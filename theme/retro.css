@@ -1,0 +1,62 @@
+@import url("https://fonts.googleapis.com/css2?family=VT323&display=swap");
+#node-editor {
+  background-color: cadetblue;
+}
+
+.sl-node {
+  font-family: "VT323", monospace;
+  background-color: lightgray;
+  border-style: outset;
+  border-width: 3px;
+  border-color: darkgray;
+  box-shadow: 4px 4px 0px 0px rgba(4, 45, 39, 0.7294117647);
+}
+.sl-node input {
+  background-color: white;
+  border-style: inset;
+  border-width: 3px;
+}
+
+.sl-node-container {
+  margin: 2px;
+}
+
+.sl-node-content {
+  padding: 2px;
+  min-height: 30px;
+}
+
+.sl-input-connector {
+  left: -24px;
+}
+
+.sl-input, .sl-output {
+  display: flex;
+  flex-grow: 1;
+  align-items: center;
+}
+
+.sl-input > .sl-label {
+  padding-right: 8px;
+  inline-size: max-content;
+}
+
+.sl-output-connector, .sl-input-connector {
+  width: 16px;
+  height: 16px;
+  background-color: rgb(214, 214, 214);
+  border: 3px solid rgb(125, 125, 125);
+  border-style: inset;
+  border-radius: 50%;
+  right: -24px;
+  position: absolute;
+}
+.sl-connector-line {
+  stroke-linecap: round;
+  stroke: rgb(97, 98, 100);
+}
+.sl-connector-line.overlapping {
+  stroke: rgb(187, 187, 187);
+}
+
+/*# sourceMappingURL=retro.css.map */
