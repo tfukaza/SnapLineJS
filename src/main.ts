@@ -32,6 +32,7 @@ export default class SnapLine {
             cameraHeight: 0,
 
             targetNode: null,
+            focusNode: null,
             hoverDOM: null,
             gid: 0,
             
@@ -49,7 +50,8 @@ export default class SnapLine {
         
         g.cameraWidth = g.canvasContainer.clientWidth;
         g.cameraHeight = g.canvasContainer.clientHeight;
-        console.debug(`Canvas size: ${g.cameraWidth}x${g.cameraHeight}`);
+        console.debug(`Canvas size: ${g.cameraWidth}x${g.cameraHeight}`); 
+        
         
         const c = document.createElement('div');
         c.style.position = 'absolute';
@@ -60,6 +62,21 @@ export default class SnapLine {
         g.canvas = c;
         
         g.canvas.style.transform = `translate(${g.cameraWidth/2}px, ${g.cameraHeight/2}px)`;
+        
+        g.canvasContainer.tabIndex = 0;
+        
+        const bg = document.createElement('div');
+        bg.id = "sl-background";
+        bg.style.width = (g.cameraWidth * 10) + 'px';
+        bg.style.height = (g.cameraHeight * 10) + 'px';
+        bg.style.transform = `translate(${-g.cameraWidth*5}px, ${-g.cameraHeight*5}px)`;
+        bg.style.transformOrigin = "center";
+        bg.style.zIndex = "0";
+        bg.style.position = "absolute";
+        g.canvas.appendChild(bg);
+
+        g.canvasBackground = bg; 
+       
 
         g.canvasContainer.addEventListener('mousedown', function (e) {
             g.isMouseDown = true;
@@ -67,6 +84,8 @@ export default class SnapLine {
             g.mousedown_y = e.clientY;
             g.camera_pan_start_x = g.camera_x;
             g.camera_pan_start_y = g.camera_y;
+
+            g.focusNode = null;
             for (const node of g.nodeArray) {
                 node.offFocus();
             }
@@ -87,7 +106,7 @@ export default class SnapLine {
                     g.camera_x = g.camera_pan_start_x -g.dx/g.zoom;
                     g.camera_y = g.camera_pan_start_y -g.dy/g.zoom;
                     g.canvas!.style.transform = `matrix3d(${worldToCamera(g.camera_x, g.camera_y, g)})`;
-                    //g.canvasContainer.style.backgroundPosition = -g.camera_x* g.zoom + "px " + -g.camera_y* g.zoom + "px";
+                    g.canvasBackground!.style.backgroundPosition = `${-g.camera_x}px ${-g.camera_y}px`;
                     g.canvas!.style.cursor = "grabbing";
                 }
             }
@@ -116,7 +135,7 @@ export default class SnapLine {
             g.camera_y += d_zoom_y/g.zoom/g.zoom;
             g.canvas!.style.transform = `matrix3d(${worldToCamera(g.camera_x, g.camera_y, g)})`;
             // scale background image
-            //g.canvasContainer.style.backgroundSize = g.zoom * 40 + "px " + g.zoom * 40 + "px";
+            //g.canvasBackground!.style.transform = `translate(${-g.cameraWidth*5}px, ${-g.cameraHeight*5}px) scale(${g.zoom}) `;
             e.preventDefault();
         });
 
@@ -136,6 +155,17 @@ export default class SnapLine {
             
         });
 
+        g.canvasContainer.addEventListener('keydown', (e:KeyboardEvent) => {
+            switch(e.key){
+                case 'Delete':
+                    if (g.focusNode){
+                        console.debug("Delete Node " + g.focusNode.gid);
+                        this.deleteNode(g.focusNode.gid);
+                    }
+                    break;
+            }
+        });
+
         console.info('Initialized SnapLine...');
     
         window.requestAnimationFrame(this.step.bind(this));
@@ -151,14 +181,38 @@ export default class SnapLine {
     addNode(config: NodeConfig, x: number, y:number) {
         const n: NodeUI = new NodeUI(config, this.g, x, y);
         this.g.globalNodes[n.gid] = n;
+        this.focusNode(n.gid);
         return n;
     }
 
     deleteNode(id: string){
-        console.debug(id);
+        if (!(id in this.g.globalNodes)) return null;
+        const node = this.g.globalNodes[id];
+        this.g.canvas?.removeChild((<NodeUI>node).dom);
+        delete this.g.globalNodes[id];
+        return id;
+    }
+
+    focusNode(id: string){
+        if (!(id in this.g.globalNodes)) return null;
+        const node = this.g.globalNodes[id];
+        node.onFocus();
+        return id;
     }
 
     connectNodes(node0: string, outputID:string, node1: string, inputID: string){
-        console.debug(node0, outputID, node1, inputID);
+        const n0 = this.g.globalNodes[node0];
+        const n1 = this.g.globalNodes[node1];
+        if (!n0 || !n1 || !(n0 instanceof NodeUI) || !(n1 instanceof NodeUI)){
+            return null;
+        }
+        const o = n0.findOutput(outputID);
+        const i = n1.findInput(inputID);
+
+        if (!o || !i) return null;
+
+        o.connectToInput(i);
+
+        return 0;
     }
 }

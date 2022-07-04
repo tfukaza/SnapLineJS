@@ -123,6 +123,20 @@ class NodeUI extends Base {
         }
     }
 
+    findInput(id: string): InputComponent | null{
+        for (const o of this.inputs){
+            if (o.gid === id) return o;
+        }
+        return null;
+    }
+    
+    findOutput(id: string): OutputComponent | null{
+        for (const o of this.outputs){
+            if (o.gid === id) return o;
+        }
+        return null;
+    }
+
     _initParseComponent(ui: ComponentConfig, content: HTMLElement): InputComponent | OutputComponent | uiComponent | customComponent | null{
         let u = null;
         switch (ui.type) {
@@ -161,10 +175,10 @@ class NodeUI extends Base {
         
     }
 
-    customMouseDown(e: MouseEvent): void {     
-        console.debug(e);
+    customMouseDown(_: MouseEvent): void {     
         this.pan_start_x = this.position_x;
         this.pan_start_y = this.position_y;
+        this.g.focusNode = this;
     }
 
     domMouseUp() {

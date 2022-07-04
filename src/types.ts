@@ -5,6 +5,7 @@ import { NodeUI } from "./node";
 export interface GlobalStats {
     canvas: HTMLElement | null,             // Root element 
     canvasContainer: HTMLElement | null,    // Container for all elements on canvas 
+    canvasBackground: HTMLElement | null,
     
     isMouseDown: boolean            // If mouse is being pressed
     mousedown_x: number,            // Initial mouse  position when mouse is pressed
@@ -26,6 +27,7 @@ export interface GlobalStats {
 
     //outputNode: HTMLElement | null,        // Node used to output values
     targetNode: Base | null,
+    focusNode: NodeUI | null,
     hoverDOM: EventTarget | null,
     gid: number,
     

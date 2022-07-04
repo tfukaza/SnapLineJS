@@ -8,7 +8,7 @@ export default {
     input: 'out-tsc/main.js',
     output: {
       file: dev ? 'demo/src/lib/snapline.js' : 'dist/snapline.js',
-      format: deploy ? 'module':'iife',
+      format: 'module',
       name: "SnapLine",
       sourcemap: dev,
     },
