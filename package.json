@@ -7,9 +7,10 @@
     "dev": "npm run watch:tsc & npm run watch:sass & npm run watch:rollup",
     "watch:tsc": "tsc -w",
     "watch:rollup": "rollup --config --watch --environment BUILD_ENV:dev",
-    "watch:sass": "sass -w src/theme:demo/lib/theme",
+    "watch:sass": "sass -w src/theme:demo/src/lib/theme",
     "lint": "eslint src/**/*.ts --fix",
-    "build": "tsc && sass src/theme:dist/theme --no-source-map && rollup --config --environment BUILD_ENV:production && uglifyjs --compress --mangle -- dist/snapline.js > dist/snapline.min.js"
+    "build": "tsc && sass src/theme:dist/theme --no-source-map && rollup --config --environment BUILD_ENV:production && uglifyjs --compress --mangle -- dist/snapline.js > dist/snapline.min.js",
+    "deploy": "tsc && sass src/theme:demo/src/lib/theme && rollup --config --environment BUILD_ENV:deploy"
   },
   "repository": {
     "type": "git",

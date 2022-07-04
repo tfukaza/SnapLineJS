@@ -1,4 +1,4 @@
-import { Base, ComponentBase } from "./base";
+import { Base } from "./base";
 import { OutputComponent, InputComponent } from "./component";
 import { NodeUI } from "./node";
 

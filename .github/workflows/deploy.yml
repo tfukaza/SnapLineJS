@@ -7,9 +7,6 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: demo
     steps:
     - name: Checkout
       uses: actions/checkout@v3
@@ -19,8 +16,12 @@ jobs:
         node-version: 16
     - name: Install npm
       run:  npm install
-    - name: Build
-      run: npm run build
+    - name: Build Snapline
+      run: npm run deploy
+    - name: Build demo site
+      run: cd demo |
+        npm install 
+        npm run build
     - name: Deploy
       uses: peaceiris/actions-gh-pages@v3
       with:

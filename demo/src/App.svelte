@@ -1,9 +1,14 @@
+<svelte:head>
+  <base href="BASEURL">
+</svelte:head>
+
 <script>
   import "./app.css";
-  import { textSpinner } from "./lib/textSpinner";
-  import { youtube } from "./lib/youtube";
-  import { math, displayData } from "./lib/math";
   import {onMount} from 'svelte';
+
+  import { youtube } from "./nodes/youtube";
+  import { math, displayData } from "./nodes/math";
+  import  SnapLine  from './lib/snapline';
 
   let sl = null;
 
