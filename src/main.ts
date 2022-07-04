@@ -12,6 +12,7 @@ export default class SnapLine {
         this.g = {
             canvas: null,
             canvasContainer: null,
+            canvasBackground: null,
             
             isMouseDown: false,     // If mouse is being pressed
             mousedown_x: 0,         // Initial mouse  position when mouse is pressed
@@ -106,6 +107,7 @@ export default class SnapLine {
                     g.camera_x = g.camera_pan_start_x -g.dx/g.zoom;
                     g.camera_y = g.camera_pan_start_y -g.dy/g.zoom;
                     g.canvas!.style.transform = `matrix3d(${worldToCamera(g.camera_x, g.camera_y, g)})`;
+                    g.canvasBackground!.style.transform = `translate(${g.camera_x + -g.cameraWidth*5}px, ${g.camera_y + -g.cameraHeight*5}px)`;
                     g.canvasBackground!.style.backgroundPosition = `${-g.camera_x}px ${-g.camera_y}px`;
                     g.canvas!.style.cursor = "grabbing";
                 }
