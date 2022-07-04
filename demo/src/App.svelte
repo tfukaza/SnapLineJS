@@ -1,14 +1,16 @@
-<svelte:head>
-  <base href="BASEURL">
-</svelte:head>
 
 <script>
   import "./app.css";
+  //import "./lib/theme/standard.css";
+  // import "./lib/theme/retro.css";
   import {onMount} from 'svelte';
 
   import { youtube } from "./nodes/youtube";
   import { math, displayData } from "./nodes/math";
   import  SnapLine  from './lib/snapline';
+
+  const dev = import.meta.env.DEV;
+  const basePath = dev ? '/' : 'SnapLineJS/';
 
   let sl = null;
 
@@ -25,7 +27,7 @@
 <!-- <svelte:window on:load={loadSnapLine} /> -->
 
 <main>
-  <link href="lib/theme/{cssPath}" rel="stylesheet" type="text/css" />
+  <link href="{basePath}src/lib/theme/{cssPath}" rel="stylesheet" type="text/css" />
 
   <navbar class="navbar px-5 fixed z-20 bg-white shadow-sm">
     <div class="flex-1">

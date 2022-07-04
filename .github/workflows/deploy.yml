@@ -23,7 +23,11 @@ jobs:
         cd demo
         npm install 
         npm run build
-        ls dist
+    - name: Copy CSS files
+      run: |
+        cd demo
+        mkdir dist/theme
+        cp src/lib/theme/* dist/theme
     - name: Deploy
       uses: peaceiris/actions-gh-pages@v3
       with:
