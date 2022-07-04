@@ -8,7 +8,7 @@
   import  SnapLine  from './lib/snapline';
 
   const dev = import.meta.env.DEV;
-  const basePath = dev ? '/src/lib/' : '/';
+  const basePath = dev ? '/src/lib/' : '/SnapLineJS/';
 
   let sl = null;
 
