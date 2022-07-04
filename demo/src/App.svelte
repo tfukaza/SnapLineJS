@@ -10,7 +10,7 @@
   import  SnapLine  from './lib/snapline';
 
   const dev = import.meta.env.DEV;
-  const basePath = dev ? '/' : 'SnapLineJS/';
+  const basePath = dev ? '/src/lib/' : '/SnapLineJS/';
 
   let sl = null;
 
@@ -27,7 +27,7 @@
 <!-- <svelte:window on:load={loadSnapLine} /> -->
 
 <main>
-  <link href="{basePath}src/lib/theme/{cssPath}" rel="stylesheet" type="text/css" />
+  <link href="{basePath}theme/{cssPath}" rel="stylesheet" type="text/css" />
 
   <navbar class="navbar px-5 fixed z-20 bg-white shadow-sm">
     <div class="flex-1">
