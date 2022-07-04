@@ -1,8 +1,6 @@
 
 <script>
   import "./app.css";
-  //import "./lib/theme/standard.css";
-  // import "./lib/theme/retro.css";
   import {onMount} from 'svelte';
 
   import { youtube } from "./nodes/youtube";
@@ -10,7 +8,7 @@
   import  SnapLine  from './lib/snapline';
 
   const dev = import.meta.env.DEV;
-  const basePath = dev ? '/src/lib/' : '/SnapLineJS/';
+  const basePath = dev ? '/src/lib/' : '/';
 
   let sl = null;
 
