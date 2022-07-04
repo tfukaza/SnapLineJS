@@ -19,11 +19,13 @@ jobs:
     - name: Build Snapline
       run: npm run deploy
     - name: Build demo site
-      run: cd demo |
+      run: |
+        cd demo
         npm install 
         npm run build
+        ls dist
     - name: Deploy
       uses: peaceiris/actions-gh-pages@v3
       with:
         github_token: ${{ secrets.GITHUB_TOKEN }}
-        publish_dir: dist
+        publish_dir: demo/dist
