@@ -110,7 +110,7 @@ export default class SnapLine {
                     g.canvasBackground!.style.transform = `translate(${g.camera_x + -g.cameraWidth*5}px, ${g.camera_y + -g.cameraHeight*5}px)`;
                     g.canvasBackground!.style.backgroundPosition = `${-g.camera_x}px ${-g.camera_y}px`;
                     g.canvas!.style.cursor = "grabbing";
-                }
+                } 
             }
         });
 
@@ -213,7 +213,7 @@ export default class SnapLine {
 
         if (!o || !i) return null;
 
-        o.connectToInput(i);
+        o.output.connectToInput(i.input);
 
         return 0;
     }

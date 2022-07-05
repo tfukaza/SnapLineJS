@@ -20,7 +20,12 @@ function addLabel(dom: HTMLElement, config: ComponentConfig){
     const label = document.createElement('span');
     label.classList.add('sl-label');
     label.innerText = config.name;
+    label.style.position = "relative";
+    label.style.zIndex = "99"
+    
     dom.appendChild(label);
+
+    return label
 }
 
 export {

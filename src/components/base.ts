@@ -1,10 +1,10 @@
-import { NodeUI } from "./node";
-import { ComponentConfig, GlobalStats } from "./types"
+import { NodeUI } from "../node";
+import { ComponentConfig, GlobalStats } from "../types"
 
 /*
     Root class of all classes. 
 */
-export class Base {
+export abstract class Base {
 
     g: GlobalStats;
     gid: string;
@@ -21,7 +21,12 @@ export class Base {
         this.position_y = 0;
     }
 
+    bindFunction(dom: HTMLElement){
+        dom.onmousedown = this.domMouseDown.bind(this);
+    }
+
     domMouseDown(e: MouseEvent):void {
+        console.debug(this)
         this.g.isMouseDown = true;
         this.g.targetNode = this;
         this.g.mousedown_x = e.clientX;
