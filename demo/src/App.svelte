@@ -35,46 +35,20 @@
           tabindex="0"
           class="dropdown-content menu p-2 shadow bg-base-100 rounded-box w-52"
         >
-          <li><button class="btn-sm" on:click={() => sl.addNode(math, 0, 0)}>Math</button>
-          </li>
-        
-          <li>
-            <button class="btn-sm" on:click={() => sl.addNode(youtube, 0, 0)}
-              >YouTube</button
-            >
-          </li>
-          <li>
-            <button
-              class="btn-sm"
-              on:click={() => sl.addNode(displayData, 0, 0)}>Print</button
-            >
-          </li>
-          <li>
-            <button
-              class="btn-sm"
-              on:click={() => sl.addNode(lerp, 0, 0)}>Lerp</button
-            >
-          </li>
+          <li><button class="btn-sm" on:click={() => sl.addNode(math, 0, 0)}>Math</button></li>
+          <li><button class="btn-sm" on:click={() => sl.addNode(youtube, 0, 0)}>YouTube</button></li>
+          <li><button class="btn-sm" on:click={() => sl.addNode(displayData, 0, 0)}>Print</button></li>
+          <li><button class="btn-sm" on:click={() => sl.addNode(lerp, 0, 0)}>Print</button></li>
         </ul>
       </div>
     </div>
     <div class="flex-none">
       <div class="dropdown dropdown-end">
         <label tabindex="0" class="btn btn-sm btn-outline">Theme</label>
-        <ul
-          tabindex="0"
-          class="dropdown-content menu p-2 shadow bg-base-100 rounded-box w-52"
-        >
-          <li>
-            <button class="btn-sm" on:click={() => setTheme("standard.css")}
-              >Standard</button
-            >
-          </li>
-          <li>
-            <button class="btn-sm" on:click={() => setTheme("retro.css")}
-              >Retro</button
-            >
-          </li>
+        <ul tabindex="0" class="dropdown-content menu p-2 shadow bg-base-100 rounded-box w-52">
+          <li><button class="btn-sm" on:click={() => setTheme("standard.css")}>Standard</button></li>
+          <li><button class="btn-sm" on:click={() => setTheme("dark.css")}>Standard (Dark)</button></li>
+          <li><button class="btn-sm" on:click={() => setTheme("retro.css")}>Retro</button></li>
         </ul>
       </div>
     </div>

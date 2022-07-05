@@ -24,4 +24,4 @@ dist-ssr
 *.sw?
 
 .vscode
-./src/lib
+src/lib/*
