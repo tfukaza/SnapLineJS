@@ -1,19 +1,20 @@
 import {isBetween} from './helper';
-import {ConnectorComponent, InputComponent, OutputComponent, uiComponent, customComponent} from './component';
-import {Base} from './base';
+import {uiComponent, customComponent, InputInterface, OutputInterface} from './components/component';
+import {Base, ComponentBase} from './components/base';
 import { ComponentConfig, GlobalStats, lineObject, NodeConfig, NodeConfigFunction } from './types';
+
 
 
 class NodeUI extends Base {
 
     config: NodeConfig;
 
-    inputs: Array<InputComponent>;// List of NodeInput classes for each input connector
-    outputs: Array<OutputComponent>;// List of NodeOutput classes for each output connector
+    inputs: Array<InputInterface>;// List of NodeInput classes for each input connector
+    outputs: Array<OutputInterface>;// List of NodeOutput classes for each output connector
     inputCount: number;
     outputCount: number;
 
-    elements: { [key: string]: uiComponent | ConnectorComponent};
+    elements: { [key: string]: ComponentBase};
 
     dom: HTMLElement;
 
@@ -123,32 +124,33 @@ class NodeUI extends Base {
         }
     }
 
-    findInput(id: string): InputComponent | null{
+    findInput(id: string): InputInterface | null{
         for (const o of this.inputs){
             if (o.gid === id) return o;
         }
         return null;
     }
     
-    findOutput(id: string): OutputComponent | null{
+    findOutput(id: string): OutputInterface | null{
         for (const o of this.outputs){
             if (o.gid === id) return o;
         }
         return null;
     }
 
-    _initParseComponent(ui: ComponentConfig, content: HTMLElement): InputComponent | OutputComponent | uiComponent | customComponent | null{
+    _initParseComponent(ui: ComponentConfig, content: HTMLElement): InputInterface | OutputInterface | uiComponent | customComponent | null{
         let u = null;
         switch (ui.type) {
             case 'input-text':
             case 'input-bool':
-                u = new InputComponent(ui, this, this.g, content);
+            case 'input-float':
+                u = new InputInterface(ui, this, this.g);
                 u.parent = this;
                 this.g.globalNodes[u.gid] = u;
                 this.inputs.push(u);
                 break;
             case 'output-text':
-                u = new OutputComponent(ui, this, this.g, content);
+                u = new OutputInterface(ui, this, this.g);
                 u.parent = this;
                 this.g.globalNodes[u.gid] = u;
                 this.outputs.push(u);
@@ -192,23 +194,22 @@ class NodeUI extends Base {
         const firstInput = this.inputs[0];
         const firstOutput = this.outputs[0];
         from.disconnectFromInput(to);
-        from.connectToInput(firstInput);
-        firstOutput.connectToInput(to);
+        from.connectToInput(firstInput.input);
+        firstOutput.output.connectToInput(to);
     }
-
 
     
-    onPan() {
+    // onPan() {
         
-        this.dom.style.transform = `translate3d(${this.position_x}px, ${this.position_y}px, 0)`;
+    //     this.dom.style.transform = `translate3d(${this.position_x}px, ${this.position_y}px, 0)`;
 
-        for (const input of this.inputs) {
-            input.onPan();
-        }
-        for (const output of this.outputs) {
-            output.onPan();
-        }
-    }
+    //     for (const input of this.inputs) {
+    //         input.onPan();
+    //     }
+    //     for (const output of this.outputs) {
+    //         output.onPan();
+    //     }
+    // }
     
     onDrag() {
 
@@ -218,10 +219,10 @@ class NodeUI extends Base {
         this.dom.style.transform = `translate3d(${this.position_x}px, ${this.position_y}px, 0)`;
 
         for (const input of this.inputs) {
-            input.nodeDrag();
+            input.input.nodeDrag();
         }
         for (const output of this.outputs) {
-            output.nodeDrag();
+            output.output.nodeDrag();
         }
 
         this.overlapping = null;
@@ -265,10 +266,10 @@ class NodeUI extends Base {
         this.nodeHeight = this.dom.offsetHeight;
         this.nodeWidth = this.dom.offsetWidth;
         for (const input of this.inputs) {
-            input.updateDOMproperties();
+            input.input.updateDOMproperties();
         }
         for (const output of this.outputs) {
-            output.updateDOMproperties();
+            output.output.updateDOMproperties();
         }
     }
 
@@ -276,16 +277,16 @@ class NodeUI extends Base {
         let outputCount = 0;
         for (const [_, fData] of Object.entries(this.functions)) {
             for (const x of fData.outputs) {
-                const o = <OutputComponent>this.elements[x];
+                const o = <OutputInterface>this.elements[x];
                 if (o == undefined){
                     console.warn(`Output '${x}' was not found in elements. Double check '${x}' is defined.`)
                     return;
                 }
-                if (!o.svgs || o.svgs.length < 1) {
+                if (!o.output.svgs || o.output.svgs.length < 1) {
                     continue;
                 }
                 outputCount++;
-                for (const line of o.svgs){
+                for (const line of o.output.svgs){
                     line.to.parent?.findLeaf();
                 }
             }
@@ -304,14 +305,14 @@ class NodeUI extends Base {
             const inputs = [this];
             for (const x of fData.inputs) {
                 if (x in this.elements) {
-                    const i = <InputComponent>this.elements[x];
+                    const i = <InputInterface>this.elements[x];
                     inputs.push(i.getValue());
                 }
             }
             
             const result = fData.functionUpdate(...inputs);
             for (const x of fData.outputs) {
-                const o = <OutputComponent>this.elements[x];
+                const o = <OutputInterface>this.elements[x];
                 if (o == undefined){
                     console.warn(`Output '${x}' was not found in elements. Double check '${x}' is defined.`)
                     return;

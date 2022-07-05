@@ -2,6 +2,10 @@
   --ui-border-radius: 3px;
 }
 
+textarea:focus, input:focus {
+  outline: none;
+}
+
 #sl-background {
   background-image: radial-gradient(circle at 1px 1px, rgb(169, 171, 181) 1px, transparent 0);
   background-size: 32px 32px;
@@ -19,16 +23,13 @@
 .sl-node.focused {
   border: 2px solid rgb(0, 122, 255);
 }
-.sl-node select, .sl-node input {
-  padding: 2px 8px;
-}
 
 .sl-node-container {
   margin: 2px;
 }
 
 .sl-node-content {
-  padding: 2px 16px;
+  padding: 4px 16px;
   min-height: 30px;
 }
 
@@ -99,6 +100,20 @@
 .sl-connector-line.overlapping {
   stroke: rgb(187, 187, 187);
   filter: drop-shadow(0px 0px 8px rgba(44, 178, 142, 0.533));
+}
+
+.sl-input-float-container {
+  background-color: rgb(217, 217, 217);
+  border-radius: var(--ui-border-radius);
+  padding: 0px 8px;
+}
+
+.sl-input-float-slider {
+  background-color: rgb(179, 179, 179);
+}
+
+.sl-input-float-editor {
+  padding: 0px 8px;
 }
 
 /*# sourceMappingURL=standard.css.map */

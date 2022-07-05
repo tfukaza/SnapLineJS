@@ -1,5 +1,5 @@
-import { Base } from "./base";
-import { OutputComponent, InputComponent } from "./component";
+import { Base } from "./components/base";
+import { InputConnector, OutputConnector } from "./components/connector";
 import { NodeUI } from "./node";
 
 export interface GlobalStats {
@@ -57,7 +57,7 @@ export interface ComponentConfig {
     [key: string]: any;
 }
 
-export type inputType = "input-text" | "input-bool";
+export type inputType = "input-text" | "input-bool" | "input-float";
 export type uiType = "ui-paragraph" | "ui-display" | "ui-dropdown";
 export type outputType = "output-text";
 export type comType =  inputType | uiType| outputType | "custom"
@@ -65,11 +65,11 @@ export type comType =  inputType | uiType| outputType | "custom"
 export interface lineObject {
     svg:SVGSVGElement | SVGLineElement;
     line: SVGSVGElement | SVGLineElement;
-    to: InputComponent;
-    from: OutputComponent;
+    to: InputConnector;
+    from: OutputConnector;
     connector_x: number;
     connector_y: number;
     x2: number;
     y2: number;
-    connector: OutputComponent;   
+    connector: OutputConnector;
 }

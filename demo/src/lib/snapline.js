@@ -15,7 +15,10 @@ function addLabel(dom, config) {
     const label = document.createElement('span');
     label.classList.add('sl-label');
     label.innerText = config.name;
+    label.style.position = "relative";
+    label.style.zIndex = "99";
     dom.appendChild(label);
+    return label;
 }
 
 /*
@@ -33,7 +36,11 @@ class Base {
         this.position_x = 0;
         this.position_y = 0;
     }
+    bindFunction(dom) {
+        dom.onmousedown = this.domMouseDown.bind(this);
+    }
     domMouseDown(e) {
+        console.debug(this);
         this.g.isMouseDown = true;
         this.g.targetNode = this;
         this.g.mousedown_x = e.clientX;
@@ -69,21 +76,20 @@ class ComponentBase extends Base {
 }
 
 class ConnectorComponent extends ComponentBase {
-    connector_x;
+    connector_x; // Location of the connector on canvas
     connector_y;
-    c_total_offset_x;
+    c_total_offset_x; // Location of the connector relative to the location of parent Node
     c_total_offset_y;
     name;
-    parentContent;
     connector;
-    constructor(config, parent, globals, parentContent) {
+    constructor(config, parent, globals) {
         super(config, parent, globals);
         this.connector_x = 0;
         this.connector_y = 0;
         this.c_total_offset_x = 0;
         this.c_total_offset_y = 0;
         this.dom = null;
-        this.parentContent = parentContent;
+        //this.parentContent = parentContent;
         this.connector = null;
         if (config.name) {
             this.name = config.name;
@@ -92,91 +98,43 @@ class ConnectorComponent extends ComponentBase {
             globals.gid++;
             this.name = globals.gid.toString();
         }
-        this.parent.elements[this.name] = this;
         this.g.globalNodes[this.gid] = this;
     }
     pxToInt(px) {
         return parseInt(px.substring(0, px.length - 2));
     }
     updateDOMproperties() {
-        const container_offset_x = this.parent.nodeContainerOffsetLeft;
-        const container_offset_y = this.parent.nodeContainerOffsetTop;
-        const content_offset_x = 0;
-        this.pxToInt(window.getComputedStyle(this.parentContent).marginLeft)
-            + this.pxToInt(window.getComputedStyle(this.parentContent).paddingLeft)
-            + this.pxToInt(window.getComputedStyle(this.parentContent).borderLeftWidth)
-            + this.parentContent.offsetLeft;
-        const content_offset_y = this.parentContent.offsetTop;
-        const connector_offset_x = this.pxToInt(window.getComputedStyle(this.connector).marginLeft)
-            + this.pxToInt(window.getComputedStyle(this.connector).paddingLeft)
-            + this.pxToInt(window.getComputedStyle(this.connector).borderLeftWidth)
-            + this.connector.offsetLeft;
-        const connector_offset_y = this.pxToInt(window.getComputedStyle(this.connector).marginTop)
-            + this.pxToInt(window.getComputedStyle(this.connector).paddingTop)
-            + this.pxToInt(window.getComputedStyle(this.connector).borderTopWidth)
-            + this.connector.offsetTop;
-        console.debug(`connector_offset_x: ${connector_offset_x} connector_offset_y: ${connector_offset_y}`);
-        const connectorWidth = this.connector.getBoundingClientRect().width;
-        const connectorHeight = this.connector.getBoundingClientRect().height;
-        this.c_total_offset_x = container_offset_x + content_offset_x + connector_offset_x + connectorWidth / 2;
-        this.c_total_offset_y = container_offset_y + content_offset_y + connector_offset_y + connectorHeight / 2;
+        let parentDOM = this.dom;
+        let ox = 0;
+        let oy = 0;
+        while (parentDOM && parentDOM != this.parent?.dom) {
+            ox += parentDOM?.offsetLeft;
+            oy += parentDOM?.offsetTop;
+            parentDOM = parentDOM.parentElement;
+        }
+        this.c_total_offset_x = ox + this.dom.getBoundingClientRect().width / 2;
+        this.c_total_offset_y = oy + this.dom.getBoundingClientRect().height / 2;
     }
     setLineXY(line, x, y) {
         line.setAttribute('x1', '' + 0);
         line.setAttribute('y1', '' + 0);
         line.setAttribute('x2', '' + x);
         line.setAttribute('y2', '' + y);
-        line.setAttribute('stroke-width', `${4 * this.g.zoom}`);
+        line.setAttribute('stroke-width', '4');
     }
 }
-class InputComponent extends ConnectorComponent {
+class InputConnector extends ConnectorComponent {
     inputDOM; // Reference to the UI element where the user enters the value
-    inputValue; // Function to get the value from inputDOM
     peerOutput;
-    constructor(config, parent, globals, content) {
-        super(config, parent, globals, content);
+    constructor(config, parent, globals) {
+        super(config, parent, globals);
         this.inputDOM = null;
         this.peerOutput = null;
-        const input = document.createElement('div');
-        input.classList.add('sl-input');
         const connector = document.createElement('span');
         connector.classList.add('sl-input-connector');
         connector.id = `input-${this.gid}`;
         connector.onmousedown = this.domMouseDown.bind(this);
-        input.appendChild(connector);
-        this.inputValue = () => { };
-        switch (config.type) {
-            case 'input-text':
-                {
-                    addLabel(input, config);
-                    const inp = document.createElement('input');
-                    inp.classList.add('sl-input-text');
-                    inp.type = 'text';
-                    input.appendChild(inp);
-                    this.inputDOM = inp;
-                    inp.onkeyup = () => {
-                        this.parent?.findLeaf();
-                    };
-                    this.inputValue = () => { return this.inputDOM.value; };
-                }
-                break;
-            case 'input-bool':
-                {
-                    addLabel(input, config);
-                    const inp = document.createElement('input');
-                    inp.classList.add('sl-input-bool');
-                    inp.type = 'checkbox';
-                    input.appendChild(inp);
-                    this.inputDOM = inp;
-                    inp.onchange = () => {
-                        this.parent?.findLeaf();
-                    };
-                    this.inputValue = () => { return this.inputDOM.checked; };
-                }
-                break;
-        }
-        this.connector = connector;
-        this.dom = input;
+        this.dom = connector;
     }
     domMouseDown(e) {
         if (this.peerOutput) {
@@ -211,38 +169,24 @@ class InputComponent extends ConnectorComponent {
         }
         this.peerOutput.nodeDrag();
     }
-    getValue() {
-        if (this.peerOutput) {
-            return this.peerOutput.getValue();
-        }
-        else if (this.inputDOM) {
-            return this.inputValue();
-        }
-        return null;
-    }
 }
-class OutputComponent extends ConnectorComponent {
+class OutputConnector extends ConnectorComponent {
     val;
     svgTmp;
     svgs;
-    constructor(config, parent, globals, content) {
-        super(config, parent, globals, content);
+    constructor(config, parent, globals) {
+        super(config, parent, globals);
         this.val = null;
         this.svgTmp = {
             svg: null,
             line: null,
         };
         this.svgs = [];
-        const output = document.createElement('div');
-        output.classList.add('sl-output');
-        addLabel(output, config);
         const connector = document.createElement('span');
         connector.classList.add('sl-output-connector');
         connector.id = `output-${this.gid}`;
         connector.onmousedown = this.domMouseDown.bind(this);
-        output.appendChild(connector);
-        this.connector = connector;
-        this.dom = output;
+        this.dom = connector;
     }
     connectToInput(input) {
         // already connected, do nothing
@@ -299,13 +243,6 @@ class OutputComponent extends ConnectorComponent {
         // Update the position of the output connector
         this.connector_x = this.parent.position_x + this.c_total_offset_x;
         this.connector_y = this.parent.position_y + this.c_total_offset_y;
-    }
-    getValue() {
-        this.parent.exec();
-        return this.val;
-    }
-    setValue(val) {
-        this.val = val;
     }
     moveToParent() {
         /* Called when lines need to be updated */
@@ -389,6 +326,223 @@ class OutputComponent extends ConnectorComponent {
             svg: null,
             line: null
         };
+    }
+    getValue() {
+        this.parent.exec();
+        return this.val;
+    }
+}
+
+class InputUI extends ComponentBase {
+    inputDOM;
+    inputItf;
+    constructor(config, parent, globals, inputItf) {
+        super(config, parent, globals);
+        this.inputDOM = null;
+        this.inputItf = inputItf;
+    }
+    triggerExec(_) {
+        this.inputItf.parent?.findLeaf();
+    }
+}
+class InputUiText extends InputUI {
+    constructor(config, parent, globals, inputItf) {
+        super(config, parent, globals, inputItf);
+        addLabel(inputItf.dom, config);
+        const inp = document.createElement('input');
+        inp.classList.add('sl-input-text');
+        inp.type = 'text';
+        inputItf.dom.appendChild(inp);
+        this.inputDOM = inp;
+        inp.onkeyup = this.triggerExec.bind(this);
+    }
+    getInputValue() {
+        return this.inputDOM.value;
+    }
+}
+class InputUiBool extends InputUI {
+    constructor(config, parent, globals, inputItf) {
+        super(config, parent, globals, inputItf);
+        addLabel(inputItf.dom, config);
+        const inp = document.createElement('input');
+        inp.classList.add('sl-input-bool');
+        inp.type = 'checkbox';
+        inputItf.dom.appendChild(inp);
+        this.inputDOM = inp;
+        inp.onkeyup = this.triggerExec.bind(this);
+    }
+    getInputValue() {
+        return this.inputDOM.checked;
+    }
+}
+class InputUiFloat extends InputUI {
+    cur_w;
+    x_cur;
+    x_min;
+    x_max;
+    slider_w;
+    floatSlider;
+    floatEditor;
+    floatContainer;
+    constructor(config, parent, globals, inputItf) {
+        super(config, parent, globals, inputItf);
+        this.x_cur = 0;
+        this.x_min = ('x_min' in config) ? config.x_min : 0;
+        this.x_max = ('x_max' in config) ? config.x_max : this.x_min + 1;
+        this.slider_w = 0;
+        this.cur_w = 0;
+        const floatContainer = document.createElement('div');
+        const floatEditor = document.createElement('input');
+        const floatSlider = document.createElement('div');
+        floatContainer.classList.add('sl-input-float-container');
+        floatContainer.style.position = "relative";
+        floatContainer.style.overflow = "hidden";
+        floatContainer.style.flexGrow = "1";
+        // floatContainer.style.zIndex = "1";
+        floatEditor.classList.add('sl-input-float-editor');
+        floatEditor.style.backgroundColor = "transparent";
+        floatEditor.style.position = "absolute";
+        floatEditor.style.width = "100%";
+        floatEditor.style.left = "0";
+        floatEditor.type = 'text';
+        floatEditor.style.textAlign = "right";
+        floatEditor.style.zIndex = "10";
+        floatSlider.classList.add('sl-input-float-slider');
+        floatSlider.style.width = "10px";
+        floatSlider.style.height = "100%";
+        floatSlider.style.top = "0px";
+        floatSlider.style.left = "0";
+        floatSlider.style.position = "absolute";
+        floatSlider.style.zIndex = "10";
+        floatContainer.appendChild(floatSlider);
+        floatContainer.appendChild(floatEditor);
+        addLabel(floatContainer, config);
+        inputItf.dom.appendChild(floatContainer);
+        this.inputDOM = floatEditor;
+        floatEditor.onchange = this.triggerExec.bind(this);
+        floatSlider.onmousedown = this.triggerExec.bind(this);
+        this.floatSlider = floatSlider;
+        this.floatEditor = floatEditor;
+        this.floatContainer = floatContainer;
+        this.bindFunction(floatContainer);
+    }
+    customMouseDown() {
+        this.cur_w = parseInt(this.floatSlider.style.width, 10);
+        this.slider_w = this.floatContainer.getBoundingClientRect().width / this.g.zoom;
+        console.log(this.slider_w);
+        this.floatEditor.blur();
+    }
+    onDrag() {
+        this.floatEditor.blur();
+        //const diff = (this.x_max - this.x_min)/this.slider_w;
+        const inc = 50;
+        const v_inc = (this.x_max - this.x_min) / inc;
+        const s_inc = this.slider_w / inc;
+        let slider_cur = this.cur_w + this.g.dx / this.g.zoom;
+        slider_cur = Math.ceil(slider_cur / s_inc) * s_inc;
+        slider_cur = Math.min(Math.max(slider_cur, 0), this.slider_w);
+        this.floatSlider.style.width = slider_cur + 'px';
+        this.x_cur = Math.min(Math.max(this.x_min + slider_cur / this.slider_w, this.x_min), this.x_max);
+        this.x_cur = Math.ceil(this.x_cur / v_inc) * v_inc;
+        this.floatEditor.value = this.x_cur + '';
+        this.inputItf.parent?.findLeaf();
+    }
+    domMouseUp() {
+        this.floatEditor.focus();
+    }
+    getInputValue() {
+        return parseFloat(this.inputDOM.value);
+    }
+}
+
+/*
+    A general class tio contain all elements in a node
+*/
+class Interface extends ComponentBase {
+    name;
+    constructor(config, parent, globals) {
+        super(config, parent, globals);
+        this.name = config.name;
+        this.parent.elements[this.name] = this;
+    }
+}
+class InputInterface extends Interface {
+    input;
+    inputUI;
+    name;
+    constructor(config, parent, globals) {
+        super(config, parent, globals);
+        const input = document.createElement('div');
+        input.classList.add('sl-input');
+        this.input = new InputConnector(config, parent, globals);
+        input.appendChild(this.input.dom);
+        this.dom = input;
+        this.name = config.name;
+        this.parent.elements[this.name] = this;
+        switch (config.type) {
+            case 'input-text':
+                this.inputUI = new InputUiText(config, parent, globals, this);
+                break;
+            case 'input-bool':
+                this.inputUI = new InputUiBool(config, parent, globals, this);
+                break;
+            case 'input-float':
+                this.inputUI = new InputUiFloat(config, parent, globals, this);
+                break;
+            default:
+                this.inputUI = null;
+        }
+        this.bindFunction(this.dom);
+    }
+    // updateConnectorPosition() {
+    //     this.connector_x = this.parent!.position_x + this.c_total_offset_x;
+    //     this.connector_y = this.parent!.position_y + this.c_total_offset_y;
+    // }
+    // disconnectFromOutput() {
+    //     this.peerOutput = null;
+    //     this.dom?.classList.remove("connected");
+    // }
+    // connectToOutput(output: OutputComponent) {
+    //     this.peerOutput = output;
+    //     this.dom?.classList.add("connected");
+    // }
+    // nodeDrag() {
+    //     this.updateConnectorPosition();
+    //     if (!this.peerOutput) {
+    //         return;
+    //     }
+    //     this.peerOutput.nodeDrag();
+    // }
+    getValue() {
+        if (this.input.peerOutput) {
+            return this.input.peerOutput.getValue();
+        }
+        else if (this.inputUI) {
+            return this.inputUI.getInputValue();
+        }
+        return null;
+    }
+}
+class OutputInterface extends Interface {
+    output;
+    name;
+    constructor(config, parent, globals) {
+        super(config, parent, globals);
+        const out = document.createElement('div');
+        out.classList.add('sl-output');
+        addLabel(out, config);
+        this.output = new OutputConnector(config, parent, globals);
+        out.appendChild(this.output.dom);
+        this.dom = out;
+        this.name = config.name;
+        this.parent.elements[this.name] = this;
+    }
+    getValue() {
+        this.parent.exec();
+        return this.output.val;
+    }
+    setValue(val) {
+        this.output.val = val;
     }
 }
 class uiComponent extends ComponentBase {
@@ -600,13 +754,14 @@ class NodeUI extends Base {
         switch (ui.type) {
             case 'input-text':
             case 'input-bool':
-                u = new InputComponent(ui, this, this.g, content);
+            case 'input-float':
+                u = new InputInterface(ui, this, this.g);
                 u.parent = this;
                 this.g.globalNodes[u.gid] = u;
                 this.inputs.push(u);
                 break;
             case 'output-text':
-                u = new OutputComponent(ui, this, this.g, content);
+                u = new OutputInterface(ui, this, this.g);
                 u.parent = this;
                 this.g.globalNodes[u.gid] = u;
                 this.outputs.push(u);
@@ -644,27 +799,27 @@ class NodeUI extends Base {
         const firstInput = this.inputs[0];
         const firstOutput = this.outputs[0];
         from.disconnectFromInput(to);
-        from.connectToInput(firstInput);
-        firstOutput.connectToInput(to);
+        from.connectToInput(firstInput.input);
+        firstOutput.output.connectToInput(to);
     }
-    onPan() {
-        this.dom.style.transform = `translate3d(${this.position_x}px, ${this.position_y}px, 0)`;
-        for (const input of this.inputs) {
-            input.onPan();
-        }
-        for (const output of this.outputs) {
-            output.onPan();
-        }
-    }
+    // onPan() {
+    //     this.dom.style.transform = `translate3d(${this.position_x}px, ${this.position_y}px, 0)`;
+    //     for (const input of this.inputs) {
+    //         input.onPan();
+    //     }
+    //     for (const output of this.outputs) {
+    //         output.onPan();
+    //     }
+    // }
     onDrag() {
         this.position_x = this.pan_start_x + this.g.dx / this.g.zoom;
         this.position_y = this.pan_start_y + this.g.dy / this.g.zoom;
         this.dom.style.transform = `translate3d(${this.position_x}px, ${this.position_y}px, 0)`;
         for (const input of this.inputs) {
-            input.nodeDrag();
+            input.input.nodeDrag();
         }
         for (const output of this.outputs) {
-            output.nodeDrag();
+            output.output.nodeDrag();
         }
         this.overlapping = null;
         if (!this.hasIandO)
@@ -703,10 +858,10 @@ class NodeUI extends Base {
         this.nodeHeight = this.dom.offsetHeight;
         this.nodeWidth = this.dom.offsetWidth;
         for (const input of this.inputs) {
-            input.updateDOMproperties();
+            input.input.updateDOMproperties();
         }
         for (const output of this.outputs) {
-            output.updateDOMproperties();
+            output.output.updateDOMproperties();
         }
     }
     findLeaf() {
@@ -718,11 +873,11 @@ class NodeUI extends Base {
                     console.warn(`Output '${x}' was not found in elements. Double check '${x}' is defined.`);
                     return;
                 }
-                if (!o.svgs || o.svgs.length < 1) {
+                if (!o.output.svgs || o.output.svgs.length < 1) {
                     continue;
                 }
                 outputCount++;
-                for (const line of o.svgs) {
+                for (const line of o.output.svgs) {
                     line.to.parent?.findLeaf();
                 }
             }
@@ -931,7 +1086,7 @@ class SnapLine {
         const i = n1.findInput(inputID);
         if (!o || !i)
             return null;
-        o.connectToInput(i);
+        o.output.connectToInput(i.input);
         return 0;
     }
 }

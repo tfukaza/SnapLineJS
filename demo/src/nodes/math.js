@@ -48,6 +48,40 @@ export const math = {
   ],
 };
 
+export const lerp = {
+  functions: {
+    output: {
+      inputs: ["Input 1", "Input 2", "Alpha"],
+      outputs: ["Result"],
+      functionUpdate: (self, a, b, alpha) => {
+        a = parseFloat(a);
+        b = parseFloat(b);
+        alpha = parseFloat(alpha);
+        return a + (b-a) * alpha;
+      }
+        
+    },
+  },
+  elements: [
+    { type: "output-text", name: "Result" },
+    {
+        type: "input-text",
+        name: "Input 1",
+    },
+    {
+        type: "input-text",
+        name: "Input 2",
+    },
+    {
+      type: "input-float",
+      name: "Alpha",
+      min: 0,
+      max: 1,
+    },
+    
+  ],
+};
+
 export const displayData = {
   functions: {
     output: {
