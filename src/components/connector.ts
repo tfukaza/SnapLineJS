@@ -328,7 +328,7 @@ class OutputConnector extends ConnectorComponent {
             const input = <InputConnector>this.g.globalNodes[hn.id.split('-')[1]];
             this.connectToInput(input);
 
-            input.parent!.findLeaf();
+            input.parent!.run();
         }
 
         this.g.canvas!.removeChild(<Node>this.svgTmp.svg);

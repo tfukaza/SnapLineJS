@@ -34,6 +34,8 @@ class NodeUI extends Base {
 
     overlapping: lineObject | null;
 
+    freeze: boolean;
+
     constructor(config: NodeConfig, globals: GlobalStats, x=0, y=0) {
 
         super(globals);
@@ -54,6 +56,8 @@ class NodeUI extends Base {
         this.pan_start_y = 0;
 
         this.overlapping = null;
+
+        this.freeze = false;
 
 
         const node = document.createElement('div');
@@ -185,6 +189,9 @@ class NodeUI extends Base {
     }
 
     domMouseUp() {
+
+        if (this.freeze) return;
+
         this.position_x = this.pan_start_x+this.g.dx/this.g.zoom
         this.position_y = this.pan_start_y+this.g.dy/this.g.zoom
         
@@ -213,6 +220,8 @@ class NodeUI extends Base {
     // }
     
     onDrag() {
+
+        if(this.freeze) return;
 
         this.position_x = this.pan_start_x+this.g.dx/this.g.zoom
         this.position_y = this.pan_start_y+this.g.dy/this.g.zoom
@@ -275,7 +284,7 @@ class NodeUI extends Base {
         }
     }
 
-    findLeaf(){
+    run(){
         let outputCount = 0;
         for (const [_, fData] of Object.entries(this.functions)) {
             for (const x of fData.outputs) {
@@ -289,7 +298,7 @@ class NodeUI extends Base {
                 }
                 outputCount++;
                 for (const line of o.output.svgs){
-                    line.to.parent?.findLeaf();
+                    line.to.parent?.run();
                 }
             }
         }
@@ -313,13 +322,18 @@ class NodeUI extends Base {
             }
             
             const result = fData.functionUpdate(...inputs);
+            let i = 0;
             for (const x of fData.outputs) {
                 const o = <OutputInterface>this.elements[x];
                 if (o == undefined){
                     console.warn(`Output '${x}' was not found in elements. Double check '${x}' is defined.`)
                     return;
                 }
-                o.setValue(result);
+                if (result instanceof Array){
+                    o.setValue(result[i++])
+                } else {
+                    o.setValue(result);
+                }
             }
         }
     }

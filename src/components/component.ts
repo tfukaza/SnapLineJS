@@ -190,7 +190,7 @@ class uiComponent extends ComponentBase {
 
     setExecTrigger(dom: HTMLElement, event: string){
         dom.addEventListener(event, () => {
-            this.parent?.findLeaf();
+            this.parent?.run();
         });
         console.debug(dom, event);
     }

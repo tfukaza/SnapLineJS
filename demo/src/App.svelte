@@ -6,6 +6,7 @@
   import { youtube } from "./nodes/youtube";
   import { math, displayData, lerp, constantFloat, clamp } from "./nodes/math";
   import  SnapLine  from './lib/snapline';
+import { colorPicker } from "./nodes/input";
 
   const dev = import.meta.env.DEV;
   const basePath = dev ? '/src/lib/' : '/SnapLineJS/';
@@ -37,6 +38,7 @@
         >
           <div class="divider">Input</div> 
           <li><button class="btn-sm" on:click={() => sl.addNode(constantFloat, 0, 0)}>Constant</button></li>
+          <li><button class="btn-sm" on:click={() => sl.addNode(colorPicker, 0, 0)}>Color</button></li>
           <div class="divider">Output</div> 
           <li><button class="btn-sm" on:click={() => sl.addNode(displayData, 0, 0)}>Print</button></li>
           <li><button class="btn-sm" on:click={() => sl.addNode(youtube, 0, 0)}>YouTube</button></li>

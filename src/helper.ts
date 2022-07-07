@@ -28,13 +28,13 @@ function addLabel(dom: HTMLElement, config: ComponentConfig){
     return label
 }
 
-function roundTo(v: number, d:number){
-    return Math.round(v * Math.pow(10, d)) / Math.pow(10, d);
-}
+// function roundTo(v: number, d:number){
+//     return Math.round(v * Math.pow(10, d)) / Math.pow(10, d);
+// }
 
 export {
     isBetween,
     worldToCamera,
     addLabel,
-    roundTo
+    //roundTo
 }

@@ -1,4 +1,4 @@
-import { addLabel, roundTo } from "../helper";
+import { addLabel } from "../helper";
 import { NodeUI } from "../node";
 import { ComponentConfig, GlobalStats } from "../types";
 import { ComponentBase } from "./base";
@@ -16,7 +16,7 @@ abstract class InputUI extends ComponentBase {
     }
 
     triggerExec(_: Event): void{
-        this.inputItf.parent?.findLeaf();
+        this.inputItf.parent?.run();
     }
 
     abstract getInputValue() : any;
@@ -157,7 +157,7 @@ class InputUiFloat extends InputUI {
         this.x_cur = Math.ceil(this.x_cur / v_inc) * v_inc;
         this.floatEditor.value = this.x_cur.toFixed(3)
 
-        this.inputItf.parent?.findLeaf();
+        this.inputItf.parent?.run();
     }
 
     domMouseUp(): void {
@@ -239,7 +239,7 @@ class InputUiFloatInfinite extends InputUI {
         let cur = Math.ceil((this.x_cur + this.g.dx*0.1) / inc) * inc;
         this.floatEditor.value = cur.toFixed(3)
 
-        this.inputItf.parent?.findLeaf();
+        this.inputItf.parent?.run();
     }
 
     domMouseUp(): void {
