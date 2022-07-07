@@ -48,6 +48,33 @@ export const math = {
   ],
 };
 
+export const clamp = {
+  functions: {
+    output: {
+      inputs: ["Min", "Max", "Value"],
+      outputs: ["Result"],
+      functionUpdate: (self, min, max, val) => {
+        return Math.min(Math.max(min, val), max);
+      },
+    },
+  },
+  elements: [
+    { type: "output-text", name: "Result" },
+    {
+      type: "input-float-infinite",
+      name: "Min",
+    },
+    {
+      type: "input-float-infinite",
+      name: "Max",
+    },
+    {
+      type: "input-float-infinite",
+      name: "Value",
+    },
+  ],
+};
+
 export const lerp = {
   functions: {
     output: {
@@ -77,6 +104,27 @@ export const lerp = {
       name: "Alpha",
       min: 0,
       max: 1,
+    },
+    
+  ],
+};
+
+export const constantFloat = {
+  functions: {
+    output: {
+      inputs: ["Value"],
+      outputs: ["Result"],
+      functionUpdate: (self, a) => {
+        return parseFloat(a);
+      }
+        
+    },
+  },
+  elements: [
+    { type: "output-text", name: "Result" },
+    {
+        type: "input-float-infinite",
+        name: "Input 1",
     },
     
   ],

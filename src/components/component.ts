@@ -3,7 +3,7 @@ import { ComponentConfig, GlobalStats} from '../types';
 import { NodeUI } from "../node"
 import { addLabel } from '../helper';
 import { InputConnector, OutputConnector } from './connector';
-import { InputUI, InputUiBool, InputUiFloat, InputUiText } from './input_ui';
+import { InputUI, InputUiBool, InputUiFloat, InputUiFloatInfinite, InputUiText } from './input_ui';
 
 /*  
     A general class tio contain all elements in a node
@@ -51,6 +51,9 @@ class InputInterface extends Interface {
                 break; 
             case 'input-float':
                 this.inputUI = new InputUiFloat(config, parent, globals, this);
+                break;
+            case 'input-float-infinite':
+                this.inputUI = new InputUiFloatInfinite(config, parent, globals, this);
                 break;
             default:
                 this.inputUI = null;

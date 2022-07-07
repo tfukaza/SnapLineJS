@@ -19,7 +19,7 @@ textarea:focus, input:focus{
     background-color: rgb(55, 59, 65);
     box-shadow: 0 5px 30px rgba(14, 17, 26, 0.852);
     padding: 0px 0px 10px 0px;
-    cursor: move;
+    min-width: 150px;
 
     color:rgb(239, 239, 239);
 

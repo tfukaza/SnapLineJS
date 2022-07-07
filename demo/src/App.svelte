@@ -4,7 +4,7 @@
   import {onMount} from 'svelte';
 
   import { youtube } from "./nodes/youtube";
-  import { math, displayData, lerp } from "./nodes/math";
+  import { math, displayData, lerp, constantFloat, clamp } from "./nodes/math";
   import  SnapLine  from './lib/snapline';
 
   const dev = import.meta.env.DEV;
@@ -35,11 +35,14 @@
           tabindex="0"
           class="dropdown-content menu p-2 shadow bg-base-100 rounded-box w-52"
         >
+          <div class="divider">Input</div> 
+          <li><button class="btn-sm" on:click={() => sl.addNode(constantFloat, 0, 0)}>Constant</button></li>
           <div class="divider">Output</div> 
           <li><button class="btn-sm" on:click={() => sl.addNode(displayData, 0, 0)}>Print</button></li>
           <li><button class="btn-sm" on:click={() => sl.addNode(youtube, 0, 0)}>YouTube</button></li>
           <div class="divider">Math</div> 
           <li><button class="btn-sm" on:click={() => sl.addNode(math, 0, 0)}>Operator</button></li>
+          <li><button class="btn-sm" on:click={() => sl.addNode(clamp, 0, 0)}>Clamp</button></li>
           <li><button class="btn-sm" on:click={() => sl.addNode(lerp, 0, 0)}>Lerp</button></li>
         </ul>
       </div>
