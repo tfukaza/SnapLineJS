@@ -144,6 +144,7 @@ class NodeUI extends Base {
             case 'input-text':
             case 'input-bool':
             case 'input-float':
+            case 'input-float-infinite':
                 u = new InputInterface(ui, this, this.g);
                 u.parent = this;
                 this.g.globalNodes[u.gid] = u;

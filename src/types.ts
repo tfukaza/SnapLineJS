@@ -57,7 +57,7 @@ export interface ComponentConfig {
     [key: string]: any;
 }
 
-export type inputType = "input-text" | "input-bool" | "input-float";
+export type inputType = "input-text" | "input-bool" | "input-float" | "input-float-infinite";
 export type uiType = "ui-paragraph" | "ui-display" | "ui-dropdown";
 export type outputType = "output-text";
 export type comType =  inputType | uiType| outputType | "custom"
