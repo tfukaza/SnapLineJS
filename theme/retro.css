@@ -3,6 +3,10 @@
   background-color: cadetblue;
 }
 
+textarea:focus, input:focus {
+  outline: none;
+}
+
 .sl-node {
   font-family: "VT323", monospace;
   background-color: lightgray;
@@ -27,13 +31,16 @@
 }
 
 .sl-input-connector {
-  left: -24px;
+  left: -28px;
 }
 
 .sl-input, .sl-output {
   display: flex;
   flex-grow: 1;
   align-items: center;
+}
+.sl-input.connected > *:not(.sl-input-connector):not(.sl-label), .sl-output.connected > *:not(.sl-input-connector):not(.sl-label) {
+  opacity: 0.2;
 }
 
 .sl-input > .sl-label {
@@ -47,8 +54,7 @@
   background-color: rgb(214, 214, 214);
   border: 3px solid rgb(125, 125, 125);
   border-style: inset;
-  border-radius: 50%;
-  right: -24px;
+  right: -28px;
   position: absolute;
 }
 .sl-connector-line {
@@ -57,6 +63,21 @@
 }
 .sl-connector-line.overlapping {
   stroke: rgb(187, 187, 187);
+}
+
+.sl-input-float-container {
+  width: 70%;
+}
+.sl-input-float-container .sl-label {
+  width: 30%;
+}
+
+.sl-input-float-slider-container {
+  background-color: rgb(255, 255, 255);
+}
+
+.sl-input-float-slider {
+  background-color: rgb(63, 217, 255);
 }
 
 /*# sourceMappingURL=retro.css.map */

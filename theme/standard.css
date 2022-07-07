@@ -41,7 +41,7 @@ textarea:focus, input:focus {
 }
 .sl-input.connected > *:not(.sl-input-connector):not(.sl-label),
 .sl-output.connected > *:not(.sl-input-connector):not(.sl-label) {
-  display: none;
+  opacity: 0.2;
 }
 
 .sl-input > .sl-label {
@@ -58,6 +58,8 @@ textarea:focus, input:focus {
 .sl-input-text {
   background-color: rgb(239, 239, 239);
   border-radius: var(--ui-border-radius);
+  height: 30px;
+  padding: 0px 8px;
 }
 
 .sl-ui {
@@ -77,7 +79,7 @@ textarea:focus, input:focus {
   height: 16px;
   background-color: rgb(255, 98, 103);
   border: 2px solid rgb(224, 83, 88);
-  right: -8px;
+  right: -26px;
   border-radius: 8px;
   position: absolute;
   cursor: pointer;
@@ -89,7 +91,7 @@ textarea:focus, input:focus {
 }
 
 .sl-input-connector {
-  left: -10px;
+  left: -26px;
 }
 
 .sl-connector-line {
@@ -103,13 +105,22 @@ textarea:focus, input:focus {
 }
 
 .sl-input-float-container {
-  background-color: rgb(217, 217, 217);
   border-radius: var(--ui-border-radius);
-  padding: 0px 8px;
+}
+.sl-input-float-container .sl-label {
+  position: absolute;
+  left: 8px;
+  top: 2px;
 }
 
 .sl-input-float-slider {
-  background-color: rgb(179, 179, 179);
+  background-color: rgb(213, 213, 213);
+}
+
+.sl-input-float-slider-container {
+  background-color: rgb(239, 239, 239);
+  width: 100%;
+  padding: 4px 0px;
 }
 
 .sl-input-float-editor {

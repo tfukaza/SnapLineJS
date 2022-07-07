@@ -2,6 +2,10 @@
   --ui-border-radius: 3px;
 }
 
+textarea:focus, input:focus {
+  outline: none;
+}
+
 #sl-background {
   background-image: radial-gradient(circle at 1px 1px, rgb(81, 81, 91) 1px, transparent 0);
   background-color: rgb(37, 38, 41);
@@ -22,8 +26,7 @@
   border: 1px solid rgb(0, 122, 255);
 }
 .sl-node select, .sl-node input {
-  border: 1px solid rgb(47, 49, 50);
-  padding: 2px 8px;
+  padding: 4px 8px;
   background-color: rgb(47, 49, 54);
 }
 
@@ -83,8 +86,8 @@
   width: 16px;
   height: 16px;
   background-color: rgb(198, 100, 103);
-  border: 2px solid rgb(27, 25, 25);
-  right: -10px;
+  border: 2px solid rgb(100, 41, 85);
+  right: -28px;
   border-radius: 8px;
   position: absolute;
   cursor: pointer;
@@ -96,7 +99,7 @@
 }
 
 .sl-input-connector {
-  left: -10px;
+  left: -28px;
 }
 
 .sl-connector-line {
@@ -107,6 +110,29 @@
 .sl-connector-line.overlapping {
   stroke: rgb(187, 187, 187);
   filter: drop-shadow(0px 0px 8px rgba(44, 178, 142, 0.533));
+}
+
+.sl-input-float-container {
+  border-radius: var(--ui-border-radius);
+}
+.sl-input-float-container .sl-label {
+  position: absolute;
+  left: 8px;
+  top: 2px;
+}
+
+.sl-input-float-slider {
+  background-color: rgb(34, 36, 40);
+}
+
+.sl-input-float-slider-container {
+  background-color: rgb(47, 49, 50);
+  width: 100%;
+}
+
+.sl-input-float-editor {
+  padding: 4px 8px;
+  border-width: 0px;
 }
 
 /*# sourceMappingURL=dark.css.map */
