@@ -255,6 +255,7 @@ class NodeUI extends Base {
         }
         this.dom.classList.add('focused');
         this.dom.style.zIndex = "20";
+        this.updateDOMproperties();
     }
     
     offFocus() {

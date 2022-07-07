@@ -115,15 +115,15 @@ export default class SnapLine {
         });
 
         g.canvasContainer.addEventListener('wheel', function (e) {
-            const d_zoom = (1*g.zoom) * (-e.deltaY / 600);
+            let d_zoom = (1*g.zoom) * (-e.deltaY / 600);
             e.preventDefault();
 
             if (g.zoom + d_zoom < 0.2) {
                 g.zoom = 0.2;
-                return;
+                d_zoom = 0;
             } else if (g.zoom + d_zoom > 3) {
                 g.zoom = 3;
-                return;
+                d_zoom = 0;
             }
 
             // Move the camera closer to the mouse while zooming 

@@ -4,7 +4,7 @@
   "description": "",
   "main": "src/main.ts",
   "scripts": {
-    "dev": "npm run watch:tsc & npm run watch:sass & npm run watch:rollup",
+    "dev": "npm run watch:tsc & npm run watch:sass & npm run watch:rollup & cd demo && npm run dev",
     "watch:tsc": "tsc -w",
     "watch:rollup": "rollup --config --watch --environment BUILD_ENV:dev",
     "watch:sass": "sass -w src/theme:demo/src/lib/theme",

@@ -64,6 +64,7 @@ class InputUiFloat extends InputUI {
     x_min: number;
     x_max: number;
     slider_w: number;
+    floatSliderContainer: HTMLElement;
     floatSlider: HTMLElement;
     floatEditor: HTMLInputElement;
     floatContainer: HTMLElement;
@@ -80,21 +81,30 @@ class InputUiFloat extends InputUI {
 
         const floatContainer = document.createElement('div');
         const floatEditor = document.createElement('input');
+        const floatSliderContainer = document.createElement('div');
         const floatSlider = document.createElement('div');
         floatContainer.classList.add('sl-input-float-container');
         floatContainer.style.position = "relative";
         floatContainer.style.overflow = "hidden";
         floatContainer.style.flexGrow = "1";
-        // floatContainer.style.zIndex = "1";
+        floatContainer.style.display = "flex";
 
         floatEditor.classList.add('sl-input-float-editor');
         floatEditor.style.backgroundColor = "transparent";
-        floatEditor.style.position = "absolute";
+        floatEditor.style.position = "relative";
         floatEditor.style.width = "100%";
-        floatEditor.style.left = "0";
+        //floatEditor.style.height = "100%";
         floatEditor.type = 'text';
         floatEditor.style.textAlign = "right";
         floatEditor.style.zIndex = "10";
+
+        floatSliderContainer.classList.add('sl-input-float-slider-container');
+        floatSliderContainer.style.position = "relative";
+        floatSliderContainer.style.zIndex = "1";
+        //floatSliderContainer.style.height = "100%";
+        floatSliderContainer.style.overflow = "hidden";
+        //floatSliderContainer.style.width = "100%";
+        //floatSliderContainer.style.top = '0px';
 
         floatSlider.classList.add('sl-input-float-slider');
         floatSlider.style.width = "10px";
@@ -104,10 +114,10 @@ class InputUiFloat extends InputUI {
         floatSlider.style.position = "absolute";
         floatSlider.style.zIndex = "10";
         
-
-        floatContainer.appendChild(floatSlider);
-        floatContainer.appendChild(floatEditor);
+        floatSliderContainer.appendChild(floatSlider);
         addLabel(floatContainer, config);
+        floatContainer.appendChild(floatSliderContainer);
+        floatSliderContainer.appendChild(floatEditor);
 
         inputItf.dom!.appendChild(floatContainer);
 
@@ -119,6 +129,7 @@ class InputUiFloat extends InputUI {
         this.floatSlider = floatSlider;
         this.floatEditor = floatEditor;
         this.floatContainer = floatContainer;
+        this.floatSliderContainer = floatSliderContainer;
 
         this.bindFunction(floatContainer);
        
@@ -126,7 +137,7 @@ class InputUiFloat extends InputUI {
 
     customMouseDown() {
         this.cur_w = parseInt(this.floatSlider.style.width, 10);
-        this.slider_w = this.floatContainer.getBoundingClientRect().width/this.g.zoom;
+        this.slider_w = this.floatSliderContainer.getBoundingClientRect().width/this.g.zoom;
         console.log(this.slider_w)
         this.floatEditor.blur();
     }

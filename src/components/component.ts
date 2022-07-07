@@ -32,8 +32,9 @@ class InputInterface extends Interface {
 
         const input = document.createElement('div');
         input.classList.add('sl-input');
+        input.style.position='relative';
 
-        this.input = new InputConnector(config, parent, globals);
+        this.input = new InputConnector(config, parent, globals, this);
 
         input.appendChild(<Node>this.input.dom);
         this.dom = input;
@@ -103,6 +104,7 @@ class OutputInterface extends Interface {
         
         const out = document.createElement('div');
         out.classList.add('sl-output');
+        out.style.position='relative';
 
         addLabel(out, config);
         

@@ -4,6 +4,10 @@
     background-color: cadetblue; 
 }
 
+textarea:focus, input:focus{
+    outline: none;
+}
+
 .sl-node {
     font-family: 'VT323', monospace;
     background-color: lightgray;
@@ -33,13 +37,17 @@
 }
 
 .sl-input-connector{
-    left: -24px;
+    left: -28px;
 }
 
 .sl-input, .sl-output{
     display: flex;
     flex-grow: 1;
     align-items: center;
+
+    &.connected>*:not(.sl-input-connector):not(.sl-label) {
+        opacity: 0.2;
+    }
 }
 
 .sl-input {
@@ -56,8 +64,7 @@
     background-color: rgb(214, 214, 214);
     border: 3px solid rgb(125, 125, 125);
     border-style: inset;
-    border-radius: 50%;;
-    right: -24px;
+    right: -28px;
     position: absolute;
     &:hover{
        
@@ -70,4 +77,22 @@
     &.overlapping{
         stroke: rgb(187, 187, 187);
     }
+}
+
+.sl-input-float-container{
+    .sl-label {
+        width:30%;
+    }
+    width: 70%;
+}
+.sl-input-float-slider-container{
+    background-color: rgb(255, 255, 255);
+}
+.sl-input-float-slider{
+    background-color: rgb(63, 217, 255);
+}
+.sl-input-float-editor{
+    // height:100%;
+    // mix-blend-mode: difference;
+    
 }

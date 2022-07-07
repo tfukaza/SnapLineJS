@@ -35,9 +35,11 @@
           tabindex="0"
           class="dropdown-content menu p-2 shadow bg-base-100 rounded-box w-52"
         >
-          <li><button class="btn-sm" on:click={() => sl.addNode(math, 0, 0)}>Math</button></li>
-          <li><button class="btn-sm" on:click={() => sl.addNode(youtube, 0, 0)}>YouTube</button></li>
+          <div class="divider">Output</div> 
           <li><button class="btn-sm" on:click={() => sl.addNode(displayData, 0, 0)}>Print</button></li>
+          <li><button class="btn-sm" on:click={() => sl.addNode(youtube, 0, 0)}>YouTube</button></li>
+          <div class="divider">Math</div> 
+          <li><button class="btn-sm" on:click={() => sl.addNode(math, 0, 0)}>Operator</button></li>
           <li><button class="btn-sm" on:click={() => sl.addNode(lerp, 0, 0)}>Lerp</button></li>
         </ul>
       </div>
