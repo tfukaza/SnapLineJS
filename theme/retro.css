@@ -13,6 +13,7 @@ textarea:focus, input:focus {
   border-style: outset;
   border-width: 3px;
   border-color: darkgray;
+  min-width: 150px;
   box-shadow: 4px 4px 0px 0px rgba(4, 45, 39, 0.7294117647);
 }
 .sl-node input {
