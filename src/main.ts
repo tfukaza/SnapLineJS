@@ -7,24 +7,65 @@ export default class SnapLine {
 
     g: GlobalStats;
 
+    onMouseMove(e: MouseEvent) {
+
+        const g = this.g;
+
+        g.hoverDOM = e.target;
+        // get mouse position relative to canvas
+        g.mouse_x = e.clientX - g.canvasContainer!.offsetLeft;
+        g.mouse_y = e.clientY - g.canvasContainer!.offsetTop;
+
+        // console.debug(`Mouse position: ${g.mouse_x}, ${g.mouse_y}`);
+
+        // Adjust mouse position to world coordinates
+        let w_x = (g.mouse_x - g.cameraWidth / 2) / g.zoom + g.camera_x;
+        let w_y = (g.mouse_y - g.cameraHeight / 2) / g.zoom + g.camera_y;
+
+        // console.debug(`World position: ${w_x}, ${w_y}`);
+
+        g.mouse_x_world = w_x;
+        g.mouse_y_world = w_y;
+
+        if (g.isMouseDown || g.overrideDrag) {
+            g.dx = e.clientX - g.mousedown_x + g.dx_offset;
+            g.dy = e.clientY - g.mousedown_y + g.dy_offset;
+
+            // console.debug(`Camera position: ${g.camera_x}, ${g.camera_y}`);
+
+            if (g.targetNode == null) {
+                g.camera_x = g.camera_pan_start_x - g.dx / g.zoom;
+                g.camera_y = g.camera_pan_start_y - g.dy / g.zoom;
+                g.canvas!.style.transform = `matrix3d(${worldToCamera(g.camera_x, g.camera_y, g)})`;
+                g.canvasBackground!.style.transform = `translate(${g.camera_x + -g.cameraWidth * 5}px, ${g.camera_y + -g.cameraHeight * 5}px)`;
+                g.canvasBackground!.style.backgroundPosition = `${-g.camera_x}px ${-g.camera_y}px`;
+                g.canvas!.style.cursor = "grabbing";
+            }
+        }
+    }
+
     constructor(canvasContainerID: string) {
-        
+
         this.g = {
             canvas: null,
             canvasContainer: null,
             canvasBackground: null,
-            
+
             isMouseDown: false,     // If mouse is being pressed
             mousedown_x: 0,         // Initial mouse  position when mouse is pressed
-            mousedown_y: 0,         
+            mousedown_y: 0,
             mouse_x: 0,             // Current mouse position
             mouse_y: 0,
+            mouse_x_world: 0,       // Current mouse position, in world space
+            mouse_y_world: 0,
             camera_pan_start_x: 0,  // Initial camera position when camera is being panned
             camera_pan_start_y: 0,
             dx: 0,                  // How much the mouse has moved since being pressed
             dy: 0,
             dx_offset: 0,           // Offset for dx and dy
             dy_offset: 0,
+
+            overrideDrag: false,
 
             camera_x: 0,
             camera_y: 0,
@@ -36,7 +77,7 @@ export default class SnapLine {
             focusNode: null,
             hoverDOM: null,
             gid: 0,
-            
+
             nodeArray: [],
             globalLines: [],
             globalNodes: {},
@@ -48,12 +89,14 @@ export default class SnapLine {
             console.error("Canvas not found");
             return;
         }
-        
+
         g.cameraWidth = g.canvasContainer.clientWidth;
         g.cameraHeight = g.canvasContainer.clientHeight;
-        console.debug(`Canvas size: ${g.cameraWidth}x${g.cameraHeight}`); 
-        
-        
+        console.debug(`Canvas size: ${g.cameraWidth}x${g.cameraHeight}`);
+
+        // g.camera_x = g.cameraWidth/2;
+        // g.camera_y = g.cameraHeight/2;
+
         const c = document.createElement('div');
         c.style.position = 'absolute';
         c.style.top = '0px';
@@ -61,61 +104,45 @@ export default class SnapLine {
         c.className = 'canvas';
         g.canvasContainer.appendChild(c);
         g.canvas = c;
-        
-        g.canvas.style.transform = `translate(${g.cameraWidth/2}px, ${g.cameraHeight/2}px)`;
-        
+
+        g.canvas.style.transform = `translate(${g.cameraWidth / 2}px, ${g.cameraHeight / 2}px)`;
+
         g.canvasContainer.tabIndex = 0;
-        
+
         const bg = document.createElement('div');
         bg.id = "sl-background";
         bg.style.width = (g.cameraWidth * 10) + 'px';
         bg.style.height = (g.cameraHeight * 10) + 'px';
-        bg.style.transform = `translate(${-g.cameraWidth*5}px, ${-g.cameraHeight*5}px)`;
+        bg.style.transform = `translate(${-g.cameraWidth * 5}px, ${-g.cameraHeight * 5}px)`;
         bg.style.transformOrigin = "center";
         bg.style.zIndex = "0";
         bg.style.position = "absolute";
         g.canvas.appendChild(bg);
 
-        g.canvasBackground = bg; 
-       
+        g.canvasBackground = bg;
+
 
         g.canvasContainer.addEventListener('mousedown', function (e) {
+            if (g.overrideDrag) {
+                return;
+            }
+
             g.isMouseDown = true;
             g.mousedown_x = e.clientX;
             g.mousedown_y = e.clientY;
             g.camera_pan_start_x = g.camera_x;
             g.camera_pan_start_y = g.camera_y;
 
-            g.focusNode = null;
+
             for (const node of g.nodeArray) {
                 node.offFocus();
             }
         });
 
-        g.canvasContainer.addEventListener('mousemove', function (e) {
-
-            g.hoverDOM = e.target;
-            // get mouse position relative to canvas
-            g.mouse_x = e.clientX - g.canvasContainer!.offsetLeft;
-            g.mouse_y = e.clientY - g.canvasContainer!.offsetTop;
-      
-            if (g.isMouseDown) {
-                g.dx = e.clientX - g.mousedown_x + g.dx_offset;
-                g.dy = e.clientY - g.mousedown_y + g.dy_offset;
-                
-                if (g.targetNode == null) {
-                    g.camera_x = g.camera_pan_start_x -g.dx/g.zoom;
-                    g.camera_y = g.camera_pan_start_y -g.dy/g.zoom;
-                    g.canvas!.style.transform = `matrix3d(${worldToCamera(g.camera_x, g.camera_y, g)})`;
-                    g.canvasBackground!.style.transform = `translate(${g.camera_x + -g.cameraWidth*5}px, ${g.camera_y + -g.cameraHeight*5}px)`;
-                    g.canvasBackground!.style.backgroundPosition = `${-g.camera_x}px ${-g.camera_y}px`;
-                    g.canvas!.style.cursor = "grabbing";
-                } 
-            }
-        });
+        g.canvasContainer.addEventListener('mousemove', this.onMouseMove.bind(this));
 
         g.canvasContainer.addEventListener('wheel', function (e) {
-            let d_zoom = (1*g.zoom) * (-e.deltaY / 600);
+            let d_zoom = (1 * g.zoom) * (-e.deltaY / 600);
             e.preventDefault();
 
             if (g.zoom + d_zoom < 0.2) {
@@ -127,14 +154,14 @@ export default class SnapLine {
             }
 
             // Move the camera closer to the mouse while zooming 
-            const d_zoom_x = (g.mouse_x - g.cameraWidth/2)*d_zoom;
-            const d_zoom_y = (g.mouse_y - g.cameraHeight/2)* d_zoom;
+            const d_zoom_x = (g.mouse_x - g.cameraWidth / 2) * d_zoom;
+            const d_zoom_y = (g.mouse_y - g.cameraHeight / 2) * d_zoom;
             g.zoom += d_zoom;
             // Needs to be divided by g.zoom twice, 
             // once to account for the zoom itself, and once more because this value will be 
             // multiplied by g.zoom during worldToCamera()
-            g.camera_x += d_zoom_x/g.zoom/g.zoom;
-            g.camera_y += d_zoom_y/g.zoom/g.zoom;
+            g.camera_x += d_zoom_x / g.zoom / g.zoom;
+            g.camera_y += d_zoom_y / g.zoom / g.zoom;
             g.canvas!.style.transform = `matrix3d(${worldToCamera(g.camera_x, g.camera_y, g)})`;
             // scale background image
             //g.canvasBackground!.style.transform = `translate(${-g.cameraWidth*5}px, ${-g.cameraHeight*5}px) scale(${g.zoom}) `;
@@ -143,6 +170,11 @@ export default class SnapLine {
 
         g.canvasContainer.addEventListener('mouseup', function (_) {
 
+            if (g.overrideDrag) {
+                 g.canvasBackground!.style.cursor = "default";
+            }
+
+            g.overrideDrag = false;
             g.isMouseDown = false;
             g.canvas!.style.cursor = "default";
             if (g.targetNode == null) {
@@ -154,13 +186,19 @@ export default class SnapLine {
             g.dy = 0;
             g.dx_offset = 0;
             g.dy_offset = 0;
-            
+
+            // if (g.overrideDrag) {
+            //     g.canvasContainer.style.cursor = "grab";
+            // }
+
         });
 
-        g.canvasContainer.addEventListener('keydown', (e:KeyboardEvent) => {
-            switch(e.key){
+        g.canvasContainer.addEventListener('keydown', (e: KeyboardEvent) => {
+            console.debug("Keydown: " + e.key);
+            switch (e.key) {
+                case 'Backspace':
                 case 'Delete':
-                    if (g.focusNode){
+                    if (g.focusNode) {
                         console.debug("Delete Node " + g.focusNode.gid);
                         this.deleteNode(g.focusNode.gid);
                     }
@@ -169,9 +207,12 @@ export default class SnapLine {
         });
 
         console.info('Initialized SnapLine...');
-    
+
         window.requestAnimationFrame(this.step.bind(this));
     }
+
+
+
 
     step() {
         if (this.g.targetNode) {
@@ -180,14 +221,40 @@ export default class SnapLine {
         window.requestAnimationFrame(this.step.bind(this));
     }
 
-    addNode(config: NodeConfig, x: number, y:number) {
+    addNode(config: NodeConfig, x: number, y: number) {
         const n: NodeUI = new NodeUI(config, this.g, x, y);
         this.g.globalNodes[n.gid] = n;
         this.focusNode(n.gid);
         return n;
     }
 
-    deleteNode(id: string){
+    addNodeAtMouse(config: NodeConfig, e: MouseEvent) {
+
+        let x = this.g.mouse_x_world;
+        let y = this.g.mouse_y_world;
+
+        let n = this.addNode(config, x, y);
+
+        this.g.isMouseDown = true;
+        this.g.mousedown_x = this.g.mouse_x;
+        this.g.mousedown_y = this.g.mouse_y;
+        this.g.camera_pan_start_x = this.g.camera_x;
+        this.g.camera_pan_start_y = this.g.camera_y;
+        this.g.overrideDrag = true;
+
+        this.g.focusNode = n;
+        this.g.targetNode = n;
+
+        for (const node of this.g.nodeArray) {
+            node.offFocus();
+        }
+
+        this.onMouseMove(e);
+
+        this.g.canvasBackground!.style.cursor = "none";
+    }
+
+    deleteNode(id: string) {
         if (!(id in this.g.globalNodes)) return null;
         const node = this.g.globalNodes[id];
         this.g.canvas?.removeChild((<NodeUI>node).dom);
@@ -195,17 +262,17 @@ export default class SnapLine {
         return id;
     }
 
-    focusNode(id: string){
+    focusNode(id: string) {
         if (!(id in this.g.globalNodes)) return null;
         const node = this.g.globalNodes[id];
         node.onFocus();
         return id;
     }
 
-    connectNodes(node0: string, outputID:string, node1: string, inputID: string){
+    connectNodes(node0: string, outputID: string, node1: string, inputID: string) {
         const n0 = this.g.globalNodes[node0];
         const n1 = this.g.globalNodes[node1];
-        if (!n0 || !n1 || !(n0 instanceof NodeUI) || !(n1 instanceof NodeUI)){
+        if (!n0 || !n1 || !(n0 instanceof NodeUI) || !(n1 instanceof NodeUI)) {
             return null;
         }
         const o = n0.findOutput(outputID);

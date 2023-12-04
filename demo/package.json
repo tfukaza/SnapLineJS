@@ -15,10 +15,10 @@
     "postcss": "^8.4.14",
     "svelte": "^3.44.0",
     "svelte-preprocess": "^4.10.7",
-    "tailwindcss": "^3.1.4",
-    "vite": "^2.9.9"
+    "tailwindcss": "^3.1.4"
   },
   "dependencies": {
-    "@jaames/iro": "^5.5.2"
+    "@jaames/iro": "^5.5.2",
+    "vite": "^4.3.9"
   }
 }

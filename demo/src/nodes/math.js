@@ -112,7 +112,7 @@ export const lerp = {
 export const constantFloat = {
   functions: {
     output: {
-      inputs: ["Value"],
+      inputs: ["Input 1"],
       outputs: ["Result"],
       functionUpdate: (self, a) => {
         return parseFloat(a);
@@ -144,6 +144,14 @@ export const displayData = {
     },
   },
   elements: [
+    { type: "custom",
+      name: "Display",
+      html: `
+      <div class="bg-white w-full">
+        Display
+      </div>
+      `,
+    },
     {
       type: "input-text",
       name: "Input",

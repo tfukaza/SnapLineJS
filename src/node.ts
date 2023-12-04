@@ -42,8 +42,8 @@ class NodeUI extends Base {
 
         this.config = config;
 
-        this.position_x = x;
-        this.position_y = y;
+        this.position_x = x;// - this.g.cameraWidth / 2;
+        this.position_y = y; //- this.g.cameraHeight / 2;
 
         this.inputs = [];    
         this.outputs = [];   
@@ -52,8 +52,8 @@ class NodeUI extends Base {
         
         this.elements = {};
 
-        this.pan_start_x = 0;
-        this.pan_start_y = 0;
+        this.pan_start_x = this.position_x;
+        this.pan_start_y = this.position_y;
 
         this.overlapping = null;
 
@@ -225,6 +225,8 @@ class NodeUI extends Base {
 
         this.position_x = this.pan_start_x+this.g.dx/this.g.zoom
         this.position_y = this.pan_start_y+this.g.dy/this.g.zoom
+
+        // console.debug(`onDrag ${this.position_x} ${this.position_y}`);
         
         this.dom.style.transform = `translate3d(${this.position_x}px, ${this.position_y}px, 0)`;
 
