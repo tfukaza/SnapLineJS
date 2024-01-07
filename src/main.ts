@@ -31,8 +31,6 @@ export default class SnapLine {
             g.dx = e.clientX - g.mousedown_x + g.dx_offset;
             g.dy = e.clientY - g.mousedown_y + g.dy_offset;
 
-            // console.debug(`Camera position: ${g.camera_x}, ${g.camera_y}`);
-
             if (g.targetNode == null) {
                 g.camera_x = g.camera_pan_start_x - g.dx / g.zoom;
                 g.camera_y = g.camera_pan_start_y - g.dy / g.zoom;
@@ -142,36 +140,32 @@ export default class SnapLine {
         g.canvasContainer.addEventListener('mousemove', this.onMouseMove.bind(this));
 
         g.canvasContainer.addEventListener('wheel', function (e) {
-            let d_zoom = (1 * g.zoom) * (-e.deltaY / 600);
             e.preventDefault();
+            let d_zoom = (1 * g.zoom) * (-e.deltaY / 1000);
 
             if (g.zoom + d_zoom < 0.2) {
-                g.zoom = 0.2;
-                d_zoom = 0;
-            } else if (g.zoom + d_zoom > 3) {
-                g.zoom = 3;
-                d_zoom = 0;
+                d_zoom = 0.2 - g.zoom;
+            } else if (g.zoom + d_zoom > 1) {
+                d_zoom = 1 - g.zoom;
             }
 
-            // Move the camera closer to the mouse while zooming 
-            const d_zoom_x = (g.mouse_x - g.cameraWidth / 2) * d_zoom;
-            const d_zoom_y = (g.mouse_y - g.cameraHeight / 2) * d_zoom;
+            let dz = g.zoom / (g.zoom + d_zoom);
+
+            let camera_dx = (g.cameraWidth / g.zoom * (dz - 1)) * (1 - (g.cameraWidth * 1.5 - g.mouse_x) / g.cameraWidth);
+            let camera_dy = (g.cameraHeight / g.zoom * (dz - 1)) * (1 - (g.cameraHeight * 1.5 - g.mouse_y) / g.cameraHeight);
             g.zoom += d_zoom;
-            // Needs to be divided by g.zoom twice, 
-            // once to account for the zoom itself, and once more because this value will be 
-            // multiplied by g.zoom during worldToCamera()
-            g.camera_x += d_zoom_x / g.zoom / g.zoom;
-            g.camera_y += d_zoom_y / g.zoom / g.zoom;
+
+            g.camera_x -= camera_dx;
+            g.camera_y -= camera_dy;
+
             g.canvas!.style.transform = `matrix3d(${worldToCamera(g.camera_x, g.camera_y, g)})`;
-            // scale background image
-            //g.canvasBackground!.style.transform = `translate(${-g.cameraWidth*5}px, ${-g.cameraHeight*5}px) scale(${g.zoom}) `;
-            e.preventDefault();
+
         });
 
         g.canvasContainer.addEventListener('mouseup', function (_) {
 
             if (g.overrideDrag) {
-                 g.canvasBackground!.style.cursor = "default";
+                g.canvasBackground!.style.cursor = "default";
             }
 
             g.overrideDrag = false;
