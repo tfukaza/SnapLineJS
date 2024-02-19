@@ -1,6 +1,6 @@
 
 
-const dev = (process.env.BUILD_ENV !== 'production');
+const dev = (process.env.BUILD_ENV === 'dev');
 
 
 export default {
