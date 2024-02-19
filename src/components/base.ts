@@ -72,7 +72,7 @@ export abstract class Base {
         this.customCursorDown({ button: button, clientX: clientX, clientY: clientY });
 
     }
-    customCursorDown(prop: customCursorDownProp): void { }
+    customCursorDown(_: customCursorDownProp): void { }
 
     domCursorUp(): void { }
     onFocus(): void { }

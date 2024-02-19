@@ -197,7 +197,7 @@ class NodeUI extends Base {
         this.pan_start_y = this.position_y;
     }
 
-    customCursorDown(prop: customCursorDownProp) {
+    customCursorDown(_: customCursorDownProp) {
 
         console.debug(`Node class mousedown event triggered on ${this.gid}!`);
 

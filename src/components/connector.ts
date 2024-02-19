@@ -319,7 +319,7 @@ class OutputConnector extends ConnectorComponent {
         return [svg, line];
     }
 
-    customCursorDown(prop: customCursorDownProp) {
+    customCursorDown(_: customCursorDownProp) {
 
         console.debug(`ConnectorComponent mousedown event triggered on ${this.gid}!`);
 
