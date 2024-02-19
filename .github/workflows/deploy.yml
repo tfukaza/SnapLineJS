@@ -23,10 +23,11 @@ jobs:
         mkdir demo/gh-pages
         mkdir demo/gh-pages/lib
         mkdir demo/gh-pages/lib/theme
-        cp -r dist/theme/* demo/gh-pages/lib/theme
+        cp dist/theme/* demo/gh-pages/lib/theme
         cp dist/snapline.js demo/gh-pages/lib
         cp demo/index.html demo/gh-pages
         cp demo/demo.css demo/gh-pages
+        cp demo/demo.js demo/gh-pages
     - name: Deploy
       uses: peaceiris/actions-gh-pages@v3
       with:
