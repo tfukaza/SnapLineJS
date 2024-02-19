@@ -1,4 +1,4 @@
-export const math = {
+const math = {
   functions: {
     output: {
       inputs: ["Input 1", "Input 2", "Operation"],
@@ -48,7 +48,7 @@ export const math = {
   ],
 };
 
-export const clamp = {
+const clamp = {
   functions: {
     output: {
       inputs: ["Min", "Max", "Value"],
@@ -75,7 +75,7 @@ export const clamp = {
   ],
 };
 
-export const lerp = {
+const lerp = {
   functions: {
     output: {
       inputs: ["Input 1", "Input 2", "Alpha"],
@@ -84,20 +84,20 @@ export const lerp = {
         a = parseFloat(a);
         b = parseFloat(b);
         alpha = parseFloat(alpha);
-        return a + (b-a) * alpha;
+        return a + (b - a) * alpha;
       }
-        
+
     },
   },
   elements: [
     { type: "output-text", name: "Result" },
     {
-        type: "input-text",
-        name: "Input 1",
+      type: "input-text",
+      name: "Input 1",
     },
     {
-        type: "input-text",
-        name: "Input 2",
+      type: "input-text",
+      name: "Input 2",
     },
     {
       type: "input-float",
@@ -105,11 +105,11 @@ export const lerp = {
       min: 0,
       max: 1,
     },
-    
+
   ],
 };
 
-export const constantFloat = {
+const constantFloat = {
   functions: {
     output: {
       inputs: ["Input 1"],
@@ -117,20 +117,20 @@ export const constantFloat = {
       functionUpdate: (self, a) => {
         return parseFloat(a);
       }
-        
+
     },
   },
   elements: [
     { type: "output-text", name: "Result" },
     {
-        type: "input-float-infinite",
-        name: "Input 1",
+      type: "input-float-infinite",
+      name: "Input 1",
     },
-    
+
   ],
 };
 
-export const displayData = {
+const displayData = {
   functions: {
     output: {
       inputs: ["Input"],
@@ -144,7 +144,8 @@ export const displayData = {
     },
   },
   elements: [
-    { type: "custom",
+    {
+      type: "custom",
       name: "Display",
       html: `
       <div class="bg-white w-full">
@@ -156,7 +157,8 @@ export const displayData = {
       type: "input-text",
       name: "Input",
     },
-    { type: "custom",
+    {
+      type: "custom",
       name: "Display",
       html: `
       <div class="bg-red rounded-lg">

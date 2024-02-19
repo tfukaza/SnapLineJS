@@ -1,18 +1,18 @@
-import {ComponentBase} from './base';
-import { ComponentConfig, GlobalStats} from '../types';
-import { NodeUI } from "../node"
+import { ComponentBase } from './base';
+import { ComponentConfig, GlobalStats } from '../types';
+import { NodeUI } from "./node"
 import { addLabel } from '../helper';
 import { InputConnector, OutputConnector } from './connector';
 import { InputUI, InputUiBool, InputUiFloat, InputUiFloatInfinite, InputUiText } from './input_ui';
 
-/*  
-    A general class tio contain all elements in a node
-*/
+/**
+ * Each UX element in a node, such as a text input or a button, is an interface. 
+ */
 class Interface extends ComponentBase {
 
-    name:string;
+    name: string;
 
-    constructor(config: ComponentConfig, parent: NodeUI, globals:GlobalStats) {
+    constructor(config: ComponentConfig, parent: NodeUI, globals: GlobalStats) {
         super(config, parent, globals);
         this.name = config.name;
         this.parent!.elements[this.name] = this;
@@ -26,13 +26,13 @@ class InputInterface extends Interface {
     inputUI: InputUI | null;
     name: string;
 
-    constructor(config: ComponentConfig, parent: NodeUI, globals: GlobalStats){
+    constructor(config: ComponentConfig, parent: NodeUI, globals: GlobalStats) {
 
         super(config, parent, globals);
 
         const input = document.createElement('div');
         input.classList.add('sl-input');
-        input.style.position='relative';
+        input.style.position = 'relative';
 
         this.input = new InputConnector(config, parent, globals, this);
 
@@ -45,10 +45,10 @@ class InputInterface extends Interface {
         switch (config.type) {
             case 'input-text':
                 this.inputUI = new InputUiText(config, parent, globals, this);
-                break; 
+                break;
             case 'input-bool':
                 this.inputUI = new InputUiBool(config, parent, globals, this);
-                break; 
+                break;
             case 'input-float':
                 this.inputUI = new InputUiFloat(config, parent, globals, this);
                 break;
@@ -57,8 +57,8 @@ class InputInterface extends Interface {
                 break;
             default:
                 this.inputUI = null;
-            }
-        
+        }
+
         this.bindFunction(this.dom);
     }
 
@@ -66,17 +66,17 @@ class InputInterface extends Interface {
     //     this.connector_x = this.parent!.position_x + this.c_total_offset_x;
     //     this.connector_y = this.parent!.position_y + this.c_total_offset_y;
     // }
-    
+
     // disconnectFromOutput() {
     //     this.peerOutput = null;
     //     this.dom?.classList.remove("connected");
     // }
-    
+
     // connectToOutput(output: OutputComponent) {
     //     this.peerOutput = output;
     //     this.dom?.classList.add("connected");
     // }
-    
+
     // nodeDrag() {
     //     this.updateConnectorPosition();
     //     if (!this.peerOutput) {
@@ -88,10 +88,14 @@ class InputInterface extends Interface {
     getValue() {
         if (this.input.peerOutput) {
             return this.input.peerOutput.getValue();
-        } else if (this.inputUI){
+        } else if (this.inputUI) {
             return this.inputUI.getInputValue();
         }
         return null;
+    }
+
+    destroy(): void {
+        this.input.destroy();
     }
 
 }
@@ -102,18 +106,18 @@ class OutputInterface extends Interface {
     output: OutputConnector;
     name: string;
 
-    constructor(config: ComponentConfig, parent: NodeUI, globals:GlobalStats) {
+    constructor(config: ComponentConfig, parent: NodeUI, globals: GlobalStats) {
         super(config, parent, globals);
-        
+
         const out = document.createElement('div');
         out.classList.add('sl-output');
-        out.style.position='relative';
+        out.style.position = 'relative';
 
         addLabel(out, config);
-        
+
         this.output = new OutputConnector(config, parent, globals);
         out.appendChild(<Node>this.output.dom);
-        
+
         this.dom = out;
         this.name = config.name;
 
@@ -124,12 +128,16 @@ class OutputInterface extends Interface {
         this.parent!.exec();
         return this.output.val;
     }
-    
+
     setValue(val: any) {
         this.output.val = val;
     }
-    
-  
+
+    destroy(): void {
+        this.output.destroy();
+    }
+
+
 }
 
 
@@ -138,10 +146,10 @@ class uiComponent extends ComponentBase {
     parentContent: HTMLElement;
     getUIvalue: Function;
     setUIvalue: Function;
-    
+
     name: string;
 
-    constructor(config: ComponentConfig, parent: NodeUI, globals:GlobalStats, content: HTMLElement) {
+    constructor(config: ComponentConfig, parent: NodeUI, globals: GlobalStats, content: HTMLElement) {
 
         super(config, parent, globals);
 
@@ -152,7 +160,7 @@ class uiComponent extends ComponentBase {
 
         const cont = document.createElement('div');
         cont.classList.add('sl-ui');
-    
+
         const uiType = config.type;
         switch (uiType) {
             case 'ui-paragraph':
@@ -166,7 +174,7 @@ class uiComponent extends ComponentBase {
                 display.style.pointerEvents = 'none';
                 display.innerText = "Output";
                 cont.appendChild(display);
-                this.setSetFunction((v: any) => { display.innerText = v})
+                this.setSetFunction((v: any) => { display.innerText = v })
                 break;
             case 'ui-dropdown':
                 const dropdown = document.createElement('select');
@@ -188,7 +196,7 @@ class uiComponent extends ComponentBase {
         }
     }
 
-    setExecTrigger(dom: HTMLElement, event: string){
+    setExecTrigger(dom: HTMLElement, event: string) {
         dom.addEventListener(event, () => {
             this.parent?.run();
         });
@@ -218,21 +226,21 @@ class customComponent extends ComponentBase {
     getUIvalue: Function;
     setUIvalue: Function;
 
-    constructor(config: ComponentConfig, parent: NodeUI, globals:GlobalStats, content: HTMLElement) {
+    constructor(config: ComponentConfig, parent: NodeUI, globals: GlobalStats, content: HTMLElement) {
 
         super(config, parent, globals);
 
         this.parentContent = content;
 
         this.getUIvalue = () => { return null };
-        this.setUIvalue = (v:any) => { console.debug(v) };
+        this.setUIvalue = (v: any) => { console.debug(v) };
 
         const template = document.createElement('template');
         template.innerHTML = config.html.trim();
         this.dom = <HTMLElement>template.content.firstChild
     }
 
-    setExecTrigger(dom: HTMLElement, event:string){
+    setExecTrigger(dom: HTMLElement, event: string) {
         console.debug(dom, event);
     }
 
@@ -248,7 +256,7 @@ class customComponent extends ComponentBase {
         return this.getUIvalue();
     }
 
-    setValue(val:any) {
+    setValue(val: any) {
         return this.setUIvalue(val);
     }
 }
