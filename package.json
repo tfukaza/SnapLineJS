@@ -4,13 +4,12 @@
   "description": "",
   "main": "src/main.ts",
   "scripts": {
-    "dev": "npm run watch:tsc & npm run watch:sass & npm run watch:rollup & cd demo && npm run dev",
+    "dev": "npm run watch:tsc & npm run watch:sass & npm run watch:rollup & npx browser-sync start --server 'demo' --watch 'demo' --no-notify",
     "watch:tsc": "tsc -w",
-    "watch:rollup": "rollup --config --watch --environment BUILD_ENV:dev",
+    "watch:rollup": "rollup --open --config --watch --environment BUILD_ENV:dev",
     "watch:sass": "sass -w src/theme:demo/src/lib/theme",
     "lint": "eslint src/**/*.ts --fix",
-    "build": "tsc && sass src/theme:dist/theme --no-source-map && rollup --config --environment BUILD_ENV:production && uglifyjs --compress --mangle -- dist/snapline.js > dist/snapline.min.js",
-    "deploy": "tsc && sass src/theme:demo/src/lib/theme && rollup --config --environment BUILD_ENV:deploy"
+    "deploy": "tsc && sass src/theme:dist/theme && rollup --config --environment BUILD_ENV:production"
   },
   "repository": {
     "type": "git",
@@ -23,22 +22,22 @@
   },
   "homepage": "https://github.com/tfukaza/node-editor#readme",
   "devDependencies": {
-    "@rollup/plugin-babel": "^5.3.1",
-    "@rollup/plugin-commonjs": "^22.0.0",
-    "@rollup/plugin-node-resolve": "^13.3.0",
-    "@rollup/plugin-replace": "^4.0.0",
-    "@rollup/plugin-typescript": "^8.3.3",
-    "@typescript-eslint/eslint-plugin": "^5.30.0",
-    "@typescript-eslint/parser": "^5.30.0",
-    "eslint": "^8.18.0",
-    "rollup": "^2.75.7",
+    "@rollup/plugin-babel": "^6.0.4",
+    "@rollup/plugin-commonjs": "^25.0.7",
+    "@rollup/plugin-node-resolve": "^15.2.3",
+    "@rollup/plugin-replace": "^5.0.5",
+    "@rollup/plugin-typescript": "^11.1.6",
+    "@typescript-eslint/eslint-plugin": "^7.0.1",
+    "@typescript-eslint/parser": "^7.0.1",
+    "browser-sync": "^3.0.2",
+    "eslint": "^8.56.0",
+    "rollup": "^4.12.0",
     "rollup-plugin-livereload": "^2.0.5",
-    "rollup-plugin-scss": "^3.0.0",
-    "rollup-plugin-serve": "^1.1.0",
-    "sass": "^1.53.0",
-    "typescript": "^4.7.4"
-  },
-  "dependencies": {
-    "uglify-js": "^3.16.0"
+    "rollup-plugin-scss": "^4.0.0",
+    "rollup-plugin-serve": "^1.1.1",
+    "sass": "^1.71.0",
+    "serve": "^14.2.1",
+    "typescript": "^5.3.3",
+    "uglify-js": "^3.17.4"
   }
 }

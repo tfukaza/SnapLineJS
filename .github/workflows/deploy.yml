@@ -14,22 +14,17 @@ jobs:
       uses: actions/setup-node@v1
       with:
         node-version: 16
-    - name: Install npm
+    - name: Install npm packages
       run:  npm install
-    - name: Build Snapline
+    - name: Build Snapline to dist directory
       run: npm run deploy
-    - name: Build demo site
+    - name: Copy files to demo directory
       run: |
-        cd demo
-        npm install 
-        npm run build
-    - name: Copy CSS files
-      run: |
-        cd demo
-        mkdir dist/theme
-        cp src/lib/theme/* dist/theme
+        mkdir demo/gh-pages
+        cp -r dist/* demo/gh-pages
+        cp index.html demo/gh-pages
     - name: Deploy
       uses: peaceiris/actions-gh-pages@v3
       with:
         github_token: ${{ secrets.GITHUB_TOKEN }}
-        publish_dir: demo/dist
+        publish_dir: demo

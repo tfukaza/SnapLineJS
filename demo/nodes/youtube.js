@@ -1,4 +1,4 @@
-export const youtube = {
+const youtube = {
   functions: {
     visualize: {
       inputs: ['Video ID', 'Show Controls'],

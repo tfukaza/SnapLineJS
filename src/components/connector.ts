@@ -1,10 +1,13 @@
 
-import { NodeUI } from "../node";
-import { ComponentConfig, GlobalStats, lineObject } from "../types";
+import { NodeUI } from "./node";
+import { ComponentConfig, GlobalStats, customCursorDownProp, lineObject } from "../types";
 import { ComponentBase } from "./base";
 import { InputInterface } from "./component";
 
 
+/**
+ * Connector components are the elements that are used to connect nodes.
+ */
 class ConnectorComponent extends ComponentBase {
 
     connector_x: number;        // Location of the connector on canvas
@@ -64,6 +67,10 @@ class ConnectorComponent extends ComponentBase {
         line.setAttribute('y2', '' + y);
         line.setAttribute('stroke-width', '4');
     }
+
+    // destroy(): void {
+    //     this.g.canvas?.removeChild(this.dom!);
+    // }
 }
 
 
@@ -85,24 +92,36 @@ class InputConnector extends ConnectorComponent {
         const connector = document.createElement('span');
         connector.classList.add('sl-input-connector');
         connector.id = `input-${this.gid}`;
+
         connector.onmousedown = this.domMouseDown.bind(this);
+        connector.ontouchstart = this.domTouchStart.bind(this);
 
         this.dom = connector;
     }
 
+    domTouchStart(e: TouchEvent): void {
+        this.domCursorDown(0, e.touches[0].clientX, e.touches[0].clientY);
+        e.stopPropagation();
+    }
+
     domMouseDown(e: MouseEvent): void {
+        this.domCursorDown(e.button, e.clientX, e.clientY);
+        e.stopPropagation();
+    }
+
+    domCursorDown(button: number, clientX: number, clientY: number): void {
         if (this.peerOutput) {
-            super.domMouseDown(e);
+            super.domCursorDown(button, clientX, clientY);
             // Hand over control to the peer output
-            this.g.targetNode = this.peerOutput;
+            this.g.targetObject = this.peerOutput;
 
             this.g.dx_offset = (this.connector_x - this.peerOutput.connector_x) * this.g.zoom;
             this.g.dy_offset = (this.connector_y - this.peerOutput.connector_y) * this.g.zoom;
             this.g.dx = this.g.dx_offset;
             this.g.dy = this.g.dy_offset;
-            this.peerOutput.customMouseDown(e);
+            this.peerOutput.customCursorDown({ button: button, clientX: clientX, clientY: clientY });
             this.peerOutput.disconnectFromInput(this);
-            e.stopPropagation();
+
         }
     }
 
@@ -140,6 +159,14 @@ class InputConnector extends ConnectorComponent {
     //     return null;
     // }
 
+    destroy(): void {
+        if (this.peerOutput) {
+            this.peerOutput.disconnectFromInput(this);
+        }
+
+
+    }
+
 }
 
 
@@ -151,6 +178,7 @@ class OutputConnector extends ConnectorComponent {
         line: SVGSVGElement | SVGLineElement | null;
     }
     svgs: Array<lineObject>;
+    peerInputs: Array<InputConnector> = [];
 
     constructor(config: ComponentConfig, parent: NodeUI, globals: GlobalStats) {
         super(config, parent, globals);
@@ -165,7 +193,7 @@ class OutputConnector extends ConnectorComponent {
         const connector = document.createElement('span');
         connector.classList.add('sl-output-connector');
         connector.id = `output-${this.gid}`;
-        connector.onmousedown = this.domMouseDown.bind(this);
+        this.bindFunction(connector);
 
         this.dom = connector;
     }
@@ -186,6 +214,7 @@ class OutputConnector extends ConnectorComponent {
 
         console.debug("Now connecting to: ", input);
         input.connectToOutput(this);
+        this.peerInputs.push(input);
 
         const s = this.createNewSVG();
         const svg = s[0];
@@ -227,6 +256,8 @@ class OutputConnector extends ConnectorComponent {
         input.disconnectFromOutput();
         this.parent!.outputCount--;
         input.parent!.inputCount--;
+        // Remove the input from the peerInputs array using gid as key
+        this.peerInputs = this.peerInputs.filter(i => i.gid != input.gid);
     }
 
     updateConnectorPosition() {
@@ -258,10 +289,12 @@ class OutputConnector extends ConnectorComponent {
         }
     }
 
-    createNewSVG() {
+    createNewSVG(isTmp = false): [SVGSVGElement, SVGLineElement] {
+        console.debug("Creating new SVG");
         // create a new svg path
         const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
         svg.classList.add('sl-connector-svg');
+        if (isTmp) svg.classList.add('tmp');
         svg.style.pointerEvents = 'none';
         svg.style.position = 'absolute';
         svg.style.overflow = 'visible';
@@ -270,7 +303,8 @@ class OutputConnector extends ConnectorComponent {
         svg.style.willChange = "transform";
 
         const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-        line.classList.add('sl-connector-line');
+        line.classList.add('sl-connector-line')
+        line.classList.add('tmp')
 
         line.setAttribute('stroke-width', '4');
 
@@ -285,9 +319,16 @@ class OutputConnector extends ConnectorComponent {
         return [svg, line];
     }
 
-    customMouseDown(_: MouseEvent): void {
+    customCursorDown(prop: customCursorDownProp) {
+
+        console.debug(`ConnectorComponent mousedown event triggered on ${this.gid}!`);
+
         // while dragging, we use a temporary svg to show the line
-        const s = this.createNewSVG();
+        // if (this.g.noNewSVG) {
+        //     return;
+        // }
+        const s = this.createNewSVG(true);
+        //console.debug(s[0]);
         this.svgTmp.svg = s[0];
         this.svgTmp.line = s[1];
         this.moveToParent();
@@ -297,6 +338,7 @@ class OutputConnector extends ConnectorComponent {
 
     onDrag() {
         // Handle snapping lines to connectors
+        console.debug("Dragging connector", this.g.hoverDOM);
         let distance = 9999;
         let connector_x = 0;
         let connector_y = 0;
@@ -321,7 +363,8 @@ class OutputConnector extends ConnectorComponent {
         this.moveToParent();
     }
 
-    domMouseUp(): void {
+    domCursorUp(): void {
+        console.debug(`connector domMouseUp`);
         const hn: HTMLElement | null = <HTMLElement>this.g.hoverDOM;
         if (hn && hn.id && hn.id.startsWith('input-')) {
             console.debug("Connecting to input: ", hn.id);
@@ -330,17 +373,32 @@ class OutputConnector extends ConnectorComponent {
 
             input.parent!.run();
         }
-
-        this.g.canvas!.removeChild(<Node>this.svgTmp.svg);
+        console.debug(this.svgTmp.svg!.classList);
+        this.g.canvas!.removeChild(document.querySelector('.sl-connector-svg.tmp')!);
         this.svgTmp = {
             svg: null,
             line: null
         };
+
+        console.debug("Canvas children: ", this.g.canvas!.children);
     }
 
     getValue() {
         this.parent!.exec();
         return this.val;
+    }
+
+    destroy() {
+
+        for (const input of this.peerInputs) {
+            this.disconnectFromInput(input);
+        }
+        for (const svg of this.svgs) {
+            console.debug("Removing svg: ", svg);
+            this.g.canvas!.removeChild(svg.svg);
+        }
+        //this.g.canvas?.removeChild(this.dom!);
+
     }
 }
 

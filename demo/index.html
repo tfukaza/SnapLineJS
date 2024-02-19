@@ -1,13 +1,58 @@
 <!doctype html>
 <html>
 
-  <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link href="https://cdn.jsdelivr.net/npm/daisyui@2.15.2/dist/full.css" rel="stylesheet" type="text/css" />
-  </head>
-  
-  <body id="app"></body>
-  <script type="module" src="/src/main.js"></script>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SnapLineJS</title>
+  <link rel="stylesheet" href="demo.css">
 
-</html>
+  <link rel="stylesheet" href="lib/theme/standard.css" media="" id="theme-standard" class="theme">
+  <link rel="stylesheet" href="lib/theme/dark.css" media="none" id="theme-dark" class="theme">
+  <link rel="stylesheet" href="lib/theme/retro.css" media="none" id="theme-retro" class="theme">
+
+</head>
+
+<body>
+  <script src="lib/snapline.js" defer></script>
+  <script src="demo.js" defer></script>
+  <script src="nodes/math.js" defer></script>
+  <script src="nodes/youtube.js" defer></script>
+  <script src="nodes/textSpinner.js" defer></script>
+
+  <main>
+
+
+    <navbar class="navbar">
+      <div>
+        <div class="sl-dropdown">
+          <button class="menu-button" onclick="toggleMenu('addNodeMenu')">Add Node</button>
+          <ul class="hide" id="addNodeMenu">
+            <div class="divider">Input</div>
+            <li><button class="sl-btn" onmouseup="addNode(constantFloat, event)">Float</button></li>
+            <li><button class="sl-btn" onmouseup="addNode(colorPicker, event)">Color</button></li>
+            <div class="divider">Output</div>
+            <li><button class="sl-btn" onmouseup="addNode(displayData, event)">Display</button></li>
+            <li><button class="sl-btn" onmouseup="addNode(youtube, event)">Youtube</button></li>
+            <div class="divider">Math</div>
+            <li><button class="sl-btn" onmouseup="addNode(math, event)">Math</button></li>
+            <li><button class="sl-btn" onmouseup="addNode(clamp, event)">Clamp</button></li>
+            <li><button class="sl-btn" onmouseup="addNode(lerp, event)">Lerp</button></li>
+          </ul>
+        </div>
+      </div>
+      <div>
+        <div class="sl-dropdown">
+          <button class="menu-button" onclick="toggleMenu('themeMenu')">Theme</button>
+          <ul class="hide" id="themeMenu">
+            <li><button class="sl-btn" onclick="setTheme('theme-standard')">Standard</button></li>
+            <li><button class="sl-btn" onclick="setTheme('theme-dark')">Standard (Dark)</button></li>
+            <li><button class="sl-btn" onclick="setTheme('theme-retro')">Retro</button></li>
+          </ul>
+        </div>
+      </div>
+    </navbar>
+    <div id="node-editor"></div>
+  </main>
+
+</body>
