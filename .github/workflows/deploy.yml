@@ -28,6 +28,8 @@ jobs:
         cp demo/index.html demo/gh-pages
         cp demo/demo.css demo/gh-pages
         cp demo/demo.js demo/gh-pages
+        mkdir demo/gh-pages/nodes
+        cp demo/nodes/* demo/gh-pages/nodes
     - name: Deploy
       uses: peaceiris/actions-gh-pages@v3
       with:
