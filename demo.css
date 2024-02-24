@@ -1,12 +1,22 @@
+* {
+    -webkit-touch-callout: none;
+    -webkit-tap-highlight-color: transparent;
+    -moz-user-select: -moz-none;
+    -webkit-user-select: none;
+    -ms-user-select: none;
+    user-select: none;
+}
+
+
 body {
     margin: 0;
     padding: 0;
+    touch-action: none;
 }
 
 #node-editor {
     width: 100%;
     height: 100vh;
-    user-select: none;
 }
 
 .navbar {
