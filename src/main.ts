@@ -48,6 +48,9 @@ export default class SnapLine {
 
             mouseHasMoved: false,
             ignoreMouseUp: false,
+
+            prevTouches: null,
+            prevSingleTouchTime: 0,
         }
         const g = this.g;
 
@@ -119,6 +122,28 @@ export default class SnapLine {
     }
 
     onTouchStart(e: TouchEvent) {
+
+        // else if (Date.now() - this.g.prevSingleTouchTime > 300) {
+        //     this.g.prevSingleTouchTime = 0;
+        //     this.onCursorDown(1, e.touches[0].clientX, e.touches[0].clientY);
+        //     return;
+        // }
+
+        if (e.touches.length > 1) {
+            if (this.g.prevTouches!.length == 1) {
+                this.onCursorUp();
+            }
+
+            console.debug("Multitouch touchstart");
+            this.g.currentMouseDown = mouseDownButton.middle;
+            let middleX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+            let middleY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+            this.onCursorDown(1, middleX, middleY);
+
+            this.g.prevTouches = e.touches;
+
+            return;
+        }
         this.onCursorDown(0, e.touches[0].clientX, e.touches[0].clientY);
     }
 
@@ -180,8 +205,64 @@ export default class SnapLine {
     }
 
     onTouchMove(e: TouchEvent) {
+
+        // if (this.g.timer) {
+        //     clearTimeout(this.g.timer);
+        //     this.g.timer = null;
+        //     this.g.prevSingleTouchTime = 0;
+        //     return;
+        // }
+
+        if (e.touches.length > 1) {
+
+            if (this.g.prevTouches == null || this.g.prevTouches.length != 2) {
+                if (e.touches.length == 2)
+                    this.g.prevTouches = e.touches;
+                return;
+            }
+
+            //alert("Multitouch not supported yet");
+            let cur1 = e.touches[0];
+            let cur2 = e.touches[1];
+
+            // FInd the corresponding touch in the previous event
+            let prev1 = null;
+            let prev2 = null;
+
+
+            for (let i = 0; i < e.touches.length; i++) {
+                if (cur1.identifier == this.g.prevTouches![i].identifier) {
+                    prev1 = this.g.prevTouches![i];
+                } else if (cur2.identifier == this.g.prevTouches![i].identifier) {
+                    prev2 = this.g.prevTouches![i];
+                }
+            }
+
+            let curDistance = Math.sqrt(Math.pow(cur1.clientX - cur2.clientX, 2) + Math.pow(cur1.clientY - cur2.clientY, 2));
+            let prevDistance = Math.sqrt(Math.pow(prev1!.clientX - prev2!.clientX, 2) + Math.pow(prev1!.clientY - prev2!.clientY, 2));
+            let d_zoom = -2 * (curDistance - prevDistance);
+
+
+
+            // Set mouse position to the middle of the two touches
+            let middle_x = (cur1.clientX + cur2.clientX) / 2;
+            let middle_y = (cur1.clientY + cur2.clientY) / 2;
+
+            let newMouseX = middle_x - this.g.canvasContainer!.offsetLeft;
+            let newMouseY = middle_y - this.g.canvasContainer!.offsetTop;
+
+            this.onCursorMove(document.elementFromPoint(newMouseX, newMouseY), newMouseX, newMouseY);
+
+            this.g.mouse_x = newMouseX;
+            this.g.mouse_y = newMouseY;
+
+            this.onZoom(d_zoom);
+            this.g.prevTouches = e.touches;
+            return;
+        }
         let element = document.elementFromPoint(e.touches[0].clientX, e.touches[0].clientY);
         this.onCursorMove(element, e.touches[0].clientX, e.touches[0].clientY);
+        this.g.prevTouches = e.touches;
     }
 
     /**
@@ -221,7 +302,7 @@ export default class SnapLine {
         /* If nothing is selected, then this drag is either a camera pan or a selection box */
         if (g.targetObject == null) {
             if (g.currentMouseDown == mouseDownButton.middle) {
-                // Pan camera id middle mouse button is pressed
+                // Pan camera if middle mouse button is pressed
                 g.camera_x = g.camera_pan_start_x - g.dx / g.zoom;
                 g.camera_y = g.camera_pan_start_y - g.dy / g.zoom;
                 g.canvas!.style.transform = `matrix3d(${worldToCamera(g.camera_x, g.camera_y, g)})`;
@@ -274,6 +355,9 @@ export default class SnapLine {
     }
 
     onTouchEnd(_: TouchEvent) {
+        // if (this.g.prevTouches.length >= 2) {
+        //     this.g.prevTouches = null;
+        // }
         this.onCursorUp();
     }
 
@@ -340,11 +424,15 @@ export default class SnapLine {
         g.mouseHasMoved = false;
 
     }
-
     onWheel(e: WheelEvent) {
-        const g = this.g;
+        this.onZoom(e.deltaY);
         e.preventDefault();
-        let d_zoom = (1 * g.zoom) * (-e.deltaY / 1000);
+    }
+
+    onZoom(deltaY: number = 0) {
+        const g = this.g;
+
+        let d_zoom = (1 * g.zoom) * (-deltaY / 1000);
 
         if (g.zoom + d_zoom < 0.2) {
             d_zoom = 0.2 - g.zoom;

@@ -75,6 +75,17 @@ var SnapLine = (function () {
             e.stopPropagation();
         }
         domTouchStart(e) {
+            // if (this.g.prevSingleTouchTime == 0) {
+            //     this.g.timer = setTimeout(() => {
+            //         this.g.timer = null;
+            //         this.g.prevSingleTouchTime = 0;
+            //         this.domCursorDown(0, e.touches[0].clientX, e.touches[0].clientY);
+            //         e.stopPropagation();
+            //     }
+            //         , 300);
+            //     this.g.prevSingleTouchTime = Date.now();
+            //     //return;
+            // }
             this.domCursorDown(0, e.touches[0].clientX, e.touches[0].clientY);
             e.stopPropagation();
         }
@@ -98,7 +109,7 @@ var SnapLine = (function () {
             this.g.dy_offset = 0;
             this.customCursorDown({ button: button, clientX: clientX, clientY: clientY });
         }
-        customCursorDown(prop) { }
+        customCursorDown(_) { }
         domCursorUp() { }
         onFocus() { }
         offFocus() { }
@@ -364,7 +375,7 @@ var SnapLine = (function () {
             this.g.canvas.appendChild(svg);
             return [svg, line];
         }
-        customCursorDown(prop) {
+        customCursorDown(_) {
             console.debug(`ConnectorComponent mousedown event triggered on ${this.gid}!`);
             // while dragging, we use a temporary svg to show the line
             // if (this.g.noNewSVG) {
@@ -379,7 +390,7 @@ var SnapLine = (function () {
         }
         onDrag() {
             // Handle snapping lines to connectors
-            console.debug("Dragging connector", this.g.hoverDOM);
+            // console.debug("Dragging connector", this.g.hoverDOM);
             let distance = 9999;
             let connector_x = 0;
             let connector_y = 0;
@@ -979,7 +990,7 @@ var SnapLine = (function () {
             this.pan_start_x = this.position_x;
             this.pan_start_y = this.position_y;
         }
-        customCursorDown(prop) {
+        customCursorDown(_) {
             console.debug(`Node class mousedown event triggered on ${this.gid}!`);
             let isInFocusNodes = false;
             for (let i = 0; i < this.g.focusNodes.length; i++) {
@@ -1209,6 +1220,8 @@ var SnapLine = (function () {
                 selectionBox: null,
                 mouseHasMoved: false,
                 ignoreMouseUp: false,
+                prevTouches: null,
+                prevSingleTouchTime: 0,
             };
             const g = this.g;
             g.canvasContainer = document.getElementById(canvasContainerID);
@@ -1266,6 +1279,23 @@ var SnapLine = (function () {
             window.requestAnimationFrame(this.step.bind(this));
         }
         onTouchStart(e) {
+            // else if (Date.now() - this.g.prevSingleTouchTime > 300) {
+            //     this.g.prevSingleTouchTime = 0;
+            //     this.onCursorDown(1, e.touches[0].clientX, e.touches[0].clientY);
+            //     return;
+            // }
+            if (e.touches.length > 1) {
+                if (this.g.prevTouches.length == 1) {
+                    this.onCursorUp();
+                }
+                console.debug("Multitouch touchstart");
+                this.g.currentMouseDown = mouseDownButton.middle;
+                let middleX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+                let middleY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+                this.onCursorDown(1, middleX, middleY);
+                this.g.prevTouches = e.touches;
+                return;
+            }
             this.onCursorDown(0, e.touches[0].clientX, e.touches[0].clientY);
         }
         onMouseDown(e) {
@@ -1315,8 +1345,50 @@ var SnapLine = (function () {
             this.onCursorMove(e.target, e.clientX, e.clientY);
         }
         onTouchMove(e) {
+            if (this.g.timer) {
+                clearTimeout(this.g.timer);
+                this.g.timer = null;
+                this.g.prevSingleTouchTime = 0;
+                return;
+            }
+            if (e.touches.length > 1) {
+                if (this.g.prevTouches == null || this.g.prevTouches.length != 2) {
+                    if (e.touches.length == 2)
+                        this.g.prevTouches = e.touches;
+                    return;
+                }
+                //alert("Multitouch not supported yet");
+                let cur1 = e.touches[0];
+                let cur2 = e.touches[1];
+                // FInd the corresponding touch in the previous event
+                let prev1 = null;
+                let prev2 = null;
+                for (let i = 0; i < e.touches.length; i++) {
+                    if (cur1.identifier == this.g.prevTouches[i].identifier) {
+                        prev1 = this.g.prevTouches[i];
+                    }
+                    else if (cur2.identifier == this.g.prevTouches[i].identifier) {
+                        prev2 = this.g.prevTouches[i];
+                    }
+                }
+                let curDistance = Math.sqrt(Math.pow(cur1.clientX - cur2.clientX, 2) + Math.pow(cur1.clientY - cur2.clientY, 2));
+                let prevDistance = Math.sqrt(Math.pow(prev1.clientX - prev2.clientX, 2) + Math.pow(prev1.clientY - prev2.clientY, 2));
+                let d_zoom = -2 * (curDistance - prevDistance);
+                // Set mouse position to the middle of the two touches
+                let middle_x = (cur1.clientX + cur2.clientX) / 2;
+                let middle_y = (cur1.clientY + cur2.clientY) / 2;
+                let newMouseX = middle_x - this.g.canvasContainer.offsetLeft;
+                let newMouseY = middle_y - this.g.canvasContainer.offsetTop;
+                this.onCursorMove(document.elementFromPoint(newMouseX, newMouseY), newMouseX, newMouseY);
+                this.g.mouse_x = newMouseX;
+                this.g.mouse_y = newMouseY;
+                this.onZoom(d_zoom);
+                this.g.prevTouches = e.touches;
+                return;
+            }
             let element = document.elementFromPoint(e.touches[0].clientX, e.touches[0].clientY);
             this.onCursorMove(element, e.touches[0].clientX, e.touches[0].clientY);
+            this.g.prevTouches = e.touches;
         }
         /**
          * Handle cursor movement.
@@ -1347,7 +1419,7 @@ var SnapLine = (function () {
             /* If nothing is selected, then this drag is either a camera pan or a selection box */
             if (g.targetObject == null) {
                 if (g.currentMouseDown == mouseDownButton.middle) {
-                    // Pan camera id middle mouse button is pressed
+                    // Pan camera if middle mouse button is pressed
                     g.camera_x = g.camera_pan_start_x - g.dx / g.zoom;
                     g.camera_y = g.camera_pan_start_y - g.dy / g.zoom;
                     g.canvas.style.transform = `matrix3d(${worldToCamera(g.camera_x, g.camera_y, g)})`;
@@ -1384,6 +1456,9 @@ var SnapLine = (function () {
             this.onCursorUp();
         }
         onTouchEnd(_) {
+            // if (this.g.prevTouches.length >= 2) {
+            //     this.g.prevTouches = null;
+            // }
             this.onCursorUp();
         }
         onCursorUp() {
@@ -1442,9 +1517,12 @@ var SnapLine = (function () {
             g.mouseHasMoved = false;
         }
         onWheel(e) {
-            const g = this.g;
+            this.onZoom(e.deltaY);
             e.preventDefault();
-            let d_zoom = (1 * g.zoom) * (-e.deltaY / 1000);
+        }
+        onZoom(deltaY = 0) {
+            const g = this.g;
+            let d_zoom = (1 * g.zoom) * (-deltaY / 1000);
             if (g.zoom + d_zoom < 0.2) {
                 d_zoom = 0.2 - g.zoom;
             }

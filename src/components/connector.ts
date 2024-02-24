@@ -338,7 +338,7 @@ class OutputConnector extends ConnectorComponent {
 
     onDrag() {
         // Handle snapping lines to connectors
-        console.debug("Dragging connector", this.g.hoverDOM);
+        // console.debug("Dragging connector", this.g.hoverDOM);
         let distance = 9999;
         let connector_x = 0;
         let connector_y = 0;

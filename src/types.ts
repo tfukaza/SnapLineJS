@@ -60,6 +60,10 @@ export interface GlobalStats {
 
     mouseHasMoved: boolean,
     ignoreMouseUp: boolean,
+
+    prevTouches: TouchList | null,
+    prevSingleTouchTime: number,
+    // timer: NodeJS.Timeout | null,
 }
 
 export type NodeConfigFunction = Array<{

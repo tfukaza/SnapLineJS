@@ -1,0 +1,130 @@
+:root {
+  --ui-border-radius: 3px;
+}
+
+textarea:focus, input:focus {
+  outline: none;
+}
+
+#sl-background {
+  background-image: radial-gradient(circle at 1px 1px, rgb(169, 171, 181) 1px, transparent 0);
+  background-size: 32px 32px;
+}
+
+.sl-node {
+  min-width: 200px;
+  border: 1px solid rgb(216, 216, 216);
+  border-radius: 8px;
+  background-color: rgb(255, 255, 255);
+  box-shadow: 0 5px 30px rgba(82, 84, 89, 0.2);
+  padding: 0px 0px 10px 0px;
+  min-width: 150px;
+}
+.sl-node.focused {
+  border: 1px solid rgb(0, 122, 255);
+}
+
+.sl-node-container {
+  margin: 2px;
+}
+
+.sl-node-content {
+  padding: 4px 16px;
+  min-height: 30px;
+}
+
+.sl-input,
+.sl-output {
+  display: flex;
+  flex-grow: 1;
+  align-items: center;
+}
+.sl-input.connected > *:not(.sl-input-connector):not(.sl-label),
+.sl-output.connected > *:not(.sl-input-connector):not(.sl-label) {
+  opacity: 0.2;
+}
+
+.sl-input > .sl-label {
+  padding-right: 8px;
+  inline-size: max-content;
+}
+
+.sl-output > .sl-label {
+  padding-left: 8px;
+  flex-grow: 1;
+  text-align: right;
+}
+
+.sl-input-text {
+  background-color: rgb(239, 239, 239);
+  border-radius: var(--ui-border-radius);
+  height: 30px;
+  padding: 0px 8px;
+}
+
+.sl-ui {
+  width: 100%;
+  margin: 4px 0px;
+}
+
+.sl-ui-dropdown {
+  background-color: rgb(239, 239, 239);
+  border-radius: var(--ui-border-radius);
+  width: 100%;
+}
+
+.sl-output-connector,
+.sl-input-connector {
+  width: 16px;
+  height: 16px;
+  background-color: rgb(255, 98, 103);
+  border: 2px solid rgb(224, 83, 88);
+  right: -26px;
+  border-radius: 8px;
+  position: absolute;
+  cursor: pointer;
+}
+.sl-output-connector:hover,
+.sl-input-connector:hover {
+  border-width: 3px;
+  border-color: rgb(255, 223, 230);
+}
+
+.sl-input-connector {
+  left: -26px;
+}
+
+.sl-connector-line {
+  stroke-linecap: round;
+  stroke: rgb(97, 98, 100);
+  filter: drop-shadow(0px 0px 2px rgba(78, 82, 90, 0.533));
+}
+.sl-connector-line.overlapping {
+  stroke: rgb(187, 187, 187);
+  filter: drop-shadow(0px 0px 8px rgba(44, 178, 142, 0.533));
+}
+
+.sl-input-float-container {
+  border-radius: var(--ui-border-radius);
+}
+.sl-input-float-container .sl-label {
+  position: absolute;
+  left: 8px;
+  top: 2px;
+}
+
+.sl-input-float-slider {
+  background-color: rgb(213, 213, 213);
+}
+
+.sl-input-float-slider-container {
+  background-color: rgb(239, 239, 239);
+  width: 100%;
+  padding: 4px 0px;
+}
+
+.sl-input-float-editor {
+  padding: 0px 8px;
+}
+
+/*# sourceMappingURL=standard.css.map */
