@@ -43,6 +43,18 @@ export abstract class Base {
         e.stopPropagation();
     }
     domTouchStart(e: TouchEvent): void {
+        // if (this.g.prevSingleTouchTime == 0) {
+        //     this.g.timer = setTimeout(() => {
+        //         this.g.timer = null;
+        //         this.g.prevSingleTouchTime = 0;
+        //         this.domCursorDown(0, e.touches[0].clientX, e.touches[0].clientY);
+        //         e.stopPropagation();
+        //     }
+        //         , 300);
+        //     this.g.prevSingleTouchTime = Date.now();
+        //     //return;
+
+        // }
         this.domCursorDown(0, e.touches[0].clientX, e.touches[0].clientY);
         e.stopPropagation();
     }
