@@ -1,5 +1,5 @@
-import { NodeUI } from "./node";
-import { ComponentConfig, GlobalStats, ObjectTypes, customCursorDownProp, mouseDownButton } from "../types"
+
+import { GlobalStats, ObjectTypes, customCursorDownProp, mouseDownButton } from "../types"
 
 /**
  * Base class for all classes.
@@ -95,19 +95,3 @@ export abstract class Base {
     destroy(): void { }
 }
 
-/**
- * Components are the buildings blocks of a node.
- */
-export class ComponentBase extends Base {
-
-    parent: NodeUI | null;
-    config: ComponentConfig;
-    dom: HTMLElement | null;
-
-    constructor(config: ComponentConfig, parent: NodeUI | null, globals: GlobalStats) {
-        super(globals);
-        this.config = config;
-        this.parent = parent
-        this.dom = null;
-    }
-}

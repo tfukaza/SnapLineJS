@@ -1,6 +1,6 @@
 import { Base } from "./components/base";
 import { InputConnector, OutputConnector } from "./components/connector";
-import { NodeUI } from "./components/node";
+import { NodeComponent } from "./components/node";
 
 export enum mouseDownButton {
     none = "none",
@@ -15,6 +15,15 @@ export enum ObjectTypes {
     connector = "connector",
     line = "line",
     unspecified = "unspecified",
+    invalid = "invalid"
+}
+
+export enum userState {
+    idle = "idle",
+    dragging = "dragging",
+    panning = "panning",
+    connecting = "connecting",
+    selecting = "selecting",
     invalid = "invalid"
 }
 
@@ -47,11 +56,11 @@ export interface GlobalStats {
 
     //outputNode: HTMLElement | null,        // Node used to output values
     targetObject: Base | null,
-    focusNodes: Array<NodeUI>,
+    focusNodes: Array<NodeComponent>,
     hoverDOM: EventTarget | null,
     gid: number,
 
-    nodeArray: Array<NodeUI>,  // List of all nodes
+    nodeArray: Array<NodeComponent>,  // List of all nodes
     //inputArray: Array<InputComponent>
     globalLines: Array<lineObject>,
     globalNodes: { [key: string]: Base },
@@ -75,15 +84,15 @@ export type NodeConfigFunction = Array<{
 }>;
 
 
-export interface NodeConfig {
-    functions: NodeConfigFunction;
-    elements: Array<Array<ComponentConfig> | ComponentConfig>;
-}
+// export interface NodeConfig {
+//     functions: NodeConfigFunction;
+//     elements: Array<Array<ComponentConfig> | ComponentConfig>;
+// }
 
 export interface ComponentConfig {
     name: string;
-    type: comType;
-    [key: string]: any;
+    // type: comType;
+    // [key: string]: any;
 }
 
 export type inputType = "input-text" | "input-bool" | "input-float" | "input-float-infinite";

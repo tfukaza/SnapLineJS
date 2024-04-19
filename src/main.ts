@@ -1,7 +1,7 @@
 
 import { worldToCamera } from './helper.js';
-import { GlobalStats, NodeConfig, ObjectTypes, mouseDownButton } from './types';
-import { NodeUI } from './components/node.js';
+import { GlobalStats, ObjectTypes, mouseDownButton } from './types';
+import { NodeComponent } from './components/node.js';
 
 export default class SnapLine {
 
@@ -119,6 +119,7 @@ export default class SnapLine {
 
 
         window.requestAnimationFrame(this.step.bind(this));
+
     }
 
     onTouchStart(e: TouchEvent) {
@@ -164,6 +165,20 @@ export default class SnapLine {
     onCursorDown(button: number, clientX: number, clientY: number) {
 
         console.debug("Cursor down: " + button);
+
+        const tmpLine = document.querySelector('.sl-connector-svg.tmp');
+        if (tmpLine) {
+            console.debug("Cursor down with tmp line");
+            const output_gid = tmpLine.getAttribute('output-gid');
+            if (output_gid != null) {
+                console.debug("Cursor down with tmp line and output gid: " + output_gid);
+                const output = this.g.globalNodes[output_gid!];
+                if (output) {
+                    output.domCursorUp();
+                    this.onCursorUp();
+                }
+            }
+        }
 
         const g = this.g;
 
@@ -484,17 +499,92 @@ export default class SnapLine {
         window.requestAnimationFrame(this.step.bind(this));
     }
 
-    addNode(config: NodeConfig, x: number, y: number) {
-        const n: NodeUI = new NodeUI(config, this.g, x, y);
+    createNode(dom: HTMLElement) {
+        const n: NodeComponent = new NodeComponent(dom, this.g);
         this.g.globalNodes[n.gid] = n;
-        this.focusNode(n.gid);
+
         // n.domMouseDown();
         // n.onDrag();
         // n.domMouseUp();
         return n;
     }
 
-    addNodeAtMouse(config: NodeConfig, e: MouseEvent) {
+    createNodeAuto(dom: HTMLElement) {
+        const n: NodeComponent = new NodeComponent(dom, this.g);
+        this.g.globalNodes[n.gid] = n;
+
+        // Get all 'sl-input' elements
+        const inputs = dom.querySelectorAll('.sl-input');
+        for (let i = 0; i < inputs.length; i++) {
+            const inputDom = inputs[i];
+            const inputName = inputDom.getAttribute('sl-name');
+            const input = n.addInputForm(<HTMLElement>inputDom, inputName!);
+
+
+            // Loop through all attributes for ones that start with 'sl-event:<event>'
+            // If the attribute is found, add an event listener to the input connector
+            for (let j = 0; j < inputDom.attributes.length; j++) {
+                const attr = inputDom.attributes[j];
+                if (attr.name.startsWith('sl-event:')) {
+                    const event = attr.name.split(':')[1];
+                    const func = window[attr.value as keyof Window];
+                    console.debug("Adding event listener: " + event);
+                    input.addInputUpdateListener(event, func);
+                }
+            }
+        }
+
+        // Get all 'sl-input-connector' elements
+        const connectors = dom.querySelectorAll('.sl-input-connector');
+        for (let i = 0; i < connectors.length; i++) {
+            const connector = connectors[i];
+            const connectorName = connector.getAttribute('sl-name');
+            const input = n.addInputConnector(<HTMLElement>connector, connectorName!);
+
+            const updateFuncName = connector.getAttribute('sl-update');
+            console.debug("Update function: " + updateFuncName);
+            if (updateFuncName != null || updateFuncName != undefined) {
+                console.debug("Update function: " + updateFuncName, input);
+
+                const updateFunc = window[updateFuncName! as keyof Window];
+                input.updateFunction = updateFunc.bind(input);
+            }
+
+
+        }
+
+        // Get all 'sl-output-connector' elements
+        const outputs = dom.querySelectorAll('.sl-output-connector');
+        for (let i = 0; i < outputs.length; i++) {
+            const output = outputs[i];
+            const outputName = output.getAttribute('sl-name');
+            n.addOutputConnector(<HTMLElement>output, outputName!);
+        }
+
+        for (let j = 0; j < dom.attributes.length; j++) {
+            const attr = dom.attributes[j];
+            if (attr.name.startsWith('sl-init')) {
+                const func = window[attr.value as keyof Window];
+                console.debug("Calling init func: " + func);
+                func.bind(n)();
+            }
+        }
+
+
+
+        return n;
+    }
+
+    addNode(node: NodeComponent, x: number, y: number) {
+
+        node.addNodeToCanvas(x, y);
+        // n.domMouseDown();
+        // n.onDrag();
+        // n.domMouseUp();
+
+    }
+
+    addNodeAtMouse(node: NodeComponent, e: MouseEvent) {
 
         this.g.ignoreMouseUp = true;
 
@@ -503,8 +593,8 @@ export default class SnapLine {
 
         console.debug("Adding node at " + x + ", " + y);
 
-        let n = this.addNode(config, x, y);
-
+        this.addNode(node, x, y);
+        node.setStartPositions();
 
         this.g.currentMouseDown = mouseDownButton.left;
 
@@ -512,10 +602,10 @@ export default class SnapLine {
         this.g.mousedown_y = this.g.mouse_y;
         this.g.camera_pan_start_x = this.g.camera_x;
         this.g.camera_pan_start_y = this.g.camera_y;
-        this.g.overrideDrag = true;
+        //this.g.overrideDrag = true;
 
-        this.g.focusNodes = [n];
-        this.g.targetObject = n;
+        this.g.focusNodes = [node];
+        this.g.targetObject = node;
 
         for (const node of this.g.nodeArray) {
             node.offFocus();
@@ -523,7 +613,7 @@ export default class SnapLine {
 
         this.onMouseMove(e);
 
-        this.g.canvasBackground!.style.cursor = "none";
+        // this.g.canvasBackground!.style.cursor = "none";
     }
 
     deleteNode(id: string) {
@@ -546,7 +636,7 @@ export default class SnapLine {
     connectNodes(node0: string, outputID: string, node1: string, inputID: string) {
         const n0 = this.g.globalNodes[node0];
         const n1 = this.g.globalNodes[node1];
-        if (!n0 || !n1 || !(n0 instanceof NodeUI) || !(n1 instanceof NodeUI)) {
+        if (!n0 || !n1 || !(n0 instanceof NodeComponent) || !(n1 instanceof NodeComponent)) {
             return null;
         }
         const o = n0.findOutput(outputID);
@@ -554,7 +644,7 @@ export default class SnapLine {
 
         if (!o || !i) return null;
 
-        o.output.connectToInput(i.input);
+        o.connectToInput(i);
 
         return 0;
     }

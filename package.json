@@ -6,8 +6,8 @@
   "scripts": {
     "dev": "npm run watch:tsc & npm run watch:sass & npm run watch:rollup & npx browser-sync start --server 'demo' --watch 'demo' --no-notify",
     "watch:tsc": "tsc -w",
-    "watch:rollup": "rollup --open --config --watch --environment BUILD_ENV:dev",
-    "watch:sass": "sass -w src/theme:demo/src/lib/theme",
+    "watch:rollup": "rollup --open --config --watch  --environment BUILD_ENV:dev",
+    "watch:sass": "sass -w src/theme:demo/lib/theme",
     "lint": "eslint src/**/*.ts --fix",
     "deploy": "tsc && sass src/theme:dist/theme && rollup --config --environment BUILD_ENV:production"
   },
@@ -26,6 +26,7 @@
     "@rollup/plugin-commonjs": "^25.0.7",
     "@rollup/plugin-node-resolve": "^15.2.3",
     "@rollup/plugin-replace": "^5.0.5",
+    "@rollup/plugin-terser": "^0.4.4",
     "@rollup/plugin-typescript": "^11.1.6",
     "@typescript-eslint/eslint-plugin": "^7.0.1",
     "@typescript-eslint/parser": "^7.0.1",

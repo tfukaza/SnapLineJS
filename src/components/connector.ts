@@ -1,8 +1,7 @@
 
-import { NodeUI } from "./node";
 import { ComponentConfig, GlobalStats, customCursorDownProp, lineObject } from "../types";
-import { ComponentBase } from "./base";
-import { InputInterface } from "./component";
+import { ComponentBase } from "./component";
+import { NodeComponent } from "./node";
 
 
 /**
@@ -10,14 +9,17 @@ import { InputInterface } from "./component";
  */
 class ConnectorComponent extends ComponentBase {
 
-    connector_x: number;        // Location of the connector on canvas
+    name: string;                   /* Name of the component */
+
+    connector_x: number;            // Location of the connector on canvas
     connector_y: number;
-    c_total_offset_x: number;   // Location of the connector relative to the location of parent Node
+    c_total_offset_x: number;       // Location of the connector relative to the location of parent Node
     c_total_offset_y: number;
 
-    name: string;
+    prop: { [key: string]: any };   // Reference to the parent's prop object
 
-    constructor(config: ComponentConfig, parent: NodeUI, globals: GlobalStats) {
+
+    constructor(dom: HTMLElement, config: ComponentConfig, parent: NodeComponent, globals: GlobalStats) {
         super(config, parent, globals);
 
         this.connector_x = 0;
@@ -26,8 +28,9 @@ class ConnectorComponent extends ComponentBase {
         this.c_total_offset_x = 0;
         this.c_total_offset_y = 0;
 
-        this.dom = null;
-        //this.parentContent = parentContent;
+        this.dom = dom;
+        this.parent = parent;
+        this.prop = parent.prop;
 
 
         if (config.name) {
@@ -37,6 +40,10 @@ class ConnectorComponent extends ComponentBase {
             this.name = globals.gid.toString();
         }
         this.g.globalNodes[this.gid] = this;
+
+        this.bindFunction(this.dom);
+
+        this.dom.setAttribute('sl-gid', this.gid.toString());
 
     }
 
@@ -76,27 +83,30 @@ class ConnectorComponent extends ComponentBase {
 
 class InputConnector extends ConnectorComponent {
 
-    inputDOM: HTMLElement | null;       // Reference to the UI element where the user enters the value
-    inter: InputInterface;
+    //inputDOM: HTMLElement | null;       // Reference to the UI element where the user enters the value
+    // inter: InputInterface;
     peerOutput: OutputConnector | null;
+    updateFunction: Function = () => {
+        console.debug("Update function not set for input connector");
+    };
 
-    constructor(config: ComponentConfig, parent: NodeUI, globals: GlobalStats, inter: InputInterface) {
+    constructor(dom: HTMLElement, config: ComponentConfig, parent: NodeComponent, globals: GlobalStats) {
 
-        super(config, parent, globals);
+        super(dom, config, parent, globals);
 
-        this.inter = inter;
+        // this.inter = inter;
 
-        this.inputDOM = null;
+
         this.peerOutput = null;
 
-        const connector = document.createElement('span');
-        connector.classList.add('sl-input-connector');
-        connector.id = `input-${this.gid}`;
+        // const connector = document.createElement('span');
+        // connector.classList.add('sl-input-connector');
+        // connector.id = `input-${this.gid}`;
 
-        connector.onmousedown = this.domMouseDown.bind(this);
-        connector.ontouchstart = this.domTouchStart.bind(this);
+        // connector.onmousedown = this.domMouseDown.bind(this);
+        // connector.ontouchstart = this.domTouchStart.bind(this);
 
-        this.dom = connector;
+        //this.dom = dom;
     }
 
     domTouchStart(e: TouchEvent): void {
@@ -132,14 +142,14 @@ class InputConnector extends ConnectorComponent {
 
     disconnectFromOutput() {
         this.peerOutput = null;
-        this.inter.dom!.classList.remove("connected");
-        this.inter.inputUI?.inputDOM?.setAttribute('disabled', 'false');
+        // this.inter.dom!.classList.remove("connected");
+        // this.inter.inputUI?.inputDOM?.setAttribute('disabled', 'false');
     }
 
     connectToOutput(output: OutputConnector) {
         this.peerOutput = output;
-        this.inter.dom?.classList.add("connected");
-        this.inter.inputUI?.inputDOM?.setAttribute('disabled', 'true');
+        // this.inter.dom?.classList.add("connected");
+        // this.inter.inputUI?.inputDOM?.setAttribute('disabled', 'true');
     }
 
     nodeDrag() {
@@ -149,15 +159,6 @@ class InputConnector extends ConnectorComponent {
         }
         this.peerOutput.nodeDrag();
     }
-
-    // getValue() {
-    //     if (this.peerOutput) {
-    //         return this.peerOutput.getValue();
-    //     } else if (this.inputDOM){
-    //         return this.inputValue();
-    //     }
-    //     return null;
-    // }
 
     destroy(): void {
         if (this.peerOutput) {
@@ -177,25 +178,21 @@ class OutputConnector extends ConnectorComponent {
         svg: SVGSVGElement | SVGLineElement | null;
         line: SVGSVGElement | SVGLineElement | null;
     }
-    svgs: Array<lineObject>;
+    svgLines: Array<lineObject>;
     peerInputs: Array<InputConnector> = [];
 
-    constructor(config: ComponentConfig, parent: NodeUI, globals: GlobalStats) {
-        super(config, parent, globals);
+    constructor(dom: HTMLElement, config: ComponentConfig, parent: NodeComponent, globals: GlobalStats) {
+        super(dom, config, parent, globals);
 
         this.val = null;
         this.svgTmp = {
             svg: null,
             line: null,
         };
-        this.svgs = [];
+        this.svgLines = [];
 
-        const connector = document.createElement('span');
-        connector.classList.add('sl-output-connector');
-        connector.id = `output-${this.gid}`;
-        this.bindFunction(connector);
 
-        this.dom = connector;
+        this.dom = dom;
     }
 
     connectToInput(input: InputConnector) {
@@ -232,30 +229,25 @@ class OutputConnector extends ConnectorComponent {
             connector: this
         };
 
-        this.svgs.push(newSVG);
+        this.svgLines.push(newSVG);
         this.g.globalLines.push(newSVG);
         this.g.canvas!.appendChild(svg);
         this.setLineXY(line, input.connector_x - this.connector_x, input.connector_y - this.connector_y);
-
-        this.parent!.outputCount++;
-        input.parent!.inputCount++;
 
     }
 
     disconnectFromInput(input: InputConnector) {
         console.debug("Disconnecting from input: ", input);
-        for (const svg of this.svgs) {
+        for (const svg of this.svgLines) {
             if (svg.to == input) {
                 this.g.canvas!.removeChild(svg.svg);
-                this.svgs = this.svgs.filter(s => s != svg);
+                this.svgLines = this.svgLines.filter(s => s != svg);
                 this.g.globalLines = this.g.globalLines.filter(s => s != svg);
                 console.debug("Deleted line: ", svg);
                 break;
             }
         }
         input.disconnectFromOutput();
-        this.parent!.outputCount--;
-        input.parent!.inputCount--;
         // Remove the input from the peerInputs array using gid as key
         this.peerInputs = this.peerInputs.filter(i => i.gid != input.gid);
     }
@@ -274,11 +266,11 @@ class OutputConnector extends ConnectorComponent {
             this.svgTmp.svg!.style.transform = `translate3d(${this.connector_x}px, ${this.connector_y}px, 0)`;
         }
 
-        if (this.svgs.length < 1) {
+        if (this.svgLines.length < 1) {
             return;
         }
 
-        for (const svg of this.svgs) {
+        for (const svg of this.svgLines) {
             svg.svg.style.transform = `translate3d(${this.connector_x}px, ${this.connector_y}px, 0)`;
             svg.connector_x = this.connector_x;
             svg.connector_y = this.connector_y;
@@ -294,6 +286,7 @@ class OutputConnector extends ConnectorComponent {
         // create a new svg path
         const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
         svg.classList.add('sl-connector-svg');
+        svg.setAttribute('output-gid', this.gid.toString());
         if (isTmp) svg.classList.add('tmp');
         svg.style.pointerEvents = 'none';
         svg.style.position = 'absolute';
@@ -338,13 +331,16 @@ class OutputConnector extends ConnectorComponent {
 
     onDrag() {
         // Handle snapping lines to connectors
-        // console.debug("Dragging connector", this.g.hoverDOM);
+        //console.debug("Dragging connector", this.g.hoverDOM);
         let distance = 9999;
         let connector_x = 0;
         let connector_y = 0;
         const hn: HTMLElement | null = <HTMLElement>this.g.hoverDOM;
-        if (hn && hn.id && hn.id.startsWith('input-')) {
-            const gid = hn.id.split('-')[1];
+        // If the node has a class of "sl-input-connector", then it is an input connector
+        if (hn && hn.classList.contains('sl-input-connector')) {
+            const gid = hn.getAttribute('sl-gid');
+            if (!gid) return;
+            console.debug("Hovering over input connector: ", gid);
             const input = <InputConnector>this.g.globalNodes[gid];
             input.updateConnectorPosition();
             connector_x = input.connector_x;
@@ -363,22 +359,34 @@ class OutputConnector extends ConnectorComponent {
         this.moveToParent();
     }
 
-    domCursorUp(): void {
-        console.debug(`connector domMouseUp`);
-        const hn: HTMLElement | null = <HTMLElement>this.g.hoverDOM;
-        if (hn && hn.id && hn.id.startsWith('input-')) {
-            console.debug("Connecting to input: ", hn.id);
-            const input = <InputConnector>this.g.globalNodes[hn.id.split('-')[1]];
-            this.connectToInput(input);
-
-            input.parent!.run();
+    deleteTmpSvg(): void {
+        if (this.svgTmp.svg) {
+            this.g.canvas!.removeChild(this.svgTmp.svg!);
         }
-        console.debug(this.svgTmp.svg!.classList);
-        this.g.canvas!.removeChild(document.querySelector('.sl-connector-svg.tmp')!);
         this.svgTmp = {
             svg: null,
             line: null
         };
+    }
+
+    domCursorUp(): void {
+        console.debug(`connector domMouseUp`);
+        const hn: HTMLElement | null = <HTMLElement>this.g.hoverDOM;
+        if (hn && hn.classList.contains('sl-input-connector')) {
+            const gid = hn.getAttribute('sl-gid');
+            console.debug("Hovering over input connector: ", gid);
+            if (!gid) {
+                this.deleteTmpSvg();
+                return;
+            }
+            const input = <InputConnector>this.g.globalNodes[gid];
+            this.connectToInput(input);
+
+            input.prop[input.name] = this.prop[this.name];
+            input.updateFunction();
+        }
+
+        this.deleteTmpSvg();
 
         console.debug("Canvas children: ", this.g.canvas!.children);
     }
@@ -393,7 +401,7 @@ class OutputConnector extends ConnectorComponent {
         for (const input of this.peerInputs) {
             this.disconnectFromInput(input);
         }
-        for (const svg of this.svgs) {
+        for (const svg of this.svgLines) {
             console.debug("Removing svg: ", svg);
             this.g.canvas!.removeChild(svg.svg);
         }
