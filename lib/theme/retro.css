@@ -3,7 +3,8 @@
   background-color: cadetblue;
 }
 
-textarea:focus, input:focus {
+textarea:focus,
+input:focus {
   outline: none;
 }
 
@@ -15,70 +16,89 @@ textarea:focus, input:focus {
   border-color: darkgray;
   min-width: 150px;
   box-shadow: 4px 4px 0px 0px rgba(4, 45, 39, 0.7294117647);
+  padding: 10px 32px;
+  /* number input */
+  /* dropdown input */
 }
-.sl-node input {
-  background-color: white;
-  border-style: inset;
-  border-width: 3px;
+.sl-node.focused {
+  border: 3px dashed rgb(60, 60, 60);
 }
-
-.sl-node-container {
-  margin: 2px;
-}
-
-.sl-node-content {
-  padding: 2px;
-  min-height: 30px;
-}
-
-.sl-input-connector {
-  left: -28px;
-}
-
-.sl-input, .sl-output {
+.sl-node .sl-row {
   display: flex;
-  flex-grow: 1;
   align-items: center;
+  margin-bottom: 8px;
 }
-.sl-input.connected > *:not(.sl-input-connector):not(.sl-label), .sl-output.connected > *:not(.sl-input-connector):not(.sl-label) {
-  opacity: 0.2;
+.sl-node .sl-row.right {
+  justify-content: flex-end;
 }
-
-.sl-input > .sl-label {
+.sl-node .sl-label {
+  min-width: 50px;
   padding-right: 8px;
-  inline-size: max-content;
+  font-size: 14px;
+  color: rgb(97, 98, 100);
 }
-
-.sl-output-connector, .sl-input-connector {
-  width: 16px;
-  height: 16px;
-  background-color: rgb(214, 214, 214);
+.sl-node .sl-label.right {
+  text-align: right;
+}
+.sl-node .sl-output-connector,
+.sl-node .sl-input-connector {
+  width: 12px;
+  height: 12px;
+  position: absolute;
+  cursor: pointer;
   border: 3px solid rgb(125, 125, 125);
   border-style: inset;
-  right: -28px;
-  position: absolute;
 }
+.sl-node .sl-output-connector:hover,
+.sl-node .sl-input-connector:hover {
+  border-width: 3px;
+  border-color: rgb(255, 223, 230);
+}
+.sl-node .sl-output-connector {
+  right: 10px;
+}
+.sl-node .sl-input-connector {
+  left: 10px;
+}
+.sl-node select,
+.sl-node input {
+  font-family: "VT323", monospace;
+}
+.sl-node input[type=number] {
+  width: 100%;
+  padding: 4px 6px;
+  border: 1px solid rgb(216, 216, 216);
+  border-radius: 4px;
+  font-size: 14px;
+  color: rgb(97, 98, 100);
+  background-color: rgb(244, 244, 244);
+}
+.sl-node select {
+  width: 100%;
+  padding: 4px 6px;
+  border: 1px solid rgb(216, 216, 216);
+  border-radius: 4px;
+  font-size: 14px;
+  color: rgb(97, 98, 100);
+  background-color: rgb(244, 244, 244);
+}
+
+.sl-connector-svg {
+  z-index: 9999999;
+}
+
 .sl-connector-line {
   stroke-linecap: round;
-  stroke: rgb(97, 98, 100);
+  stroke: rgb(62, 62, 62);
 }
 .sl-connector-line.overlapping {
   stroke: rgb(187, 187, 187);
+  filter: drop-shadow(0px 0px 8px rgba(44, 178, 142, 0.533));
 }
 
-.sl-input-float-container {
-  width: 70%;
-}
-.sl-input-float-container .sl-label {
-  width: 30%;
-}
-
-.sl-input-float-slider-container {
-  background-color: rgb(255, 255, 255);
-}
-
-.sl-input-float-slider {
-  background-color: rgb(63, 217, 255);
+#sl-selection-box {
+  border: 2px solid rgba(0, 123, 255, 0.515);
+  background-color: rgba(0, 123, 255, 0.1);
 }
 
 /*# sourceMappingURL=retro.css.map */
