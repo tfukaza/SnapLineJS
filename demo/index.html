@@ -1,8 +1,182 @@
 <!doctype html>
 <html>
 
+<script>
+
+  function calculateMath() {
+    let input1 = +this.prop.input_1;
+    let input2 = +this.prop.input_2;
+    let operation = this.prop.operation;
+
+    console.debug(input1, input2, operation);
+
+    let result = 0;
+
+    if (operation == '+') {
+      result = input1 + input2;
+    } else if (operation == '-') {
+      result = input1 - input2;
+    } else if (operation == '*') {
+      result = input1 * input2;
+    } else {
+      result = input1 / input2;
+    }
+
+    console.debug("Result", result)
+    this.prop.result = result;
+  }
+
+  function updateText(e) {
+    console.log(`Name: ${this.name}, Value: ${this.dom.value}`);
+    this.prop[this.name] = this.dom.value;
+    calculateMath.call(this);
+  }
+
+  function updateOperation(e) {
+    console.log(`Name: ${this.name}, Value: ${this.dom.value}`);
+    this.prop[this.name] = this.dom.value;
+    calculateMath.call(this);
+  }
+
+  function initMath() {
+    this.prop.input_1 = 0;
+    this.prop.input_2 = 0;
+    this.prop.operation = '+';
+    calculateMath.call(this);
+  }
+</script>
+
+<template id="node-math">
+  <div class="sl-node" sl-init="initMath">
+    <div class="sl-row right">
+      <span class="sl-label right">Result</span>
+      <span class="sl-output-connector" sl-name="result"></span>
+    </div>
+    <div class="sl-row">
+      <select class="sl-input" sl-name="operation" sl-event:input="updateOperation">
+        <option value="+">Add</option>
+        <option value="-">Subtract</option>
+        <option value="*">Multiply</option>
+        <option value="/">Divide</option>
+      </select>
+    </div>
+    <div class="sl-row">
+      <span class="sl-input-connector" sl-name="input_1" sl-update="calculateMath"></span>
+      <span class="sl-label">Input 1</span>
+      <input class="sl-input" sl-name="input_1" sl-event:input="updateText" type="number" value="0">
+    </div>
+    <div class="sl-row">
+      <span class="sl-input-connector" sl-name="input_2" sl-update="calculateMath"></span>
+      <span class="sl-label">Input 2</span>
+      <input class="sl-input" sl-name="input_2" sl-event:input="updateText" type="number" value="0">
+    </div>
+  </div>
+</template>
+
+
+<script>
+
+  function displayValue() {
+    if ("value" in this.prop == false) {
+      this.prop.value = 0;
+    }
+    console.log("Displaying value", this.prop.value);
+    let display = this.parent.dom.querySelector("#display");
+    display.innerHTML = this.prop.value;
+  }
+
+</script>
+
+<template id="node-print">
+  <div class="sl-node">
+    <div class="sl-row">
+      <span class="sl-input-connector" sl-name="value" sl-update="displayValue"></span>
+      <span class="sl-label">Result</span>
+      <span class="sl-print" id="display">Result</span>
+    </div>
+  </div>
+</template>
+
+<script>
+
+  function constantUpdateVal() {
+    this.prop.value = this.dom.value;
+  }
+
+</script>
+
+<template id="node-constant">
+  <div class="sl-node">
+    <div class="sl-row">
+      <input class="sl-input" sl-event:input="constantUpdateVal" type="number" value="0">
+      <span class="sl-output-connector" sl-name="value"></span>
+    </div>
+  </div>
+</template>
+
+<script>
+
+  function calculateLerp() {
+    let inputX = +this.prop.input_x;
+    let input1 = +this.prop.input_1;
+    let input2 = +this.prop.input_2;
+
+    let result = 0;
+
+    result = input1 + (input2 - input1) * (inputX / 100);
+
+    this.prop.result = result;
+    this.prop.sliderDOM.value = inputX;
+  }
+
+  function updateSlider(e) {
+    this.prop[this.name] = this.dom.value;
+    calculateLerp.call(this);
+    e.stopPropagation();
+  }
+
+  function updateVal(e) {
+    this.prop[this.name] = this.dom.value;
+    calculateLerp.call(this);
+  }
+
+  function initLerp() {
+    this.prop.input_x = 50;
+    this.prop.input_1 = 0;
+    this.prop.input_2 = 100;
+    this.prop.sliderDOM = this.dom.querySelector('input[type="range"]');
+    calculateLerp.call(this);
+  }
+</script>
+
+<template id="node-lerp">
+  <div class="sl-node" sl-init="initLerp">
+    <div class="sl-row right">
+      <span class="sl-label right">Result</span>
+      <span class="sl-output-connector" sl-name="result"></span>
+    </div>
+    <div class="sl-row">
+      <span class="sl-input-connector" sl-name="input_x" sl-update="calculateLerp"></span>
+      <input class="sl-input" type="range" min="0" max="100" value="50" class="slider" sl-name="input_x"
+        sl-event:input="updateSlider" sl-event:change="updateSlider" sl-event:mousedown="updateSlider"
+        sl-event:mouseup="updateSlider">
+    </div>
+    <div class="sl-row">
+      <span class="sl-input-connector" sl-name="input_1" sl-update="calculateLerp"></span>
+      <span class="sl-label">Input 1</span>
+      <input class="sl-input" sl-name="input_1" sl-event:input="updateVal" type="number" value="0">
+    </div>
+    <div class="sl-row">
+      <span class="sl-input-connector" sl-name="input_2" sl-update="calculateLerp"></span>
+      <span class="sl-label">Input 2</span>
+      <input class="sl-input" sl-name="input_2" sl-event:input="updateVal" type="number" value="100">
+    </div>
+  </div>
+</template>
+
+
 <head>
-  <meta charset="UTF-8">
+  <meta charset=" UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>SnapLineJS</title>
   <link rel="stylesheet" href="demo.css">
@@ -14,40 +188,30 @@
 </head>
 
 <body>
-  <script src="lib/snapline.js" defer></script>
-  <script src="demo.js" defer></script>
-  <script src="nodes/math.js" defer></script>
-  <script src="nodes/youtube.js" defer></script>
-  <script src="nodes/textSpinner.js" defer></script>
+  <script type="module" src="demo.js" defer></script>
 
   <main>
-
-
     <navbar class="navbar">
-      <div>
-        <div class="sl-dropdown">
-          <button class="menu-button" onclick="toggleMenu('addNodeMenu')">Add Node</button>
+      <div class="sl-dropdown">
+        <div id="addNodeButton" class="menu-button">
+          Add Node
           <ul class="hide" id="addNodeMenu">
-            <div class="divider">Input</div>
-            <li><button class="sl-btn" onmouseup="addNode(constantFloat, event)">Float</button></li>
-            <li><button class="sl-btn" onmouseup="addNode(colorPicker, event)">Color</button></li>
-            <div class="divider">Output</div>
-            <li><button class="sl-btn" onmouseup="addNode(displayData, event)">Display</button></li>
-            <li><button class="sl-btn" onmouseup="addNode(youtube, event)">Youtube</button></li>
-            <div class="divider">Math</div>
-            <li><button class="sl-btn" onmouseup="addNode(math, event)">Math</button></li>
-            <li><button class="sl-btn" onmouseup="addNode(clamp, event)">Clamp</button></li>
-            <li><button class="sl-btn" onmouseup="addNode(lerp, event)">Lerp</button></li>
+            <li><button id="mathButton" class="sl-btn">Math</button></li>
+            <li><button id="printButton" class="sl-btn">Print</button></li>
+            <li><button id="lerpButton" class="sl-btn">Lerp</button></li>
+            <li><button id="constantButton" class="sl-btn">Constant</button></li>
           </ul>
         </div>
       </div>
-      <div>
-        <div class="sl-dropdown">
-          <button class="menu-button" onclick="toggleMenu('themeMenu')">Theme</button>
+      <div class="sl-dropdown">
+        <div id="themeButton" class="menu-button">
+          Theme
           <ul class="hide" id="themeMenu">
-            <li><button class="sl-btn" onclick="setTheme('theme-standard')">Standard</button></li>
-            <li><button class="sl-btn" onclick="setTheme('theme-dark')">Standard (Dark)</button></li>
-            <li><button class="sl-btn" onclick="setTheme('theme-retro')">Retro</button></li>
+            <li><button id="standardButton" class="sl-btn">Standard</button>
+            </li>
+            <li><button id="darkButton" class="sl-btn">Standard (Dark)</button>
+            </li>
+            <li><button id="retroButton" class="sl-btn">Retro</button></li>
           </ul>
         </div>
       </div>

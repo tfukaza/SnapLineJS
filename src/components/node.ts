@@ -1,201 +1,151 @@
 import { isBetween } from '../helper';
-import { uiComponent, customComponent, InputInterface, OutputInterface } from './component';
-import { Base, ComponentBase } from './base';
-import { ComponentConfig, GlobalStats, lineObject, NodeConfig, NodeConfigFunction, ObjectTypes, customCursorDownProp } from '../types';
+import { Base } from './base';
+import { GlobalStats, lineObject, ObjectTypes, customCursorDownProp } from '../types';
+import { InputConnector, OutputConnector } from './connector';
+import { InputForm } from './component';
+import { ComponentBase } from './component';
 
 
+class NodeComponent extends Base {
 
-class NodeUI extends Base {
-
-    config: NodeConfig;
-
-    inputs: Array<InputInterface>;// List of NodeInput classes for each input connector
-    outputs: Array<OutputInterface>;// List of NodeOutput classes for each output connector
-    inputCount: number;
+    inputConnectors: { [key: string]: InputConnector };     // Dictionary of InputConnector classes for each input connector
+    outputConnectors: { [key: string]: OutputConnector };   // Dictionary of OutputConnector classes for each output connector
     outputCount: number;
 
-    elements: { [key: string]: ComponentBase };
+    components: { [key: string]: ComponentBase };   // List iof all components in the node, except for connectors
 
-    dom: HTMLElement;
+    dom: HTMLElement;                               // The DOM element of the node 
 
-    hasIandO: boolean;
+    nodeWidth: number = 0;
+    nodeHeight: number = 0;
 
-    nodeWidth: number;
-    nodeHeight: number;
-    nodeContainerWidth: number;
-    nodeContainerHeight: number;
-    nodeContainerOffsetLeft: number;
-    nodeContainerOffsetTop: number;
-
-    functions: NodeConfigFunction;
-
-    pan_start_x: number;
-    pan_start_y: number;
+    panStartX: number;
+    panStartY: number;
 
     overlapping: lineObject | null;
-
     freeze: boolean;
-
     type: ObjectTypes;
 
-    constructor(config: NodeConfig, globals: GlobalStats, x = 0, y = 0) {
+    prop: { [key: string]: any };
+    outputProp: { [key: string]: any };
+
+    constructor(dom: HTMLElement, globals: GlobalStats) {
 
         super(globals);
 
-        this.config = config;
-
-        this.position_x = x;// - this.g.cameraWidth / 2;
-        this.position_y = y; //- this.g.cameraHeight / 2;
-
-        this.inputs = [];
-        this.outputs = [];
-        this.inputCount = 0;
+        this.inputConnectors = {};
+        this.outputConnectors = {};
         this.outputCount = 0;
+        this.components = {};
 
-        this.elements = {};
-
-        this.pan_start_x = this.position_x;
-        this.pan_start_y = this.position_y;
-
+        this.panStartX = this.position_x;
+        this.panStartY = this.position_y;
         this.overlapping = null;
-
         this.freeze = false;
+        this.type = ObjectTypes.node;
 
-        this.type = ObjectTypes.node
+        this.dom = dom;
+        this.dom.style.willChange = "transform";
+        this.dom.style.position = "absolute";
+        this.dom.style.transformOrigin = "top left";
+        this.dom.id = this.gid;
 
-        //this.g.mouseHasMoved = false;
-
-
-        const node = document.createElement('div');
-        node.classList.add('sl-node');
-        node.style.willChange = "transform";
-        node.style.position = "absolute";
-        node.style.transformOrigin = "top left";
-        node.style.position = "absolute";
-        const nodeContainer = document.createElement('div');
-        nodeContainer.classList.add('sl-node-container');
-        nodeContainer.style.position = "relative";
-        for (const row of config.elements) {
-            const nodeContent = document.createElement('div');
-            nodeContent.style.position = "relative";
-            nodeContent.style.display = "flex";
-            nodeContent.style.flexDirection = "row";
-            nodeContent.classList.add('sl-node-content');
-            nodeContainer.appendChild(nodeContent);
-
-            if (row instanceof Array) {
-                for (const r of row) {
-                    const element = this._initParseComponent(r, nodeContent);
-                    if (element) nodeContent.appendChild(<Node>element.dom);
-                }
-            } else {
-                const element = this._initParseComponent(row, nodeContent);
-                if (element) nodeContent.appendChild(<Node>element.dom);
-            }
-            nodeContainer.appendChild(nodeContent);
-        }
-
-        node.appendChild(nodeContainer);
-        node.id = this.gid;
-        node.onmousedown = this.domMouseDown.bind(this);
-        this.dom = node;
-
-        if (this.inputs.length > 0 && this.outputs.length > 0) {
-            this.hasIandO = true;
-        } else {
-            this.hasIandO = false;
-        }
-
-        this.g.canvas!.appendChild(node);
-
-        this.nodeWidth = node.offsetWidth;
-        this.nodeHeight = node.offsetHeight;
-        this.nodeContainerWidth = nodeContainer.offsetWidth;
-        this.nodeContainerHeight = nodeContainer.offsetHeight;
-        this.nodeContainerOffsetLeft = nodeContainer.offsetLeft;
-        this.nodeContainerOffsetTop = nodeContainer.offsetTop;
-
-        this.updateDOMproperties();
-        this.bindFunction(node);
-
+        this.bindFunction(this.dom);
         this.g.nodeArray.push(this);
 
         new ResizeObserver(() => {
             this.updateDOMproperties();
         }).observe(this.dom);
 
-        this.functions = [];
-        if (config.functions) {
-            this.functions = config.functions;
-            for (const [_, dict] of Object.entries(this.functions)) {
-                if (dict.functionInit !== undefined) {
-                    dict.functionInit(this);
+        this.prop = {};
+        this.outputProp = {}
+        this.prop = new Proxy(this.prop, {
+            set: (target, prop, value) => {
+                prop = prop.toString();
+                target[prop] = value;
+                if (prop in this.outputProp) {
+                    this.evaluate(prop);
                 }
+
+                return true;
+            },
+            get: (target, prop) => {
+                prop = prop.toString();
+                return target[prop];
+            }
+
+        });
+    }
+
+    addNodeToCanvas(x: number, y: number) {
+
+        this.position_x = x;
+        this.position_y = y;
+        this.nodeWidth = this.dom.offsetWidth;
+        this.nodeHeight = this.dom.offsetHeight;
+        this.dom.style.transform = `translate3d(${this.position_x}px, ${this.position_y}px, 0)`;
+        this.updateDOMproperties();
+
+        this.g.canvas!.appendChild(this.dom);
+
+    }
+
+
+    addOutputConnector(dom: HTMLElement, name: string) {
+
+        const output = new OutputConnector(dom, { name: name }, this, this.g);
+        this.outputConnectors[name] = output;
+
+        this.prop[name] = null;
+        this.outputProp[name] = null;
+
+        return output;
+    }
+
+
+    addInputConnector(dom: HTMLElement, name: string) {
+        const input = new InputConnector(dom, { name: name }, this, this.g);
+        this.inputConnectors[name] = input;
+
+        this.prop[name] = null;
+
+        return input;
+    }
+
+
+    addInputForm(dom: HTMLElement, name: string) {
+        const input = new InputForm(dom, { name: name }, this, this.g);
+        this.prop[name] = null;
+
+        return input;
+    }
+
+
+    findInput(id: string): InputConnector | null {
+        for (const input of Object.values(this.inputConnectors)) {
+            if (input.name == id) {
+                return input;
             }
         }
-
-        this.dom.style.transform = `translate3d(${this.position_x}px, ${this.position_y}px, 0)`;
-
-    }
-
-    findInput(id: string): InputInterface | null {
-        for (const o of this.inputs) {
-            if (o.gid === id) return o;
-        }
         return null;
     }
 
-    findOutput(id: string): OutputInterface | null {
-        for (const o of this.outputs) {
-            if (o.gid === id) return o;
+    findOutput(id: string): OutputConnector | null {
+        for (const output of Object.values(this.outputConnectors)) {
+            if (output.name == id) {
+                return output;
+            }
         }
         return null;
-    }
-
-    _initParseComponent(ui: ComponentConfig, content: HTMLElement): InputInterface | OutputInterface | uiComponent | customComponent | null {
-        let u = null;
-        switch (ui.type) {
-            case 'input-text':
-            case 'input-bool':
-            case 'input-float':
-            case 'input-float-infinite':
-                u = new InputInterface(ui, this, this.g);
-                u.parent = this;
-                this.g.globalNodes[u.gid] = u;
-                this.inputs.push(u);
-                break;
-            case 'output-text':
-                u = new OutputInterface(ui, this, this.g);
-                u.parent = this;
-                this.g.globalNodes[u.gid] = u;
-                this.outputs.push(u);
-
-                break;
-            case 'ui-display':
-            case 'ui-dropdown':
-            case 'ui-paragraph':
-                u = new uiComponent(ui, this, this.g, content);
-                u.parent = this;
-                this.g.globalNodes[u.gid] = u;
-
-                break;
-            case 'custom':
-                u = new customComponent(ui, this, this.g, content);
-                u.parent = this;
-                this.g.globalNodes[u.gid] = u;
-
-                break;
-            default:
-                console.warn("Unknown type " + ui.type);
-        }
-        return u;
 
     }
+
 
     setStartPositions() {
-        this.pan_start_x = this.position_x;
-        this.pan_start_y = this.position_y;
+        this.panStartX = this.position_x;
+        this.panStartY = this.position_y;
     }
+
 
     customCursorDown(_: customCursorDownProp) {
 
@@ -226,20 +176,17 @@ class NodeUI extends Base {
 
         this.setStartPositions();
 
-        //this.g.focusNodes.push(this);
     }
 
     domCursorUp() {
 
-        //console.debug("Node domMouseUp: " + this.gid + ", targetObject: " + this.g.targetObject.gid + ", focusNodes: " + this.g.focusNodes);
-
         if (this.freeze) return;
 
-        this.position_x = this.pan_start_x + this.g.dx / this.g.zoom
-        this.position_y = this.pan_start_y + this.g.dy / this.g.zoom
+        this.position_x = this.panStartX + this.g.dx / this.g.zoom
+        this.position_y = this.panStartY + this.g.dy / this.g.zoom
 
-        // If the mouse has not moved since being pressed, then it is a regular click
-        // Unselect other nodes in focusNodes
+        /* If the mouse has not moved since being pressed, then it is a regular click
+            unselect other nodes in focusNodes */
         console.debug("Mouse has moved: " + this.g.mouseHasMoved);
         if (!this.g.mouseHasMoved && this.g.targetObject && this.g.targetObject.gid == this.gid) {
             console.debug("Mouse has not moved")
@@ -251,33 +198,21 @@ class NodeUI extends Base {
             return;
         }
 
-        // this.g.mouseHasMoved = false;
 
         if (this.overlapping == null) { return; }
 
+        /* Handle dropping node on line */
         const from = this.overlapping.from;
         const to = this.overlapping.to;
-        const firstInput = this.inputs[0];
-        const firstOutput = this.outputs[0];
+        const firstInput = Object.values(this.inputConnectors)[0];
+        const firstOutput = Object.values(this.outputConnectors)[0];
         from.disconnectFromInput(to);
-        from.connectToInput(firstInput.input);
-        firstOutput.output.connectToInput(to);
+        from.connectToInput(firstInput);
+        firstOutput.connectToInput(to);
 
 
     }
 
-
-    // onPan() {
-
-    //     this.dom.style.transform = `translate3d(${this.position_x}px, ${this.position_y}px, 0)`;
-
-    //     for (const input of this.inputs) {
-    //         input.onPan();
-    //     }
-    //     for (const output of this.outputs) {
-    //         output.onPan();
-    //     }
-    // }
 
     /**
      * Fired every time requestAnimationFrame is called,
@@ -288,32 +223,23 @@ class NodeUI extends Base {
      */
     onDrag() {
 
-
-
         if (this.freeze) return;
 
-        this.position_x = this.pan_start_x + this.g.dx / this.g.zoom
-        this.position_y = this.pan_start_y + this.g.dy / this.g.zoom
-
-        // console.debug(`onDrag ${this.position_x} ${this.position_y} ${this.pan_start_x} ${this.pan_start_y} `);
-        // console.debug(`onDrag ${this.g.dx} ${this.g.dy} ${this.g.zoom} `);
-
-
-        // console.debug(`onDrag ${this.position_x} ${this.position_y}`);
+        this.position_x = this.panStartX + this.g.dx / this.g.zoom
+        this.position_y = this.panStartY + this.g.dy / this.g.zoom
 
         this.dom.style.transform = `translate3d(${this.position_x}px, ${this.position_y}px, 0)`;
 
-        for (const input of this.inputs) {
-            input.input.nodeDrag();
+        for (const input of Object.values(this.inputConnectors)) {
+            input.nodeDrag();
         }
-        for (const output of this.outputs) {
-            output.output.nodeDrag();
+        for (const output of Object.values(this.outputConnectors)) {
+            output.nodeDrag();
         }
 
         this.overlapping = null;
-        if (!this.hasIandO) return;
-        if (this.outputCount > 0 || this.inputCount > 0) return;
 
+        if (Object.keys(this.inputConnectors).length == 0 && Object.keys(this.outputConnectors).length == 0) return;
 
         let avg_height = 9999;
         for (const line of this.g.globalLines) {
@@ -334,96 +260,60 @@ class NodeUI extends Base {
     }
 
     onFocus() {
-        // for (const n of this.g.nodeArray) {
-        //     n.dom.classList.remove('focused');
-        //     n.dom.style.zIndex = "10";
-        // }
         this.dom.classList.add('focused');
         this.dom.style.zIndex = "20";
         this.updateDOMproperties();
     }
+
 
     offFocus() {
         this.dom.classList.remove('focused');
         this.dom.style.zIndex = "10";
     }
 
+
     updateDOMproperties() {
         this.nodeHeight = this.dom.offsetHeight;
         this.nodeWidth = this.dom.offsetWidth;
-        for (const input of this.inputs) {
-            input.input.updateDOMproperties();
+        for (const input of Object.values(this.inputConnectors)) {
+            input.updateDOMproperties();
         }
-        for (const output of this.outputs) {
-            output.output.updateDOMproperties();
+        for (const output of Object.values(this.outputConnectors)) {
+            output.updateDOMproperties();
         }
     }
 
-    run() {
-        let outputCount = 0;
-        for (const [_, fData] of Object.entries(this.functions)) {
-            for (const x of fData.outputs) {
-                const o = <OutputInterface>this.elements[x];
-                if (o == undefined) {
-                    console.warn(`Output '${x}' was not found in elements. Double check '${x}' is defined.`)
-                    return;
-                }
-                if (!o.output.svgs || o.output.svgs.length < 1) {
-                    continue;
-                }
-                outputCount++;
-                for (const line of o.output.svgs) {
-                    line.to.parent?.run();
-                }
-            }
-        }
-        if (outputCount === 0) {
-            this.exec();
+
+    evaluate(varName: string) {
+        console.debug("Update all nodes connected to " + varName);
+        const output = this.outputConnectors[varName];
+        if (!output) return;
+        for (const input of output.peerInputs) {
+            console.debug(`Update input ${input.name} connected to ${varName} with value ${this.prop[varName]}`);
+            input.prop[input.name] = this.prop[varName];
+            input.updateFunction();
         }
     }
 
 
     exec() {
-        if (!this.functions)
-            return;
 
-        for (const [_, fData] of Object.entries(this.functions)) {
-            const inputs = [this];
-            for (const x of fData.inputs) {
-                if (x in this.elements) {
-                    const i = <InputInterface>this.elements[x];
-                    inputs.push(i.getValue());
-                }
-            }
-
-            const result = fData.functionUpdate(...inputs);
-            let i = 0;
-            for (const x of fData.outputs) {
-                const o = <OutputInterface>this.elements[x];
-                if (o == undefined) {
-                    console.warn(`Output '${x}' was not found in elements. Double check '${x}' is defined.`)
-                    return;
-                }
-                if (result instanceof Array) {
-                    o.setValue(result[i++])
-                } else {
-                    o.setValue(result);
-                }
-            }
-        }
     }
+
 
     destroy() {
         this.g.canvas?.removeChild(this.dom!);
-        for (const input of this.inputs) {
+        for (const input of Object.values(this.inputConnectors)) {
             input.destroy();
         }
-        for (const output of this.outputs) {
+        for (const output of Object.values(this.outputConnectors)) {
             output.destroy();
         }
     }
+
+
 }
 
 export {
-    NodeUI
+    NodeComponent
 }
