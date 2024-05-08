@@ -42,6 +42,7 @@
     "rollup-plugin-serve": "^1.1.1",
     "sass": "^1.75.0",
     "serve": "^14.2.1",
+    "tslib": "^2.6.2",
     "typescript": "^5.4.5",
     "uglify-js": "^3.17.4"
   },
