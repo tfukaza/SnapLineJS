@@ -1,30 +1,69 @@
 
 import { worldToCamera } from './helper.js';
-import { GlobalStats, ObjectTypes, mouseDownButton } from './types';
+import { GlobalStats, ObjectTypes, SnapLineDomType, mouseDownButton } from './types';
 import { NodeComponent } from './components/node.js';
+
+import './theme/standard_light.scss';
+// import './theme/standard_dark.scss';
+// import './theme/retro.scss';
+import { ConnectorComponent, OutputConnector } from './components/connector.js';
 
 export default class SnapLine {
 
     g: GlobalStats;
 
-    constructor(canvasContainerID: string) {
+    canvasContainerStyle: { [key: string]: string } = {};
+    canvasStyle: { [key: string]: string } = {};
+    canvasSelectionBoxStyle: { [key: string]: string } = {};
+    canvasBackgroundStyle: { [key: string]: string } = {};
+
+    constructor() {
+
+        this.g = null as any;
+
+        this.canvasContainerStyle = {
+            position: 'relative',
+            overflow: 'hidden',
+        };
+        this.canvasSelectionBoxStyle = {
+            position: 'absolute',
+            pointerEvents: "none",
+        };
+
+        /* Public methods */
+        this.initSnapLine = this.initSnapLine.bind(this);
+
+
+    }
+
+
+    initSnapLine(
+        containerDom: HTMLElement,
+        canvasDom: HTMLElement,
+        backgroundDom: HTMLElement,
+        selectionBoxDom: HTMLElement
+    ) {
+
+
 
         this.g = {
-            canvas: null,
-            canvasContainer: null,
-            canvasBackground: null,
+            canvas: canvasDom,
+            canvasContainer: containerDom,
+            canvasBackground: backgroundDom,
+            selectionBox: selectionBoxDom,
+
             currentMouseDown: mouseDownButton.none,
-            mousedown_x: 0,         // Initial mouse  position when mouse is pressed
+            mousedown_x: 0,
             mousedown_y: 0,
-            mouse_x: 0,             // Current mouse position
+            mouse_x: 0,
             mouse_y: 0,
-            mouse_x_world: 0,       // Current mouse position, in world space
+            mouse_x_world: 0,
             mouse_y_world: 0,
-            camera_pan_start_x: 0,  // Initial camera position when camera is being panned
+            camera_pan_start_x: 0,
             camera_pan_start_y: 0,
-            dx: 0,                  // How much the mouse has moved since being pressed
+            dx: 0,
             dy: 0,
-            dx_offset: 0,           // Offset for dx and dy
+            dx_offset: 0,
             dy_offset: 0,
 
             overrideDrag: false,
@@ -35,81 +74,59 @@ export default class SnapLine {
             cameraWidth: 0,
             cameraHeight: 0,
 
-            targetObject: null,      // Node that is currently being dragged
-            focusNodes: [],      // Node that is currently focused
+            targetObject: null,
+            focusNodes: [],
             hoverDOM: null,
             gid: 0,
 
-            nodeArray: [],
             globalLines: [],
-            globalNodes: {},
-
-            selectionBox: null,
+            globalNodeList: [],
+            globalNodeTable: {},
 
             mouseHasMoved: false,
             ignoreMouseUp: false,
 
             prevTouches: null,
             prevSingleTouchTime: 0,
-        }
-        const g = this.g;
 
-        g.canvasContainer = document.getElementById(canvasContainerID);
-        if (!g.canvasContainer) {
-            console.error("Canvas not found");
-            return;
+            snapline: this,
         }
+
+        const g = this.g;
 
         g.cameraWidth = g.canvasContainer.clientWidth;
         g.cameraHeight = g.canvasContainer.clientHeight;
+
         console.debug(`Canvas size: ${g.cameraWidth}x${g.cameraHeight}`);
 
-        // g.camera_x = g.cameraWidth/2;
-        // g.camera_y = g.cameraHeight/2;
+        this.setCanvasElementStyle(this.canvasStyle, {
+            position: 'relative',
+            top: '0px',
+            left: '0px',
+            transform: `translate(${g.cameraWidth / 2}px, ${g.cameraHeight / 2}px)`,
+            width: '0px',
+            height: '0px',
+        });
+        this.setCanvasElementStyle(this.canvasBackgroundStyle, {
+            width: (g.cameraWidth * 10) + 'px',
+            height: (g.cameraHeight * 10) + 'px',
+            transform: `translate(${-g.cameraWidth * 5}px, ${-g.cameraHeight * 5}px)`,
+            transformOrigin: "center",
+            zIndex: "0",
+            position: "absolute",
+        });
 
-        const c = document.createElement('div');
-        c.style.position = 'relative';
-        c.style.top = '0px';
-        c.style.left = '0px';
-        c.className = 'canvas';
-        g.canvasContainer.appendChild(c);
-        g.canvas = c;
+        this.renderCanvasElement(SnapLineDomType.canvasContainer, this.canvasContainerStyle);
+        this.renderCanvasElement(SnapLineDomType.canvas, this.canvasStyle);
+        this.renderCanvasElement(SnapLineDomType.canvasBackground, this.canvasBackgroundStyle);
+        this.renderCanvasElement(SnapLineDomType.selectionBox, this.canvasSelectionBoxStyle);
 
-        g.canvas.style.transform = `translate(${g.cameraWidth / 2}px, ${g.cameraHeight / 2}px)`;
-        g.canvas.style.width = '0px';
-        g.canvas.style.height = '0px';
-
-        g.canvasContainer.style.overflow = "hidden";
-        g.canvasContainer.tabIndex = 0;
-        g.canvasContainer.style.position = "relative";
-
-        const bg = document.createElement('div');
-        bg.id = "sl-background";
-        bg.style.width = (g.cameraWidth * 10) + 'px';
-        bg.style.height = (g.cameraHeight * 10) + 'px';
-        bg.style.transform = `translate(${-g.cameraWidth * 5}px, ${-g.cameraHeight * 5}px)`;
-        bg.style.transformOrigin = "center";
-        bg.style.zIndex = "0";
-        bg.style.position = "absolute";
-        g.canvas.appendChild(bg);
-
-        g.canvasBackground = bg;
-
-        // Create the div element that will be the rectangle to select nodes
-        const selectionBox = document.createElement('div');
-        selectionBox.id = "sl-selection-box";
-        selectionBox.style.position = 'absolute';
-        // selectionBox.style.zIndex = "2";
-        // selectionBox.style.border = "1px solid red";
-        selectionBox.style.pointerEvents = "none";
-        g.canvasContainer.appendChild(selectionBox);
-        g.selectionBox = selectionBox;
-
-        g.canvasContainer.addEventListener('mousedown', this.onMouseDown.bind(this));
-        g.canvasContainer.addEventListener('mousemove', this.onMouseMove.bind(this));
         g.canvasContainer.addEventListener('mouseup', this.onMouseUp.bind(this));
+        g.canvasContainer.addEventListener('mousemove', this.onMouseMove.bind(this));
+        g.canvasContainer.addEventListener('mousedown', this.onMouseDown.bind(this));
         g.canvasContainer.addEventListener('wheel', this.onWheel.bind(this));
         g.canvasContainer.addEventListener('keydown', this.onKeyDown.bind(this));
+
         document.addEventListener('mousemove', this.onMouseMove.bind(this));
         document.addEventListener('mouseup', this.onMouseUp.bind(this));
 
@@ -117,41 +134,89 @@ export default class SnapLine {
         g.canvasContainer.addEventListener('touchmove', this.onTouchMove.bind(this));
         g.canvasContainer.addEventListener('touchend', this.onTouchEnd.bind(this));
 
-
         window.requestAnimationFrame(this.step.bind(this));
-
     }
+
+
+    setCanvasElementStyle(curStyle: { [key: string]: string }, newStyle: { [key: string]: string }) {
+        curStyle = Object.assign({}, curStyle, newStyle);
+    }
+
+
+    renderCanvasElement(domType: SnapLineDomType, style: { [key: string]: string }) {
+        let dom: HTMLElement | null = null;
+        if (this.g == null) {
+            return;
+        }
+        switch (domType) {
+            case SnapLineDomType.canvas:
+                dom = this.g.canvas;
+                break;
+            case SnapLineDomType.canvasContainer:
+                dom = this.g.canvasContainer;
+                break;
+            case SnapLineDomType.canvasBackground:
+                dom = this.g.canvasBackground;
+                break;
+            case SnapLineDomType.selectionBox:
+                dom = this.g.selectionBox;
+                break;
+            default:
+                console.error("Invalid dom type: " + domType);
+                return;
+        }
+        if (dom == null) {
+            return;
+        }
+        for (const key in style) {
+            dom.style[<any>key] = style[key];
+        }
+    }
+
+    /* Event handlers */
 
     onTouchStart(e: TouchEvent) {
 
-        // else if (Date.now() - this.g.prevSingleTouchTime > 300) {
-        //     this.g.prevSingleTouchTime = 0;
-        //     this.onCursorDown(1, e.touches[0].clientX, e.touches[0].clientY);
-        //     return;
-        // }
-
+        /* If multiple touches are detected, treat it as a middle mouse button press (pan camera) */
         if (e.touches.length > 1) {
+
+            /* If there was only one touch previously, it means up until now it has been handled as a mouse press or drag.
+             * Call the cursor up handler to reset the state */
             if (this.g.prevTouches!.length == 1) {
                 this.onCursorUp();
             }
 
-            console.debug("Multitouch touchstart");
             this.g.currentMouseDown = mouseDownButton.middle;
+
+            /* Use the middle of the two touches as the mouse position */
             let middleX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
             let middleY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
-            this.onCursorDown(1, middleX, middleY);
+            this.onCursorDown(mouseDownButton.middle, middleX, middleY);
 
             this.g.prevTouches = e.touches;
 
             return;
         }
-        this.onCursorDown(0, e.touches[0].clientX, e.touches[0].clientY);
+
+        /* If there is only one touch, treat it as a left mouse button press */
+        this.onCursorDown(mouseDownButton.left, e.touches[0].clientX, e.touches[0].clientY);
     }
+
 
     onMouseDown(e: MouseEvent) {
-        this.onCursorDown(e.button, e.clientX, e.clientY);
+        let button = mouseDownButton.invalid;
+        switch (e.button) {
+            case 0:
+                button = mouseDownButton.left;
+                break;
+            case 1:
+                button = mouseDownButton.middle;
+                break;
+            default:
+                return;
+        }
+        this.onCursorDown(button, e.clientX, e.clientY);
     }
-
 
 
     /**
@@ -161,18 +226,25 @@ export default class SnapLine {
      * this will only be called if the user clicks on the canvas background.
      * 
      * Usually this means the user is performing a camera pan or selecting multiple nodes.
+     * 
+     * @param button: The mouse button that was pressed.
+     * @param clientX: The x position of the cursor.
+     * @param clientY: The y position of the cursor.
+     * @returns 
      */
-    onCursorDown(button: number, clientX: number, clientY: number) {
+    onCursorDown(button: mouseDownButton, clientX: number, clientY: number) {
 
-        console.debug("Cursor down: " + button);
+        this.g.currentMouseDown = button;
 
+        /*  If the user is dragging a line when another cursor down event is detected, then the line should be deleted.
+            This usually happens on touch devices with multi-touch support */
         const tmpLine = document.querySelector('.sl-connector-svg.tmp');
         if (tmpLine) {
             console.debug("Cursor down with tmp line");
             const output_gid = tmpLine.getAttribute('output-gid');
             if (output_gid != null) {
                 console.debug("Cursor down with tmp line and output gid: " + output_gid);
-                const output = this.g.globalNodes[output_gid!];
+                const output = this.g.globalNodeTable[output_gid!];
                 if (output) {
                     output.domCursorUp();
                     this.onCursorUp();
@@ -186,25 +258,21 @@ export default class SnapLine {
             return;
         }
 
-        // Handle cases where a mouse button is already pressed
+        /* Reset the selection box */
         if (g.currentMouseDown != mouseDownButton.none) {
-            g.selectionBox!.style.width = '0px';
-            g.selectionBox!.style.height = '0px';
-            g.selectionBox!.style.left = '0px';
-            g.selectionBox!.style.top = '0px';
-        }
-
-        if (button == 1) {
-            g.currentMouseDown = mouseDownButton.middle;
-        } else if (button == 0) {
-            g.currentMouseDown = mouseDownButton.left;
-        } else {
-            g.currentMouseDown = mouseDownButton.invalid;
+            this.setCanvasElementStyle(this.canvasSelectionBoxStyle, {
+                width: '0px',
+                height: '0px',
+                left: '0px',
+                top: '0px',
+                pointerEvents: "none",
+                opacity: "0",
+            });
         }
 
         /* Unselect all nodes */
         g.focusNodes = [];
-        for (const node of g.nodeArray) {
+        for (const node of g.globalNodeList) {
             node.offFocus();
         }
 
@@ -215,96 +283,94 @@ export default class SnapLine {
 
     }
 
+
+
+    onTouchMove(e: TouchEvent) {
+
+        /* Single touch move is same as mouse drag */
+        if (e.touches.length <= 0) {
+            let element = document.elementFromPoint(e.touches[0].clientX, e.touches[0].clientY);
+            this.onCursorMove(element, e.touches[0].clientX, e.touches[0].clientY);
+            this.g.prevTouches = e.touches;
+            return;
+        }
+
+        /* If there are multiple touches moving, it is a camera pan and zoom */
+
+        /*  If there are more or less than two touches, then ignore as ir is likely the user was
+            trying to drag and accidentally touched the screen with another finger */
+        if (this.g.prevTouches == null || this.g.prevTouches.length != 2) {
+            if (e.touches.length == 2)
+                this.g.prevTouches = e.touches;
+            return;
+        }
+
+        let cur1 = e.touches[0];
+        let cur2 = e.touches[1];
+
+        let prev1 = null;
+        let prev2 = null;
+
+        /* Find the previous touch positions for each finger */
+        for (let i = 0; i < e.touches.length; i++) {
+            if (cur1.identifier == this.g.prevTouches![i].identifier) {
+                prev1 = this.g.prevTouches![i];
+            } else if (cur2.identifier == this.g.prevTouches![i].identifier) {
+                prev2 = this.g.prevTouches![i];
+            }
+        }
+
+        let curDistance = Math.sqrt(Math.pow(cur1.clientX - cur2.clientX, 2) + Math.pow(cur1.clientY - cur2.clientY, 2));
+        let prevDistance = Math.sqrt(Math.pow(prev1!.clientX - prev2!.clientX, 2) + Math.pow(prev1!.clientY - prev2!.clientY, 2));
+        let d_zoom = -2 * (curDistance - prevDistance);
+
+        let middle_x = (cur1.clientX + cur2.clientX) / 2;
+        let middle_y = (cur1.clientY + cur2.clientY) / 2;
+
+        let newMouseX = middle_x - this.g.canvasContainer!.offsetLeft;
+        let newMouseY = middle_y - this.g.canvasContainer!.offsetTop;
+
+        this.onCursorMove(document.elementFromPoint(newMouseX, newMouseY), newMouseX, newMouseY);
+
+        this.g.mouse_x = newMouseX;
+        this.g.mouse_y = newMouseY;
+
+        this.onZoom(d_zoom);
+        this.g.prevTouches = e.touches;
+
+        return;
+    }
+
     onMouseMove(e: MouseEvent) {
         this.onCursorMove(e.target, e.clientX, e.clientY);
     }
 
-    onTouchMove(e: TouchEvent) {
-
-        // if (this.g.timer) {
-        //     clearTimeout(this.g.timer);
-        //     this.g.timer = null;
-        //     this.g.prevSingleTouchTime = 0;
-        //     return;
-        // }
-
-        if (e.touches.length > 1) {
-
-            if (this.g.prevTouches == null || this.g.prevTouches.length != 2) {
-                if (e.touches.length == 2)
-                    this.g.prevTouches = e.touches;
-                return;
-            }
-
-            //alert("Multitouch not supported yet");
-            let cur1 = e.touches[0];
-            let cur2 = e.touches[1];
-
-            // FInd the corresponding touch in the previous event
-            let prev1 = null;
-            let prev2 = null;
-
-
-            for (let i = 0; i < e.touches.length; i++) {
-                if (cur1.identifier == this.g.prevTouches![i].identifier) {
-                    prev1 = this.g.prevTouches![i];
-                } else if (cur2.identifier == this.g.prevTouches![i].identifier) {
-                    prev2 = this.g.prevTouches![i];
-                }
-            }
-
-            let curDistance = Math.sqrt(Math.pow(cur1.clientX - cur2.clientX, 2) + Math.pow(cur1.clientY - cur2.clientY, 2));
-            let prevDistance = Math.sqrt(Math.pow(prev1!.clientX - prev2!.clientX, 2) + Math.pow(prev1!.clientY - prev2!.clientY, 2));
-            let d_zoom = -2 * (curDistance - prevDistance);
-
-
-
-            // Set mouse position to the middle of the two touches
-            let middle_x = (cur1.clientX + cur2.clientX) / 2;
-            let middle_y = (cur1.clientY + cur2.clientY) / 2;
-
-            let newMouseX = middle_x - this.g.canvasContainer!.offsetLeft;
-            let newMouseY = middle_y - this.g.canvasContainer!.offsetTop;
-
-            this.onCursorMove(document.elementFromPoint(newMouseX, newMouseY), newMouseX, newMouseY);
-
-            this.g.mouse_x = newMouseX;
-            this.g.mouse_y = newMouseY;
-
-            this.onZoom(d_zoom);
-            this.g.prevTouches = e.touches;
-            return;
-        }
-        let element = document.elementFromPoint(e.touches[0].clientX, e.touches[0].clientY);
-        this.onCursorMove(element, e.touches[0].clientX, e.touches[0].clientY);
-        this.g.prevTouches = e.touches;
-    }
-
     /**
-     * Handle cursor movement.
-        * This can be called by mousemove or touchmove.
-        */
+     * Handle cursor move events.
+     * This usually means the camera is panned or a selection box is being drawn.
+     * 
+     * @param target 
+     * @param clientX 
+     * @param clientY 
+     * @returns 
+     */
     onCursorMove(target: EventTarget | null, clientX: number, clientY: number) {
-
-        console.debug("Cursor move");
 
         const g = this.g;
 
         g.hoverDOM = target;
-        // Get mouse position relative to canvas
         g.mouse_x = clientX - g.canvasContainer!.offsetLeft;
         g.mouse_y = clientY - g.canvasContainer!.offsetTop;
-        // Adjust mouse position to world coordinates
+
+        /* Adjust mouse position to world coordinates */
         let w_x = (g.mouse_x - g.cameraWidth / 2) / g.zoom + g.camera_x;
         let w_y = (g.mouse_y - g.cameraHeight / 2) / g.zoom + g.camera_y;
         g.mouse_x_world = w_x;
         g.mouse_y_world = w_y;
 
-        //console.debug("Mouse move: " + g.mouse_x + ", " + g.mouse_y + " (" + w_x + ", " + w_y + ")");
-
-
         g.dx = clientX - g.mousedown_x + g.dx_offset;
         g.dy = clientY - g.mousedown_y + g.dy_offset;
+
         /* Handle cases where a mouse button is pressed, i.e. dragging */
         if (g.currentMouseDown == mouseDownButton.none || g.overrideDrag) {
             return;
@@ -320,17 +386,23 @@ export default class SnapLine {
                 // Pan camera if middle mouse button is pressed
                 g.camera_x = g.camera_pan_start_x - g.dx / g.zoom;
                 g.camera_y = g.camera_pan_start_y - g.dy / g.zoom;
-                g.canvas!.style.transform = `matrix3d(${worldToCamera(g.camera_x, g.camera_y, g)})`;
-                g.canvasBackground!.style.transform = `translate(${g.camera_x + -g.cameraWidth * 5}px, ${g.camera_y + -g.cameraHeight * 5}px)`;
-                g.canvasBackground!.style.backgroundPosition = `${-g.camera_x}px ${-g.camera_y}px`;
-                g.canvas!.style.cursor = "grabbing";
+
+                this.setCanvasElementStyle(this.canvasStyle, {
+                    transform: `matrix3d(${worldToCamera(g.camera_x, g.camera_y, g)})`,
+                    cursor: "grabbing",
+                });
+                this.setCanvasElementStyle(this.canvasBackgroundStyle, {
+                    transform: `translate(${g.camera_x + -g.cameraWidth * 5}px, ${g.camera_y + -g.cameraHeight * 5}px)`,
+                    backgroundPosition: `${-g.camera_x}px ${-g.camera_y}px`,
+                });
             } else if (g.currentMouseDown == mouseDownButton.left) {
                 // Select multiple boxes if left mouse button is pressed
-                g.selectionBox!.style.width = Math.abs(g.dx) + 'px';
-                g.selectionBox!.style.height = Math.abs(g.dy) + 'px';
-                g.selectionBox!.style.left = Math.min(g.mousedown_x, g.mouse_x) + 'px';
-                g.selectionBox!.style.top = Math.min(g.mousedown_y, g.mouse_y) + 'px';
-
+                this.setCanvasElementStyle(this.canvasSelectionBoxStyle, {
+                    width: Math.abs(g.dx) + 'px',
+                    height: Math.abs(g.dy) + 'px',
+                    left: Math.min(g.mousedown_x, g.mouse_x) + 'px',
+                    top: Math.min(g.mousedown_y, g.mouse_y) + 'px',
+                });
                 // Check if any nodes are inside the selection box
                 let w_x_start = (Math.min(g.mousedown_x, g.mouse_x) - g.cameraWidth / 2) / g.zoom + g.camera_x;
                 let w_y_start = (Math.min(g.mousedown_y, g.mouse_y) - g.cameraHeight / 2) / g.zoom + g.camera_y;
@@ -340,10 +412,10 @@ export default class SnapLine {
 
                 let selectedNodes = [];
 
-                for (const node of g.nodeArray) {
+                /* Focus on nodes that are inside the selection box */
+                for (const node of g.globalNodeList) {
                     if (node.position_x + node.nodeWidth > w_x_start && node.position_x < w_x_end && node.position_y + node.nodeHeight > w_y_start && node.position_y < w_y_end) {
                         node.onFocus();
-
                         selectedNodes.push(node);
                     } else {
                         node.offFocus();
@@ -352,15 +424,17 @@ export default class SnapLine {
                 g.focusNodes = selectedNodes;
             }
         } else {
-            // if (g.targetObject.type == ObjectTypes.node) {
-            //     /* If the object being dragged is a node, then drag all selected nodes */
-            //     for (const node of g.focusNodes) {
-            //         node.onDrag();
-            //     }
-            // } else {
-            //     /* Otherwise, just drag the selected object */
-            //     g.targetObject.onDrag();
-            // }
+            /* If an object is selected, then this drag is for that object */
+            if (g.targetObject.type == ObjectTypes.node) {
+                /* If the object being dragged is a node, then handle mouse move for all selected nodes */
+                for (const node of g.focusNodes) {
+                    node.onDrag();
+                }
+            } else {
+                /* Otherwise, just handle mouse move for the selected object */
+                g.targetObject.onDrag();
+            }
+
         }
 
     }
@@ -370,9 +444,6 @@ export default class SnapLine {
     }
 
     onTouchEnd(_: TouchEvent) {
-        // if (this.g.prevTouches.length >= 2) {
-        //     this.g.prevTouches = null;
-        // }
         this.onCursorUp();
     }
 
@@ -390,10 +461,12 @@ export default class SnapLine {
 
             if (g.targetObject == null) {
                 /* If nothing is selected, then this drag is a selection box */
-                g.selectionBox!.style.width = '0px';
-                g.selectionBox!.style.height = '0px';
-                g.selectionBox!.style.left = '0px';
-                g.selectionBox!.style.top = '0px';
+                this.setCanvasElementStyle(this.canvasSelectionBoxStyle, {
+                    width: '0px',
+                    height: '0px',
+                    left: '0px',
+                    top: '0px',
+                });
             } else if (g.targetObject.type == ObjectTypes.node) {
                 /* If the object being dragged is a node, then handle mouse up for all selected nodes */
                 for (const node of g.focusNodes) {
@@ -404,32 +477,21 @@ export default class SnapLine {
                 /* Otherwise, just handle mouse up for the selected object */
                 g.targetObject.domCursorUp();
             }
-
-            // g.noNewSVG = true;
-            // for (const node of g.focusNodes) {
-            //     node.domMouseDown(e);
-            // }
-            // g.noNewSVG = false;
         }
 
         g.currentMouseDown = mouseDownButton.none;
 
         if (g.overrideDrag) {
-            g.canvasBackground!.style.cursor = "default";
+            this.setCanvasElementStyle(this.canvasStyle, {
+                cursor: "default",
+            });
         }
 
         g.overrideDrag = false;
-        g.canvas!.style.cursor = "default";
-        // if (g.targetObject == null) {
-        //     console.debug("Mouse up with no target node");
-        // } else {
-        //     console.debug("Mouse up with target node: " + g.targetObject.gid);
-        //     for (const node of g.focusNodes) {
-        //         node.domMouseUp();
-        //     }
-        //     g.targetObject.domMouseUp();
-        //     //g.focusNodes = [];
-        // }
+        this.setCanvasElementStyle(this.canvasBackgroundStyle, {
+            cursor: "default",
+        });
+
         g.targetObject = null;
         g.dx = 0;
         g.dy = 0;
@@ -439,10 +501,13 @@ export default class SnapLine {
         g.mouseHasMoved = false;
 
     }
+
+
     onWheel(e: WheelEvent) {
         this.onZoom(e.deltaY);
         e.preventDefault();
     }
+
 
     onZoom(deltaY: number = 0) {
         const g = this.g;
@@ -464,7 +529,9 @@ export default class SnapLine {
         g.camera_x -= camera_dx;
         g.camera_y -= camera_dy;
 
-        g.canvas!.style.transform = `matrix3d(${worldToCamera(g.camera_x, g.camera_y, g)})`;
+        this.setCanvasElementStyle(this.canvasStyle, {
+            transform: `matrix3d(${worldToCamera(g.camera_x, g.camera_y, g)})`,
+        });
 
     }
 
@@ -489,19 +556,35 @@ export default class SnapLine {
 
 
     step() {
+        console.debug("Step", this.g.targetObject?.type);
         if (this.g.targetObject?.type == ObjectTypes.node) {
             for (const node of this.g.focusNodes) {
-                node.onDrag();
+                node.renderNode(node.nodeStyle);
             }
-        } else {
-            this.g.targetObject?.onDrag();
+
+        } else if (this.g.targetObject?.type == ObjectTypes.connector && this.g.targetObject instanceof OutputConnector) {
+            let output: OutputConnector = this.g.targetObject;
+            output.renderAllLines(output.svgLines);
         }
+        this.renderCanvasElement(SnapLineDomType.canvasContainer, this.canvasContainerStyle);
+        this.renderCanvasElement(SnapLineDomType.canvas, this.canvasStyle);
+        this.renderCanvasElement(SnapLineDomType.canvasBackground, this.canvasBackgroundStyle);
+        this.renderCanvasElement(SnapLineDomType.selectionBox, this.canvasSelectionBoxStyle);
+
         window.requestAnimationFrame(this.step.bind(this));
     }
 
+
+    addNodeObject(): [NodeComponent, { [key: string]: NodeComponent | ConnectorComponent }] {
+        const n: NodeComponent = new NodeComponent(null, this.g);
+        this.g.globalNodeTable[n.gid] = n;
+        return [n, this.g.globalNodeTable];
+    }
+
+
     createNode(dom: HTMLElement) {
         const n: NodeComponent = new NodeComponent(dom, this.g);
-        this.g.globalNodes[n.gid] = n;
+        this.g.globalNodeTable[n.gid] = n;
 
         // n.domMouseDown();
         // n.onDrag();
@@ -509,9 +592,10 @@ export default class SnapLine {
         return n;
     }
 
+
     createNodeAuto(dom: HTMLElement) {
         const n: NodeComponent = new NodeComponent(dom, this.g);
-        this.g.globalNodes[n.gid] = n;
+        this.g.globalNodeTable[n.gid] = n;
 
         // Get all 'sl-input' elements
         const inputs = dom.querySelectorAll('.sl-input');
@@ -607,7 +691,7 @@ export default class SnapLine {
         this.g.focusNodes = [node];
         this.g.targetObject = node;
 
-        for (const node of this.g.nodeArray) {
+        for (const node of this.g.globalNodeList) {
             node.offFocus();
         }
 
@@ -617,25 +701,25 @@ export default class SnapLine {
     }
 
     deleteNode(id: string) {
-        if (!(id in this.g.globalNodes)) {
+        if (!(id in this.g.globalNodeTable)) {
             console.error("Node not found: " + id);
             return null;
         }
-        this.g.globalNodes[id].destroy();
-        delete this.g.globalNodes[id];
+        this.g.globalNodeTable[id].destroy();
+        delete this.g.globalNodeTable[id];
         return id;
     }
 
     focusNode(id: string) {
-        if (!(id in this.g.globalNodes)) return null;
-        const node = this.g.globalNodes[id];
+        if (!(id in this.g.globalNodeTable)) return null;
+        const node = this.g.globalNodeTable[id];
         node.onFocus();
         return id;
     }
 
     connectNodes(node0: string, outputID: string, node1: string, inputID: string) {
-        const n0 = this.g.globalNodes[node0];
-        const n1 = this.g.globalNodes[node1];
+        const n0 = this.g.globalNodeTable[node0];
+        const n1 = this.g.globalNodeTable[node1];
         if (!n0 || !n1 || !(n0 instanceof NodeComponent) || !(n1 instanceof NodeComponent)) {
             return null;
         }

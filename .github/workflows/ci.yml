@@ -1,0 +1,23 @@
+
+
+name: Basic CI
+on:
+  push:
+    branches-ignore:
+      - 'main'
+
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v3
+    - name: Set up Node.js
+      uses: actions/setup-node@v1
+      with:
+        node-version: 20
+    - name: Install npm packages
+      run:  npm install
+    - name: Build Snapline to dist directory
+      run: npm run build

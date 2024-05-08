@@ -12,9 +12,9 @@ class NodeComponent extends Base {
     outputConnectors: { [key: string]: OutputConnector };   // Dictionary of OutputConnector classes for each output connector
     outputCount: number;
 
-    components: { [key: string]: ComponentBase };   // List iof all components in the node, except for connectors
+    components: { [key: string]: ComponentBase };           // List iof all components in the node, except for connectors
 
-    dom: HTMLElement;                               // The DOM element of the node 
+    dom: HTMLElement | null;                                // The DOM element of the node 
 
     nodeWidth: number = 0;
     nodeHeight: number = 0;
@@ -29,9 +29,14 @@ class NodeComponent extends Base {
     prop: { [key: string]: any };
     outputProp: { [key: string]: any };
 
-    constructor(dom: HTMLElement, globals: GlobalStats) {
+    nodeType: string;
+    nodeStyle: any;
+
+    constructor(dom: HTMLElement | null, globals: GlobalStats) {
 
         super(globals);
+
+        this.dom = null;
 
         this.inputConnectors = {};
         this.outputConnectors = {};
@@ -44,18 +49,24 @@ class NodeComponent extends Base {
         this.freeze = false;
         this.type = ObjectTypes.node;
 
-        this.dom = dom;
-        this.dom.style.willChange = "transform";
-        this.dom.style.position = "absolute";
-        this.dom.style.transformOrigin = "top left";
-        this.dom.id = this.gid;
+        if (dom) {
+            this.dom = dom;
+            this.dom.id = this.gid;
 
-        this.bindFunction(this.dom);
-        this.g.nodeArray.push(this);
+            this.setNodeStyle({
+                willChange: "transform",
+                position: "absolute",
+                transformOrigin: "top left"
+            });
+            this.renderNode(this.nodeStyle);
 
-        new ResizeObserver(() => {
-            this.updateDOMproperties();
-        }).observe(this.dom);
+            this.bindFunction(this.dom);
+            new ResizeObserver(() => {
+                this.updateDOMproperties();
+            }).observe(this.dom);
+        }
+
+        this.g.globalNodeList.push(this);
 
         this.prop = {};
         this.outputProp = {}
@@ -75,18 +86,57 @@ class NodeComponent extends Base {
             }
 
         });
+
+        this.nodeType = "";
+
+        this.initNode = this.initNode.bind(this);
+        this.addInputConnector = this.addInputConnector.bind(this);
+        this.addOutputConnector = this.addOutputConnector.bind(this);
+        this.addInputForm = this.addInputForm.bind(this);
+
+        this.setNodeStyle({
+            willChange: "transform",
+            position: "absolute",
+            transformOrigin: "top left"
+        });
+    }
+
+
+    initNode(dom: HTMLElement) {
+        this.dom = dom;
+        this.dom.id = this.gid;
+
+        this.renderNode(this.nodeStyle);
+
+        this.bindFunction(this.dom);
+        new ResizeObserver(() => {
+            this.updateDOMproperties();
+        }).observe(this.dom);
+    }
+
+    setNodeStyle(style: any) {
+        this.nodeStyle = Object.assign({}, this.nodeStyle, style);
+    }
+
+    renderNode(style: any) {
+        for (const key in style) {
+            this.dom!.style[<any>key] = style[key];
+        }
+        for (const output of Object.values(this.outputConnectors)) {
+            output.renderAllLines(output.svgLines);
+        }
     }
 
     addNodeToCanvas(x: number, y: number) {
 
         this.position_x = x;
         this.position_y = y;
-        this.nodeWidth = this.dom.offsetWidth;
-        this.nodeHeight = this.dom.offsetHeight;
-        this.dom.style.transform = `translate3d(${this.position_x}px, ${this.position_y}px, 0)`;
+        this.nodeWidth = this.dom!.offsetWidth;
+        this.nodeHeight = this.dom!.offsetHeight;
+        this.dom!.style.transform = `translate3d(${this.position_x}px, ${this.position_y}px, 0)`;
         this.updateDOMproperties();
 
-        this.g.canvas!.appendChild(this.dom);
+        this.g.canvas!.appendChild(this.dom!);
 
     }
 
@@ -206,9 +256,11 @@ class NodeComponent extends Base {
         const to = this.overlapping.to;
         const firstInput = Object.values(this.inputConnectors)[0];
         const firstOutput = Object.values(this.outputConnectors)[0];
-        from.disconnectFromInput(to);
-        from.connectToInput(firstInput);
-        firstOutput.connectToInput(to);
+        if (to) {
+            from.disconnectFromInput(to);
+            from.connectToInput(firstInput);
+            firstOutput.connectToInput(to);
+        }
 
 
     }
@@ -228,7 +280,11 @@ class NodeComponent extends Base {
         this.position_x = this.panStartX + this.g.dx / this.g.zoom
         this.position_y = this.panStartY + this.g.dy / this.g.zoom
 
-        this.dom.style.transform = `translate3d(${this.position_x}px, ${this.position_y}px, 0)`;
+
+        this.setNodeStyle({
+            transform: `translate3d(${this.position_x}px, ${this.position_y}px, 0)`
+        });
+        // this.renderNode(this.nodeStyle);
 
         for (const input of Object.values(this.inputConnectors)) {
             input.nodeDrag();
@@ -243,7 +299,7 @@ class NodeComponent extends Base {
 
         let avg_height = 9999;
         for (const line of this.g.globalLines) {
-            line.line.classList.remove('overlapping');
+            //line.line.classList.remove('overlapping');
             if (isBetween(this.position_x + this.nodeWidth / 2, line.connector_x, line.connector_x + line.x2) &&
                 isBetween(this.position_y + this.nodeHeight / 2, line.connector_y, line.connector_y + line.y2)) {
                 if ((line.y2 + line.connector_x) / 2 < avg_height) {
@@ -255,26 +311,26 @@ class NodeComponent extends Base {
         if (!this.overlapping) {
             return;
         }
-        this.overlapping.line.classList.add('overlapping');
+        //this.overlapping.line.classList.add('overlapping');
 
     }
 
     onFocus() {
-        this.dom.classList.add('focused');
-        this.dom.style.zIndex = "20";
+        this.dom!.classList.add('focused');
+        this.dom!.style.zIndex = "20";
         this.updateDOMproperties();
     }
 
 
     offFocus() {
-        this.dom.classList.remove('focused');
-        this.dom.style.zIndex = "10";
+        this.dom!.classList.remove('focused');
+        this.dom!.style.zIndex = "10";
     }
 
 
     updateDOMproperties() {
-        this.nodeHeight = this.dom.offsetHeight;
-        this.nodeWidth = this.dom.offsetWidth;
+        this.nodeHeight = this.dom!.offsetHeight;
+        this.nodeWidth = this.dom!.offsetWidth;
         for (const input of Object.values(this.inputConnectors)) {
             input.updateDOMproperties();
         }

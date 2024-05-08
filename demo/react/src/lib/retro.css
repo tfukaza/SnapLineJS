@@ -1,0 +1,102 @@
+@import url("https://fonts.googleapis.com/css2?family=VT323&display=swap");
+#sl-background {
+  background-color: cadetblue;
+}
+
+textarea:focus,
+input:focus {
+  outline: none;
+}
+
+.sl-node {
+  font-family: "VT323", monospace;
+  background-color: lightgray;
+  border-style: outset;
+  border-width: 3px;
+  border-color: darkgray;
+  min-width: 150px;
+  box-shadow: 4px 4px 0px 0px rgba(4, 45, 39, 0.7294117647);
+  padding: 10px 32px;
+  /* number input */
+  /* dropdown input */
+}
+.sl-node.focused {
+  border: 3px dashed rgb(60, 60, 60);
+}
+.sl-node .sl-row {
+  display: flex;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.sl-node .sl-row.right {
+  justify-content: flex-end;
+}
+.sl-node .sl-label {
+  min-width: 50px;
+  padding-right: 8px;
+  font-size: 14px;
+  color: rgb(97, 98, 100);
+}
+.sl-node .sl-label.right {
+  text-align: right;
+}
+.sl-node .sl-output-connector,
+.sl-node .sl-input-connector {
+  width: 12px;
+  height: 12px;
+  position: absolute;
+  cursor: pointer;
+  border: 3px solid rgb(125, 125, 125);
+  border-style: inset;
+}
+.sl-node .sl-output-connector:hover,
+.sl-node .sl-input-connector:hover {
+  border-width: 3px;
+  border-color: rgb(255, 223, 230);
+}
+.sl-node .sl-output-connector {
+  right: 10px;
+}
+.sl-node .sl-input-connector {
+  left: 10px;
+}
+.sl-node select,
+.sl-node input {
+  font-family: "VT323", monospace;
+}
+.sl-node input[type=number] {
+  width: 100%;
+  padding: 4px 6px;
+  border: 1px solid rgb(216, 216, 216);
+  border-radius: 4px;
+  font-size: 14px;
+  color: rgb(97, 98, 100);
+  background-color: rgb(244, 244, 244);
+}
+.sl-node select {
+  width: 100%;
+  padding: 4px 6px;
+  border: 1px solid rgb(216, 216, 216);
+  border-radius: 4px;
+  font-size: 14px;
+  color: rgb(97, 98, 100);
+  background-color: rgb(244, 244, 244);
+}
+
+.sl-connector-svg {
+  z-index: 9999999;
+}
+
+.sl-connector-line {
+  stroke-linecap: round;
+  stroke: rgb(62, 62, 62);
+}
+.sl-connector-line.overlapping {
+  stroke: rgb(187, 187, 187);
+  filter: drop-shadow(0px 0px 8px rgba(44, 178, 142, 0.533));
+}
+
+#sl-selection-box {
+  border: 2px solid rgba(0, 123, 255, 0.515);
+  background-color: rgba(0, 123, 255, 0.1);
+}

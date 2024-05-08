@@ -1,6 +1,7 @@
 import { Base } from "./components/base";
-import { InputConnector, OutputConnector } from "./components/connector";
+import { ConnectorComponent, InputConnector, OutputConnector } from "./components/connector";
 import { NodeComponent } from "./components/node";
+import SnapLine from "./main";
 
 export enum mouseDownButton {
     none = "none",
@@ -27,26 +28,35 @@ export enum userState {
     invalid = "invalid"
 }
 
-export interface GlobalStats {
-    canvas: HTMLElement | null,             // Root element 
-    canvasContainer: HTMLElement | null,    // Container for all elements on canvas 
-    canvasBackground: HTMLElement | null,
+export enum SnapLineDomType {
+    canvasContainer = 0,
+    canvas = 1,
+    canvasBackground = 2,
+    selectionBox = 3,
+    invalid = 4
+}
 
-    currentMouseDown: mouseDownButton,    // Current mouse button being pressed
-    mousedown_x: number,            // Initial mouse  position when mouse is pressed
+export interface GlobalStats {
+    canvas: HTMLElement,                // Root element 
+    canvasContainer: HTMLElement,       // Container for all elements on canvas 
+    canvasBackground: HTMLElement,      // Background of canvas
+    selectionBox: HTMLElement,          // Selection box
+
+    currentMouseDown: mouseDownButton,  // Current mouse button being pressed
+    mousedown_x: number,                // Initial mouse  position when mouse is pressed
     mousedown_y: number,
-    mouse_x: number,                // Current mouse position, in camera space
+    mouse_x: number,                    // Current mouse position, in camera space
     mouse_y: number,
-    mouse_x_world: number,          // Current mouse position, in world space
+    mouse_x_world: number,              // Current mouse position, in world space
     mouse_y_world: number,
-    dx: number,                     // How much the mouse has moved since being pressed
+    dx: number,                         // How much the mouse has moved since being pressed
     dy: number,
-    dx_offset: number,              // Offset for dx and dy
+    dx_offset: number,                  // Offset for dx and dy
     dy_offset: number,
 
-    camera_x: number,               // Current camera position
+    camera_x: number,                   // Current camera position
     camera_y: number,
-    camera_pan_start_x: number,     // Initial camera position when camera is being panned
+    camera_pan_start_x: number,         // Initial camera position when camera is being panned
     camera_pan_start_y: number,
     zoom: number,
     cameraWidth: number,
@@ -54,25 +64,23 @@ export interface GlobalStats {
 
     overrideDrag: boolean,
 
-    //outputNode: HTMLElement | null,        // Node used to output values
     targetObject: Base | null,
     focusNodes: Array<NodeComponent>,
     hoverDOM: EventTarget | null,
     gid: number,
 
-    nodeArray: Array<NodeComponent>,  // List of all nodes
-    //inputArray: Array<InputComponent>
     globalLines: Array<lineObject>,
-    globalNodes: { [key: string]: Base },
-
-    selectionBox: HTMLElement | null,
+    globalNodeList: Array<NodeComponent>,// List of all nodes
+    globalNodeTable: { [key: string]: NodeComponent | ConnectorComponent },
 
     mouseHasMoved: boolean,
     ignoreMouseUp: boolean,
 
     prevTouches: TouchList | null,
     prevSingleTouchTime: number,
-    // timer: NodeJS.Timeout | null,
+
+
+    snapline: SnapLine,
 }
 
 export type NodeConfigFunction = Array<{
@@ -100,16 +108,18 @@ export type uiType = "ui-paragraph" | "ui-display" | "ui-dropdown";
 export type outputType = "output-text";
 export type comType = inputType | uiType | outputType | "custom"
 
+export type LineElement = SVGElement | HTMLElement | null;
+
 export interface lineObject {
-    svg: SVGSVGElement | SVGLineElement;
-    line: SVGSVGElement | SVGLineElement;
-    to: InputConnector;
+    svg: SVGElement | null,
+    to: InputConnector | null,
     from: OutputConnector;
     connector_x: number;
     connector_y: number;
     x2: number;
     y2: number;
     connector: OutputConnector;
+    requestDelete: boolean;
 }
 
 export interface customCursorDownProp {
