@@ -27,5 +27,3 @@ dist-ssr
 demo/vanilla/lib/*
 demo/eleventy/lib/*
 demo/svelte/lib/*
-
-package-lock.json
