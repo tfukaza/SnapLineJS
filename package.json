@@ -4,12 +4,11 @@
   "description": "",
   "main": "src/main.ts",
   "scripts": {
-    "dev": "npm run watch:tsc & npm run watch:sass & npm run watch:rollup & npx browser-sync start --server 'demo' --watch 'demo' --no-notify",
-    "watch:tsc": "tsc -w",
-    "watch:rollup": "rollup --open --config --watch  --environment BUILD_ENV:dev",
-    "watch:sass": "sass -w src/theme:demo/lib/theme",
-    "lint": "eslint src/**/*.ts --fix",
-    "deploy": "tsc && sass src/theme:dist/theme && rollup --config --environment BUILD_ENV:production"
+    "dev-vanilla": "rollup --config --watch --environment BUILD_ENV:dev --environment FRAMEWORK_ENV:vanilla & npx browser-sync start --server 'demo' --watch 'demo/**' --no-notify",
+    "dev-eleventy": "rollup --config --watch --environment BUILD_ENV:dev --environment FRAMEWORK_ENV:eleventy & npx @11ty/eleventy --serve --config=demo/eleventy/.eleventy.js",
+    "dev-react": "rollup --config --watch --environment BUILD_ENV:dev --environment FRAMEWORK_ENV:react & rollup --watch --config demo/react/rollup.config.mjs",
+    "dev-svelte": "rollup --config --watch --environment BUILD_ENV:dev --environment FRAMEWORK_ENV:svelte",
+    "build": "rollup --config --environment BUILD_ENV:production"
   },
   "repository": {
     "type": "git",
@@ -22,23 +21,35 @@
   },
   "homepage": "https://github.com/tfukaza/node-editor#readme",
   "devDependencies": {
+    "@11ty/eleventy": "^2.0.1",
     "@rollup/plugin-babel": "^6.0.4",
     "@rollup/plugin-commonjs": "^25.0.7",
     "@rollup/plugin-node-resolve": "^15.2.3",
     "@rollup/plugin-replace": "^5.0.5",
+    "@rollup/plugin-sucrase": "^5.0.2",
     "@rollup/plugin-terser": "^0.4.4",
     "@rollup/plugin-typescript": "^11.1.6",
     "@typescript-eslint/eslint-plugin": "^7.0.1",
     "@typescript-eslint/parser": "^7.0.1",
     "browser-sync": "^3.0.2",
     "eslint": "^8.56.0",
-    "rollup": "^4.12.0",
+    "rollup": "^4.15.0",
+    "rollup-plugin-copy": "^3.5.0",
+    "rollup-plugin-dev": "^2.0.4",
     "rollup-plugin-livereload": "^2.0.5",
+    "rollup-plugin-postcss": "^4.0.2",
     "rollup-plugin-scss": "^4.0.0",
     "rollup-plugin-serve": "^1.1.1",
-    "sass": "^1.71.0",
+    "sass": "^1.75.0",
     "serve": "^14.2.1",
-    "typescript": "^5.3.3",
+    "tslib": "^2.6.2",
+    "typescript": "^5.4.5",
     "uglify-js": "^3.17.4"
+  },
+  "dependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "rollup-plugin-copy-watch": "^0.0.1",
+    "rollup-plugin-import-css": "^3.5.0"
   }
 }

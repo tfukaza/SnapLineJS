@@ -1,20 +1,72 @@
 import terser from '@rollup/plugin-terser';
+import postcss from 'rollup-plugin-postcss';
+import typescript from '@rollup/plugin-typescript';
 
-const dev = (process.env.BUILD_ENV === 'dev');
+const dev = (process.env.BUILD_ENV !== 'production');
+const devFramework = process.env.FRAMEWORK_ENV;
 
+
+let outputFile;
+if (dev) {
+  if (devFramework === 'vanilla') {
+    outputFile = 'vanilla/lib/snapline.js';
+  } else if (devFramework === 'eleventy') {
+    outputFile = 'eleventy/src/lib/snapline.js';
+  } else if (devFramework === 'svelte') {
+    outputFile = 'svelte/public/lib/snapline.js';
+  } else if (devFramework === 'react') {
+    outputFile = 'react/src/lib/snapline.js';
+  } else {
+    throw new Error('Invalid FRAMEWORK_ENV');
+  }
+} else {
+  outputFile = 'snapline.js';
+}
+
+const outputDir = dev ? 'demo' : 'dist';
+outputFile = `${outputDir}/${outputFile}`;
 
 export default {
-  input: 'out-tsc/main.js',
+  input: 'src/main.ts',
   output: {
-    file: dev ? 'demo/lib/snapline.js' : 'dist/snapline.js',
+    file: outputFile,
     name: "SnapLine",
-    format: 'module',
+    format: 'es',
     sourcemap: dev,
-    plugins: [
-      !dev && terser(),
-    ],
   },
   watch: {
-    include: 'out-tsc/**/*',
+    include: ['src/**', 'demo/react/**'],
   },
+  plugins: [
+    postcss({
+      include: 'src/theme/standard_light.scss',
+      extract: "standard_light.css",
+      minimize: !dev,
+    }),
+    postcss({
+      include: 'src/theme/standard_dark.scss',
+      extract: "standard_dark.css",
+      minimize: !dev,
+    }),
+    postcss({
+      include: 'src/theme/retro.scss',
+      extract: "retro.css",
+      minimize: !dev,
+    }),
+    typescript(
+      {
+        tsconfig: 'tsconfig.json',
+        sourceMap: dev,
+        inlineSources: dev,
+      }
+    ),
+    !dev && terser(
+      {
+        compress: {
+          drop_console: true,
+          booleans_as_integers: true,
+        }
+      }
+    ),
+  ],
 };

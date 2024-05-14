@@ -24,5 +24,6 @@ dist-ssr
 *.sw?
 **/*.css.map
 
-out-tsc
-package-lock.json
+demo/vanilla/lib/*
+demo/eleventy/lib/*
+demo/svelte/lib/*

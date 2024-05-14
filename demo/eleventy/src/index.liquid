@@ -1,0 +1,54 @@
+<!doctype html>
+<html>
+
+{% include "math.liquid" %}
+{% include "print.liquid" %}
+{% include "lerp.liquid" %}
+{% include "constant.liquid" %}
+
+
+<head>
+    <meta charset=" UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>SnapLineJS</title>
+    <link rel="stylesheet" href="demo.css">
+
+    <link rel="stylesheet" href="lib/standard_light.css" media="" id="theme-standard" class="theme">
+    <link rel="stylesheet" href="lib/standard_dark.css" media="none" id="theme-dark" class="theme">
+    <link rel="stylesheet" href="lib/retro.css" media="none" id="theme-retro" class="theme">
+
+</head>
+
+<body>
+    <script type="module" src="demo.js" defer></script>
+
+    <main>
+        <navbar class="navbar">
+            <div class="sl-dropdown">
+                <div id="addNodeButton" class="menu-button">
+                    Add Node
+                    <ul class="hide" id="addNodeMenu">
+                        <li><button id="mathButton" class="sl-btn">Math</button></li>
+                        <li><button id="printButton" class="sl-btn">Print</button></li>
+                        <li><button id="lerpButton" class="sl-btn">Lerp</button></li>
+                        <li><button id="constantButton" class="sl-btn">Constant</button></li>
+                    </ul>
+                </div>
+            </div>
+            <div class="sl-dropdown">
+                <div id="themeButton" class="menu-button">
+                    Theme
+                    <ul class="hide" id="themeMenu">
+                        <li><button id="standardButton" class="sl-btn">Standard</button>
+                        </li>
+                        <li><button id="darkButton" class="sl-btn">Standard (Dark)</button>
+                        </li>
+                        <li><button id="retroButton" class="sl-btn">Retro</button></li>
+                    </ul>
+                </div>
+            </div>
+        </navbar>
+        <div id="node-editor"></div>
+    </main>
+
+</body>
