@@ -124,6 +124,7 @@ class NodeComponent extends Base {
         }
         for (const output of Object.values(this.outputConnectors)) {
             output.renderAllLines(output.svgLines);
+            output.svgLines = output.svgLines.filter((line) => !line.requestDelete);
         }
     }
 

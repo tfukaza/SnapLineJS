@@ -4,7 +4,7 @@
   "description": "",
   "main": "src/main.ts",
   "scripts": {
-    "dev-vanilla": "rollup --config --watch --environment BUILD_ENV:dev --environment FRAMEWORK_ENV:vanilla & npx browser-sync start --server 'demo' --watch 'demo/**' --no-notify",
+    "dev-vanilla": "rollup --config --watch --environment BUILD_ENV:dev --environment FRAMEWORK_ENV:vanilla & npx browser-sync start --server 'demo/vanilla' --watch 'demo/vanilla/**' --no-notify",
     "dev-eleventy": "rollup --config --watch --environment BUILD_ENV:dev --environment FRAMEWORK_ENV:eleventy & npx @11ty/eleventy --serve --config=demo/eleventy/.eleventy.js",
     "dev-react": "rollup --config --watch --environment BUILD_ENV:dev --environment FRAMEWORK_ENV:react & rollup --watch --config demo/react/rollup.config.mjs",
     "dev-svelte": "rollup --config --watch --environment BUILD_ENV:dev --environment FRAMEWORK_ENV:svelte",

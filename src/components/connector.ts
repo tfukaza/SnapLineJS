@@ -426,6 +426,8 @@ class OutputConnector extends ConnectorComponent {
         let connector_y = 0;
         const hn: HTMLElement | null = <HTMLElement>this.g.hoverDOM;
 
+        console.debug(`connector onDrag`, hn);
+
         // If the node has a class of "sl-input-connector", then it is an input connector
         if (hn && hn.classList.contains('sl-input-connector')) {
             const gid = hn.getAttribute('sl-gid');

@@ -43,16 +43,16 @@ export default {
       extract: "standard_light.css",
       minimize: !dev,
     }),
-    postcss({
-      include: 'src/theme/standard_dark.scss',
-      extract: "standard_dark.css",
-      minimize: !dev,
-    }),
-    postcss({
-      include: 'src/theme/retro.scss',
-      extract: "retro.css",
-      minimize: !dev,
-    }),
+    // postcss({
+    //   include: 'src/theme/standard_dark.scss',
+    //   extract: "standard_dark.css",
+    //   minimize: !dev,
+    // }),
+    // postcss({
+    //   include: 'src/theme/retro.scss',
+    //   extract: "retro.css",
+    //   minimize: !dev,
+    // }),
     typescript(
       {
         tsconfig: 'tsconfig.json',
