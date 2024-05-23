@@ -3,7 +3,7 @@ import { NodeComponent } from './node';
 import { Base } from './base';
 
 /**
- * Components are the buildings blocks of a node.
+ * Components refer to any element that is part of a node.
  */
 export class ComponentBase extends Base {
 

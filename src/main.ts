@@ -2,37 +2,40 @@
 import { worldToCamera } from './helper.js';
 import { GlobalStats, ObjectTypes, SnapLineDomType, mouseDownButton } from './types';
 import { NodeComponent } from './components/node.js';
+import { ConnectorComponent, OutputConnector } from './components/connector.js';
 
 import './theme/standard_light.scss';
-// import './theme/standard_dark.scss';
-// import './theme/retro.scss';
-import { ConnectorComponent, OutputConnector } from './components/connector.js';
+import './theme/standard_dark.scss';
+import './theme/retro.scss';
+
 
 export default class SnapLine {
 
-    g: GlobalStats;
 
-    canvasContainerStyle: { [key: string]: string } = {};
+    g: GlobalStats;
+    containerStyle: { [key: string]: string } = {};
     canvasStyle: { [key: string]: string } = {};
-    canvasSelectionBoxStyle: { [key: string]: string } = {};
-    canvasBackgroundStyle: { [key: string]: string } = {};
+    selectionBoxStyle: { [key: string]: string } = {};
+    backgroundStyle: { [key: string]: string } = {};
+
+    requestLineRender: OutputConnector | null = null;
+
 
     constructor() {
 
         this.g = null as any;
 
-        this.canvasContainerStyle = {
+        this.containerStyle = {
             position: 'relative',
             overflow: 'hidden',
         };
-        this.canvasSelectionBoxStyle = {
+        this.selectionBoxStyle = {
             position: 'absolute',
             pointerEvents: "none",
         };
 
         /* Public methods */
         this.initSnapLine = this.initSnapLine.bind(this);
-
 
     }
 
@@ -43,8 +46,6 @@ export default class SnapLine {
         backgroundDom: HTMLElement,
         selectionBoxDom: HTMLElement
     ) {
-
-
 
         this.g = {
             canvas: canvasDom,
@@ -107,7 +108,7 @@ export default class SnapLine {
             width: '0px',
             height: '0px',
         });
-        this.setCanvasElementStyle(SnapLineDomType.canvasBackground, {
+        this.setCanvasElementStyle(SnapLineDomType.background, {
             width: (g.cameraWidth * 10) + 'px',
             height: (g.cameraHeight * 10) + 'px',
             transform: `translate(${-g.cameraWidth * 5}px, ${-g.cameraHeight * 5}px)`,
@@ -116,10 +117,10 @@ export default class SnapLine {
             position: "absolute",
         });
 
-        this.renderCanvasElement(SnapLineDomType.canvasContainer, this.canvasContainerStyle);
+        this.renderCanvasElement(SnapLineDomType.container, this.containerStyle);
         this.renderCanvasElement(SnapLineDomType.canvas, this.canvasStyle);
-        this.renderCanvasElement(SnapLineDomType.canvasBackground, this.canvasBackgroundStyle);
-        this.renderCanvasElement(SnapLineDomType.selectionBox, this.canvasSelectionBoxStyle);
+        this.renderCanvasElement(SnapLineDomType.background, this.backgroundStyle);
+        this.renderCanvasElement(SnapLineDomType.selectionBox, this.selectionBoxStyle);
 
         g.canvasContainer.addEventListener('mouseup', this.onMouseUp.bind(this));
         g.canvasContainer.addEventListener('mousemove', this.onMouseMove.bind(this));
@@ -143,15 +144,19 @@ export default class SnapLine {
         switch (domType) {
             case SnapLineDomType.canvas:
                 this.canvasStyle = Object.assign({}, this.canvasStyle, newStyle);
+                this.canvasStyle._requestUpdate = "true";
                 break;
-            case SnapLineDomType.canvasContainer:
-                this.canvasContainerStyle = Object.assign({}, this.canvasContainerStyle, newStyle);
+            case SnapLineDomType.container:
+                this.containerStyle = Object.assign({}, this.containerStyle, newStyle);
+                this.containerStyle._requestUpdate = "true";
                 break;
-            case SnapLineDomType.canvasBackground:
-                this.canvasBackgroundStyle = Object.assign({}, this.canvasBackgroundStyle, newStyle);
+            case SnapLineDomType.background:
+                this.backgroundStyle = Object.assign({}, this.backgroundStyle, newStyle);
+                this.backgroundStyle._requestUpdate = "true";
                 break;
             case SnapLineDomType.selectionBox:
-                this.canvasSelectionBoxStyle = Object.assign({}, this.canvasSelectionBoxStyle, newStyle);
+                this.selectionBoxStyle = Object.assign({}, this.selectionBoxStyle, newStyle);
+                this.selectionBoxStyle._requestUpdate = "true";
                 break;
             default:
                 console.error("Invalid dom type: " + domType);
@@ -170,10 +175,10 @@ export default class SnapLine {
             case SnapLineDomType.canvas:
                 dom = this.g.canvas;
                 break;
-            case SnapLineDomType.canvasContainer:
+            case SnapLineDomType.container:
                 dom = this.g.canvasContainer;
                 break;
-            case SnapLineDomType.canvasBackground:
+            case SnapLineDomType.background:
                 dom = this.g.canvasBackground;
                 break;
             case SnapLineDomType.selectionBox:
@@ -183,12 +188,20 @@ export default class SnapLine {
                 console.error("Invalid dom type: " + domType);
                 return;
         }
+
         if (dom == null) {
             return;
         }
+
+        if (style._requestUpdate != "true") {
+            return;
+        }
+
         for (const key in style) {
             dom.style[<any>key] = style[key];
         }
+
+        style._requestUpdate = "false";
     }
 
     /* Event handlers */
@@ -254,20 +267,23 @@ export default class SnapLine {
 
         this.g.currentMouseDown = button;
 
-        /*  If the user is dragging a line when another cursor down event is detected, then the line should be deleted.
-            This usually happens on touch devices with multi-touch support */
-        const tmpLine = document.querySelector('.sl-connector-svg.tmp');
-        if (tmpLine) {
+        console.debug("Cursor down: " + button);
+
+        /*  If the user is dragging a line when another cursor down event is detected, then the line should be deleted. */
+        if (this.g.targetObject && this.g.targetObject.type == ObjectTypes.outputConnector) {
             console.debug("Cursor down with tmp line");
-            const output_gid = tmpLine.getAttribute('output-gid');
-            if (output_gid != null) {
-                console.debug("Cursor down with tmp line and output gid: " + output_gid);
-                const output = this.g.globalNodeTable[output_gid!];
-                if (output) {
-                    output.domCursorUp();
-                    this.onCursorUp();
-                }
-            }
+            // const output_gid = tmpLine.getAttribute('output-gid');
+            // if (output_gid != null) {
+            //     console.debug("Cursor down with tmp line and output gid: " + output_gid);
+            //     const output = this.g.globalNodeTable[output_gid!];
+            //     if (output) {
+            //         output.domCursorUp();
+            //         this.onCursorUp();
+            //     }
+            // }
+            const output = <OutputConnector>this.g.targetObject;
+            output.domCursorUp();
+
         }
 
         const g = this.g;
@@ -376,6 +392,8 @@ export default class SnapLine {
 
         const g = this.g;
 
+        console.debug("Cursor move");
+
         g.hoverDOM = target;
         g.mouse_x = clientX - g.canvasContainer!.offsetLeft;
         g.mouse_y = clientY - g.canvasContainer!.offsetTop;
@@ -400,6 +418,7 @@ export default class SnapLine {
 
         /* If nothing is selected, then this drag is either a camera pan or a selection box */
         if (g.targetObject == null) {
+
             if (g.currentMouseDown == mouseDownButton.middle) {
                 // Pan camera if middle mouse button is pressed
                 g.camera_x = g.camera_pan_start_x - g.dx / g.zoom;
@@ -409,7 +428,7 @@ export default class SnapLine {
                     transform: `matrix3d(${worldToCamera(g.camera_x, g.camera_y, g)})`,
                     cursor: "grabbing",
                 });
-                this.setCanvasElementStyle(SnapLineDomType.canvasBackground, {
+                this.setCanvasElementStyle(SnapLineDomType.background, {
                     transform: `translate(${g.camera_x + -g.cameraWidth * 5}px, ${g.camera_y + -g.cameraHeight * 5}px)`,
                     backgroundPosition: `${-g.camera_x}px ${-g.camera_y}px`,
                 });
@@ -420,6 +439,7 @@ export default class SnapLine {
                     height: Math.abs(g.dy) + 'px',
                     left: Math.min(g.mousedown_x, g.mouse_x) + 'px',
                     top: Math.min(g.mousedown_y, g.mouse_y) + 'px',
+                    opacity: "1",
                 });
                 // Check if any nodes are inside the selection box
                 let w_x_start = (Math.min(g.mousedown_x, g.mouse_x) - g.cameraWidth / 2) / g.zoom + g.camera_x;
@@ -432,7 +452,7 @@ export default class SnapLine {
 
                 /* Focus on nodes that are inside the selection box */
                 for (const node of g.globalNodeList) {
-                    if (node.position_x + node.nodeWidth > w_x_start && node.position_x < w_x_end && node.position_y + node.nodeHeight > w_y_start && node.position_y < w_y_end) {
+                    if (node.positionX + node.nodeWidth > w_x_start && node.positionX < w_x_end && node.positionY + node.nodeHeight > w_y_start && node.positionY < w_y_end) {
                         node.onFocus();
                         selectedNodes.push(node);
                     } else {
@@ -495,6 +515,10 @@ export default class SnapLine {
                 /* Otherwise, just handle mouse up for the selected object */
                 g.targetObject.domCursorUp();
             }
+
+            if (g.targetObject?.type == ObjectTypes.outputConnector) {
+                this.requestLineRender = <OutputConnector>g.targetObject;
+            }
         }
 
         g.currentMouseDown = mouseDownButton.none;
@@ -506,7 +530,7 @@ export default class SnapLine {
         }
 
         g.overrideDrag = false;
-        this.setCanvasElementStyle(SnapLineDomType.canvasBackground, {
+        this.setCanvasElementStyle(SnapLineDomType.background, {
             cursor: "default",
         });
 
@@ -560,6 +584,10 @@ export default class SnapLine {
             case 'Backspace':
             case 'Delete':
 
+                if (this.g.targetObject?.type != ObjectTypes.node) {
+                    return;
+                }
+
                 if (this.g.focusNodes.length > 0) {
 
                     // this.deleteNode(g.focusNode.gid);
@@ -572,23 +600,32 @@ export default class SnapLine {
         }
     }
 
+    renderElements() {
+        const target: any = this.g.targetObject;
 
-    step() {
-        console.debug("Step", this.g.targetObject?.type);
-        if (this.g.targetObject?.type == ObjectTypes.node) {
+        if (!this.requestLineRender && target?.type == ObjectTypes.outputConnector) {
+            this.requestLineRender = <OutputConnector>target;
+        }
+
+        if (target?.type == ObjectTypes.node) {
             for (const node of this.g.focusNodes) {
                 node.renderNode(node.nodeStyle);
             }
-
-        } else if (this.g.targetObject?.type == ObjectTypes.connector && this.g.targetObject instanceof OutputConnector) {
-            let output: OutputConnector = this.g.targetObject;
+        } else if (this.requestLineRender) {
+            let output: OutputConnector = this.requestLineRender;
             output.renderAllLines(output.svgLines);
             output.svgLines = output.svgLines.filter((line) => !line.requestDelete);
+
         }
-        this.renderCanvasElement(SnapLineDomType.canvasContainer, this.canvasContainerStyle);
+    }
+
+
+    step() {
+        this.renderElements();
+        this.renderCanvasElement(SnapLineDomType.container, this.containerStyle);
         this.renderCanvasElement(SnapLineDomType.canvas, this.canvasStyle);
-        this.renderCanvasElement(SnapLineDomType.canvasBackground, this.canvasBackgroundStyle);
-        this.renderCanvasElement(SnapLineDomType.selectionBox, this.canvasSelectionBoxStyle);
+        this.renderCanvasElement(SnapLineDomType.background, this.backgroundStyle);
+        this.renderCanvasElement(SnapLineDomType.selectionBox, this.selectionBoxStyle);
 
         window.requestAnimationFrame(this.step.bind(this));
     }

@@ -3,6 +3,12 @@ input:focus {
     outline: none;
 }
 
+#sl-selection {
+    background-color: rgba(0, 0, 0, 0.067);
+    border: 2px solid #00000035;
+    box-sizing: border-box;
+}
+
 #sl-background {
     background-image: radial-gradient(circle at 1px 1px, rgb(169, 171, 181) 1px, transparent 0);
     background-size: 32px 32px;
@@ -18,7 +24,7 @@ input:focus {
     padding: 10px 16px;
 
 
-    &.focused {
+    &.focus {
         border: 1px solid rgb(0, 122, 255);
     }
 

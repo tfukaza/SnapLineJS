@@ -57,7 +57,8 @@ function addNode(e, name) {
     // Create a new Web Component element based on the node type
     let ele = document.createElement(name);
     let node = sl.createNode(ele);
-    ele.initNode(node);
+
+    ele.initComponent(node);
 
     sl.addNodeAtMouse(node, e);
 
@@ -103,18 +104,21 @@ customElements.define("node-math", class extends HTMLElement {
         this.append(this.templateClone);
     }
 
-    initNode(nodeRef) {
+    initComponent(nodeRef) {
         this._nodeRef = nodeRef;
-        nodeRef.addInputForm(this._input_1, 'input_1');
-        nodeRef.addInputConnector(this._input_1, 'input_1_input');
+        nodeRef.initNode(this._node);
+        nodeRef.addInputForm(this._input_1_input, 'input_1');
+        nodeRef.addInputConnector(this._input_1, 'input_1');
+        nodeRef.addPropSetFunction(this.calculateMath.bind(this), 'input_1');
         nodeRef.addInputForm(this._input_2, 'input_2');
-        nodeRef.addInputConnector(this._input_2, 'input_2_input');
+        nodeRef.addInputConnector(this._input_2_input, 'input_2');
+        nodeRef.addPropSetFunction(this.calculateMath.bind(this), 'input_2');
         nodeRef.addInputForm(this._operation, 'operation');
         nodeRef.addOutputConnector(this._result, 'result');
 
-        this._input_1.addEventListener("input", this.updateText.bind(nodeRef));
-        this._input_2.addEventListener("input", this.updateText.bind(nodeRef));
-        this._operation.addEventListener("change", this.updateOperation.bind(nodeRef));
+        this._input_1_input.addEventListener("input", this.updateText1.bind(this));
+        this._input_2_input.addEventListener("input", this.updateText2.bind(this));
+        this._operation.addEventListener("change", this.updateOperation.bind(this));
         this.initMath.call(this);
     }
 
@@ -122,8 +126,6 @@ customElements.define("node-math", class extends HTMLElement {
         let input1 = +this._nodeRef.prop.input_1;
         let input2 = +this._nodeRef.prop.input_2;
         let operation = this._nodeRef.prop.operation;
-
-        console.debug(input1, input2, operation);
 
         let result = 0;
 
@@ -140,14 +142,17 @@ customElements.define("node-math", class extends HTMLElement {
         this._nodeRef.prop.result = result;
     }
 
-    updateText(e) {
-        this._nodeRef.prop[this.name] = this.dom.value;
-        calculateMath.call(this);
+    updateText1(e) {
+        this._nodeRef.prop.input_1 = this._input_1_input.value;
+    }
+
+    updateText2(e) {
+        this._nodeRef.prop.input_2 = this._input_2_input.value;
     }
 
     updateOperation(e) {
-        this._nodeRef.prop[this.name] = this.dom.value;
-        calculateMath.call(this);
+        this._nodeRef.prop.operation = this._operation.value;
+        this.calculateMath.call(this);
     }
 
     initMath() {
@@ -158,3 +163,35 @@ customElements.define("node-math", class extends HTMLElement {
     }
 });
 
+
+
+customElements.define("node-print", class extends HTMLElement {
+    constructor() {
+        super();
+
+        const template = document.getElementById("node-print").content;
+        const templateClone = template.cloneNode(true);
+
+        this._node = templateClone.querySelector(".sl-node");
+        this._input = templateClone.querySelector("#input");
+        this._print = templateClone.querySelector("#print");
+
+        this.templateClone = templateClone;
+
+    }
+
+    connectedCallback() {
+        this.append(this.templateClone);
+    }
+
+    initComponent(nodeRef) {
+        this._nodeRef = nodeRef;
+        nodeRef.initNode(this._node);
+        nodeRef.addInputConnector(this._input, 'input');
+        nodeRef.addPropSetFunction(this.printValue.bind(this), 'input');
+    }
+
+    printValue() {
+        this._print.innerHTML = this._nodeRef.prop.input;
+    }
+});
