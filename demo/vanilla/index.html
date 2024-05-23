@@ -1,59 +1,16 @@
 <!doctype html>
 <html>
 
-<script>
-
-  function calculateMath() {
-    let input1 = +this.prop.input_1;
-    let input2 = +this.prop.input_2;
-    let operation = this.prop.operation;
-
-    console.debug(input1, input2, operation);
-
-    let result = 0;
-
-    if (operation == '+') {
-      result = input1 + input2;
-    } else if (operation == '-') {
-      result = input1 - input2;
-    } else if (operation == '*') {
-      result = input1 * input2;
-    } else {
-      result = input1 / input2;
-    }
-
-    console.debug("Result", result)
-    this.prop.result = result;
-  }
-
-  function updateText(e) {
-    console.log(`Name: ${this.name}, Value: ${this.dom.value}`);
-    this.prop[this.name] = this.dom.value;
-    calculateMath.call(this);
-  }
-
-  function updateOperation(e) {
-    console.log(`Name: ${this.name}, Value: ${this.dom.value}`);
-    this.prop[this.name] = this.dom.value;
-    calculateMath.call(this);
-  }
-
-  function initMath() {
-    this.prop.input_1 = 0;
-    this.prop.input_2 = 0;
-    this.prop.operation = '+';
-    calculateMath.call(this);
-  }
-</script>
 
 <template id="node-math">
+
   <div class="sl-node" sl-init="initMath">
     <div class="sl-row right">
       <span class="sl-label right">Result</span>
-      <span class="sl-output-connector" sl-name="result"></span>
+      <span class="sl-output-connector" id="result"></span>
     </div>
     <div class="sl-row">
-      <select class="sl-input" sl-name="operation" sl-event:input="updateOperation">
+      <select class="sl-input" sl-name="operation" id="operation">
         <option value="+">Add</option>
         <option value="-">Subtract</option>
         <option value="*">Multiply</option>
@@ -61,14 +18,24 @@
       </select>
     </div>
     <div class="sl-row">
-      <span class="sl-input-connector" sl-name="input_1" sl-update="calculateMath"></span>
+      <span class="sl-input-connector" id="input_1"></span>
       <span class="sl-label">Input 1</span>
-      <input class="sl-input" sl-name="input_1" sl-event:input="updateText" type="number" value="0">
+      <input class="sl-input" type="number" value="0" id="input_1_input">
     </div>
     <div class="sl-row">
-      <span class="sl-input-connector" sl-name="input_2" sl-update="calculateMath"></span>
+      <span class="sl-input-connector" id="input_2"></span>
       <span class="sl-label">Input 2</span>
-      <input class="sl-input" sl-name="input_2" sl-event:input="updateText" type="number" value="0">
+      <input class="sl-input" type="number" value="0" id="input_2_input">
+    </div>
+  </div>
+</template>
+
+
+<template id="node-print">
+  <div class="sl-node" sl-init="initMath">
+    <div class="sl-row">
+      <span class="sl-input-connector" id="input"></span>
+      <span class="sl-label" id="print"> </span>
     </div>
   </div>
 </template>
@@ -191,6 +158,12 @@
   <script type="module" src="demo.js" defer></script>
 
   <main>
+    <div id="sl-canvas-container" style="width: 100%; height: 100vh;">
+      <div id="sl-canvas">
+        <div id="sl-background"></div>
+      </div>
+      <div id="sl-selection"></div>
+    </div>
     <navbar class="navbar">
       <div class="sl-dropdown">
         <div id="addNodeButton" class="menu-button">

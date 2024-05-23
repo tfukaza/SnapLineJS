@@ -12,11 +12,13 @@ export enum mouseDownButton {
 }
 
 export enum ObjectTypes {
-    node = "node",
-    connector = "connector",
-    line = "line",
-    unspecified = "unspecified",
-    invalid = "invalid"
+    node = 0,
+    connector = 1,
+    line = 2,
+    unspecified = 3,
+    inputConnector = 4,
+    outputConnector = 5,
+    invalid = 6
 }
 
 export enum userState {
@@ -29,9 +31,9 @@ export enum userState {
 }
 
 export enum SnapLineDomType {
-    canvasContainer = 0,
+    container = 0,
     canvas = 1,
-    canvasBackground = 2,
+    background = 2,
     selectionBox = 3,
     invalid = 4
 }
