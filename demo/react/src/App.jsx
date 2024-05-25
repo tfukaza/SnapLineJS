@@ -1,7 +1,6 @@
 import React from "react";
 import { useState } from "react";
 import { useRef } from "react";
-import Button from "./components/Button";
 import SnapLine from "./lib/snapline.js";
 import { useEffect } from "react";
 import MathNode from "./components/Math";
@@ -9,31 +8,24 @@ import MathNode from "./components/Math";
 
 export default function App() {
 
-    const [nodes, setNodes] = useState([]);
-    const snapLine = useRef(null);
-    const slCanvasContainer = useRef(null);
-    const slCanvas = useRef(null);
-    const slBackground = useRef(null);
-    const slSelection = useRef(null);
+    const [snapLine] = useState(() => new SnapLine());  // SnapLine object
+    const slContainer = useRef(null);                   // div to contain the canvas
+    const slCanvas = useRef(null);                      // canvas that contains the nodes
+    const slBackground = useRef(null);                  // Background of the canvas
+    const slSelection = useRef(null);                   // selection box
 
-    //let nodeList = [];
+    const [nodes, setNodes] = useState([]);             // List of nodes
 
-    let canvasContainerStyle = {
-        overflow: 'hidden',
-        position: 'relative',
-    };
-
+    const [containerStyle, setContainerStyle] = useState(null);
     const [slCanvasStyle, setSlCanvasStyle] = useState(null);
     const [slBackgroundStyle, setSlBackgroundStyle] = useState(null);
     const [slSelectionStyle, setSlSelectionStyle] = useState(null);
 
     useEffect(() => {
-        snapLine.current = new SnapLine();
-        //snapLine.current.setCanvasContainerStyle = setSlCanvasContainerStyle;
-        snapLine.current.renderCanvasElement = function (type, style) {
+        snapLine.renderCanvasElement = function (type, style) {
             switch (type) {
                 case 0:
-                    //console.error("Invalid dom type: " + type);
+                    setContainerStyle(style);
                     break;
                 case 1:
                     setSlCanvasStyle(style);
@@ -49,14 +41,12 @@ export default function App() {
                     return;
             }
         };
-
-        snapLine.current.initSnapLine(
-            slCanvasContainer.current,
+        snapLine.initSnapLine(
+            slContainer.current,
             slCanvas.current,
             slBackground.current,
             slSelection.current
         );
-        setNodes(snapLine.current.g.globalNodeTabel);
     }, []);
 
     function typeToNode(node) {
@@ -72,52 +62,77 @@ export default function App() {
         }
     }
 
-    function handleClick(e, type) {
-        console.log("Button Clicked");
-        let [node, newNodeDict] = snapLine.current.addNodeObject();
+    const [chooseNodeToggle, setChooseNodeToggle] = useState(false);
+    const [chooseThemeToggle, setChooseThemeToggle] = useState(false);
+
+    function menuClick(e, type) {
+        if (type === "nodeMenu") {
+            setChooseNodeToggle(() => !chooseNodeToggle);
+            setChooseThemeToggle(false);
+        } else if (type === "themeMenu") {
+            setChooseThemeToggle(() => !chooseThemeToggle);
+            setChooseNodeToggle(false);
+        }
+    }
+
+    function handleSelectNode(e, type) {
+        let [node, newNodeDict] = snapLine.addNodeObject();
         node.nodeType = type;
         let newNodeList = Object.values(newNodeDict);
-        console.log(newNodeList);
         setNodes([...newNodeList]);
     }
 
+    const [theme, setTheme] = useState("standard_light");
+
+    handleSelectTheme = (e, theme) => {
+        setTheme(theme);
+        setChooseThemeToggle(false);
+    }
 
     return (
         <main>
-            <div ref={slCanvasContainer} style={canvasContainerStyle} id="sl-canvas-container">
+            <link rel="stylesheet" href={`lib/${theme}.css`} />
+
+            <div className="sl-container" ref={slContainer} style={containerStyle} id="sl-canvas-container">
                 <div ref={slCanvas} id="slCanvas" style={slCanvasStyle}>
-                    <div ref={slBackground} id="slBackground" style={slBackgroundStyle}></div>
-                    {nodes?.map((node, index) => { return typeToNode(node) })}
+                    <div ref={slBackground} id="sl-background" style={slBackgroundStyle}></div>
+                    {nodes.map((node, index) => { return typeToNode(node); })}
                 </div>
-                <div ref={slSelection} id="slSelection" style={slSelectionStyle}></div>
+                <div ref={slSelection} id="sl-selection" style={slSelectionStyle}></div>
             </div>
 
             <nav className="navbar">
                 <div className="sl-dropdown">
-                    <div id="addNodeButton" className="menu-button hide" onClick={e => e.target.classList.toggle("hide")}>
+                    <div
+                        id="addNodeButton"
+                        className={`menu-button${chooseNodeToggle ? "" : " hide"}`}
+                        onClick={e => menuClick(e, "nodeMenu")}
+                    >
                         Add Node
                         <ul className="hide" id="addNodeMenu">
-                            <li><button className="sl-btn" onClick={e => handleClick(e, "math")}>Math</button></li>
-                            <li><button className="sl-btn" onClick={e => handleClick(e, "print")}>Print</button></li>
-                            <li><button className="sl-btn" onClick={e => handleClick(e, "lerp")}>Constant</button></li>
-                            <li><button className="sl-btn" onClick={e => handleClick(e, "const")}>Lerp</button></li>
+                            <li><button className="sl-btn" onClick={e => handleSelectNode(e, "math")}>Math</button></li>
+                            <li><button className="sl-btn" onClick={e => handleSelectNode(e, "print")}>Print</button></li>
+                            <li><button className="sl-btn" onClick={e => handleSelectNode(e, "lerp")}>Constant</button></li>
+                            <li><button className="sl-btn" onClick={e => handleSelectNode(e, "const")}>Lerp</button></li>
                         </ul>
                     </div>
                 </div>
                 <div className="sl-dropdown">
-                    <div id="themeButton" className="menu-button">
+                    <div
+                        id="addNodeButton"
+                        className={`menu-button${chooseThemeToggle ? "" : " hide"}`}
+                        onClick={e => menuClick(e, "themeMenu")}
+                    >
                         Theme
                         <ul className="hide" id="themeMenu">
-                            <li><button id="standardButton" className="sl-btn">Standard</button>
-                            </li>
-                            <li><button id="darkButton" className="sl-btn">Standard (Dark)</button>
-                            </li>
-                            <li><button id="retroButton" className="sl-btn">Retro</button></li>
+                            <li><button id="standardButton" className="sl-btn" onClick={e => handleSelectTheme(e, "standard_light")}>Standard (Light)</button> </li>
+                            <li><button id="darkButton" className="sl-btn" onClick={e => handleSelectTheme(e, "standard_dark")}>Standard (Dark)</button> </li>
+                            < li > <button id="retroButton" className="sl-btn" onClick={e => handleSelectTheme(e, "retro")}>Retro</button></li>
                         </ul>
                     </div>
                 </div>
             </nav>
-        </main>
+        </main >
     );
 
 }

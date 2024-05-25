@@ -3,6 +3,11 @@ input:focus {
     outline: none;
 }
 
+#sl-container {
+    position: relative;
+    overflow: hidden;
+}
+
 #sl-selection {
     background-color: rgba(0, 0, 0, 0.067);
     border: 2px solid #00000035;

@@ -292,6 +292,8 @@ export default class SnapLine {
             return;
         }
 
+        console.debug("Cursor ddown");
+
         /* Reset the selection box */
         if (g.currentMouseDown != mouseDownButton.none) {
             this.setCanvasElementStyle(SnapLineDomType.selectionBox, {

@@ -19,11 +19,13 @@ var mouseDownButton;
 })(mouseDownButton || (mouseDownButton = {}));
 var ObjectTypes;
 (function (ObjectTypes) {
-    ObjectTypes["node"] = "node";
-    ObjectTypes["connector"] = "connector";
-    ObjectTypes["line"] = "line";
-    ObjectTypes["unspecified"] = "unspecified";
-    ObjectTypes["invalid"] = "invalid";
+    ObjectTypes[ObjectTypes["node"] = 0] = "node";
+    ObjectTypes[ObjectTypes["connector"] = 1] = "connector";
+    ObjectTypes[ObjectTypes["line"] = 2] = "line";
+    ObjectTypes[ObjectTypes["unspecified"] = 3] = "unspecified";
+    ObjectTypes[ObjectTypes["inputConnector"] = 4] = "inputConnector";
+    ObjectTypes[ObjectTypes["outputConnector"] = 5] = "outputConnector";
+    ObjectTypes[ObjectTypes["invalid"] = 6] = "invalid";
 })(ObjectTypes || (ObjectTypes = {}));
 var userState;
 (function (userState) {
@@ -36,9 +38,9 @@ var userState;
 })(userState || (userState = {}));
 var SnapLineDomType;
 (function (SnapLineDomType) {
-    SnapLineDomType[SnapLineDomType["canvasContainer"] = 0] = "canvasContainer";
+    SnapLineDomType[SnapLineDomType["container"] = 0] = "container";
     SnapLineDomType[SnapLineDomType["canvas"] = 1] = "canvas";
-    SnapLineDomType[SnapLineDomType["canvasBackground"] = 2] = "canvasBackground";
+    SnapLineDomType[SnapLineDomType["background"] = 2] = "background";
     SnapLineDomType[SnapLineDomType["selectionBox"] = 3] = "selectionBox";
     SnapLineDomType[SnapLineDomType["invalid"] = 4] = "invalid";
 })(SnapLineDomType || (SnapLineDomType = {}));
@@ -49,23 +51,20 @@ var SnapLineDomType;
  * such as position, id, etc.
 */
 class Base {
-    g;
-    gid;
-    position_x;
-    position_y;
-    type;
+    g; /* Reference to the global stats object */
+    gid; /* Unique identifier for the object */
+    positionX; /* Position of the object in x-axis */
+    positionY;
+    type; /* Type of the object */
     constructor(globals) {
         this.g = globals;
-        globals.gid++;
-        this.gid = globals.gid.toString();
-        this.position_x = 0;
-        this.position_y = 0;
+        this.gid = (++globals.gid).toString();
+        this.positionX = 0;
+        this.positionY = 0;
         this.type = ObjectTypes.unspecified;
     }
     /**
      * Binds the mousedown event to the given DOM element.
-     * This overrides the default mousedown event.
-     *
      * @param dom The DOM element to bind the function to
      */
     bindFunction(dom) {
@@ -73,25 +72,24 @@ class Base {
         dom.ontouchstart = this.domTouchStart.bind(this);
     }
     domMouseDown(e) {
-        this.domCursorDown(e.button, e.clientX, e.clientY);
+        this.domCursorDown({ button: e.button, clientX: e.clientX, clientY: e.clientY });
         e.stopPropagation();
     }
     domTouchStart(e) {
-        // if (this.g.prevSingleTouchTime == 0) {
-        //     this.g.timer = setTimeout(() => {
-        //         this.g.timer = null;
-        //         this.g.prevSingleTouchTime = 0;
-        //         this.domCursorDown(0, e.touches[0].clientX, e.touches[0].clientY);
-        //         e.stopPropagation();
-        //     }
-        //         , 300);
-        //     this.g.prevSingleTouchTime = Date.now();
-        //     //return;
-        // }
-        this.domCursorDown(0, e.touches[0].clientX, e.touches[0].clientY);
+        this.domCursorDown({ button: 0, clientX: e.touches[0].clientX, clientY: e.touches[0].clientY });
         e.stopPropagation();
     }
-    domCursorDown(button, clientX, clientY) {
+    /**
+     * Mouse down event common to all elements.
+     * Triggered when the dom of this object is clicked.
+     * @param button: The mouse button that was clicked
+     * @param clientX: The x-coordinate of the mouse click
+     * @param clientY: The y-coordinate of the mouse click
+     */
+    domCursorDown(prop) {
+        let button = prop.button;
+        let clientX = prop.clientX;
+        let clientY = prop.clientY;
         console.debug(`Base class mousedown event triggered on ${this.gid}!`);
         if (button == 0) {
             this.g.currentMouseDown = mouseDownButton.left;
@@ -109,19 +107,42 @@ class Base {
         this.g.dy = 0;
         this.g.dx_offset = 0;
         this.g.dy_offset = 0;
-        this.customCursorDown({ button: button, clientX: clientX, clientY: clientY });
+        this.componentCursorDown(prop);
     }
-    customCursorDown(_) { }
-    domCursorUp() { }
+    componentCursorDown(_) { }
+    /**
+     * Mouse up event common to all elements.
+     * Triggered when the dom of this object is released.
+     */
+    domCursorUp() {
+        console.debug(`Base class mouseup event triggered on ${this.gid}!`);
+        this.componentCursorUp();
+    }
+    componentCursorUp() { }
+    /**
+     *  Focuses on the object.
+     */
     onFocus() { }
+    /**
+     *  Removes focus from the object.
+     */
     offFocus() { }
+    /**
+     *  Called for every frame when the object is being dragged.
+     */
     onDrag() { }
+    /**
+     *  Called for every frame when the camera is being panned.
+     */
     onPan() { }
+    /**
+     *  Called when the object is being deleted.
+     */
     destroy() { }
 }
 
 /**
- * Components are the buildings blocks of a node.
+ * Components refer to any element that is part of a node.
  */
 class ComponentBase extends Base {
     parent;
@@ -155,25 +176,25 @@ class InputForm extends ComponentBase {
 }
 
 /**
- * Connector components are the elements that are used to connect nodes.
+ * Connector components connect together nodes using lines.
  */
 class ConnectorComponent extends ComponentBase {
-    name; /* Name of the component */
-    connector_x; /* Location of the connector on canvas */
-    connector_y;
-    c_total_offset_x; /* Location of the connector relative to the location of parent Node */
-    c_total_offset_y;
+    name; /* Name of the connector. This should describe the data associated with the connector */
+    connectorX; /* Location of the connector on canvas */
+    connectorY;
+    connectorTotalOffsetX; /* Location of the connector relative to the location of parent Node */
+    connectorTotalOffsetY;
     prop; /* Reference to the parent's prop object */
-    // tmpSvgDom: SVGSVGElement | null;
-    // tmpSvgData: lineObject | null;
     svgLines;
     type = ObjectTypes.connector;
+    dom;
+    parent;
     constructor(dom, config, parent, globals) {
         super(config, parent, globals);
-        this.connector_x = 0;
-        this.connector_y = 0;
-        this.c_total_offset_x = 0;
-        this.c_total_offset_y = 0;
+        this.connectorX = 0;
+        this.connectorY = 0;
+        this.connectorTotalOffsetX = 0;
+        this.connectorTotalOffsetY = 0;
         this.dom = dom;
         this.parent = parent;
         this.prop = parent.prop;
@@ -185,11 +206,9 @@ class ConnectorComponent extends ComponentBase {
             this.name = globals.gid.toString();
         }
         this.g.globalNodeTable[this.gid] = this;
-        this.bindFunction(this.dom);
         this.dom.setAttribute('sl-gid', this.gid.toString());
-        // this.tmpSvgDom = null;
-        // this.tmpSvgData = null;
         this.svgLines = [];
+        this.bindFunction(this.dom);
     }
     pxToInt(px) {
         return parseInt(px.substring(0, px.length - 2));
@@ -205,40 +224,33 @@ class ConnectorComponent extends ComponentBase {
         let parentDOM = this.dom;
         let p = parentDOM.getBoundingClientRect();
         let p1 = this.parent.dom.getBoundingClientRect();
-        this.c_total_offset_x = (p.left - p1.left) / this.g.zoom + p.width / 2 / this.g.zoom;
-        this.c_total_offset_y = (p.top - p1.top) / this.g.zoom + p.height / 2 / this.g.zoom;
+        this.connectorTotalOffsetX = (p.left - p1.left) / this.g.zoom + p.width / 2 / this.g.zoom;
+        this.connectorTotalOffsetY = (p.top - p1.top) / this.g.zoom + p.height / 2 / this.g.zoom;
     }
     /* SVG line functions */
-    createLineDOM(x, y) {
+    createLineDOM() {
         const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
         const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
         svg.appendChild(line);
-        this.g.canvas.appendChild(svg);
-        this.setLineAttr(svg, line, x, y);
-        return svg;
-    }
-    setLineAttr(svg, line, x, y) {
         svg.classList.add('sl-connector-svg');
-        // svg.setAttribute('output-gid', this.g.gid.toString());
-        // this.setTmpSvgLineStyle({
-        //     position: 'absolute',
-        //     overflow: 'visible',
-        //     pointerEvents: 'none',
-        //     willChange: 'transform',
-        //     transform: `translate3d(${x}px, ${y}px, 0)`,
-        // });
-        // svg.setAttribute('width', '4');
-        // svg.setAttribute('height', '4');
         line.classList.add('sl-connector-line');
         line.setAttribute('stroke-width', '4');
+        this.g.canvas.appendChild(svg);
+        return svg;
     }
     setStyle(dom, style) {
+        if (!dom) {
+            return;
+        }
         for (const key in style) {
             dom.style[key] = style[key];
         }
     }
     renderLinePosition(entry) {
         let svg = entry.svg;
+        if (!svg) {
+            return;
+        }
         this.setStyle(svg, {
             position: 'absolute',
             overflow: 'visible',
@@ -252,19 +264,8 @@ class ConnectorComponent extends ComponentBase {
         line.setAttribute('x2', '' + entry.x2);
         line.setAttribute('y2', '' + entry.y2);
     }
-    // setTmpSvgLineStyle(style: any) {
-    //     for (const key in style) {
-    //         this.tmpSvgDom!.style[<any>key] = style[key];
-    //     }
-    // }
     /* Deletes the line from the svgLines array */
     deleteLine(i) {
-        // if (this.svgLines.length > 0) {
-        //     const svg = this.svgLines[i];
-        //     this.svgLines.splice(i, 1);
-        //     return svg;
-        // }
-        // return undefined;
         if (this.svgLines.length > 0) {
             const svg = this.svgLines[i];
             svg.requestDelete = true;
@@ -272,9 +273,6 @@ class ConnectorComponent extends ComponentBase {
         return undefined;
     }
     deleteAllLines() {
-        // let tmpLines = [...this.svgLines];
-        // this.svgLines = [];
-        // return tmpLines;
         for (const svg of this.svgLines) {
             svg.requestDelete = true;
         }
@@ -283,6 +281,7 @@ class ConnectorComponent extends ComponentBase {
 class InputConnector extends ConnectorComponent {
     //inputDOM: HTMLElement | null;       // Reference to the UI element where the user enters the value
     // inter: InputInterface;
+    type = ObjectTypes.inputConnector;
     peerOutput;
     updateFunction = () => {
         console.debug("Update function not set for input connector");
@@ -298,33 +297,39 @@ class InputConnector extends ConnectorComponent {
         // connector.ontouchstart = this.domTouchStart.bind(this);
         //this.dom = dom;
     }
-    renderAllLines(svgLines, deletedLines = [], newLines = [], updatedLines = []) {
-        this.peerOutput?.renderAllLines(svgLines, deletedLines, newLines, updatedLines);
+    renderAllLines(svgLines) {
+        this.peerOutput?.renderAllLines(svgLines);
     }
-    domTouchStart(e) {
-        this.domCursorDown(0, e.touches[0].clientX, e.touches[0].clientY);
-        e.stopPropagation();
-    }
-    domMouseDown(e) {
-        this.domCursorDown(e.button, e.clientX, e.clientY);
-        e.stopPropagation();
-    }
-    domCursorDown(button, clientX, clientY) {
+    /* Override the default domMouseDown and domTouchStart functions,
+     * so the event is not propagated to the parent node */
+    // domTouchStart(e: TouchEvent): void {
+    //     this.domCursorDown({ button: 0, clientX: e.touches[0].clientX, clientY: e.touches[0].clientY });
+    //     e.stopPropagation();
+    // }
+    // domMouseDown(e: MouseEvent): void {
+    //     this.domCursorDown({ button: e.button, clientX: e.clientX, clientY: e.clientY });
+    //     e.stopPropagation();
+    // }
+    domCursorDown(prop) {
+        console.debug(`ConnectorComponent mousedown event triggered on ${this.gid}!`);
+        let button = prop.button;
+        let clientX = prop.clientX;
+        let clientY = prop.clientY;
         if (this.peerOutput) {
-            super.domCursorDown(button, clientX, clientY);
+            super.domCursorDown({ button: button, clientX: clientX, clientY: clientY });
             // Hand over control to the peer output
             this.g.targetObject = this.peerOutput;
-            this.g.dx_offset = (this.connector_x - this.peerOutput.connector_x) * this.g.zoom;
-            this.g.dy_offset = (this.connector_y - this.peerOutput.connector_y) * this.g.zoom;
+            this.g.dx_offset = (this.connectorX - this.peerOutput.connectorX) * this.g.zoom;
+            this.g.dy_offset = (this.connectorY - this.peerOutput.connectorY) * this.g.zoom;
             this.g.dx = this.g.dx_offset;
             this.g.dy = this.g.dy_offset;
-            this.peerOutput.customCursorDown({ button: button, clientX: clientX, clientY: clientY });
+            this.peerOutput.componentCursorDown({ button: button, clientX: clientX, clientY: clientY });
             this.peerOutput.disconnectFromInput(this);
         }
     }
     updateConnectorPosition() {
-        this.connector_x = this.parent.position_x + this.c_total_offset_x;
-        this.connector_y = this.parent.position_y + this.c_total_offset_y;
+        this.connectorX = this.parent.positionX + this.connectorTotalOffsetX;
+        this.connectorY = this.parent.positionY + this.connectorTotalOffsetY;
     }
     disconnectFromOutput() {
         this.peerOutput = null;
@@ -352,6 +357,7 @@ class InputConnector extends ConnectorComponent {
 class OutputConnector extends ConnectorComponent {
     val;
     peerInputs = [];
+    type = ObjectTypes.outputConnector;
     constructor(dom, config, parent, globals) {
         super(dom, config, parent, globals);
         this.val = null;
@@ -396,10 +402,7 @@ class OutputConnector extends ConnectorComponent {
         console.debug("Disconnecting from input: ", input);
         for (const svg of this.svgLines) {
             if (svg.to == input) {
-                this.g.canvas.removeChild(svg.svg);
-                this.svgLines = this.svgLines.filter(s => s != svg);
-                this.g.globalLines = this.g.globalLines.filter(s => s != svg);
-                console.debug("Deleted line: ", svg);
+                svg.requestDelete = true;
                 break;
             }
         }
@@ -409,23 +412,22 @@ class OutputConnector extends ConnectorComponent {
     }
     updateConnectorPosition() {
         // Update the position of the output connector
-        this.connector_x = this.parent.position_x + this.c_total_offset_x;
-        this.connector_y = this.parent.position_y + this.c_total_offset_y;
+        this.connectorX = this.parent.positionX + this.connectorTotalOffsetX;
+        this.connectorY = this.parent.positionY + this.connectorTotalOffsetY;
     }
     setLineXYPosition(entry, x, y) {
         entry.x2 = x;
         entry.y2 = y;
     }
     refreshLinePosition(entry) {
-        entry.connector_x = this.connector_x;
-        entry.connector_y = this.connector_y;
+        entry.connector_x = this.connectorX;
+        entry.connector_y = this.connectorY;
         if (!entry.to) {
-            entry.x2 = 0;
-            entry.y2 = 0;
+            /* If entry.to is not set, then this line is currently being dragged */
+            this.setLineXYPosition(entry, this.g.dx / this.g.zoom, this.g.dy / this.g.zoom);
         }
         else {
-            entry.x2 = (entry.to.connector_x - this.connector_x);
-            entry.y2 = (entry.to.connector_y - this.connector_y);
+            this.setLineXYPosition(entry, (entry.to.connectorX - this.connectorX), (entry.to.connectorY - this.connectorY));
         }
     }
     /* Called when lines need to be updated */
@@ -435,62 +437,44 @@ class OutputConnector extends ConnectorComponent {
             this.refreshLinePosition(svgEntry);
         }
     }
-    renderAllLines(svgLines, deletedLines = [], newLines = [], updatedLines = []) {
-        for (const svg of newLines) {
-            let svgDom = this.createLineDOM(svg.connector_x, svg.connector_y);
-            svg.svg = svgDom;
-            this.renderLinePosition(svg);
-        }
-        for (const svg of deletedLines) {
-            this.g.canvas.removeChild(svg.svg);
-        }
-        for (const svg of updatedLines) {
-            this.renderLinePosition(svg);
-        }
-        // if (this.tmpSvgDom) {
-        //     this.setTmpSvgLineStyle({
-        //         transform: `translate3d(${this.connector_x}px, ${this.connector_y}px, 0)`,
-        //     });
-        // }
-        if (deletedLines.length > 0 || newLines.length > 0 || updatedLines.length > 0) {
-            return;
-        }
+    renderAllLines(svgLines) {
         for (const svgEntry of svgLines) {
             if (!svgEntry.svg) {
-                let svgDom = this.createLineDOM(svgEntry.connector_x, svgEntry.connector_y);
+                let svgDom = this.createLineDOM();
                 svgEntry.svg = svgDom;
             }
             else if (svgEntry.requestDelete) {
                 this.g.canvas.removeChild(svgEntry.svg);
                 continue;
             }
-            svgEntry.connector_x = this.connector_x;
-            svgEntry.connector_y = this.connector_y;
+            svgEntry.connector_x = this.connectorX;
+            svgEntry.connector_y = this.connectorY;
             if (svgEntry.to) {
-                svgEntry.x2 = (svgEntry.to.connector_x - this.connector_x);
-                svgEntry.y2 = (svgEntry.to.connector_y - this.connector_y);
+                svgEntry.x2 = (svgEntry.to.connectorX - this.connectorX);
+                svgEntry.y2 = (svgEntry.to.connectorY - this.connectorY);
             }
-            svgEntry.svg.style.transform = `translate3d(${this.connector_x}px, ${this.connector_y}px, 0)`;
+            svgEntry.svg.style.transform = `translate3d(${this.connectorX}px, ${this.connectorY}px, 0)`;
             this.renderLinePosition(svgEntry);
         }
     }
-    /* Called when a user clicks on the output connector */
-    customCursorDown(_) {
+    /** Called when a user clicks on the output connector
+     * @param prop: The properties of the mouse event
+     */
+    componentCursorDown(_) {
         console.debug(`ConnectorComponent mousedown event triggered on ${this.gid}!`);
-        let tmpData = {
+        /* Insert the temporary line into the svgLines array at index 0 */
+        this.svgLines.unshift({
             svg: null,
             to: null,
             from: this,
-            connector_x: this.connector_x,
-            connector_y: this.connector_y,
+            connector_x: this.connectorX,
+            connector_y: this.connectorY,
             x2: 0,
             y2: 0,
             connector: this,
             requestDelete: false
-        };
-        // Insert the temporary line into the svgLines array at index 0
-        this.svgLines.unshift(tmpData);
-        this.g.targetObject = this;
+        });
+        //this.g.targetObject = this;
         this.refreshAllLinePositions();
         //this.renderAllLines(this.svgLines, [], [this.svgLines[0]]);
     }
@@ -500,6 +484,11 @@ class OutputConnector extends ConnectorComponent {
         let connector_x = 0;
         let connector_y = 0;
         const hn = this.g.hoverDOM;
+        // console.debug(`connector onDrag`, hn);
+        if (this.svgLines.length == 0) {
+            console.error(`Error: svgLines is empty`);
+            return;
+        }
         // If the node has a class of "sl-input-connector", then it is an input connector
         if (hn && hn.classList.contains('sl-input-connector')) {
             const gid = hn.getAttribute('sl-gid');
@@ -508,12 +497,12 @@ class OutputConnector extends ConnectorComponent {
             console.debug("Hovering over input connector: ", gid);
             const input = this.g.globalNodeTable[gid];
             input.updateConnectorPosition(); /* Update the position of the input connector to the latest position. Not needed? */
-            connector_x = input.connector_x;
-            connector_y = input.connector_y;
-            distance = Math.sqrt(Math.pow(this.connector_x + this.g.dx / this.g.zoom - connector_x, 2) + Math.pow(this.connector_y + this.g.dy / this.g.zoom - connector_y, 2));
+            connector_x = input.connectorX;
+            connector_y = input.connectorY;
+            distance = Math.sqrt(Math.pow(this.connectorX + this.g.dx / this.g.zoom - connector_x, 2) + Math.pow(this.connectorY + this.g.dy / this.g.zoom - connector_y, 2));
             /* Handle snapping to the input connector */
             if (distance < 40) {
-                this.setLineXYPosition(this.svgLines[0], (connector_x - this.connector_x), (connector_y - this.connector_y));
+                this.setLineXYPosition(this.svgLines[0], (connector_x - this.connectorX), (connector_y - this.connectorY));
             }
             else {
                 this.setLineXYPosition(this.svgLines[0], this.g.dx / this.g.zoom, this.g.dy / this.g.zoom);
@@ -522,7 +511,7 @@ class OutputConnector extends ConnectorComponent {
         else {
             this.setLineXYPosition(this.svgLines[0], this.g.dx / this.g.zoom, this.g.dy / this.g.zoom);
         }
-        console.debug(`Distance: ${distance}`);
+        // console.debug(`Distance: ${distance}`);
         // this.renderAllLines(this.svgLines, [], [], [this.svgLines[0]]);
     }
     nodeDrag() {
@@ -530,7 +519,7 @@ class OutputConnector extends ConnectorComponent {
         // return this.renderAllLines(this.svgLines, [], [], this.svgLines);
     }
     /* Called when the user releases the mouse button */
-    domCursorUp() {
+    componentCursorUp() {
         console.debug(`connector domMouseUp`);
         const hn = this.g.hoverDOM;
         if (hn && hn.classList.contains('sl-input-connector')) {
@@ -544,8 +533,8 @@ class OutputConnector extends ConnectorComponent {
             this.connectToInput(input);
             input.prop[input.name] = this.prop[this.name]; /* Logically connect the input to the output */
             input.updateFunction(); /* Update the input */
-            this.setLineXYPosition(this.svgLines[0], (input.connector_x - this.connector_x), (input.connector_y - this.connector_y));
-            // this.renderAllLines(this.svgLines, [], [], [this.svgLines[0]]);
+            this.setLineXYPosition(this.svgLines[0], (input.connectorX - this.connectorX), (input.connectorY - this.connectorY));
+            this.g.snapline.requestLineRender = this;
         }
         else {
             let delLine = this.deleteLine(0);
@@ -569,75 +558,66 @@ class OutputConnector extends ConnectorComponent {
 }
 
 class NodeComponent extends Base {
-    inputConnectors; // Dictionary of InputConnector classes for each input connector
-    outputConnectors; // Dictionary of OutputConnector classes for each output connector
-    outputCount;
-    components; // List iof all components in the node, except for connectors
-    dom; // The DOM element of the node 
-    nodeWidth = 0;
+    type = ObjectTypes.node;
+    nodeType; /* Type of the node */
+    dom; /* The DOM element of the node */
+    inputConnectors; /* Dictionary of InputConnector classes for each input connector */
+    outputConnectors; /* Dictionary of OutputConnector classes for each output connector */
+    components; /* List iof all components in the node, except for connectors */
+    nodeWidth = 0; /* Size of the node */
     nodeHeight = 0;
-    panStartX;
-    panStartY;
-    overlapping;
-    freeze;
-    type;
-    prop;
-    outputProp;
-    nodeType;
-    nodeStyle;
+    dragStartX = 0; /* Initial position of the node when dragging */
+    dragStartY = 0;
+    overlapping; /* Line that the node is overlapping with */
+    freeze; /* If true, the node cannot be moved */
+    prop; /* A dictionary of all data stored in the node */
+    propFunc; /* A dictionary of all functions stored in the node */
+    nodeStyle; /* CSS style of the node */
     constructor(dom, globals) {
         super(globals);
-        this.dom = null;
+        this.nodeType = "";
+        this.dom = dom;
         this.inputConnectors = {};
         this.outputConnectors = {};
-        this.outputCount = 0;
         this.components = {};
-        this.panStartX = this.position_x;
-        this.panStartY = this.position_y;
+        this.dragStartX = this.positionX;
+        this.dragStartY = this.positionY;
         this.overlapping = null;
         this.freeze = false;
-        this.type = ObjectTypes.node;
-        if (dom) {
-            this.dom = dom;
-            this.dom.id = this.gid;
-            this.setNodeStyle({
-                willChange: "transform",
-                position: "absolute",
-                transformOrigin: "top left"
-            });
-            this.renderNode(this.nodeStyle);
-            this.bindFunction(this.dom);
-            new ResizeObserver(() => {
-                this.updateDOMproperties();
-            }).observe(this.dom);
-        }
-        this.g.globalNodeList.push(this);
         this.prop = {};
-        this.outputProp = {};
         this.prop = new Proxy(this.prop, {
             set: (target, prop, value) => {
                 prop = prop.toString();
                 target[prop] = value;
-                if (prop in this.outputProp) {
-                    this.evaluate(prop);
+                if (prop in this.outputConnectors) {
+                    console.debug(`Update all nodes connected to ${prop}`);
+                    const peers = this.outputConnectors[prop].peerInputs;
+                    if (peers) {
+                        for (const input of peers) {
+                            input.parent.prop[input.name] = value;
+                        }
+                    }
+                }
+                else if (prop in this.inputConnectors) {
+                    console.debug(`Call all functions connected to ${prop}`);
+                    if (prop in this.propFunc)
+                        this.propFunc[prop]();
                 }
                 return true;
-            },
-            get: (target, prop) => {
-                prop = prop.toString();
-                return target[prop];
             }
         });
-        this.nodeType = "";
-        this.initNode = this.initNode.bind(this);
-        this.addInputConnector = this.addInputConnector.bind(this);
-        this.addOutputConnector = this.addOutputConnector.bind(this);
-        this.addInputForm = this.addInputForm.bind(this);
+        this.propFunc = {};
         this.setNodeStyle({
             willChange: "transform",
             position: "absolute",
             transformOrigin: "top left"
         });
+        this.g.globalNodeList.push(this);
+        /* Public functions */
+        this.initNode = this.initNode.bind(this);
+        this.addInputConnector = this.addInputConnector.bind(this);
+        this.addOutputConnector = this.addOutputConnector.bind(this);
+        this.addInputForm = this.addInputForm.bind(this);
     }
     initNode(dom) {
         this.dom = dom;
@@ -648,23 +628,60 @@ class NodeComponent extends Base {
             this.updateDOMproperties();
         }).observe(this.dom);
     }
+    /**
+     * Updates the DOM properties of the node, such as height, width, etc.
+     * Also updates the DOM properties of all input and output connectors.
+     * Called when the node is first created, and when the node is resized.
+     * @returns
+     */
+    updateDOMproperties() {
+        this.nodeHeight = this.dom.offsetHeight;
+        this.nodeWidth = this.dom.offsetWidth;
+        for (const input of Object.values(this.inputConnectors)) {
+            input.updateDOMproperties();
+        }
+        for (const output of Object.values(this.outputConnectors)) {
+            output.updateDOMproperties();
+        }
+    }
     setNodeStyle(style) {
         this.nodeStyle = Object.assign({}, this.nodeStyle, style);
     }
     renderNode(style) {
         for (const key in style) {
+            if (key[0] == "_")
+                continue;
             this.dom.style[key] = style[key];
+        }
+        if (style._focus) {
+            this.dom.classList.add("focus");
+        }
+        else {
+            this.dom.classList.remove("focus");
         }
         for (const output of Object.values(this.outputConnectors)) {
             output.renderAllLines(output.svgLines);
+            output.svgLines = output.svgLines.filter((line) => !line.requestDelete);
+        }
+        for (const input of Object.values(this.inputConnectors)) {
+            let peer = input.peerOutput;
+            if (!peer)
+                continue;
+            let peerOutputs = peer.parent.outputConnectors;
+            for (const output of Object.values(peerOutputs)) {
+                output.renderAllLines(output.svgLines);
+            }
         }
     }
     addNodeToCanvas(x, y) {
-        this.position_x = x;
-        this.position_y = y;
+        this.positionX = x;
+        this.positionY = y;
         this.nodeWidth = this.dom.offsetWidth;
         this.nodeHeight = this.dom.offsetHeight;
-        this.dom.style.transform = `translate3d(${this.position_x}px, ${this.position_y}px, 0)`;
+        this.setNodeStyle({
+            transform: `translate3d(${this.positionX}px, ${this.positionY}px, 0)`
+        });
+        this.renderNode(this.nodeStyle);
         this.updateDOMproperties();
         this.g.canvas.appendChild(this.dom);
     }
@@ -672,7 +689,6 @@ class NodeComponent extends Base {
         const output = new OutputConnector(dom, { name: name }, this, this.g);
         this.outputConnectors[name] = output;
         this.prop[name] = null;
-        this.outputProp[name] = null;
         return output;
     }
     addInputConnector(dom, name) {
@@ -685,6 +701,9 @@ class NodeComponent extends Base {
         const input = new InputForm(dom, { name: name }, this, this.g);
         this.prop[name] = null;
         return input;
+    }
+    addPropSetFunction(func, name) {
+        this.propFunc[name] = func;
     }
     findInput(id) {
         for (const input of Object.values(this.inputConnectors)) {
@@ -703,10 +722,10 @@ class NodeComponent extends Base {
         return null;
     }
     setStartPositions() {
-        this.panStartX = this.position_x;
-        this.panStartY = this.position_y;
+        this.dragStartX = this.positionX;
+        this.dragStartY = this.positionY;
     }
-    customCursorDown(_) {
+    componentCursorDown(_) {
         console.debug(`Node class mousedown event triggered on ${this.gid}!`);
         let isInFocusNodes = false;
         for (let i = 0; i < this.g.focusNodes.length; i++) {
@@ -733,11 +752,11 @@ class NodeComponent extends Base {
         }
         this.setStartPositions();
     }
-    domCursorUp() {
+    componentCursorUp() {
         if (this.freeze)
             return;
-        this.position_x = this.panStartX + this.g.dx / this.g.zoom;
-        this.position_y = this.panStartY + this.g.dy / this.g.zoom;
+        this.positionX = this.dragStartX + this.g.dx / this.g.zoom;
+        this.positionY = this.dragStartY + this.g.dy / this.g.zoom;
         /* If the mouse has not moved since being pressed, then it is a regular click
             unselect other nodes in focusNodes */
         console.debug("Mouse has moved: " + this.g.mouseHasMoved);
@@ -758,9 +777,11 @@ class NodeComponent extends Base {
         const to = this.overlapping.to;
         const firstInput = Object.values(this.inputConnectors)[0];
         const firstOutput = Object.values(this.outputConnectors)[0];
-        from.disconnectFromInput(to);
-        from.connectToInput(firstInput);
-        firstOutput.connectToInput(to);
+        if (to) {
+            from.disconnectFromInput(to);
+            from.connectToInput(firstInput);
+            firstOutput.connectToInput(to);
+        }
     }
     /**
      * Fired every time requestAnimationFrame is called,
@@ -772,12 +793,11 @@ class NodeComponent extends Base {
     onDrag() {
         if (this.freeze)
             return;
-        this.position_x = this.panStartX + this.g.dx / this.g.zoom;
-        this.position_y = this.panStartY + this.g.dy / this.g.zoom;
+        this.positionX = this.dragStartX + this.g.dx / this.g.zoom;
+        this.positionY = this.dragStartY + this.g.dy / this.g.zoom;
         this.setNodeStyle({
-            transform: `translate3d(${this.position_x}px, ${this.position_y}px, 0)`
+            transform: `translate3d(${this.positionX}px, ${this.positionY}px, 0)`
         });
-        // this.renderNode(this.nodeStyle);
         for (const input of Object.values(this.inputConnectors)) {
             input.nodeDrag();
         }
@@ -790,11 +810,11 @@ class NodeComponent extends Base {
         let avg_height = 9999;
         for (const line of this.g.globalLines) {
             //line.line.classList.remove('overlapping');
-            if (isBetween(this.position_x + this.nodeWidth / 2, line.connector_x, line.connector_x + line.x2) &&
-                isBetween(this.position_y + this.nodeHeight / 2, line.connector_y, line.connector_y + line.y2)) {
+            if (isBetween(this.positionX + this.nodeWidth / 2, line.connector_x, line.connector_x + line.x2) &&
+                isBetween(this.positionY + this.nodeHeight / 2, line.connector_y, line.connector_y + line.y2)) {
                 if ((line.y2 + line.connector_x) / 2 < avg_height) {
                     this.overlapping = line;
-                    avg_height = (line.y2 + this.position_y) / 2;
+                    avg_height = (line.y2 + this.positionY) / 2;
                 }
             }
         }
@@ -804,23 +824,12 @@ class NodeComponent extends Base {
         //this.overlapping.line.classList.add('overlapping');
     }
     onFocus() {
-        this.dom.classList.add('focused');
-        this.dom.style.zIndex = "20";
-        this.updateDOMproperties();
+        this.setNodeStyle({ "_focus": true });
+        this.renderNode(this.nodeStyle);
     }
     offFocus() {
-        this.dom.classList.remove('focused');
-        this.dom.style.zIndex = "10";
-    }
-    updateDOMproperties() {
-        this.nodeHeight = this.dom.offsetHeight;
-        this.nodeWidth = this.dom.offsetWidth;
-        for (const input of Object.values(this.inputConnectors)) {
-            input.updateDOMproperties();
-        }
-        for (const output of Object.values(this.outputConnectors)) {
-            output.updateDOMproperties();
-        }
+        this.setNodeStyle({ "_focus": false });
+        this.renderNode(this.nodeStyle);
     }
     evaluate(varName) {
         console.debug("Update all nodes connected to " + varName);
@@ -848,17 +857,18 @@ class NodeComponent extends Base {
 
 class SnapLine {
     g;
-    canvasContainerStyle = {};
+    containerStyle = {};
     canvasStyle = {};
-    canvasSelectionBoxStyle = {};
-    canvasBackgroundStyle = {};
+    selectionBoxStyle = {};
+    backgroundStyle = {};
+    requestLineRender = null;
     constructor() {
         this.g = null;
-        this.canvasContainerStyle = {
+        this.containerStyle = {
             position: 'relative',
             overflow: 'hidden',
         };
-        this.canvasSelectionBoxStyle = {
+        this.selectionBoxStyle = {
             position: 'absolute',
             pointerEvents: "none",
         };
@@ -907,7 +917,7 @@ class SnapLine {
         g.cameraWidth = g.canvasContainer.clientWidth;
         g.cameraHeight = g.canvasContainer.clientHeight;
         console.debug(`Canvas size: ${g.cameraWidth}x${g.cameraHeight}`);
-        this.setCanvasElementStyle(this.canvasStyle, {
+        this.setCanvasElementStyle(SnapLineDomType.canvas, {
             position: 'relative',
             top: '0px',
             left: '0px',
@@ -915,7 +925,7 @@ class SnapLine {
             width: '0px',
             height: '0px',
         });
-        this.setCanvasElementStyle(this.canvasBackgroundStyle, {
+        this.setCanvasElementStyle(SnapLineDomType.background, {
             width: (g.cameraWidth * 10) + 'px',
             height: (g.cameraHeight * 10) + 'px',
             transform: `translate(${-g.cameraWidth * 5}px, ${-g.cameraHeight * 5}px)`,
@@ -923,10 +933,10 @@ class SnapLine {
             zIndex: "0",
             position: "absolute",
         });
-        this.renderCanvasElement(SnapLineDomType.canvasContainer, this.canvasContainerStyle);
+        this.renderCanvasElement(SnapLineDomType.container, this.containerStyle);
         this.renderCanvasElement(SnapLineDomType.canvas, this.canvasStyle);
-        this.renderCanvasElement(SnapLineDomType.canvasBackground, this.canvasBackgroundStyle);
-        this.renderCanvasElement(SnapLineDomType.selectionBox, this.canvasSelectionBoxStyle);
+        this.renderCanvasElement(SnapLineDomType.background, this.backgroundStyle);
+        this.renderCanvasElement(SnapLineDomType.selectionBox, this.selectionBoxStyle);
         g.canvasContainer.addEventListener('mouseup', this.onMouseUp.bind(this));
         g.canvasContainer.addEventListener('mousemove', this.onMouseMove.bind(this));
         g.canvasContainer.addEventListener('mousedown', this.onMouseDown.bind(this));
@@ -939,8 +949,28 @@ class SnapLine {
         g.canvasContainer.addEventListener('touchend', this.onTouchEnd.bind(this));
         window.requestAnimationFrame(this.step.bind(this));
     }
-    setCanvasElementStyle(curStyle, newStyle) {
-        curStyle = Object.assign({}, curStyle, newStyle);
+    setCanvasElementStyle(domType, newStyle) {
+        switch (domType) {
+            case SnapLineDomType.canvas:
+                this.canvasStyle = Object.assign({}, this.canvasStyle, newStyle);
+                this.canvasStyle._requestUpdate = "true";
+                break;
+            case SnapLineDomType.container:
+                this.containerStyle = Object.assign({}, this.containerStyle, newStyle);
+                this.containerStyle._requestUpdate = "true";
+                break;
+            case SnapLineDomType.background:
+                this.backgroundStyle = Object.assign({}, this.backgroundStyle, newStyle);
+                this.backgroundStyle._requestUpdate = "true";
+                break;
+            case SnapLineDomType.selectionBox:
+                this.selectionBoxStyle = Object.assign({}, this.selectionBoxStyle, newStyle);
+                this.selectionBoxStyle._requestUpdate = "true";
+                break;
+            default:
+                console.error("Invalid dom type: " + domType);
+                return;
+        }
     }
     renderCanvasElement(domType, style) {
         let dom = null;
@@ -951,10 +981,10 @@ class SnapLine {
             case SnapLineDomType.canvas:
                 dom = this.g.canvas;
                 break;
-            case SnapLineDomType.canvasContainer:
+            case SnapLineDomType.container:
                 dom = this.g.canvasContainer;
                 break;
-            case SnapLineDomType.canvasBackground:
+            case SnapLineDomType.background:
                 dom = this.g.canvasBackground;
                 break;
             case SnapLineDomType.selectionBox:
@@ -967,9 +997,13 @@ class SnapLine {
         if (dom == null) {
             return;
         }
+        if (style._requestUpdate != "true") {
+            return;
+        }
         for (const key in style) {
             dom.style[key] = style[key];
         }
+        style._requestUpdate = "false";
     }
     /* Event handlers */
     onTouchStart(e) {
@@ -1020,28 +1054,30 @@ class SnapLine {
      */
     onCursorDown(button, clientX, clientY) {
         this.g.currentMouseDown = button;
-        /*  If the user is dragging a line when another cursor down event is detected, then the line should be deleted.
-            This usually happens on touch devices with multi-touch support */
-        const tmpLine = document.querySelector('.sl-connector-svg.tmp');
-        if (tmpLine) {
+        console.debug("Cursor down: " + button);
+        /*  If the user is dragging a line when another cursor down event is detected, then the line should be deleted. */
+        if (this.g.targetObject && this.g.targetObject.type == ObjectTypes.outputConnector) {
             console.debug("Cursor down with tmp line");
-            const output_gid = tmpLine.getAttribute('output-gid');
-            if (output_gid != null) {
-                console.debug("Cursor down with tmp line and output gid: " + output_gid);
-                const output = this.g.globalNodeTable[output_gid];
-                if (output) {
-                    output.domCursorUp();
-                    this.onCursorUp();
-                }
-            }
+            // const output_gid = tmpLine.getAttribute('output-gid');
+            // if (output_gid != null) {
+            //     console.debug("Cursor down with tmp line and output gid: " + output_gid);
+            //     const output = this.g.globalNodeTable[output_gid!];
+            //     if (output) {
+            //         output.domCursorUp();
+            //         this.onCursorUp();
+            //     }
+            // }
+            const output = this.g.targetObject;
+            output.domCursorUp();
         }
         const g = this.g;
         if (g.overrideDrag) {
             return;
         }
+        console.debug("Cursor ddown");
         /* Reset the selection box */
         if (g.currentMouseDown != mouseDownButton.none) {
-            this.setCanvasElementStyle(this.canvasSelectionBoxStyle, {
+            this.setCanvasElementStyle(SnapLineDomType.selectionBox, {
                 width: '0px',
                 height: '0px',
                 left: '0px',
@@ -1117,6 +1153,7 @@ class SnapLine {
      */
     onCursorMove(target, clientX, clientY) {
         const g = this.g;
+        console.debug("Cursor move");
         g.hoverDOM = target;
         g.mouse_x = clientX - g.canvasContainer.offsetLeft;
         g.mouse_y = clientY - g.canvasContainer.offsetTop;
@@ -1140,22 +1177,23 @@ class SnapLine {
                 // Pan camera if middle mouse button is pressed
                 g.camera_x = g.camera_pan_start_x - g.dx / g.zoom;
                 g.camera_y = g.camera_pan_start_y - g.dy / g.zoom;
-                this.setCanvasElementStyle(this.canvasStyle, {
+                this.setCanvasElementStyle(SnapLineDomType.canvas, {
                     transform: `matrix3d(${worldToCamera(g.camera_x, g.camera_y, g)})`,
                     cursor: "grabbing",
                 });
-                this.setCanvasElementStyle(this.canvasBackgroundStyle, {
+                this.setCanvasElementStyle(SnapLineDomType.background, {
                     transform: `translate(${g.camera_x + -g.cameraWidth * 5}px, ${g.camera_y + -g.cameraHeight * 5}px)`,
                     backgroundPosition: `${-g.camera_x}px ${-g.camera_y}px`,
                 });
             }
             else if (g.currentMouseDown == mouseDownButton.left) {
                 // Select multiple boxes if left mouse button is pressed
-                this.setCanvasElementStyle(this.canvasSelectionBoxStyle, {
+                this.setCanvasElementStyle(SnapLineDomType.selectionBox, {
                     width: Math.abs(g.dx) + 'px',
                     height: Math.abs(g.dy) + 'px',
                     left: Math.min(g.mousedown_x, g.mouse_x) + 'px',
                     top: Math.min(g.mousedown_y, g.mouse_y) + 'px',
+                    opacity: "1",
                 });
                 // Check if any nodes are inside the selection box
                 let w_x_start = (Math.min(g.mousedown_x, g.mouse_x) - g.cameraWidth / 2) / g.zoom + g.camera_x;
@@ -1165,7 +1203,7 @@ class SnapLine {
                 let selectedNodes = [];
                 /* Focus on nodes that are inside the selection box */
                 for (const node of g.globalNodeList) {
-                    if (node.position_x + node.nodeWidth > w_x_start && node.position_x < w_x_end && node.position_y + node.nodeHeight > w_y_start && node.position_y < w_y_end) {
+                    if (node.positionX + node.nodeWidth > w_x_start && node.positionX < w_x_end && node.positionY + node.nodeHeight > w_y_start && node.positionY < w_y_end) {
                         node.onFocus();
                         selectedNodes.push(node);
                     }
@@ -1206,7 +1244,7 @@ class SnapLine {
         if (g.currentMouseDown == mouseDownButton.left) {
             if (g.targetObject == null) {
                 /* If nothing is selected, then this drag is a selection box */
-                this.setCanvasElementStyle(this.canvasSelectionBoxStyle, {
+                this.setCanvasElementStyle(SnapLineDomType.selectionBox, {
                     width: '0px',
                     height: '0px',
                     left: '0px',
@@ -1224,15 +1262,18 @@ class SnapLine {
                 /* Otherwise, just handle mouse up for the selected object */
                 g.targetObject.domCursorUp();
             }
+            if (g.targetObject?.type == ObjectTypes.outputConnector) {
+                this.requestLineRender = g.targetObject;
+            }
         }
         g.currentMouseDown = mouseDownButton.none;
         if (g.overrideDrag) {
-            this.setCanvasElementStyle(this.canvasStyle, {
+            this.setCanvasElementStyle(SnapLineDomType.canvas, {
                 cursor: "default",
             });
         }
         g.overrideDrag = false;
-        this.setCanvasElementStyle(this.canvasBackgroundStyle, {
+        this.setCanvasElementStyle(SnapLineDomType.background, {
             cursor: "default",
         });
         g.targetObject = null;
@@ -1261,7 +1302,7 @@ class SnapLine {
         g.zoom += d_zoom;
         g.camera_x -= camera_dx;
         g.camera_y -= camera_dy;
-        this.setCanvasElementStyle(this.canvasStyle, {
+        this.setCanvasElementStyle(SnapLineDomType.canvas, {
             transform: `matrix3d(${worldToCamera(g.camera_x, g.camera_y, g)})`,
         });
     }
@@ -1270,6 +1311,9 @@ class SnapLine {
         switch (e.key) {
             case 'Backspace':
             case 'Delete':
+                if (this.g.targetObject?.type != ObjectTypes.node) {
+                    return;
+                }
                 if (this.g.focusNodes.length > 0) {
                     // this.deleteNode(g.focusNode.gid);
                     for (const node of this.g.focusNodes) {
@@ -1280,21 +1324,28 @@ class SnapLine {
                 break;
         }
     }
-    step() {
-        console.debug("Step", this.g.targetObject?.type);
-        if (this.g.targetObject?.type == ObjectTypes.node) {
+    renderElements() {
+        const target = this.g.targetObject;
+        if (!this.requestLineRender && target?.type == ObjectTypes.outputConnector) {
+            this.requestLineRender = target;
+        }
+        if (target?.type == ObjectTypes.node) {
             for (const node of this.g.focusNodes) {
                 node.renderNode(node.nodeStyle);
             }
         }
-        else if (this.g.targetObject?.type == ObjectTypes.connector && this.g.targetObject instanceof OutputConnector) {
-            let output = this.g.targetObject;
+        else if (this.requestLineRender) {
+            let output = this.requestLineRender;
             output.renderAllLines(output.svgLines);
+            output.svgLines = output.svgLines.filter((line) => !line.requestDelete);
         }
-        this.renderCanvasElement(SnapLineDomType.canvasContainer, this.canvasContainerStyle);
+    }
+    step() {
+        this.renderElements();
+        this.renderCanvasElement(SnapLineDomType.container, this.containerStyle);
         this.renderCanvasElement(SnapLineDomType.canvas, this.canvasStyle);
-        this.renderCanvasElement(SnapLineDomType.canvasBackground, this.canvasBackgroundStyle);
-        this.renderCanvasElement(SnapLineDomType.selectionBox, this.canvasSelectionBoxStyle);
+        this.renderCanvasElement(SnapLineDomType.background, this.backgroundStyle);
+        this.renderCanvasElement(SnapLineDomType.selectionBox, this.selectionBoxStyle);
         window.requestAnimationFrame(this.step.bind(this));
     }
     addNodeObject() {

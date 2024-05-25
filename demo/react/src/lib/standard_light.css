@@ -3,6 +3,17 @@ input:focus {
   outline: none;
 }
 
+#sl-container {
+  position: relative;
+  overflow: hidden;
+}
+
+#sl-selection {
+  background-color: rgba(0, 0, 0, 0.067);
+  border: 2px solid rgba(0, 0, 0, 0.2078431373);
+  box-sizing: border-box;
+}
+
 #sl-background {
   background-image: radial-gradient(circle at 1px 1px, rgb(169, 171, 181) 1px, transparent 0);
   background-size: 32px 32px;
@@ -19,7 +30,7 @@ input:focus {
   /* number input */
   /* dropdown input */
 }
-.sl-node.focused {
+.sl-node.focus {
   border: 1px solid rgb(0, 122, 255);
 }
 .sl-node .sl-row {
