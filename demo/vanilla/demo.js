@@ -1,4 +1,4 @@
-import SnapLine from "./lib/snapline.js";
+import SnapLine from "./lib/snapline.mjs";
 
 const sl = new SnapLine("node-editor");
 

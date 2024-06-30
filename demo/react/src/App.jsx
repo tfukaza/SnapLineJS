@@ -1,7 +1,7 @@
 import React from "react";
 import { useState } from "react";
 import { useRef } from "react";
-import SnapLine from "./lib/snapline.js";
+import SnapLine from "./lib/snapline.mjs";
 import { useEffect } from "react";
 import MathNode from "./components/Math";
 
@@ -84,7 +84,7 @@ export default function App() {
 
     const [theme, setTheme] = useState("standard_light");
 
-    handleSelectTheme = (e, theme) => {
+    function handleSelectTheme(e, theme) {
         setTheme(theme);
         setChooseThemeToggle(false);
     }

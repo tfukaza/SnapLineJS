@@ -1,12 +1,12 @@
 
-import { worldToCamera } from './helper.js';
+import { worldToCamera } from './helper';
 import { GlobalStats, ObjectTypes, SnapLineDomType, mouseDownButton } from './types';
-import { NodeComponent } from './components/node.js';
-import { ConnectorComponent, OutputConnector } from './components/connector.js';
+import { NodeComponent } from './components/node';
+import { ConnectorComponent, OutputConnector } from './components/connector';
 
 import './theme/standard_light.scss';
-import './theme/standard_dark.scss';
-import './theme/retro.scss';
+// import './theme/standard_dark.scss';
+// import './theme/retro.scss'; 
 
 
 export default class SnapLine {
