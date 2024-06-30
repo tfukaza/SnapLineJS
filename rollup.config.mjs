@@ -10,10 +10,6 @@ let outputFile;
 if (dev) {
   if (devFramework === 'vanilla') {
     outputFile = 'vanilla/lib/snapline.js';
-  } else if (devFramework === 'eleventy') {
-    outputFile = 'eleventy/src/lib/snapline.js';
-  } else if (devFramework === 'svelte') {
-    outputFile = 'svelte/public/lib/snapline.js';
   } else if (devFramework === 'react') {
     outputFile = 'react/src/lib/snapline.js';
   } else {

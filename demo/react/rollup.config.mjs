@@ -5,6 +5,7 @@ import commonjs from '@rollup/plugin-commonjs';
 import serve from 'rollup-plugin-serve'
 import livereload from 'rollup-plugin-livereload'
 import postcss from 'rollup-plugin-postcss'
+import copy from 'rollup-plugin-copy-watch';
 
 
 export default {
@@ -23,6 +24,7 @@ export default {
   plugins: [
     replace({
       'process.env.NODE_ENV': JSON.stringify('development'),
+      preventAssignment: true,
     }),
     postcss({
       extract: false,
@@ -37,6 +39,13 @@ export default {
       transforms: ['jsx'],
     }),
     commonjs(),
+    copy({
+      targets: [
+        { src: 'src/lib/standard_light.css', dest: 'dist/lib' },
+        { src: 'src/lib/standard_dark.css', dest: 'dist/lib' },
+        { src: 'src/lib/retro.css', dest: 'dist/lib' },
+      ],
+    }),
     serve({
       open: true,
       contentBase: 'demo/react/dist',
@@ -44,7 +53,7 @@ export default {
       port: 5000,
     }),
     livereload({
-      watch: 'demo/react/src',
+      watch: 'demo/react/dist',
     }),
   ],
 };
