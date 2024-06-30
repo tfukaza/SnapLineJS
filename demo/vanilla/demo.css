@@ -140,3 +140,7 @@ body {
 #retroButton {
     font-family: monospace;
 }
+
+#themeButton {
+    display: none;
+}
