@@ -1,14 +1,14 @@
 var O = Object.defineProperty;
-var L = (i, n, t) => n in i ? O(i, n, { enumerable: !0, configurable: !0, writable: !0, value: t }) : i[n] = t;
-var r = (i, n, t) => L(i, typeof n != "symbol" ? n + "" : n, t);
-function _(i, n, t) {
+var S = (i, n, t) => n in i ? O(i, n, { enumerable: !0, configurable: !0, writable: !0, value: t }) : i[n] = t;
+var r = (i, n, t) => S(i, typeof n != "symbol" ? n + "" : n, t);
+function C(i, n, t) {
   return i >= n && i <= t || i >= t && i <= n;
 }
-function C(i, n, t) {
+function _(i, n, t) {
   const o = t.zoom, e = t.zoom, s = -i * t.zoom + t.cameraWidth / 2, c = -n * t.zoom + t.cameraHeight / 2;
   return `${o},0,0,0,0,${e},0,0,0,0,1,0,${s},${c},0,1`;
 }
-var d = /* @__PURE__ */ ((i) => (i.none = "none", i.left = "left", i.middle = "middle", i.right = "right", i.invalid = "invalid", i))(d || {}), p = /* @__PURE__ */ ((i) => (i[i.node = 0] = "node", i[i.connector = 1] = "connector", i[i.line = 2] = "line", i[i.unspecified = 3] = "unspecified", i[i.inputConnector = 4] = "inputConnector", i[i.outputConnector = 5] = "outputConnector", i[i.invalid = 6] = "invalid", i))(p || {}), a = /* @__PURE__ */ ((i) => (i[i.container = 0] = "container", i[i.canvas = 1] = "canvas", i[i.background = 2] = "background", i[i.selectionBox = 3] = "selectionBox", i[i.invalid = 4] = "invalid", i))(a || {});
+var h = /* @__PURE__ */ ((i) => (i.none = "none", i.left = "left", i.middle = "middle", i.right = "right", i.invalid = "invalid", i))(h || {}), f = /* @__PURE__ */ ((i) => (i[i.node = 0] = "node", i[i.connector = 1] = "connector", i[i.line = 2] = "line", i[i.unspecified = 3] = "unspecified", i[i.inputConnector = 4] = "inputConnector", i[i.outputConnector = 5] = "outputConnector", i[i.invalid = 6] = "invalid", i))(f || {}), l = /* @__PURE__ */ ((i) => (i[i.container = 0] = "container", i[i.canvas = 1] = "canvas", i[i.background = 2] = "background", i[i.selectionBox = 3] = "selectionBox", i[i.invalid = 4] = "invalid", i))(l || {});
 class x {
   /* Type of the object */
   constructor(n) {
@@ -20,7 +20,7 @@ class x {
     /* Position of the object in x-axis */
     r(this, "positionY");
     r(this, "type");
-    this.g = n, this.gid = (++n.gid).toString(), this.positionX = 0, this.positionY = 0, this.type = p.unspecified;
+    this.g = n, this.gid = (++n.gid).toString(), this.positionX = 0, this.positionY = 0, this.type = f.unspecified;
   }
   /**
    * Binds the mousedown event to the given DOM element.
@@ -44,7 +44,7 @@ class x {
    */
   domCursorDown(n) {
     let t = n.button, o = n.clientX, e = n.clientY;
-    console.debug(`Base class mousedown event triggered on ${this.gid}!`), t == 0 ? this.g.currentMouseDown = d.left : t == 1 ? this.g.currentMouseDown = d.middle : t == 2 && (this.g.currentMouseDown = d.right), this.g.targetObject = this, this.g.mousedown_x = o, this.g.mousedown_y = e, this.g.dx = 0, this.g.dy = 0, this.g.dx_offset = 0, this.g.dy_offset = 0, this.componentCursorDown(n);
+    console.debug(`Base class mousedown event triggered on ${this.gid}!`), t == 0 ? this.g.currentMouseDown = h.left : t == 1 ? this.g.currentMouseDown = h.middle : t == 2 && (this.g.currentMouseDown = h.right), this.g.targetObject = this, this.g.mousedown_x = o, this.g.mousedown_y = e, this.g.dx = 0, this.g.dy = 0, this.g.dx_offset = 0, this.g.dy_offset = 0, this.componentCursorDown(n);
   }
   componentCursorDown(n) {
   }
@@ -126,7 +126,7 @@ class w extends y {
     r(this, "prop");
     /* Reference to the parent's prop object */
     r(this, "svgLines");
-    r(this, "type", p.connector);
+    r(this, "type", f.connector);
     r(this, "dom");
     r(this, "parent");
     this.connectorX = 0, this.connectorY = 0, this.connectorTotalOffsetX = 0, this.connectorTotalOffsetY = 0, this.dom = t, this.parent = e, this.prop = e.prop, o.name ? this.name = o.name : (s.gid++, this.name = s.gid.toString()), this.g.globalNodeTable[this.gid] = this, this.dom.setAttribute("sl-gid", this.gid.toString()), this.svgLines = [], this.bindFunction(this.dom);
@@ -178,12 +178,12 @@ class w extends y {
       t.requestDelete = !0;
   }
 }
-class S extends w {
+class L extends w {
   constructor(t, o, e, s) {
     super(t, o, e, s);
     //inputDOM: HTMLElement | null;       // Reference to the UI element where the user enters the value
     // inter: InputInterface;
-    r(this, "type", p.inputConnector);
+    r(this, "type", f.inputConnector);
     r(this, "peerOutput");
     r(this, "updateFunction", () => {
       console.debug("Update function not set for input connector");
@@ -230,7 +230,7 @@ class N extends w {
     super(t, o, e, s);
     r(this, "val");
     r(this, "peerInputs", []);
-    r(this, "type", p.outputConnector);
+    r(this, "type", f.outputConnector);
     this.val = null, this.svgLines = [], this.dom = t, this.renderAllLines = this.renderAllLines.bind(this);
   }
   connectToInput(t) {
@@ -264,11 +264,16 @@ class N extends w {
     for (const t of this.svgLines)
       this.refreshLinePosition(t);
   }
+  filterDeletedLines(t) {
+    for (let o = 0; o < t.length; o++)
+      t[o].requestDelete && (t.splice(o, 1), o--);
+  }
   renderAllLines(t) {
+    console.debug(`Rendering all lines for ${this.gid}`, t);
     for (const o of t) {
       if (o.svg) {
         if (o.requestDelete) {
-          this.g.canvas.removeChild(o.svg);
+          console.warn("Deleting line: ", o), this.g.canvas.removeChild(o.svg);
           continue;
         }
       } else {
@@ -277,6 +282,12 @@ class N extends w {
       }
       o.connector_x = this.connectorX, o.connector_y = this.connectorY, o.to && (o.x2 = o.to.connectorX - this.connectorX, o.y2 = o.to.connectorY - this.connectorY), o.svg.style.transform = `translate3d(${this.connectorX}px, ${this.connectorY}px, 0)`, this.renderLinePosition(o);
     }
+    this.filterDeletedLines(t);
+  }
+  setRenderLineCallback(t) {
+    this.renderAllLines = (o) => {
+      this.filterDeletedLines(o), t(o);
+    };
   }
   /** Called when a user clicks on the output connector
    * @param prop: The properties of the mouse event
@@ -292,13 +303,13 @@ class N extends w {
       y2: 0,
       connector: this,
       requestDelete: !1
-    }), this.refreshAllLinePositions();
+    }), console.debug("svgLines: ", this.svgLines), this.refreshAllLinePositions();
   }
   /* Called when the user drags the lines extending from the output connector */
   onDrag() {
     let t = 9999, o = 0, e = 0;
     const s = this.g.hoverDOM;
-    if (this.svgLines.length == 0) {
+    if (console.debug("connector onDrag", s), this.svgLines.length == 0) {
       console.error("Error: svgLines is empty");
       return;
     }
@@ -306,8 +317,8 @@ class N extends w {
       const c = s.getAttribute("sl-gid");
       if (!c) return;
       console.debug("Hovering over input connector: ", c);
-      const u = this.g.globalNodeTable[c];
-      u.updateConnectorPosition(), o = u.connectorX, e = u.connectorY, t = Math.sqrt(Math.pow(this.connectorX + this.g.dx / this.g.zoom - o, 2) + Math.pow(this.connectorY + this.g.dy / this.g.zoom - e, 2)), t < 40 ? this.setLineXYPosition(this.svgLines[0], o - this.connectorX, e - this.connectorY) : this.setLineXYPosition(this.svgLines[0], this.g.dx / this.g.zoom, this.g.dy / this.g.zoom);
+      const a = this.g.globalNodeTable[c];
+      a.updateConnectorPosition(), o = a.connectorX, e = a.connectorY, t = Math.sqrt(Math.pow(this.connectorX + this.g.dx / this.g.zoom - o, 2) + Math.pow(this.connectorY + this.g.dy / this.g.zoom - e, 2)), t < 40 ? this.setLineXYPosition(this.svgLines[0], o - this.connectorX, e - this.connectorY) : this.setLineXYPosition(this.svgLines[0], this.g.dx / this.g.zoom, this.g.dy / this.g.zoom);
     } else
       this.setLineXYPosition(this.svgLines[0], this.g.dx / this.g.zoom, this.g.dy / this.g.zoom);
   }
@@ -325,10 +336,10 @@ class N extends w {
         return;
       }
       const e = this.g.globalNodeTable[o];
-      this.connectToInput(e), e.prop[e.name] = this.prop[this.name], e.updateFunction(), this.setLineXYPosition(this.svgLines[0], e.connectorX - this.connectorX, e.connectorY - this.connectorY), this.g.snapline.requestLineRender = this;
+      this.connectToInput(e), e.prop[e.name] = this.prop[this.name], e.updateFunction(), this.setLineXYPosition(this.svgLines[0], e.connectorX - this.connectorX, e.connectorY - this.connectorY);
     } else {
       let o = this.deleteLine(0);
-      o && (o.requestDelete = !0);
+      o && (o.requestDelete = !0), this.renderAllLines(this.svgLines);
     }
   }
   getValue() {
@@ -343,7 +354,7 @@ class b extends x {
   /* CSS style of the node */
   constructor(t, o) {
     super(o);
-    r(this, "type", p.node);
+    r(this, "type", f.node);
     r(this, "nodeType");
     /* Type of the node */
     r(this, "dom");
@@ -373,10 +384,10 @@ class b extends x {
       set: (e, s, c) => {
         if (s = s.toString(), e[s] = c, s in this.outputConnectors) {
           console.debug(`Update all nodes connected to ${s}`);
-          const u = this.outputConnectors[s].peerInputs;
-          if (u)
-            for (const h of u)
-              h.parent.prop[h.name] = c;
+          const a = this.outputConnectors[s].peerInputs;
+          if (a)
+            for (const u of a)
+              u.parent.prop[u.name] = c;
         } else s in this.inputConnectors && (console.debug(`Call all functions connected to ${s}`), s in this.propFunc && this.propFunc[s]());
         return !0;
       }
@@ -384,7 +395,7 @@ class b extends x {
       willChange: "transform",
       position: "absolute",
       transformOrigin: "top left"
-    }), this.g.globalNodeList.push(this), this.initNode = this.initNode.bind(this), this.addInputConnector = this.addInputConnector.bind(this), this.addOutputConnector = this.addOutputConnector.bind(this), this.addInputForm = this.addInputForm.bind(this);
+    }), this.g.globalNodeList.push(this), this.initNode = this.initNode.bind(this), this.addInputConnector = this.addInputConnector.bind(this), this.addOutputConnector = this.addOutputConnector.bind(this), this.addInputForm = this.addInputForm.bind(this), this.setRenderNodeCallback = this.setRenderNodeCallback.bind(this);
   }
   initNode(t) {
     this.dom = t, this.dom.id = this.gid, this.renderNode(this.nodeStyle), this.bindFunction(this.dom), new ResizeObserver(() => {
@@ -412,7 +423,7 @@ class b extends x {
       o[0] != "_" && (this.dom.style[o] = t[o]);
     t._focus ? this.dom.classList.add("focus") : this.dom.classList.remove("focus");
     for (const o of Object.values(this.outputConnectors))
-      o.renderAllLines(o.svgLines), o.svgLines = o.svgLines.filter((e) => !e.requestDelete);
+      o.renderAllLines(o.svgLines);
     for (const o of Object.values(this.inputConnectors)) {
       let e = o.peerOutput;
       if (!e) continue;
@@ -420,6 +431,20 @@ class b extends x {
       for (const c of Object.values(s))
         c.renderAllLines(c.svgLines);
     }
+  }
+  setRenderNodeCallback(t) {
+    this.renderNode = (o) => {
+      t(o);
+      for (const e of Object.values(this.outputConnectors))
+        e.renderAllLines(e.svgLines);
+      for (const e of Object.values(this.inputConnectors)) {
+        let s = e.peerOutput;
+        if (!s) continue;
+        let c = s.parent.outputConnectors;
+        for (const a of Object.values(c))
+          a.renderAllLines(a.svgLines);
+      }
+    };
   }
   addNodeToCanvas(t, o) {
     this.positionX = t, this.positionY = o, this.nodeWidth = this.dom.offsetWidth, this.nodeHeight = this.dom.offsetHeight, this.setNodeStyle({
@@ -431,7 +456,7 @@ class b extends x {
     return this.outputConnectors[o] = e, this.prop[o] = null, e;
   }
   addInputConnector(t, o) {
-    const e = new S(t, { name: o }, this, this.g);
+    const e = new L(t, { name: o }, this, this.g);
     return this.inputConnectors[o] = e, this.prop[o] = null, e;
   }
   addInputForm(t, o) {
@@ -483,7 +508,7 @@ class b extends x {
       this.g.focusNodes = [this], this.onFocus();
       return;
     }
-    if (this.overlapping == null)
+    if (this.renderNode(this.nodeStyle), this.overlapping == null)
       return;
     const t = this.overlapping.from, o = this.overlapping.to, e = Object.values(this.inputConnectors)[0], s = Object.values(this.outputConnectors)[0];
     o && (t.disconnectFromInput(o), t.connectToInput(e), s.connectToInput(o));
@@ -507,7 +532,7 @@ class b extends x {
     if (this.overlapping = null, Object.keys(this.inputConnectors).length == 0 && Object.keys(this.outputConnectors).length == 0) return;
     let t = 9999;
     for (const o of this.g.globalLines)
-      _(this.positionX + this.nodeWidth / 2, o.connector_x, o.connector_x + o.x2) && _(this.positionY + this.nodeHeight / 2, o.connector_y, o.connector_y + o.y2) && (o.y2 + o.connector_x) / 2 < t && (this.overlapping = o, t = (o.y2 + this.positionY) / 2);
+      C(this.positionX + this.nodeWidth / 2, o.connector_x, o.connector_x + o.x2) && C(this.positionY + this.nodeHeight / 2, o.connector_y, o.connector_y + o.y2) && (o.y2 + o.connector_x) / 2 < t && (this.overlapping = o, t = (o.y2 + this.positionY) / 2);
     this.overlapping;
   }
   onFocus() {
@@ -535,20 +560,25 @@ class b extends x {
   }
 }
 class X {
+  // Style for the background element
+  //requestLineRender: OutputConnector | null = null;   // If set to an OutputConnector, it will render all lines for that connector
   constructor() {
     r(this, "g");
+    // Global state
     r(this, "containerStyle", {});
+    // Style for the container element
     r(this, "canvasStyle", {});
+    // Style for the canvas element
     r(this, "selectionBoxStyle", {});
+    // Style for the selection box element
     r(this, "backgroundStyle", {});
-    r(this, "requestLineRender", null);
     this.g = null, this.containerStyle = {
       position: "relative",
       overflow: "hidden"
     }, this.selectionBoxStyle = {
       position: "absolute",
       pointerEvents: "none"
-    }, this.initSnapLine = this.initSnapLine.bind(this);
+    }, this.initSnapLine = this.initSnapLine.bind(this), this.setRenderCanvasCallback = this.setRenderCanvasCallback.bind(this), this.setRenderContainerCallback = this.setRenderContainerCallback.bind(this), this.setRenderBackgroundCallback = this.setRenderBackgroundCallback.bind(this), this.setRenderSelectionBoxCallback = this.setRenderSelectionBoxCallback.bind(this);
   }
   initSnapLine(n, t, o, e) {
     this.g = {
@@ -556,7 +586,7 @@ class X {
       canvasContainer: n,
       canvasBackground: o,
       selectionBox: e,
-      currentMouseDown: d.none,
+      currentMouseDown: h.none,
       mousedown_x: 0,
       mousedown_y: 0,
       mouse_x: 0,
@@ -589,34 +619,34 @@ class X {
       snapline: this
     };
     const s = this.g;
-    s.cameraWidth = s.canvasContainer.clientWidth, s.cameraHeight = s.canvasContainer.clientHeight, console.debug(`Canvas size: ${s.cameraWidth}x${s.cameraHeight}`), this.setCanvasElementStyle(a.canvas, {
+    s.cameraWidth = s.canvasContainer.clientWidth, s.cameraHeight = s.canvasContainer.clientHeight, console.debug(`Canvas size: ${s.cameraWidth}x${s.cameraHeight}`), this.setCanvasElementStyle(l.canvas, {
       position: "relative",
       top: "0px",
       left: "0px",
       transform: `translate(${s.cameraWidth / 2}px, ${s.cameraHeight / 2}px)`,
       width: "0px",
       height: "0px"
-    }), this.setCanvasElementStyle(a.background, {
+    }), this.setCanvasElementStyle(l.background, {
       width: s.cameraWidth * 10 + "px",
       height: s.cameraHeight * 10 + "px",
       transform: `translate(${-s.cameraWidth * 5}px, ${-s.cameraHeight * 5}px)`,
       transformOrigin: "center",
       zIndex: "0",
       position: "absolute"
-    }), this.renderCanvasElement(a.container, this.containerStyle), this.renderCanvasElement(a.canvas, this.canvasStyle), this.renderCanvasElement(a.background, this.backgroundStyle), this.renderCanvasElement(a.selectionBox, this.selectionBoxStyle), s.canvasContainer.addEventListener("mouseup", this.onMouseUp.bind(this)), s.canvasContainer.addEventListener("mousemove", this.onMouseMove.bind(this)), s.canvasContainer.addEventListener("mousedown", this.onMouseDown.bind(this)), s.canvasContainer.addEventListener("wheel", this.onWheel.bind(this)), s.canvasContainer.addEventListener("keydown", this.onKeyDown.bind(this)), document.addEventListener("mousemove", this.onMouseMove.bind(this)), document.addEventListener("mouseup", this.onMouseUp.bind(this)), s.canvasContainer.addEventListener("touchstart", this.onTouchStart.bind(this)), s.canvasContainer.addEventListener("touchmove", this.onTouchMove.bind(this)), s.canvasContainer.addEventListener("touchend", this.onTouchEnd.bind(this)), window.requestAnimationFrame(this.step.bind(this));
+    }), this.renderContainer(this.containerStyle), this.renderCanvas(this.canvasStyle), this.renderBackground(this.backgroundStyle), this.renderSelectionBox(this.selectionBoxStyle), s.canvasContainer.addEventListener("mouseup", this.onMouseUp.bind(this)), s.canvasContainer.addEventListener("mousemove", this.onMouseMove.bind(this)), s.canvasContainer.addEventListener("mousedown", this.onMouseDown.bind(this)), s.canvasContainer.addEventListener("wheel", this.onWheel.bind(this)), s.canvasContainer.addEventListener("keydown", this.onKeyDown.bind(this)), document.addEventListener("mousemove", this.onMouseMove.bind(this)), document.addEventListener("mouseup", this.onMouseUp.bind(this)), s.canvasContainer.addEventListener("touchstart", this.onTouchStart.bind(this)), s.canvasContainer.addEventListener("touchmove", this.onTouchMove.bind(this)), s.canvasContainer.addEventListener("touchend", this.onTouchEnd.bind(this)), window.requestAnimationFrame(this.step.bind(this));
   }
   setCanvasElementStyle(n, t) {
     switch (n) {
-      case a.canvas:
+      case l.canvas:
         this.canvasStyle = Object.assign({}, this.canvasStyle, t), this.canvasStyle._requestUpdate = "true";
         break;
-      case a.container:
+      case l.container:
         this.containerStyle = Object.assign({}, this.containerStyle, t), this.containerStyle._requestUpdate = "true";
         break;
-      case a.background:
+      case l.background:
         this.backgroundStyle = Object.assign({}, this.backgroundStyle, t), this.backgroundStyle._requestUpdate = "true";
         break;
-      case a.selectionBox:
+      case l.selectionBox:
         this.selectionBoxStyle = Object.assign({}, this.selectionBoxStyle, t), this.selectionBoxStyle._requestUpdate = "true";
         break;
       default:
@@ -624,51 +654,52 @@ class X {
         return;
     }
   }
-  renderCanvasElement(n, t) {
-    let o = null;
-    if (this.g != null) {
-      switch (n) {
-        case a.canvas:
-          o = this.g.canvas;
-          break;
-        case a.container:
-          o = this.g.canvasContainer;
-          break;
-        case a.background:
-          o = this.g.canvasBackground;
-          break;
-        case a.selectionBox:
-          o = this.g.selectionBox;
-          break;
-        default:
-          console.error("Invalid dom type: " + n);
-          return;
-      }
-      if (o != null && t._requestUpdate == "true") {
-        for (const e in t)
-          o.style[e] = t[e];
-        t._requestUpdate = "false";
-      }
-    }
+  renderContainer(n) {
+    for (const t in n)
+      this.g.canvasContainer.style[t] = n[t];
+  }
+  renderCanvas(n) {
+    for (const t in n)
+      this.g.canvas.style[t] = n[t];
+  }
+  renderBackground(n) {
+    for (const t in n)
+      this.g.canvasBackground.style[t] = n[t];
+  }
+  renderSelectionBox(n) {
+    for (const t in n)
+      this.g.selectionBox.style[t] = n[t];
+  }
+  setRenderContainerCallback(n) {
+    this.renderContainer = n;
+  }
+  setRenderCanvasCallback(n) {
+    this.renderCanvas = n;
+  }
+  setRenderBackgroundCallback(n) {
+    this.renderBackground = n;
+  }
+  setRenderSelectionBoxCallback(n) {
+    this.renderSelectionBox = n;
   }
   /* Event handlers */
   onTouchStart(n) {
     if (n.touches.length > 1) {
-      this.g.prevTouches.length == 1 && this.onCursorUp(), this.g.currentMouseDown = d.middle;
+      this.g.prevTouches.length == 1 && this.onCursorUp(), this.g.currentMouseDown = h.middle;
       let t = (n.touches[0].clientX + n.touches[1].clientX) / 2, o = (n.touches[0].clientY + n.touches[1].clientY) / 2;
-      this.onCursorDown(d.middle, t, o), this.g.prevTouches = n.touches;
+      this.onCursorDown(h.middle, t, o), this.g.prevTouches = n.touches;
       return;
     }
-    this.onCursorDown(d.left, n.touches[0].clientX, n.touches[0].clientY);
+    this.onCursorDown(h.left, n.touches[0].clientX, n.touches[0].clientY);
   }
   onMouseDown(n) {
-    let t = d.invalid;
+    let t = h.invalid;
     switch (n.button) {
       case 0:
-        t = d.left;
+        t = h.left;
         break;
       case 1:
-        t = d.middle;
+        t = h.middle;
         break;
       default:
         return;
@@ -689,10 +720,10 @@ class X {
    * @returns 
    */
   onCursorDown(n, t, o) {
-    this.g.currentMouseDown = n, console.debug("Cursor down: " + n), this.g.targetObject && this.g.targetObject.type == p.outputConnector && (console.debug("Cursor down with tmp line"), this.g.targetObject.domCursorUp());
+    this.g.currentMouseDown = n, console.debug("Cursor down: " + n), this.g.targetObject && this.g.targetObject.type == f.outputConnector && (console.debug("Cursor down with tmp line"), this.g.targetObject.domCursorUp());
     const e = this.g;
     if (!e.overrideDrag) {
-      console.debug("Cursor ddown"), e.currentMouseDown != d.none && this.setCanvasElementStyle(a.selectionBox, {
+      console.debug("Cursor ddown"), e.currentMouseDown != h.none && this.setCanvasElementStyle(l.selectionBox, {
         width: "0px",
         height: "0px",
         left: "0px",
@@ -718,8 +749,8 @@ class X {
     let t = n.touches[0], o = n.touches[1], e = null, s = null;
     for (let m = 0; m < n.touches.length; m++)
       t.identifier == this.g.prevTouches[m].identifier ? e = this.g.prevTouches[m] : o.identifier == this.g.prevTouches[m].identifier && (s = this.g.prevTouches[m]);
-    let c = Math.sqrt(Math.pow(t.clientX - o.clientX, 2) + Math.pow(t.clientY - o.clientY, 2)), u = Math.sqrt(Math.pow(e.clientX - s.clientX, 2) + Math.pow(e.clientY - s.clientY, 2)), h = -2 * (c - u), v = (t.clientX + o.clientX) / 2, g = (t.clientY + o.clientY) / 2, f = v - this.g.canvasContainer.offsetLeft, l = g - this.g.canvasContainer.offsetTop;
-    this.onCursorMove(document.elementFromPoint(f, l), f, l), this.g.mouse_x = f, this.g.mouse_y = l, this.onZoom(h), this.g.prevTouches = n.touches;
+    let c = Math.sqrt(Math.pow(t.clientX - o.clientX, 2) + Math.pow(t.clientY - o.clientY, 2)), a = Math.sqrt(Math.pow(e.clientX - s.clientX, 2) + Math.pow(e.clientY - s.clientY, 2)), u = -2 * (c - a), v = (t.clientX + o.clientX) / 2, g = (t.clientY + o.clientY) / 2, p = v - this.g.canvasContainer.offsetLeft, d = g - this.g.canvasContainer.offsetTop;
+    this.onCursorMove(document.elementFromPoint(p, d), p, d), this.g.mouse_x = p, this.g.mouse_y = d, this.onZoom(u), this.g.prevTouches = n.touches;
   }
   onMouseMove(n) {
     this.onCursorMove(n.target, n.clientX, n.clientY);
@@ -737,32 +768,32 @@ class X {
     const e = this.g;
     console.debug("Cursor move"), e.hoverDOM = n, e.mouse_x = t - e.canvasContainer.offsetLeft, e.mouse_y = o - e.canvasContainer.offsetTop;
     let s = (e.mouse_x - e.cameraWidth / 2) / e.zoom + e.camera_x, c = (e.mouse_y - e.cameraHeight / 2) / e.zoom + e.camera_y;
-    if (e.mouse_x_world = s, e.mouse_y_world = c, e.dx = t - e.mousedown_x + e.dx_offset, e.dy = o - e.mousedown_y + e.dy_offset, !(e.currentMouseDown == d.none || e.overrideDrag))
+    if (e.mouse_x_world = s, e.mouse_y_world = c, e.dx = t - e.mousedown_x + e.dx_offset, e.dy = o - e.mousedown_y + e.dy_offset, !(e.currentMouseDown == h.none || e.overrideDrag))
       if ((e.dx !== 0 || e.dy !== 0) && (e.mouseHasMoved = !0), e.targetObject == null) {
-        if (e.currentMouseDown == d.middle)
-          e.camera_x = e.camera_pan_start_x - e.dx / e.zoom, e.camera_y = e.camera_pan_start_y - e.dy / e.zoom, this.setCanvasElementStyle(a.canvas, {
-            transform: `matrix3d(${C(e.camera_x, e.camera_y, e)})`,
+        if (e.currentMouseDown == h.middle)
+          e.camera_x = e.camera_pan_start_x - e.dx / e.zoom, e.camera_y = e.camera_pan_start_y - e.dy / e.zoom, this.setCanvasElementStyle(l.canvas, {
+            transform: `matrix3d(${_(e.camera_x, e.camera_y, e)})`,
             cursor: "grabbing"
-          }), this.setCanvasElementStyle(a.background, {
+          }), this.setCanvasElementStyle(l.background, {
             transform: `translate(${e.camera_x + -e.cameraWidth * 5}px, ${e.camera_y + -e.cameraHeight * 5}px)`,
             backgroundPosition: `${-e.camera_x}px ${-e.camera_y}px`
           });
-        else if (e.currentMouseDown == d.left) {
-          this.setCanvasElementStyle(a.selectionBox, {
+        else if (e.currentMouseDown == h.left) {
+          this.setCanvasElementStyle(l.selectionBox, {
             width: Math.abs(e.dx) + "px",
             height: Math.abs(e.dy) + "px",
             left: Math.min(e.mousedown_x, e.mouse_x) + "px",
             top: Math.min(e.mousedown_y, e.mouse_y) + "px",
             opacity: "1"
           });
-          let u = (Math.min(e.mousedown_x, e.mouse_x) - e.cameraWidth / 2) / e.zoom + e.camera_x, h = (Math.min(e.mousedown_y, e.mouse_y) - e.cameraHeight / 2) / e.zoom + e.camera_y, v = (Math.max(s, e.mousedown_x, e.mouse_x) - e.cameraWidth / 2) / e.zoom + e.camera_x, g = (Math.max(c, e.mousedown_y, e.mouse_y) - e.cameraHeight / 2) / e.zoom + e.camera_y, f = [];
-          for (const l of e.globalNodeList)
-            l.positionX + l.nodeWidth > u && l.positionX < v && l.positionY + l.nodeHeight > h && l.positionY < g ? (l.onFocus(), f.push(l)) : l.offFocus();
-          e.focusNodes = f;
+          let a = (Math.min(e.mousedown_x, e.mouse_x) - e.cameraWidth / 2) / e.zoom + e.camera_x, u = (Math.min(e.mousedown_y, e.mouse_y) - e.cameraHeight / 2) / e.zoom + e.camera_y, v = (Math.max(s, e.mousedown_x, e.mouse_x) - e.cameraWidth / 2) / e.zoom + e.camera_x, g = (Math.max(c, e.mousedown_y, e.mouse_y) - e.cameraHeight / 2) / e.zoom + e.camera_y, p = [];
+          for (const d of e.globalNodeList)
+            d.positionX + d.nodeWidth > a && d.positionX < v && d.positionY + d.nodeHeight > u && d.positionY < g ? (d.onFocus(), p.push(d)) : d.offFocus();
+          e.focusNodes = p;
         }
-      } else if (e.targetObject.type == p.node)
-        for (const u of e.focusNodes)
-          u.onDrag();
+      } else if (e.targetObject.type == f.node)
+        for (const a of e.focusNodes)
+          a.onDrag();
       else
         e.targetObject.onDrag();
   }
@@ -773,30 +804,27 @@ class X {
     this.onCursorUp();
   }
   onCursorUp() {
-    var t;
     const n = this.g;
     if (console.debug("Cursor up"), n.ignoreMouseUp) {
       n.ignoreMouseUp = !1;
       return;
     }
-    if (n.currentMouseDown == d.left) {
+    if (n.currentMouseDown == h.left)
       if (n.targetObject == null)
-        this.setCanvasElementStyle(a.selectionBox, {
+        this.setCanvasElementStyle(l.selectionBox, {
           width: "0px",
           height: "0px",
           left: "0px",
           top: "0px"
         });
-      else if (n.targetObject.type == p.node)
-        for (const o of n.focusNodes)
-          console.debug("Mouse up with target node: " + o.gid), o.domCursorUp();
+      else if (n.targetObject.type == f.node)
+        for (const t of n.focusNodes)
+          console.debug("Mouse up with target node: " + t.gid), t.domCursorUp();
       else
         n.targetObject.domCursorUp();
-      ((t = n.targetObject) == null ? void 0 : t.type) == p.outputConnector && (this.requestLineRender = n.targetObject);
-    }
-    n.currentMouseDown = d.none, n.overrideDrag && this.setCanvasElementStyle(a.canvas, {
+    n.currentMouseDown = h.none, n.overrideDrag && this.setCanvasElementStyle(l.canvas, {
       cursor: "default"
-    }), n.overrideDrag = !1, this.setCanvasElementStyle(a.background, {
+    }), n.overrideDrag = !1, this.setCanvasElementStyle(l.background, {
       cursor: "default"
     }), n.targetObject = null, n.dx = 0, n.dy = 0, n.dx_offset = 0, n.dy_offset = 0, n.mouseHasMoved = !1;
   }
@@ -808,8 +836,8 @@ class X {
     let o = 1 * t.zoom * (-n / 1e3);
     t.zoom + o < 0.2 ? o = 0.2 - t.zoom : t.zoom + o > 1 && (o = 1 - t.zoom);
     let e = t.zoom / (t.zoom + o), s = t.cameraWidth / t.zoom * (e - 1) * (1 - (t.cameraWidth * 1.5 - t.mouse_x) / t.cameraWidth), c = t.cameraHeight / t.zoom * (e - 1) * (1 - (t.cameraHeight * 1.5 - t.mouse_y) / t.cameraHeight);
-    t.zoom += o, t.camera_x -= s, t.camera_y -= c, this.setCanvasElementStyle(a.canvas, {
-      transform: `matrix3d(${C(t.camera_x, t.camera_y, t)})`
+    t.zoom += o, t.camera_x -= s, t.camera_y -= c, this.setCanvasElementStyle(l.canvas, {
+      transform: `matrix3d(${_(t.camera_x, t.camera_y, t)})`
     });
   }
   onKeyDown(n) {
@@ -817,7 +845,7 @@ class X {
     switch (console.debug("Keydown: " + n.key), n.key) {
       case "Backspace":
       case "Delete":
-        if (((t = this.g.targetObject) == null ? void 0 : t.type) != p.node)
+        if (((t = this.g.targetObject) == null ? void 0 : t.type) != f.node)
           return;
         if (this.g.focusNodes.length > 0)
           for (const o of this.g.focusNodes)
@@ -825,18 +853,23 @@ class X {
         break;
     }
   }
+  /**
+   * Renders elements currently in the canvas.
+   */
   renderElements() {
     const n = this.g.targetObject;
-    if (!this.requestLineRender && (n == null ? void 0 : n.type) == p.outputConnector && (this.requestLineRender = n), (n == null ? void 0 : n.type) == p.node)
-      for (const t of this.g.focusNodes)
-        t.renderNode(t.nodeStyle);
-    else if (this.requestLineRender) {
-      let t = this.requestLineRender;
-      t.renderAllLines(t.svgLines), t.svgLines = t.svgLines.filter((o) => !o.requestDelete);
+    if (console.debug("Rendering elements", n), n != null) {
+      if (n.type == f.node)
+        for (const t of this.g.focusNodes)
+          t.renderNode(t.nodeStyle);
+      else if (n.type == f.outputConnector) {
+        let t = this.g.targetObject;
+        t.renderAllLines(t.svgLines);
+      }
     }
   }
   step() {
-    this.renderElements(), this.renderCanvasElement(a.container, this.containerStyle), this.renderCanvasElement(a.canvas, this.canvasStyle), this.renderCanvasElement(a.background, this.backgroundStyle), this.renderCanvasElement(a.selectionBox, this.selectionBoxStyle), window.requestAnimationFrame(this.step.bind(this));
+    this.renderElements(), this.renderContainer(this.containerStyle), this.renderCanvas(this.canvasStyle), this.renderBackground(this.backgroundStyle), this.renderSelectionBox(this.selectionBoxStyle), window.requestAnimationFrame(this.step.bind(this));
   }
   addNodeObject() {
     const n = new b(null, this.g);
@@ -851,34 +884,34 @@ class X {
     this.g.globalNodeTable[t.gid] = t;
     const o = n.querySelectorAll(".sl-input");
     for (let c = 0; c < o.length; c++) {
-      const u = o[c], h = u.getAttribute("sl-name"), v = t.addInputForm(u, h);
-      for (let g = 0; g < u.attributes.length; g++) {
-        const f = u.attributes[g];
-        if (f.name.startsWith("sl-event:")) {
-          const l = f.name.split(":")[1], m = window[f.value];
-          console.debug("Adding event listener: " + l), v.addInputUpdateListener(l, m);
+      const a = o[c], u = a.getAttribute("sl-name"), v = t.addInputForm(a, u);
+      for (let g = 0; g < a.attributes.length; g++) {
+        const p = a.attributes[g];
+        if (p.name.startsWith("sl-event:")) {
+          const d = p.name.split(":")[1], m = window[p.value];
+          console.debug("Adding event listener: " + d), v.addInputUpdateListener(d, m);
         }
       }
     }
     const e = n.querySelectorAll(".sl-input-connector");
     for (let c = 0; c < e.length; c++) {
-      const u = e[c], h = u.getAttribute("sl-name"), v = t.addInputConnector(u, h), g = u.getAttribute("sl-update");
+      const a = e[c], u = a.getAttribute("sl-name"), v = t.addInputConnector(a, u), g = a.getAttribute("sl-update");
       if (console.debug("Update function: " + g), g != null || g != null) {
         console.debug("Update function: " + g, v);
-        const f = window[g];
-        v.updateFunction = f.bind(v);
+        const p = window[g];
+        v.updateFunction = p.bind(v);
       }
     }
     const s = n.querySelectorAll(".sl-output-connector");
     for (let c = 0; c < s.length; c++) {
-      const u = s[c], h = u.getAttribute("sl-name");
-      t.addOutputConnector(u, h);
+      const a = s[c], u = a.getAttribute("sl-name");
+      t.addOutputConnector(a, u);
     }
     for (let c = 0; c < n.attributes.length; c++) {
-      const u = n.attributes[c];
-      if (u.name.startsWith("sl-init")) {
-        const h = window[u.value];
-        console.debug("Calling init func: " + h), h.bind(t)();
+      const a = n.attributes[c];
+      if (a.name.startsWith("sl-init")) {
+        const u = window[a.value];
+        console.debug("Calling init func: " + u), u.bind(t)();
       }
     }
     return t;
@@ -889,7 +922,7 @@ class X {
   addNodeAtMouse(n, t) {
     this.g.ignoreMouseUp = !0;
     let o = this.g.mouse_x_world, e = this.g.mouse_y_world;
-    console.debug("Adding node at " + o + ", " + e), this.addNode(n, o, e), n.setStartPositions(), this.g.currentMouseDown = d.left, this.g.mousedown_x = this.g.mouse_x, this.g.mousedown_y = this.g.mouse_y, this.g.camera_pan_start_x = this.g.camera_x, this.g.camera_pan_start_y = this.g.camera_y, this.g.focusNodes = [n], this.g.targetObject = n;
+    console.debug("Adding node at " + o + ", " + e), this.addNode(n, o, e), n.setStartPositions(), this.g.currentMouseDown = h.left, this.g.mousedown_x = this.g.mouse_x, this.g.mousedown_y = this.g.mouse_y, this.g.camera_pan_start_x = this.g.camera_x, this.g.camera_pan_start_y = this.g.camera_y, this.g.focusNodes = [n], this.g.targetObject = n;
     for (const s of this.g.globalNodeList)
       s.offFocus();
     this.onMouseMove(t);
@@ -904,8 +937,8 @@ class X {
     const s = this.g.globalNodeTable[n], c = this.g.globalNodeTable[o];
     if (!s || !c || !(s instanceof b) || !(c instanceof b))
       return null;
-    const u = s.findOutput(t), h = c.findInput(e);
-    return !u || !h ? null : (u.connectToInput(h), 0);
+    const a = s.findOutput(t), u = c.findInput(e);
+    return !a || !u ? null : (a.connectToInput(u), 0);
   }
 }
 export {
