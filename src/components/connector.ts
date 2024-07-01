@@ -122,6 +122,7 @@ class ConnectorComponent extends ComponentBase {
     }
 
 
+
     /* Deletes the line from the svgLines array */
     deleteLine(i: number): lineObject | undefined {
         if (this.svgLines.length > 0) {
@@ -356,17 +357,26 @@ class OutputConnector extends ConnectorComponent {
         }
     }
 
-    renderAllLines(svgLines: Array<lineObject>) {
+    filterDeletedLines(svgLines: Array<lineObject>) {
+        for (let i = 0; i < svgLines.length; i++) {
+            if (svgLines[i].requestDelete) {
+                svgLines.splice(i, 1);
+                i--;
+            }
+        }
+    }
 
+    renderAllLines(svgLines: Array<lineObject>) {
+        console.debug(`Rendering all lines for ${this.gid}`, svgLines);
         for (const svgEntry of svgLines) {
             if (!svgEntry.svg) {
                 let svgDom = this.createLineDOM();
                 svgEntry.svg = svgDom;
             } else if (svgEntry.requestDelete) {
+                console.warn(`Deleting line: `, svgEntry);
                 this.g.canvas!.removeChild(<Node>svgEntry.svg!);
                 continue;
             }
-
             svgEntry.connector_x = this.connectorX;
             svgEntry.connector_y = this.connectorY;
             if (svgEntry.to) {
@@ -375,6 +385,14 @@ class OutputConnector extends ConnectorComponent {
             }
             svgEntry.svg!.style.transform = `translate3d(${this.connectorX}px, ${this.connectorY}px, 0)`;
             this.renderLinePosition(svgEntry);
+        }
+        this.filterDeletedLines(svgLines);
+    }
+
+    setRenderLineCallback(callback: (svgLines: Array<lineObject>) => void) {
+        this.renderAllLines = (svgLines: Array<lineObject>) => {
+            this.filterDeletedLines(svgLines);
+            callback(svgLines);
         }
     }
 
@@ -397,6 +415,8 @@ class OutputConnector extends ConnectorComponent {
             connector: this,
             requestDelete: false
         });
+
+        console.debug(`svgLines: `, this.svgLines);
         //this.g.targetObject = this;
 
         this.refreshAllLinePositions();
@@ -412,7 +432,7 @@ class OutputConnector extends ConnectorComponent {
         let connector_y = 0;
         const hn: HTMLElement | null = <HTMLElement>this.g.hoverDOM;
 
-        // console.debug(`connector onDrag`, hn);
+        console.debug(`connector onDrag`, hn);
 
         if (this.svgLines.length == 0) {
             console.error(`Error: svgLines is empty`);
@@ -468,13 +488,16 @@ class OutputConnector extends ConnectorComponent {
             input.updateFunction();                         /* Update the input */
 
             this.setLineXYPosition(this.svgLines[0], (input.connectorX - this.connectorX), (input.connectorY - this.connectorY));
-            this.g.snapline.requestLineRender = this;
+            //this.g.snapline.requestLineRender = this;
         } else {
             let delLine = this.deleteLine(0);
             if (delLine) {
                 // this.renderAllLines(this.svgLines, [delLine]);
                 delLine.requestDelete = true;
             }
+
+            // Force a re-render of the lines
+            this.renderAllLines(this.svgLines);
         }
     }
 

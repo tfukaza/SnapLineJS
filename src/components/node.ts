@@ -83,6 +83,8 @@ class NodeComponent extends Base {
         this.addInputConnector = this.addInputConnector.bind(this);
         this.addOutputConnector = this.addOutputConnector.bind(this);
         this.addInputForm = this.addInputForm.bind(this);
+
+        this.setRenderNodeCallback = this.setRenderNodeCallback.bind(this);
     }
 
 
@@ -136,7 +138,6 @@ class NodeComponent extends Base {
 
         for (const output of Object.values(this.outputConnectors)) {
             output.renderAllLines(output.svgLines);
-            output.svgLines = output.svgLines.filter((line) => !line.requestDelete);
         }
         for (const input of Object.values(this.inputConnectors)) {
             let peer = input.peerOutput;
@@ -144,6 +145,23 @@ class NodeComponent extends Base {
             let peerOutputs = peer.parent.outputConnectors;
             for (const output of Object.values(peerOutputs)) {
                 output.renderAllLines(output.svgLines);
+            }
+        }
+    }
+
+    setRenderNodeCallback(callback: (style: any) => void) {
+        this.renderNode = (style: any) => {
+            callback(style);
+            for (const output of Object.values(this.outputConnectors)) {
+                output.renderAllLines(output.svgLines);
+            }
+            for (const input of Object.values(this.inputConnectors)) {
+                let peer = input.peerOutput;
+                if (!peer) continue;
+                let peerOutputs = peer.parent.outputConnectors;
+                for (const output of Object.values(peerOutputs)) {
+                    output.renderAllLines(output.svgLines);
+                }
             }
         }
     }
@@ -272,6 +290,8 @@ class NodeComponent extends Base {
             this.onFocus();
             return;
         }
+
+        this.renderNode(this.nodeStyle);
 
 
         if (this.overlapping == null) { return; }

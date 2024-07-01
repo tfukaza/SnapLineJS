@@ -22,25 +22,10 @@ export default function App() {
     const [slSelectionStyle, setSlSelectionStyle] = useState(null);
 
     useEffect(() => {
-        snapLine.renderCanvasElement = function (type, style) {
-            switch (type) {
-                case 0:
-                    setContainerStyle(style);
-                    break;
-                case 1:
-                    setSlCanvasStyle(style);
-                    break;
-                case 2:
-                    setSlBackgroundStyle(style);
-                    break;
-                case 3:
-                    setSlSelectionStyle(style);
-                    break;
-                default:
-                    console.error("Invalid dom type: " + type);
-                    return;
-            }
-        };
+        snapLine.setRenderContainerCallback(setContainerStyle);
+        snapLine.setRenderCanvasCallback(setSlCanvasStyle);
+        snapLine.setRenderBackgroundCallback(setSlBackgroundStyle);
+        snapLine.setRenderSelectionBoxCallback(setSlSelectionStyle);   
         snapLine.initSnapLine(
             slContainer.current,
             slCanvas.current,

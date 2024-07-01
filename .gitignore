@@ -25,5 +25,4 @@ dist-ssr
 **/*.css.map
 
 demo/vanilla/lib/*
-demo/react/dist/index.js
-demo/svelte/lib/*
+demo/react/src/lib/*
