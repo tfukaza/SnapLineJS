@@ -21,14 +21,12 @@ export default function MathNode(nodeObject) {
     let [lineList, setLineList] = useState(node.svgLines || []);
 
     useEffect(() => {
-        node.renderNode = setNodeStyle;
+        node.setRenderNodeCallback(setNodeStyle);
         node.addInputConnector(input1Dom.current, "input_1");
         node.addInputForm(form1Dom.current, "input_1");
         node.addInputConnector(input2Dom.current, "input_2");
         node.addInputForm(form2Dom.current, "input_2");
-        node.addOutputConnector(resultDom.current, "result").renderAllLines = function (l) {
-            setLineList([...l]);
-        }
+        node.addOutputConnector(resultDom.current, "result").setRenderLineCallback((l) => setLineList([...l]));
         node.initNode(nodeDom.current);
 
     }, []);

@@ -1,25 +1,28 @@
 
 import { worldToCamera } from './helper';
-import { GlobalStats, ObjectTypes, SnapLineDomType, mouseDownButton } from './types';
+import { GlobalStats, ObjectTypes, SnapLineDomType, lineObject, mouseDownButton } from './types';
 import { NodeComponent } from './components/node';
 import { ConnectorComponent, OutputConnector } from './components/connector';
 
+// Uncomment the theme you want to use
 import './theme/standard_light.scss';
 // import './theme/standard_dark.scss';
 // import './theme/retro.scss'; 
 
 
+/**
+ * SnapLine class is the main entry point for the SnapLine library.
+ * It manages all the global state and event handlers.
+ */
 export default class SnapLine {
 
+    g: GlobalStats;                                     // Global state
+    containerStyle: { [key: string]: string } = {};     // Style for the container element
+    canvasStyle: { [key: string]: string } = {};        // Style for the canvas element
+    selectionBoxStyle: { [key: string]: string } = {};  // Style for the selection box element
+    backgroundStyle: { [key: string]: string } = {};    // Style for the background element
 
-    g: GlobalStats;
-    containerStyle: { [key: string]: string } = {};
-    canvasStyle: { [key: string]: string } = {};
-    selectionBoxStyle: { [key: string]: string } = {};
-    backgroundStyle: { [key: string]: string } = {};
-
-    requestLineRender: OutputConnector | null = null;
-
+    //requestLineRender: OutputConnector | null = null;   // If set to an OutputConnector, it will render all lines for that connector
 
     constructor() {
 
@@ -34,8 +37,12 @@ export default class SnapLine {
             pointerEvents: "none",
         };
 
-        /* Public methods */
+        // Public functions
         this.initSnapLine = this.initSnapLine.bind(this);
+        this.setRenderCanvasCallback = this.setRenderCanvasCallback.bind(this);
+        this.setRenderContainerCallback = this.setRenderContainerCallback.bind(this);
+        this.setRenderBackgroundCallback = this.setRenderBackgroundCallback.bind(this);
+        this.setRenderSelectionBoxCallback = this.setRenderSelectionBoxCallback.bind(this);
 
     }
 
@@ -117,10 +124,10 @@ export default class SnapLine {
             position: "absolute",
         });
 
-        this.renderCanvasElement(SnapLineDomType.container, this.containerStyle);
-        this.renderCanvasElement(SnapLineDomType.canvas, this.canvasStyle);
-        this.renderCanvasElement(SnapLineDomType.background, this.backgroundStyle);
-        this.renderCanvasElement(SnapLineDomType.selectionBox, this.selectionBoxStyle);
+        this.renderContainer(this.containerStyle);
+        this.renderCanvas(this.canvasStyle);
+        this.renderBackground(this.backgroundStyle);
+        this.renderSelectionBox(this.selectionBoxStyle);
 
         g.canvasContainer.addEventListener('mouseup', this.onMouseUp.bind(this));
         g.canvasContainer.addEventListener('mousemove', this.onMouseMove.bind(this));
@@ -164,45 +171,46 @@ export default class SnapLine {
         }
     }
 
-
-    renderCanvasElement(domType: SnapLineDomType, style: { [key: string]: string }) {
-
-        let dom: HTMLElement | null = null;
-        if (this.g == null) {
-            return;
-        }
-        switch (domType) {
-            case SnapLineDomType.canvas:
-                dom = this.g.canvas;
-                break;
-            case SnapLineDomType.container:
-                dom = this.g.canvasContainer;
-                break;
-            case SnapLineDomType.background:
-                dom = this.g.canvasBackground;
-                break;
-            case SnapLineDomType.selectionBox:
-                dom = this.g.selectionBox;
-                break;
-            default:
-                console.error("Invalid dom type: " + domType);
-                return;
-        }
-
-        if (dom == null) {
-            return;
-        }
-
-        if (style._requestUpdate != "true") {
-            return;
-        }
-
+    renderContainer(style: { [key: string]: string }) {
         for (const key in style) {
-            dom.style[<any>key] = style[key];
+            this.g.canvasContainer.style[<any>key] = style[key];
         }
-
-        style._requestUpdate = "false";
     }
+
+    renderCanvas(style: { [key: string]: string }) {
+        for (const key in style) {
+            this.g.canvas.style[<any>key] = style[key];
+        }
+    }
+
+    renderBackground(style: { [key: string]: string }) {
+        for (const key in style) {
+            this.g.canvasBackground.style[<any>key] = style[key];
+        }
+    }
+
+    renderSelectionBox(style: { [key: string]: string }) {
+        for (const key in style) {
+            this.g.selectionBox.style[<any>key] = style[key];
+        }
+    }
+
+    setRenderContainerCallback(callback: (style: { [key: string]: string }) => void) {
+        this.renderContainer = callback;
+    }
+
+    setRenderCanvasCallback(callback: (style: { [key: string]: string }) => void) {
+        this.renderCanvas = callback;
+    }
+
+    setRenderBackgroundCallback(callback: (style: { [key: string]: string }) => void) {
+        this.renderBackground = callback;
+    }
+
+    setRenderSelectionBoxCallback(callback: (style: { [key: string]: string }) => void) {
+        this.renderSelectionBox = callback;
+    }
+
 
     /* Event handlers */
 
@@ -500,7 +508,7 @@ export default class SnapLine {
         if (g.currentMouseDown == mouseDownButton.left) {
 
             if (g.targetObject == null) {
-                /* If nothing is selected, then this drag is a selection box */
+                // If nothing is selected, then this drag was a selection box. Reset the selection box.
                 this.setCanvasElementStyle(SnapLineDomType.selectionBox, {
                     width: '0px',
                     height: '0px',
@@ -508,19 +516,19 @@ export default class SnapLine {
                     top: '0px',
                 });
             } else if (g.targetObject.type == ObjectTypes.node) {
-                /* If the object being dragged is a node, then handle mouse up for all selected nodes */
+                // If the object being dragged was a node, then handle mouse up for all selected nodes */
                 for (const node of g.focusNodes) {
                     console.debug("Mouse up with target node: " + node.gid);
                     node.domCursorUp();
                 }
             } else {
-                /* Otherwise, just handle mouse up for the selected object */
+                // Otherwise, just handle mouse up for the selected object.
                 g.targetObject.domCursorUp();
             }
 
-            if (g.targetObject?.type == ObjectTypes.outputConnector) {
-                this.requestLineRender = <OutputConnector>g.targetObject;
-            }
+            // if (g.targetObject?.type == ObjectTypes.outputConnector) {
+            //     this.requestLineRender = <OutputConnector>g.targetObject;
+            // }
         }
 
         g.currentMouseDown = mouseDownButton.none;
@@ -602,33 +610,39 @@ export default class SnapLine {
         }
     }
 
+    /**
+     * Renders elements currently in the canvas.
+     */
     renderElements() {
-        const target: any = this.g.targetObject;
 
-        if (!this.requestLineRender && target?.type == ObjectTypes.outputConnector) {
-            this.requestLineRender = <OutputConnector>target;
+        const target: any = this.g.targetObject;    // The object that is currently selected
+
+        console.debug("Rendering elements", target);
+
+        if (target == null) {
+            return;
         }
 
-        if (target?.type == ObjectTypes.node) {
+        if (target.type == ObjectTypes.node) {
+            // If the target object is a node, render the node
             for (const node of this.g.focusNodes) {
                 node.renderNode(node.nodeStyle);
             }
-        } else if (this.requestLineRender) {
-            let output: OutputConnector = this.requestLineRender;
-            output.renderAllLines(output.svgLines);
-            output.svgLines = output.svgLines.filter((line) => !line.requestDelete);
-
+        } else if (target.type == ObjectTypes.outputConnector) {
+            // If the target object is an output connector, render the lines
+            let target = <OutputConnector>this.g.targetObject;
+            target.renderAllLines(target.svgLines);
         }
     }
 
 
     step() {
         this.renderElements();
-        this.renderCanvasElement(SnapLineDomType.container, this.containerStyle);
-        this.renderCanvasElement(SnapLineDomType.canvas, this.canvasStyle);
-        this.renderCanvasElement(SnapLineDomType.background, this.backgroundStyle);
-        this.renderCanvasElement(SnapLineDomType.selectionBox, this.selectionBoxStyle);
-
+        this.renderContainer(this.containerStyle);
+        this.renderCanvas(this.canvasStyle);
+        this.renderBackground(this.backgroundStyle);
+        this.renderSelectionBox(this.selectionBoxStyle);
+        
         window.requestAnimationFrame(this.step.bind(this));
     }
 
