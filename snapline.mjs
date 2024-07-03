@@ -388,14 +388,14 @@ class b extends x {
           if (a)
             for (const u of a)
               u.parent.prop[u.name] = c;
-        } else s in this.inputConnectors && (console.debug(`Call all functions connected to ${s}`), s in this.propFunc && this.propFunc[s]());
+        } else s in this.inputConnectors && (console.debug(`Call all functions connected to ${s}`), s in this.propFunc && this.propFunc[s](c));
         return !0;
       }
     }), this.propFunc = {}, this.setNodeStyle({
       willChange: "transform",
       position: "absolute",
       transformOrigin: "top left"
-    }), this.g.globalNodeList.push(this), this.initNode = this.initNode.bind(this), this.addInputConnector = this.addInputConnector.bind(this), this.addOutputConnector = this.addOutputConnector.bind(this), this.addInputForm = this.addInputForm.bind(this), this.setRenderNodeCallback = this.setRenderNodeCallback.bind(this);
+    }), this.g.globalNodeList.push(this), this.initNode = this.initNode.bind(this), this.addInputConnector = this.addInputConnector.bind(this), this.addOutputConnector = this.addOutputConnector.bind(this), this.addInputForm = this.addInputForm.bind(this), this.addPropSetFunction = this.addPropSetFunction.bind(this), this.setRenderNodeCallback = this.setRenderNodeCallback.bind(this);
   }
   initNode(t) {
     this.dom = t, this.dom.id = this.gid, this.renderNode(this.nodeStyle), this.bindFunction(this.dom), new ResizeObserver(() => {
@@ -858,7 +858,7 @@ class X {
    */
   renderElements() {
     const n = this.g.targetObject;
-    if (console.debug("Rendering elements", n), n != null) {
+    if (n != null) {
       if (n.type == f.node)
         for (const t of this.g.focusNodes)
           t.renderNode(t.nodeStyle);
