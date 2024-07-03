@@ -122,7 +122,7 @@ customElements.define("node-math", class extends HTMLElement {
         this.initMath.call(this);
     }
 
-    calculateMath() {
+    calculateMath(_) {
         let input1 = +this._nodeRef.prop.input_1;
         let input2 = +this._nodeRef.prop.input_2;
         let operation = this._nodeRef.prop.operation;
@@ -191,7 +191,7 @@ customElements.define("node-print", class extends HTMLElement {
         nodeRef.addPropSetFunction(this.printValue.bind(this), 'input');
     }
 
-    printValue() {
-        this._print.innerHTML = this._nodeRef.prop.input;
+    printValue(value) {
+        this._print.innerHTML = value;
     }
 });

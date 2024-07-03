@@ -461,6 +461,7 @@ export default class SnapLine {
                 let selectedNodes = [];
 
                 /* Focus on nodes that are inside the selection box */
+                // TODO: Optimize this
                 for (const node of g.globalNodeList) {
                     if (node.positionX + node.nodeWidth > w_x_start && node.positionX < w_x_end && node.positionY + node.nodeHeight > w_y_start && node.positionY < w_y_end) {
                         node.onFocus();
@@ -616,8 +617,6 @@ export default class SnapLine {
     renderElements() {
 
         const target: any = this.g.targetObject;    // The object that is currently selected
-
-        console.debug("Rendering elements", target);
 
         if (target == null) {
             return;

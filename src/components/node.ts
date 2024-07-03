@@ -63,7 +63,7 @@ class NodeComponent extends Base {
                 } else if (prop in this.inputConnectors) {
                     console.debug(`Call all functions connected to ${prop}`);
                     if (prop in this.propFunc)
-                        this.propFunc[prop]();
+                        this.propFunc[prop](value);
                 }
                 return true;
             }
@@ -83,6 +83,7 @@ class NodeComponent extends Base {
         this.addInputConnector = this.addInputConnector.bind(this);
         this.addOutputConnector = this.addOutputConnector.bind(this);
         this.addInputForm = this.addInputForm.bind(this);
+        this.addPropSetFunction = this.addPropSetFunction.bind(this);
 
         this.setRenderNodeCallback = this.setRenderNodeCallback.bind(this);
     }
