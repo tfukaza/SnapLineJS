@@ -4,9 +4,11 @@
   "description": "",
   "main": "src/main.ts",
   "scripts": {
-    "dev-vanilla":  "FRAMEWORK=vanilla npx vite build --mode development --watch  & FRAMEWORK=vanilla npx vite serve demo/vanilla --config demo/vanilla/vite.config.js",
-    "dev-react":    "FRAMEWORK=react npx vite build --mode development --watch    & FRAMEWORK=react npx vite serve demo/react --config demo/react/vite.config.js ",
-    "build":        "vite build --mode production"
+    "dev-vanilla": "FRAMEWORK=vanilla npx vite build --mode development --watch  & FRAMEWORK=vanilla npx vite serve demo/vanilla --config demo/vanilla/vite.config.js",
+    "dev-react": "FRAMEWORK=react npx vite build --mode development --watch    & FRAMEWORK=react npx vite serve demo/react --config demo/react/vite.config.js ",
+    "format": "prettier --write src",
+    "lint": "eslint src --ext .ts",
+    "build": "vite build --mode production"
   },
   "repository": {
     "type": "git",
@@ -19,21 +21,23 @@
   },
   "homepage": "https://github.com/tfukaza/node-editor#readme",
   "devDependencies": {
+    "@eslint/js": "^9.6.0",
+    "@types/eslint__js": "^8.42.3",
     "@typescript-eslint/eslint-plugin": "^7.0.1",
     "@typescript-eslint/parser": "^7.0.1",
     "@vitejs/plugin-react": "^4.3.1",
-    "eslint": "^8.56.0",
+    "eslint": "^8.57.0",
+    "prettier": "3.3.2",
     "sass": "^1.75.0",
     "serve": "^14.2.1",
     "tslib": "^2.6.2",
-    "typescript": "^5.5.2",
+    "typescript": "^5.5.3",
+    "typescript-eslint": "^7.15.0",
     "uglify-js": "^3.17.4",
     "vite": "^5.3.2"
   },
   "dependencies": {
     "react": "^18.2.0",
-    "react-dom": "^18.2.0",
-    "rollup-plugin-copy-watch": "^0.0.1",
-    "rollup-plugin-import-css": "^3.5.0"
+    "react-dom": "^18.2.0"
   }
 }
