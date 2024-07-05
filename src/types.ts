@@ -45,7 +45,7 @@ export interface GlobalStats {
   canvasBackground: HTMLElement; // Background of canvas
   selectionBox: HTMLElement; // Selection box
 
-  currentMouseDown: mouseDownButton; // Current mouse button being pressed
+  _currentMouseDown: mouseDownButton; // Current mouse button being pressed
   mousedown_x: number; // Initial mouse  position when mouse is pressed
   mousedown_y: number;
   mouse_x: number; // Current mouse position, in camera space

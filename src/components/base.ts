@@ -65,11 +65,11 @@ export abstract class Base {
     const clientY = prop.clientY;
 
     if (button == 0) {
-      this.g.currentMouseDown = mouseDownButton.left;
+      this.g._currentMouseDown = mouseDownButton.left;
     } else if (button == 1) {
-      this.g.currentMouseDown = mouseDownButton.middle;
+      this.g._currentMouseDown = mouseDownButton.middle;
     } else if (button == 2) {
-      this.g.currentMouseDown = mouseDownButton.right;
+      this.g._currentMouseDown = mouseDownButton.right;
     }
     console.debug(
       `Base class mousedown event triggered on ${this.gid}, button: ${button}, clientX: ${clientX}, clientY: ${clientY}`,

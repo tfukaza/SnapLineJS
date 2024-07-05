@@ -18,7 +18,7 @@ class ConnectorComponent extends ComponentBase {
   connectorX: number; // Location of the connector on canvas
   connectorY: number;
   connectorTotalOffsetX: number; // Location of the connector relative to the location of parent Node
-  connectorTotalOffsetY: number;
+  _connectorTotalOffsetY: number;
   prop: { [key: string]: any }; // Properties of the connector
   lineArray: lineObject[];
   type: ObjectTypes = ObjectTypes.connector;
@@ -41,7 +41,7 @@ class ConnectorComponent extends ComponentBase {
     this.connectorX = 0;
     this.connectorY = 0;
     this.connectorTotalOffsetX = 0;
-    this.connectorTotalOffsetY = 0;
+    this._connectorTotalOffsetY = 0;
     this.dom = dom;
     this.parent = parent;
     this.prop = parent.prop;
@@ -235,7 +235,7 @@ class ConnectorComponent extends ComponentBase {
 
   updateConnectorPosition() {
     this.connectorX = this.parent.positionX + this.connectorTotalOffsetX;
-    this.connectorY = this.parent.positionY + this.connectorTotalOffsetY;
+    this.connectorY = this.parent.positionY + this._connectorTotalOffsetY;
   }
 
   setLineXYPosition(entry: lineObject, x: number, y: number) {
@@ -298,16 +298,6 @@ class ConnectorComponent extends ComponentBase {
     };
   }
 
-  pxToInt(px: string): number {
-    return parseInt(px.substring(0, px.length - 2));
-  }
-
-  getComputed(element: HTMLElement, prop: string) {
-    const s = window.getComputedStyle(element, null).getPropertyValue(prop);
-    if (s.endsWith("px")) return this.pxToInt(s);
-    else return parseInt(s);
-  }
-
   updateDOMproperties() {
     const this_rect = this.dom.getBoundingClientRect();
     if (!this.parent.dom) {
@@ -324,7 +314,7 @@ class ConnectorComponent extends ComponentBase {
       this_rect.height / 2,
     );
     this.connectorTotalOffsetX = adjLeft + adjWidth;
-    this.connectorTotalOffsetY = adjTop + adjHeight;
+    this._connectorTotalOffsetY = adjTop + adjHeight;
   }
 
   createLineDOM(): SVGSVGElement {
