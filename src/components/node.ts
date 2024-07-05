@@ -258,8 +258,12 @@ class NodeComponent extends Base {
   componentCursorUp() {
     if (this.freeze) return;
 
-    this.positionX = this.dragStartX + this.g.dx / this.g.zoom;
-    this.positionY = this.dragStartY + this.g.dy / this.g.zoom;
+    const [dx, dy] = this.g.camera.getWorldDeltaFromCameraDelta(
+      this.g.dx,
+      this.g.dy,
+    );
+    this.positionX = this.dragStartX + dx;
+    this.positionY = this.dragStartY + dy;
 
     /* If the mouse has not moved since being pressed, then it is a regular click
             unselect other nodes in focusNodes */
@@ -307,8 +311,11 @@ class NodeComponent extends Base {
   onDrag() {
     if (this.freeze) return;
 
-    this.positionX = this.dragStartX + this.g.dx / this.g.zoom;
-    this.positionY = this.dragStartY + this.g.dy / this.g.zoom;
+    const [adjustedDeltaX, adjustedDeltaY] =
+      this.g.camera.getWorldDeltaFromCameraDelta(this.g.dx, this.g.dy);
+
+    this.positionX = this.dragStartX + adjustedDeltaX;
+    this.positionY = this.dragStartY + adjustedDeltaY;
     this.setNodeStyle({
       transform: `translate3d(${this.positionX}px, ${this.positionY}px, 0)`,
     });

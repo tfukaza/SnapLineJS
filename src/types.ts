@@ -1,6 +1,7 @@
 import { Base } from "./components/base";
 import { ConnectorComponent } from "./components/connector";
 import { NodeComponent } from "./components/node";
+import Camera from "./camera";
 import SnapLine from "./main";
 
 export enum mouseDownButton {
@@ -56,13 +57,14 @@ export interface GlobalStats {
   dx_offset: number; // Offset for dx and dy
   dy_offset: number;
 
-  camera_x: number; // Current camera position
-  camera_y: number;
-  camera_pan_start_x: number; // Initial camera position when camera is being panned
-  camera_pan_start_y: number;
-  zoom: number;
-  cameraWidth: number;
-  cameraHeight: number;
+  // camera_x: number; // Current camera position
+  // camera_y: number;
+  // camera_pan_start_x: number; // Initial camera position when camera is being panned
+  // camera_pan_start_y: number;
+  // zoom: number;
+  // cameraWidth: number;
+  // cameraHeight: number;
+  camera: Camera;
 
   overrideDrag: boolean;
 
@@ -71,7 +73,7 @@ export interface GlobalStats {
   hoverDOM: EventTarget | null;
   gid: number;
 
-  globalLines: lineObject[];
+  // globalLines: lineObject[];
   globalNodeList: NodeComponent[]; // List of all nodes
   globalNodeTable: Record<string, NodeComponent | ConnectorComponent>;
 
@@ -83,19 +85,6 @@ export interface GlobalStats {
 
   snapline: SnapLine;
 }
-
-// export type NodeConfigFunction = {
-//   name: string;
-//   inputs: string[];
-//   outputs: string[];
-//   functionInit?: Function;
-//   functionUpdate: Function;
-// }[];
-
-// export interface NodeConfig {
-//     functions: NodeConfigFunction;
-//     elements: Array<Array<ComponentConfig> | ComponentConfig>;
-// }
 
 export interface ComponentConfig {
   name: string;

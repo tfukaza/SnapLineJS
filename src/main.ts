@@ -1,7 +1,7 @@
-import { worldToCamera } from "./helper";
 import { GlobalStats, ObjectTypes, mouseDownButton } from "./types";
 import { NodeComponent } from "./components/node";
 import { ConnectorComponent } from "./components/connector";
+import Camera from "./camera";
 
 // Uncomment the theme you want to use
 import "./theme/standard_light.scss";
@@ -13,6 +13,7 @@ import "./theme/standard_light.scss";
  */
 export default class SnapLine {
   g: GlobalStats; // Global state
+
   containerStyle: Record<string, string> = {}; // Style for the container element
   canvasStyle: Record<string, string> = {}; // Style for the canvas element
   selectionBoxStyle: Record<string, string> = {}; // Style for the selection box element
@@ -60,27 +61,20 @@ export default class SnapLine {
       mouse_y: 0,
       mouse_x_world: 0,
       mouse_y_world: 0,
-      camera_pan_start_x: 0,
-      camera_pan_start_y: 0,
       dx: 0,
       dy: 0,
       dx_offset: 0,
       dy_offset: 0,
 
-      overrideDrag: false,
+      camera: new Camera(containerDom, canvasDom),
 
-      camera_x: 0,
-      camera_y: 0,
-      zoom: 1,
-      cameraWidth: 0,
-      cameraHeight: 0,
+      overrideDrag: false,
 
       targetObject: null,
       focusNodes: [],
       hoverDOM: null,
       gid: 0,
 
-      globalLines: [],
       globalNodeList: [],
       globalNodeTable: {},
 
@@ -95,23 +89,18 @@ export default class SnapLine {
 
     const g = this.g;
 
-    g.cameraWidth = g.canvasContainer.clientWidth;
-    g.cameraHeight = g.canvasContainer.clientHeight;
-
-    console.debug(`Canvas size: ${g.cameraWidth}x${g.cameraHeight}`);
-
     this.setCanvasStyle({
       position: "relative",
       top: "0px",
       left: "0px",
-      transform: `translate(${g.cameraWidth / 2}px, ${g.cameraHeight / 2}px)`,
       width: "0px",
       height: "0px",
+      transform: this.g.camera.canvasStyle,
     });
     this.setBackgroundStyle({
-      width: g.cameraWidth * 10 + "px",
-      height: g.cameraHeight * 10 + "px",
-      transform: `translate(${-g.cameraWidth * 5}px, ${-g.cameraHeight * 5}px)`,
+      width: this.g.camera.cameraWidth * 10 + "px",
+      height: this.g.camera.cameraHeight * 10 + "px",
+      transform: `translate(${-this.g.camera.cameraWidth * 5}px, ${-this.g.camera.cameraHeight * 5}px)`,
       transformOrigin: "center",
       zIndex: "0",
       position: "absolute",
@@ -280,14 +269,13 @@ export default class SnapLine {
   onCursorDown(button: mouseDownButton, clientX: number, clientY: number) {
     this.g.currentMouseDown = button;
 
-    console.debug("Cursor down: " + button);
+    //console.debug("Cursor down: " + button);
 
     // If the user is dragging a line when another cursor down event is detected, then the line should be deleted.
     if (
       this.g.targetObject &&
       this.g.targetObject.type == ObjectTypes.connector
     ) {
-      console.debug("Cursor down with tmp line");
       const connector = this.g.targetObject as ConnectorComponent;
       connector.domCursorUp();
     }
@@ -298,7 +286,7 @@ export default class SnapLine {
       return;
     }
 
-    console.debug("Cursor ddown");
+    //console.debug("Cursor down");
 
     // Reset the selection box
     if (g.currentMouseDown != mouseDownButton.none) {
@@ -320,8 +308,10 @@ export default class SnapLine {
 
     g.mousedown_x = clientX;
     g.mousedown_y = clientY;
-    g.camera_pan_start_x = g.camera_x;
-    g.camera_pan_start_y = g.camera_y;
+
+    if (g.currentMouseDown == mouseDownButton.middle) {
+      this.g.camera.handlePanStart();
+    }
   }
 
   onTouchMove(e: TouchEvent) {
@@ -411,23 +401,24 @@ export default class SnapLine {
   onCursorMove(target: EventTarget | null, clientX: number, clientY: number) {
     const g = this.g;
 
-    console.debug("Cursor move");
+    console.debug("Cursor move", g.currentMouseDown, g.targetObject);
 
     g.hoverDOM = target;
     g.mouse_x = clientX - g.canvasContainer.offsetLeft;
     g.mouse_y = clientY - g.canvasContainer.offsetTop;
 
     /* Adjust mouse position to world coordinates */
-    const w_x = (g.mouse_x - g.cameraWidth / 2) / g.zoom + g.camera_x;
-    const w_y = (g.mouse_y - g.cameraHeight / 2) / g.zoom + g.camera_y;
-    g.mouse_x_world = w_x;
-    g.mouse_y_world = w_y;
+    [g.mouse_x_world, g.mouse_y_world] = this.g.camera.getWorldFromCamera(
+      g.mouse_x,
+      g.mouse_y,
+    );
 
     g.dx = clientX - g.mousedown_x + g.dx_offset;
     g.dy = clientY - g.mousedown_y + g.dy_offset;
 
     /* Handle cases where a mouse button is pressed, i.e. dragging */
     if (g.currentMouseDown == mouseDownButton.none || g.overrideDrag) {
+      console.debug(`Mouse move: ${g.currentMouseDown}`, g.overrideDrag);
       return;
     }
 
@@ -438,17 +429,15 @@ export default class SnapLine {
     /* If nothing is selected, then this drag is either a camera pan or a selection box */
     if (g.targetObject == null) {
       if (g.currentMouseDown == mouseDownButton.middle) {
-        // Pan camera if middle mouse button is pressed
-        g.camera_x = g.camera_pan_start_x - g.dx / g.zoom;
-        g.camera_y = g.camera_pan_start_y - g.dy / g.zoom;
+        this.g.camera.handlePanDrag(g.dx, g.dy);
 
         this.setCanvasStyle({
-          transform: `matrix3d(${worldToCamera(g.camera_x, g.camera_y, g)})`,
+          transform: this.g.camera.canvasStyle,
           cursor: "grabbing",
         });
         this.setBackgroundStyle({
-          transform: `translate(${g.camera_x + -g.cameraWidth * 5}px, ${g.camera_y + -g.cameraHeight * 5}px)`,
-          backgroundPosition: `${-g.camera_x}px ${-g.camera_y}px`,
+          transform: `translate(${this.g.camera.cameraX + -this.g.camera.cameraWidth * 5}px, ${this.g.camera.cameraY + -this.g.camera.cameraHeight * 5}px)`,
+          backgroundPosition: `${-this.g.camera.cameraX}px ${-this.g.camera.cameraY}px`,
         });
       } else if (g.currentMouseDown == mouseDownButton.left) {
         // Select multiple boxes if left mouse button is pressed
@@ -460,21 +449,15 @@ export default class SnapLine {
           opacity: "1",
         });
         // Check if any nodes are inside the selection box
-        const w_x_start =
-          (Math.min(g.mousedown_x, g.mouse_x) - g.cameraWidth / 2) / g.zoom +
-          g.camera_x;
-        const w_y_start =
-          (Math.min(g.mousedown_y, g.mouse_y) - g.cameraHeight / 2) / g.zoom +
-          g.camera_y;
+        const [adjStartX, adjStartY] = this.g.camera.getWorldFromCamera(
+          Math.min(g.mousedown_x, g.mouse_x),
+          Math.min(g.mousedown_y, g.mouse_y),
+        );
 
-        const w_x_end =
-          (Math.max(w_x, g.mousedown_x, g.mouse_x) - g.cameraWidth / 2) /
-            g.zoom +
-          g.camera_x;
-        const w_y_end =
-          (Math.max(w_y, g.mousedown_y, g.mouse_y) - g.cameraHeight / 2) /
-            g.zoom +
-          g.camera_y;
+        const [adjEndX, adjEndY] = this.g.camera.getWorldFromCamera(
+          Math.max(g.mousedown_x, g.mouse_x),
+          Math.max(g.mousedown_y, g.mouse_y),
+        );
 
         const selectedNodes = [];
 
@@ -482,10 +465,10 @@ export default class SnapLine {
         // TODO: Optimize this
         for (const node of g.globalNodeList) {
           if (
-            node.positionX + node.nodeWidth > w_x_start &&
-            node.positionX < w_x_end &&
-            node.positionY + node.nodeHeight > w_y_start &&
-            node.positionY < w_y_end
+            node.positionX + node.nodeWidth > adjStartX &&
+            node.positionX < adjEndX &&
+            node.positionY + node.nodeHeight > adjStartY &&
+            node.positionY < adjEndY
           ) {
             node.onFocus();
             selectedNodes.push(node);
@@ -496,6 +479,7 @@ export default class SnapLine {
         g.focusNodes = selectedNodes;
       }
     } else {
+      console.debug("Target object: " + g.targetObject.gid);
       /* If an object is selected, then this drag is for that object */
       if (g.targetObject.type == ObjectTypes.node) {
         /* If the object being dragged is a node, then handle mouse move for all selected nodes */
@@ -550,6 +534,8 @@ export default class SnapLine {
       // if (g.targetObject?.type == ObjectTypes.outputConnector) {
       //     this.requestLineRender = <OutputConnector>g.targetObject;
       // }
+    } else if (g.currentMouseDown == mouseDownButton.middle) {
+      this.g.camera.handlePanEnd();
     }
 
     g.currentMouseDown = mouseDownButton.none;
@@ -580,33 +566,9 @@ export default class SnapLine {
   }
 
   onZoom(deltaY = 0) {
-    const g = this.g;
-
-    let d_zoom = 1 * g.zoom * (-deltaY / 1000);
-
-    if (g.zoom + d_zoom < 0.2) {
-      d_zoom = 0.2 - g.zoom;
-    } else if (g.zoom + d_zoom > 1) {
-      d_zoom = 1 - g.zoom;
-    }
-
-    const dz = g.zoom / (g.zoom + d_zoom);
-
-    const camera_dx =
-      (g.cameraWidth / g.zoom) *
-      (dz - 1) *
-      (1 - (g.cameraWidth * 1.5 - g.mouse_x) / g.cameraWidth);
-    const camera_dy =
-      (g.cameraHeight / g.zoom) *
-      (dz - 1) *
-      (1 - (g.cameraHeight * 1.5 - g.mouse_y) / g.cameraHeight);
-    g.zoom += d_zoom;
-
-    g.camera_x -= camera_dx;
-    g.camera_y -= camera_dy;
-
+    this.g.camera.handleScroll(deltaY, this.g.mouse_x, this.g.mouse_y);
     this.setCanvasStyle({
-      transform: `matrix3d(${worldToCamera(g.camera_x, g.camera_y, g)})`,
+      transform: this.g.camera.canvasStyle,
     });
   }
 
@@ -681,72 +643,8 @@ export default class SnapLine {
     return n;
   }
 
-  // createNodeAuto(dom: HTMLElement) {
-  //   const n: NodeComponent = new NodeComponent(dom, this.g);
-  //   this.g.globalNodeTable[n.gid] = n;
-
-  //   // Get all 'sl-input' elements
-  //   const inputs = dom.querySelectorAll(".sl-input");
-  //   for (let i = 0; i < inputs.length; i++) {
-  //     const inputDom = inputs[i];
-  //     const inputName = inputDom.getAttribute("sl-name");
-  //     const input = n.addInputForm(<HTMLElement>inputDom, inputName!);
-
-  //     // Loop through all attributes for ones that start with 'sl-event:<event>'
-  //     // If the attribute is found, add an event listener to the input connector
-  //     for (let j = 0; j < inputDom.attributes.length; j++) {
-  //       const attr = inputDom.attributes[j];
-  //       if (attr.name.startsWith("sl-event:")) {
-  //         const event = attr.name.split(":")[1];
-  //         const func = window[attr.value as keyof Window];
-  //         console.debug("Adding event listener: " + event);
-  //         input.addInputUpdateListener(event, func);
-  //       }
-  //     }
-  //   }
-
-  //   // Get all 'sl-input-connector' elements
-  //   const connectors = dom.querySelectorAll(".sl-input-connector");
-  //   for (let i = 0; i < connectors.length; i++) {
-  //     const connector = connectors[i];
-  //     const connectorName = connector.getAttribute("sl-name");
-  //     const input = n.addInputConnector(<HTMLElement>connector, connectorName!);
-
-  //     const updateFuncName = connector.getAttribute("sl-update");
-  //     console.debug("Update function: " + updateFuncName);
-  //     if (updateFuncName != null || updateFuncName != undefined) {
-  //       console.debug("Update function: " + updateFuncName, input);
-
-  //       const updateFunc = window[updateFuncName! as keyof Window];
-  //       input.updateFunction = updateFunc.bind(input);
-  //     }
-  //   }
-
-  //   // Get all 'sl-output-connector' elements
-  //   const outputs = dom.querySelectorAll(".sl-output-connector");
-  //   for (let i = 0; i < outputs.length; i++) {
-  //     const output = outputs[i];
-  //     const outputName = output.getAttribute("sl-name");
-  //     n.addOutputConnector(<HTMLElement>output, outputName!);
-  //   }
-
-  //   for (let j = 0; j < dom.attributes.length; j++) {
-  //     const attr = dom.attributes[j];
-  //     if (attr.name.startsWith("sl-init")) {
-  //       const func = window[attr.value as keyof Window];
-  //       console.debug("Calling init func: " + func);
-  //       func.bind(n)();
-  //     }
-  //   }
-
-  //   return n;
-  // }
-
   addNode(node: NodeComponent, x: number, y: number) {
     node.addNodeToCanvas(x, y);
-    // n.domMouseDown();
-    // n.onDrag();
-    // n.domMouseUp();
   }
 
   addNodeAtMouse(node: NodeComponent, e: MouseEvent) {
@@ -761,13 +659,8 @@ export default class SnapLine {
     node.setStartPositions();
 
     this.g.currentMouseDown = mouseDownButton.left;
-
     this.g.mousedown_x = this.g.mouse_x;
     this.g.mousedown_y = this.g.mouse_y;
-    this.g.camera_pan_start_x = this.g.camera_x;
-    this.g.camera_pan_start_y = this.g.camera_y;
-    //this.g.overrideDrag = true;
-
     this.g.focusNodes = [node];
     this.g.targetObject = node;
 
@@ -798,30 +691,4 @@ export default class SnapLine {
     node.onFocus();
     return id;
   }
-
-  // connectNodes(
-  //   node0: string,
-  //   outputID: string,
-  //   node1: string,
-  //   inputID: string,
-  // ) {
-  //   const n0 = this.g.globalNodeTable[node0];
-  //   const n1 = this.g.globalNodeTable[node1];
-  //   if (
-  //     !n0 ||
-  //     !n1 ||
-  //     !(n0 instanceof NodeComponent) ||
-  //     !(n1 instanceof NodeComponent)
-  //   ) {
-  //     return null;
-  //   }
-  //   const o = n0.findOutput(outputID);
-  //   const i = n1.findInput(inputID);
-
-  //   if (!o || !i) return null;
-
-  //   o.connectToInput(i);
-
-  //   return 0;
-  // }
 }

@@ -98,6 +98,9 @@ class ConnectorComponent extends ComponentBase {
       return;
     }
 
+    const [adjustedDeltaX, adjustedDeltaY] =
+      this.g.camera.getWorldDeltaFromCameraDelta(this.g.dx, this.g.dy);
+
     if (hover && hover.classList.contains("sl-connector")) {
       // If the node has a class of "sl-input-connector", then it is an input connector
       const gid = hover.getAttribute("sl-gid");
@@ -109,8 +112,8 @@ class ConnectorComponent extends ComponentBase {
       connectorX = targetConnector.connectorX;
       connectorY = targetConnector.connectorY;
       distance = Math.sqrt(
-        Math.pow(this.connectorX + this.g.dx / this.g.zoom - connectorX, 2) +
-          Math.pow(this.connectorY + this.g.dy / this.g.zoom - connectorY, 2),
+        Math.pow(this.connectorX + adjustedDeltaX - connectorX, 2) +
+          Math.pow(this.connectorY + adjustedDeltaY - connectorY, 2),
       );
 
       // Handle snapping to the input connector
@@ -123,17 +126,13 @@ class ConnectorComponent extends ComponentBase {
       } else {
         this.setLineXYPosition(
           this.lineArray[0],
-          this.g.dx / this.g.zoom,
-          this.g.dy / this.g.zoom,
+          adjustedDeltaX,
+          adjustedDeltaY,
         );
       }
     } else {
       // Update the line position to the current mouse cursor position
-      this.setLineXYPosition(
-        this.lineArray[0],
-        this.g.dx / this.g.zoom,
-        this.g.dy / this.g.zoom,
-      );
+      this.setLineXYPosition(this.lineArray[0], adjustedDeltaX, adjustedDeltaY);
     }
   }
 
@@ -181,10 +180,14 @@ class ConnectorComponent extends ComponentBase {
     // Hand over control to the peer output
     this.g.targetObject = line.start;
 
-    this.g.dx_offset = (this.connectorX - line.start.connectorX) * this.g.zoom;
-    this.g.dy_offset = (this.connectorY - line.start.connectorY) * this.g.zoom;
+    [this.g.dx_offset, this.g.dy_offset] =
+      this.g.camera.getCameraDeltaFromWorldDelta(
+        this.connectorX - line.start.connectorX,
+        this.connectorY - line.start.connectorY,
+      );
     this.g.dx = this.g.dx_offset;
     this.g.dy = this.g.dy_offset;
+
     line.start.disconnectFromConnector(this);
     this.disconnectFromConnector(line.start);
     this.deleteLine(this.lineArray.indexOf(line));
@@ -244,12 +247,10 @@ class ConnectorComponent extends ComponentBase {
     entry.connector_x = entry.start.connectorX;
     entry.connector_y = entry.start.connectorY;
     if (!entry.target) {
+      const [adjustedDeltaX, adjustedDeltaY] =
+        this.g.camera.getWorldDeltaFromCameraDelta(this.g.dx, this.g.dy);
       /* If entry.to is not set, then this line is currently being dragged */
-      this.setLineXYPosition(
-        entry,
-        this.g.dx / this.g.zoom,
-        this.g.dy / this.g.zoom,
-      );
+      this.setLineXYPosition(entry, adjustedDeltaX, adjustedDeltaY);
     } else {
       this.setLineXYPosition(
         entry,
@@ -314,12 +315,16 @@ class ConnectorComponent extends ComponentBase {
       return;
     }
     const parent_rect = this.parent.dom.getBoundingClientRect();
-    this.connectorTotalOffsetX =
-      (this_rect.left - parent_rect.left) / this.g.zoom +
-      this_rect.width / 2 / this.g.zoom;
-    this.connectorTotalOffsetY =
-      (this_rect.top - parent_rect.top) / this.g.zoom +
-      this_rect.height / 2 / this.g.zoom;
+    const [adjLeft, adjTop] = this.g.camera.getWorldDeltaFromCameraDelta(
+      this_rect.left - parent_rect.left,
+      this_rect.top - parent_rect.top,
+    );
+    const [adjWidth, adjHeight] = this.g.camera.getWorldDeltaFromCameraDelta(
+      this_rect.width / 2,
+      this_rect.height / 2,
+    );
+    this.connectorTotalOffsetX = adjLeft + adjWidth;
+    this.connectorTotalOffsetY = adjTop + adjHeight;
   }
 
   createLineDOM(): SVGSVGElement {
