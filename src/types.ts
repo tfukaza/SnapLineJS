@@ -3,14 +3,7 @@ import { ConnectorComponent } from "./components/connector";
 import { NodeComponent } from "./components/node";
 import Camera from "./camera";
 import SnapLine from "./main";
-
-export enum mouseDownButton {
-  none = "none",
-  left = "left",
-  middle = "middle",
-  right = "right",
-  invalid = "invalid",
-}
+import { cursorState } from "./input";
 
 export enum ObjectTypes {
   node = 0,
@@ -45,7 +38,7 @@ export interface GlobalStats {
   canvasBackground: HTMLElement; // Background of canvas
   selectionBox: HTMLElement; // Selection box
 
-  _currentMouseDown: mouseDownButton; // Current mouse button being pressed
+  _currentMouseDown: cursorState; // Current mouse button being pressed
   mousedown_x: number; // Initial mouse  position when mouse is pressed
   mousedown_y: number;
   mouse_x: number; // Current mouse position, in camera space

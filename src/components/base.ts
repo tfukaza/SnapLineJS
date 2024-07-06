@@ -1,9 +1,5 @@
-import {
-  GlobalStats,
-  ObjectTypes,
-  customCursorDownProp,
-  mouseDownButton,
-} from "../types";
+import { cursorState } from "../input";
+import { GlobalStats, ObjectTypes, customCursorDownProp } from "../types";
 
 /**
  * Base class for all classes.
@@ -65,11 +61,11 @@ export abstract class Base {
     const clientY = prop.clientY;
 
     if (button == 0) {
-      this.g._currentMouseDown = mouseDownButton.left;
+      this.g._currentMouseDown = cursorState.mouseLeft;
     } else if (button == 1) {
-      this.g._currentMouseDown = mouseDownButton.middle;
+      this.g._currentMouseDown = cursorState.mouseMiddle;
     } else if (button == 2) {
-      this.g._currentMouseDown = mouseDownButton.right;
+      this.g._currentMouseDown = cursorState.mouseRight;
     }
     console.debug(
       `Base class mousedown event triggered on ${this.gid}, button: ${button}, clientX: ${clientX}, clientY: ${clientY}`,

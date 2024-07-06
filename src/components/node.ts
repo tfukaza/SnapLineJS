@@ -22,7 +22,7 @@ class NodeComponent extends Base {
   dragStartX = 0;
   dragStartY = 0;
 
-  overlapping: lineObject | null; // Line that the node is overlapping with
+  //overlapping: lineObject | null; // Line that the node is overlapping with
   freeze: boolean; /* If true, the node cannot be moved */
 
   prop: { [key: string]: any }; // Properties of the node
@@ -42,7 +42,7 @@ class NodeComponent extends Base {
     this.dragStartX = this.positionX;
     this.dragStartY = this.positionY;
 
-    this.overlapping = null;
+    //this.overlapping = null;
     this.freeze = false;
 
     this.prop = {};
@@ -284,9 +284,9 @@ class NodeComponent extends Base {
 
     this.renderNode(this.nodeStyle);
 
-    if (this.overlapping == null) {
-      return;
-    }
+    // if (this.overlapping == null) {
+    //   return;
+    // }
 
     /* Handle dropping node on line */
     // TODO: Make a separate function for this.
@@ -324,7 +324,7 @@ class NodeComponent extends Base {
       connector.setAllLinePositions();
     }
 
-    this.overlapping = null;
+    //this.overlapping = null;
 
     if (Object.keys(this.connectors).length == 0) return;
   }
