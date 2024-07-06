@@ -12,7 +12,6 @@ document.addEventListener("DOMContentLoaded", function () {
   document
     .getElementById("addNodeButton")
     .addEventListener("click", (e) => toggleMenu(e, "addNodeMenu"));
-  // document.getElementById("themeButton").addEventListener("click", (e) => toggleMenu(e, "themeMenu"));
 
   document
     .getElementById("mathButton")
@@ -26,10 +25,6 @@ document.addEventListener("DOMContentLoaded", function () {
   document
     .getElementById("constantButton")
     .addEventListener("mouseup", (e) => addNode(e, "node-constant"));
-
-  // document.getElementById("standardButton").addEventListener("mouseup", (e) => setTheme(e, "theme-standard"));
-  // document.getElementById("darkButton").addEventListener("mouseup", (e) => setTheme(e, "theme-dark"));
-  // document.getElementById("retroButton").addEventListener("mouseup", (e) => setTheme(e, "theme-retro"));
 
   const canvasContainer = document.getElementById("sl-canvas-container");
   const canvas = document.getElementById("sl-canvas");
@@ -79,8 +74,8 @@ customElements.define(
       this._node = templateClone.querySelector(".sl-node");
       this._input_1 = templateClone.querySelector("#input_1");
       this._input_2 = templateClone.querySelector("#input_2");
-      this._input_1_input = templateClone.querySelector("#input_1_input");
-      this._input_2_input = templateClone.querySelector("#input_2_input");
+      this._form_1 = templateClone.querySelector("#form_1");
+      this._form_2 = templateClone.querySelector("#form_2");
       this._operation = templateClone.querySelector("#operation");
       this._result = templateClone.querySelector("#result");
 
@@ -94,23 +89,14 @@ customElements.define(
     initComponent(nodeRef) {
       this._nodeRef = nodeRef;
       nodeRef.initNode(this._node);
-      nodeRef.addInputForm(this._input_1_input, "input_1");
       nodeRef.addConnector(this._input_1, "input_1", 1, false);
       nodeRef.addPropSetCallback(this.calculateMath.bind(this), "input_1");
-      nodeRef.addInputForm(this._input_2_input, "input_2");
       nodeRef.addConnector(this._input_2, "input_2", 1, false);
       nodeRef.addPropSetCallback(this.calculateMath.bind(this), "input_2");
-      nodeRef.addInputForm(this._operation, "operation");
       nodeRef.addConnector(this._result, "result", 0, true);
 
-      this._input_1_input.addEventListener(
-        "input",
-        this.updateText1.bind(this),
-      );
-      this._input_2_input.addEventListener(
-        "input",
-        this.updateText2.bind(this),
-      );
+      this._form_1.addEventListener("input", this.updateText1.bind(this));
+      this._form_2.addEventListener("input", this.updateText2.bind(this));
       this._operation.addEventListener(
         "change",
         this.updateOperation.bind(this),
@@ -122,8 +108,6 @@ customElements.define(
       let input1 = +this._nodeRef.prop.input_1;
       let input2 = +this._nodeRef.prop.input_2;
       let operation = this._nodeRef.prop.operation;
-
-      console.debug("calculateMath", input1, input2, operation);
 
       let result = 0;
 
@@ -140,15 +124,15 @@ customElements.define(
       this._nodeRef.prop.result = result;
     }
 
-    updateText1(e) {
-      this._nodeRef.prop.input_1 = this._input_1_input.value;
+    updateText1(_) {
+      this._nodeRef.prop.input_1 = this._form_1.value;
     }
 
-    updateText2(e) {
-      this._nodeRef.prop.input_2 = this._input_2_input.value;
+    updateText2(_) {
+      this._nodeRef.prop.input_2 = this._form_2.value;
     }
 
-    updateOperation(e) {
+    updateOperation(_) {
       this._nodeRef.prop.operation = this._operation.value;
       this.calculateMath.call(this);
     }
@@ -157,6 +141,81 @@ customElements.define(
       this._nodeRef.prop.input_1 = 0;
       this._nodeRef.prop.input_2 = 0;
       this._nodeRef.prop.operation = "+";
+      this.calculateMath.call(this);
+    }
+  },
+);
+
+customElements.define(
+  "node-lerp",
+  class extends HTMLElement {
+    constructor() {
+      super();
+
+      const template = document.getElementById("node-lerp").content;
+      const templateClone = template.cloneNode(true);
+
+      console.debug("node-math", templateClone);
+
+      this._node = templateClone.querySelector(".sl-node");
+      this._input_1 = templateClone.querySelector("#input_1");
+      this._input_2 = templateClone.querySelector("#input_2");
+      this._form_1 = templateClone.querySelector("#form_1");
+      this._form_2 = templateClone.querySelector("#form_2");
+      this._alpha = templateClone.querySelector("#alpha");
+      this._result = templateClone.querySelector("#result");
+
+      this.templateClone = templateClone;
+    }
+
+    connectedCallback() {
+      this.append(this.templateClone);
+    }
+
+    initComponent(nodeRef) {
+      this._nodeRef = nodeRef;
+      nodeRef.initNode(this._node);
+      nodeRef.addConnector(this._input_1, "input_1", 1, false);
+      nodeRef.addPropSetCallback(this.calculateMath.bind(this), "input_1");
+      nodeRef.addConnector(this._input_2, "input_2", 1, false);
+      nodeRef.addPropSetCallback(this.calculateMath.bind(this), "input_2");
+      nodeRef.addConnector(this._result, "result", 0, true);
+
+      this._form_1.addEventListener("input", this.updateText1.bind(this));
+      this._form_2.addEventListener("input", this.updateText2.bind(this));
+      this._alpha.addEventListener("input", this.updateAlpha.bind(this));
+      this._alpha.addEventListener("mousedown", (e) => e.stopPropagation());
+      this.initMath.call(this);
+    }
+
+    calculateMath(_) {
+      let input1 = +this._nodeRef.prop.input_1;
+      let input2 = +this._nodeRef.prop.input_2;
+      let alpha = this._nodeRef.prop.alpha;
+
+      let result = input1 + ((input2 - input1) * alpha) / 100;
+
+      this._nodeRef.prop.result = result;
+    }
+
+    updateText1(e) {
+      this._nodeRef.prop.input_1 = this._form_1.value;
+    }
+
+    updateText2(e) {
+      this._nodeRef.prop.input_2 = this._form_2.value;
+    }
+
+    updateAlpha(e) {
+      this._nodeRef.prop.alpha = this._alpha.value;
+      this.calculateMath.call(this);
+      e.stopPropagation();
+    }
+
+    initMath() {
+      this._nodeRef.prop.input_1 = 0;
+      this._nodeRef.prop.input_2 = 0;
+      this._nodeRef.prop.alpha = 50;
       this.calculateMath.call(this);
     }
   },
@@ -191,6 +250,40 @@ customElements.define(
 
     printValue(value) {
       this._print.innerHTML = value;
+    }
+  },
+);
+
+customElements.define(
+  "node-constant",
+  class extends HTMLElement {
+    constructor() {
+      super();
+
+      const template = document.getElementById("node-constant").content;
+      const templateClone = template.cloneNode(true);
+
+      this._node = templateClone.querySelector(".sl-node");
+      this._value = templateClone.querySelector("#value");
+      this._output = templateClone.querySelector("#output");
+
+      this.templateClone = templateClone;
+    }
+
+    connectedCallback() {
+      this.append(this.templateClone);
+    }
+
+    initComponent(nodeRef) {
+      this._nodeRef = nodeRef;
+      nodeRef.initNode(this._node);
+      nodeRef.addConnector(this._output, "output", 1, true);
+
+      this._value.addEventListener("input", this.updateText.bind(this));
+    }
+
+    updateText(e) {
+      this._nodeRef.prop.output = this._value.value;
     }
   },
 );

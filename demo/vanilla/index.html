@@ -32,12 +32,12 @@
       <div class="sl-row">
         <span class="sl-connector left" id="input_1"></span>
         <span class="sl-label">Input 1</span>
-        <input class="sl-input" type="number" value="0" id="input_1_input" />
+        <input class="sl-input" type="number" value="0" id="form_1" />
       </div>
       <div class="sl-row">
         <span class="sl-connector left" id="input_2"></span>
         <span class="sl-label">Input 2</span>
-        <input class="sl-input" type="number" value="0" id="input_2_input" />
+        <input class="sl-input" type="number" value="0" id="form_2" />
       </div>
     </div>
   </template>
@@ -51,140 +51,35 @@
     </div>
   </template>
 
-  <script>
-    function displayValue() {
-      if ("value" in this.prop == false) {
-        this.prop.value = 0;
-      }
-      console.log("Displaying value", this.prop.value);
-      let display = this.parent.dom.querySelector("#display");
-      display.innerHTML = this.prop.value;
-    }
-  </script>
-
-  <template id="node-print">
-    <div class="sl-node">
-      <div class="sl-row">
-        <span
-          class="sl-input-connector"
-          sl-name="value"
-          sl-update="displayValue"
-        ></span>
-        <span class="sl-label">Result</span>
-        <span class="sl-print" id="display">Result</span>
-      </div>
-    </div>
-  </template>
-
-  <script>
-    function constantUpdateVal() {
-      this.prop.value = this.dom.value;
-    }
-  </script>
-
   <template id="node-constant">
     <div class="sl-node">
+      <div class="sl-row right">
+        <span class="sl-connector right" id="output"></span>
+      </div>
       <div class="sl-row">
-        <input
-          class="sl-input"
-          sl-event:input="constantUpdateVal"
-          type="number"
-          value="0"
-        />
-        <span class="sl-output-connector" sl-name="value"></span>
+        <input class="sl-input" id="value" type="number" value="0" />
       </div>
     </div>
   </template>
-
-  <script>
-    function calculateLerp() {
-      let inputX = +this.prop.input_x;
-      let input1 = +this.prop.input_1;
-      let input2 = +this.prop.input_2;
-
-      let result = 0;
-
-      result = input1 + (input2 - input1) * (inputX / 100);
-
-      this.prop.result = result;
-      this.prop.sliderDOM.value = inputX;
-    }
-
-    function updateSlider(e) {
-      this.prop[this.name] = this.dom.value;
-      calculateLerp.call(this);
-      e.stopPropagation();
-    }
-
-    function updateVal(e) {
-      this.prop[this.name] = this.dom.value;
-      calculateLerp.call(this);
-    }
-
-    function initLerp() {
-      this.prop.input_x = 50;
-      this.prop.input_1 = 0;
-      this.prop.input_2 = 100;
-      this.prop.sliderDOM = this.dom.querySelector('input[type="range"]');
-      calculateLerp.call(this);
-    }
-  </script>
 
   <template id="node-lerp">
     <div class="sl-node" sl-init="initLerp">
       <div class="sl-row right">
         <span class="sl-label right">Result</span>
-        <span class="sl-output-connector" sl-name="result"></span>
+        <span class="sl-connector right" id="result"></span>
       </div>
       <div class="sl-row">
-        <span
-          class="sl-input-connector"
-          sl-name="input_x"
-          sl-update="calculateLerp"
-        ></span>
-        <input
-          class="sl-input"
-          type="range"
-          min="0"
-          max="100"
-          value="50"
-          class="slider"
-          sl-name="input_x"
-          sl-event:input="updateSlider"
-          sl-event:change="updateSlider"
-          sl-event:mousedown="updateSlider"
-          sl-event:mouseup="updateSlider"
-        />
+        <input class="sl-input" id="alpha" type="range" min="0" max="100" />
       </div>
       <div class="sl-row">
-        <span
-          class="sl-input-connector"
-          sl-name="input_1"
-          sl-update="calculateLerp"
-        ></span>
+        <span class="sl-connector left" id="input_1"></span>
         <span class="sl-label">Input 1</span>
-        <input
-          class="sl-input"
-          sl-name="input_1"
-          sl-event:input="updateVal"
-          type="number"
-          value="0"
-        />
+        <input class="sl-input" type="number" value="0" id="form_1" />
       </div>
       <div class="sl-row">
-        <span
-          class="sl-input-connector"
-          sl-name="input_2"
-          sl-update="calculateLerp"
-        ></span>
+        <span class="sl-connector left" id="input_2"></span>
         <span class="sl-label">Input 2</span>
-        <input
-          class="sl-input"
-          sl-name="input_2"
-          sl-event:input="updateVal"
-          type="number"
-          value="100"
-        />
+        <input class="sl-input" type="number" value="0" id="form_2" />
       </div>
     </div>
   </template>
