@@ -1,5 +1,6 @@
 import React from "react";
 import { useState } from "react";
+import { useEffect } from "react";
 import Node from "./lib/Node";
 import Output from "./lib/Output";
 import InputNumber from "./lib/InputNumber";
@@ -7,7 +8,12 @@ import InputNumber from "./lib/InputNumber";
 export default function MathNode(nodeObject) {
   let [node, setNode] = useState(nodeObject);
 
-  node.prop.operation = "+";
+  useEffect(() => {
+    node.prop.operation = "+";
+    node.prop.input_1 = 0;
+    node.prop.input_2 = 0;
+    node.prop.result = 0;
+  }, []);
 
   function calculateMath() {
     let input1 = +node.prop.input_1;
