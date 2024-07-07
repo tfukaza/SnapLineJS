@@ -11,24 +11,25 @@ import { ComponentBase } from "./component";
 
 class NodeComponent extends Base {
   type: ObjectTypes = ObjectTypes.node;
-  nodeType: string; /* Type of the node */
+  nodeType: string;
 
-  dom: HTMLElement | null; /* The DOM element of the node */
+  dom: HTMLElement | null;
   connectors: { [key: string]: ConnectorComponent }; // Dictionary of all connectors in the node, using the name as the key
   components: { [key: string]: ComponentBase }; // Dictionary of all components in the node except connectors
+  outgoingLines: lineObject[]; // Array of all lines going out of the node
+  incomingLines: lineObject[]; // Array of all lines coming into the node
 
   nodeWidth = 0;
   nodeHeight = 0;
   dragStartX = 0;
   dragStartY = 0;
 
-  //overlapping: lineObject | null; // Line that the node is overlapping with
-  freeze: boolean; /* If true, the node cannot be moved */
+  freeze: boolean; // If true, the node cannot be moved
 
   prop: { [key: string]: any }; // Properties of the node
   propSetCallback: { [key: string]: (value: any) => void }; // Callbacks called when a property is set
 
-  nodeStyle: any; // Style of the node
+  nodeStyle: any;
 
   constructor(dom: HTMLElement | null, globals: GlobalStats) {
     super(globals);
@@ -38,11 +39,12 @@ class NodeComponent extends Base {
     this.dom = dom;
     this.connectors = {};
     this.components = {};
+    this.outgoingLines = [];
+    this.incomingLines = [];
 
     this.dragStartX = this.positionX;
     this.dragStartY = this.positionY;
 
-    //this.overlapping = null;
     this.freeze = false;
 
     this.prop = {};
@@ -54,13 +56,8 @@ class NodeComponent extends Base {
           this.propSetCallback[prop](value);
         }
         if (prop in this.connectors) {
-          const peers = this.connectors[prop].lineArray
-            .filter(
-              (line) =>
-                line.start == this.connectors[prop] &&
-                line.target &&
-                !line.requestDelete,
-            )
+          const peers = this.connectors[prop].outgoingLines
+            .filter((line) => line.target && !line.requestDelete)
             .map((line) => line.target);
           if (peers) {
             for (const peer of peers) {
@@ -93,6 +90,7 @@ class NodeComponent extends Base {
     this.addPropSetCallback = this.addPropSetCallback.bind(this);
 
     this.setRenderNodeCallback = this.setRenderNodeCallback.bind(this);
+    this.setRenderLinesCallback = this.setRenderLinesCallback.bind(this);
   }
 
   initNode(dom: HTMLElement) {
@@ -126,6 +124,63 @@ class NodeComponent extends Base {
     this.nodeStyle = Object.assign({}, this.nodeStyle, style);
   }
 
+  filterDeletedLines(svgLines: lineObject[]) {
+    for (let i = 0; i < svgLines.length; i++) {
+      if (svgLines[i].requestDelete) {
+        svgLines.splice(i, 1);
+        i--;
+      }
+    }
+  }
+
+  /**
+   * Renders the specified outgoing lines.
+   * This function can be called by the node or a connector.on the node.
+   * @param outgoingLines Array of all lines outgoing from the node or connector
+   */
+  _renderOutgoingLines(outgoingLines: lineObject[]) {
+    for (const line of outgoingLines) {
+      const connector = line.start;
+      if (!line.svg) {
+        line.svg = connector.createLineDOM();
+      } else if (line.requestDelete && !line.completedDelete) {
+        this.g.canvas.removeChild(line.svg as Node);
+        line.completedDelete = true;
+        continue;
+      }
+
+      if (!line.svg) {
+        continue;
+      }
+      line.connector_x = connector.connectorX;
+      line.connector_y = connector.connectorY;
+      if (line.target) {
+        line.x2 = line.target.connectorX - connector.connectorX;
+        line.y2 = line.target.connectorY - connector.connectorY;
+      }
+      line.svg.style.transform = `translate3d(${connector.connectorX}px, ${connector.connectorY}px, 0)`;
+      connector.renderLinePosition(line);
+    }
+    this.filterDeletedLines(outgoingLines);
+  }
+
+  setRenderLinesCallback(callback: (svgLines: lineObject[]) => void) {
+    this._renderOutgoingLines = (svgLines: lineObject[]) => {
+      this.filterDeletedLines(svgLines);
+      callback(svgLines);
+    };
+  }
+
+  _renderNodeLines() {
+    this._renderOutgoingLines(this.outgoingLines);
+    // For incoming lines, the renderLines function of the peer node is called.
+    // This is to prevent duplicate rendering of lines on some declarative frontend frameworks.
+    for (const line of this.incomingLines) {
+      const peerNode = line.start.parent;
+      peerNode._renderOutgoingLines(peerNode.outgoingLines);
+    }
+  }
+
   renderNode(style: any) {
     if (!this.dom) return;
     for (const key in style) {
@@ -139,24 +194,13 @@ class NodeComponent extends Base {
       this.dom.classList.remove("focus");
     }
 
-    for (const connector of Object.values(this.connectors)) {
-      // Only render outgoing lines
-      // const lines = connector.lineArray.filter(
-      //   (line) => line.start == connector,
-      // );
-      connector.renderAllLines(connector.lineArray);
-    }
+    this._renderNodeLines();
   }
 
   setRenderNodeCallback(callback: (style: any) => void) {
     this.renderNode = (style: any) => {
       callback(style);
-      for (const connector of Object.values(this.connectors)) {
-        const lines = connector.lineArray.filter(
-          (line) => line.start == connector,
-        );
-        connector.renderAllLines(lines);
-      }
+      this._renderNodeLines();
     };
   }
 
@@ -343,12 +387,13 @@ class NodeComponent extends Base {
     console.debug("Update all nodes connected to " + varName);
     const connector = this.connectors[varName];
     if (!connector) return;
-    for (const peer of connector.peerConnectors) {
-      console.debug(
-        `Update input ${peer.name} connected to ${varName} with value ${this.prop[varName]}`,
-      );
-      peer.parent.prop[peer.name] = this.prop[varName];
-      peer.updateFunction();
+    for (const peer of connector.outgoingLines) {
+      const peerConnector = peer.target;
+      if (!peerConnector) {
+        continue;
+      }
+      peerConnector.parent.prop[peerConnector.name] = this.prop[varName];
+      peerConnector.updateFunction();
     }
   }
 

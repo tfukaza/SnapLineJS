@@ -459,7 +459,7 @@ export default class SnapLine {
     } else if (target.type == ObjectTypes.connector) {
       // If the target object is an output connector, render the lines
       const target = this.g.targetObject as ConnectorComponent;
-      target.renderAllLines(target.lineArray);
+      target.parent._renderNodeLines();
     }
   }
 

@@ -8,9 +8,9 @@ export default function Input({ nodeObject, name, setProp }) {
   let inputDom = useRef(null);
 
   useEffect(() => {
-    node.addInputConnector(inputDom.current, name);
+    node.addConnector(inputDom.current, name, 1, false);
     node.addPropSetCallback(setProp, name);
   }, []);
 
-  return <span className="sl-input-connector" ref={inputDom}></span>;
+  return <span className="sl-connector left" ref={inputDom}></span>;
 }

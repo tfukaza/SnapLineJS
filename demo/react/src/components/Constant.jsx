@@ -1,29 +1,29 @@
-import React from 'react';
-import { useState } from 'react';
-import Node from './Node';
-import Output from './Output';
-import InputNumber from './InputNumber';
+import React from "react";
+import { useState } from "react";
+import Node from "./lib/Node";
+import Output from "./lib/Output";
 
 export default function ConstantNode(nodeObject) {
+  let [node, setNode] = useState(nodeObject);
 
-    let [node, setNode] = useState(nodeObject);  
-    let [lineList, setLineList] = useState(node.svgLines || []);
-    
-    function updateText(e, name) {
-        node.prop.number_output = e.target.value;
-    }
+  function updateText(e) {
+    node.prop.floatOutput = e.target.value;
+  }
 
-    return (
-        <Node nodeObject={node} lineList={lineList}>
-            <div className="sl-row right">
-                <span className="sl-label right">Output</span>
-                <Output nodeObject={node} setLineList={setLineList} name="number_output" />
-            </div>
-            <div className="sl-row">
-                <InputNumber nodeObject={node} name="number_input" updateText={updateText} />
-            </div>
-        </Node>
-    );
+  return (
+    <Node nodeObject={node}>
+      <div className="sl-row right">
+        <span className="sl-label right">Output</span>
+        <Output nodeObject={node} name="floatOutput" />
+      </div>
+      <div className="sl-row">
+        <input
+          className="sl-input"
+          type="number"
+          value={node.prop.floatOutput || 0}
+          onChange={(e) => updateText(e)}
+        />
+      </div>
+    </Node>
+  );
 }
-
-
