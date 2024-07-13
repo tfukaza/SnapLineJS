@@ -374,11 +374,13 @@ class NodeComponent extends Base {
   }
 
   onFocus() {
+    console.debug("On focus");
     this.setNodeStyle({ _focus: true });
     this.renderNode(this.nodeStyle);
   }
 
   offFocus() {
+    console.debug("Off focus");
     this.setNodeStyle({ _focus: false });
     this.renderNode(this.nodeStyle);
   }

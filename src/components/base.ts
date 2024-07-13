@@ -28,9 +28,11 @@ export abstract class Base {
   bindFunction(dom: HTMLElement) {
     dom.onmousedown = this.domMouseDown.bind(this);
     dom.ontouchstart = this.domTouchStart.bind(this);
+    dom.onpointerdown = this.domMouseDown.bind(this);
   }
 
   domMouseDown(e: MouseEvent): void {
+    console.debug(`Mouse down event triggered on ${this.gid}`);
     this.domCursorDown({
       button: e.button,
       clientX: e.clientX,
@@ -40,6 +42,7 @@ export abstract class Base {
   }
 
   domTouchStart(e: TouchEvent): void {
+    console.debug(`Touch start event triggered on ${this.gid}`);
     this.domCursorDown({
       button: 0,
       clientX: e.touches[0].clientX,

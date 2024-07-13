@@ -186,11 +186,19 @@ export default class SnapLine {
    */
   onCursorDown(
     _: Event,
-    __: Element | null,
+    element: Element | null,
     button: cursorState,
     clientX: number,
     clientY: number,
   ) {
+    if (
+      element !== this.g.canvasContainer &&
+      element !== this.g.canvasBackground
+    ) {
+      console.debug("Ignoring cursor down event");
+      return;
+    }
+
     this.g._currentMouseDown = button;
 
     // If the user is dragging a line when another cursor down event is detected, then the line should be deleted.
@@ -249,7 +257,7 @@ export default class SnapLine {
   onCursorMove(
     _: Event,
     element: Element | null,
-    button: cursorState,
+    __: cursorState,
     clientX: number,
     clientY: number,
   ) {
@@ -269,9 +277,9 @@ export default class SnapLine {
     g.dy = clientY - g.mousedown_y + g.dy_offset;
 
     // Do nothing if mouse is not pressed or touch is not active
-    if (button == cursorState.none) {
-      return;
-    }
+    // if (button == cursorState.none) {
+    //   return;
+    // }
 
     if (g.dx !== 0 || g.dy !== 0) {
       g.mouseHasMoved = true;
@@ -410,6 +418,7 @@ export default class SnapLine {
     });
 
     g.targetObject = null;
+    console.debug("targetObject set to null");
     g.dx = 0;
     g.dy = 0;
     g.dx_offset = 0;
@@ -425,20 +434,19 @@ export default class SnapLine {
   onZoom(
     _: Event,
     __: Element | null,
-    button: cursorState,
+    ______: cursorState,
     ____: number,
     _____: number,
     deltaY: number,
   ) {
-    if (button === cursorState.mouseMiddle) {
-      deltaY = deltaY;
-    } else if (button === cursorState.touchDouble) {
-      deltaY = deltaY;
-    }
     this.g.camera.handleScroll(deltaY, this.g.mouse_x, this.g.mouse_y);
     this._setCanvasStyle({
       transform: this.g.camera.canvasStyle,
     });
+    console.debug(
+      "Zooming",
+      `Camera position: ${this.g.camera.cameraX}, ${this.g.camera.cameraY}`,
+    );
   }
 
   /**

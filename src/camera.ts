@@ -68,22 +68,25 @@ class Camera {
 
   /**
    * Handle the scroll event to zoom in and out of the camera view
-   * @param deltaScroll Amount of scroll
+   * @param deltaZoom Amount of scroll
    * @param mouseX Position of the mouse on the device screen
    * @param mouseY
    */
-  handleScroll(deltaScroll: number, mouseX: number, mouseY: number) {
+  handleScroll(deltaZoom: number, mouseX: number, mouseY: number) {
     // Mouse position should be relative to the container
     mouseX -= this.containerDom.offsetLeft;
     mouseY -= this.containerDom.offsetTop;
 
-    let deltaZoom = 1 * this.zoom * (-deltaScroll / 1000); // Control scroll speed
     // Limit zoom
     if (this.zoom + deltaZoom < 0.2) {
       deltaZoom = 0.2 - this.zoom;
     } else if (this.zoom + deltaZoom > 1) {
       deltaZoom = 1 - this.zoom;
     }
+
+    // console.debug(
+    //   `MouseX: ${mouseX}, MouseY: ${mouseY}, cameraWidth: ${this.cameraWidth}, cameraHeight: ${this.cameraHeight}`,
+    // );
 
     const zoomRatio = this.zoom / (this.zoom + deltaZoom); // Ratio of current zoom to new zoom
     // Move camera to zoom in on the mouse position
@@ -97,6 +100,12 @@ class Camera {
       (1 - (this.cameraHeight * 1.5 - mouseY) / this.cameraHeight);
 
     this.zoom += deltaZoom;
+
+    // console.log(
+    //   (this.cameraWidth / this.zoom) *
+    //     (zoomRatio - 1) *
+    //     (1 - (this.cameraWidth * 1.5 - mouseX) / this.cameraWidth),
+    // );
 
     this.updateCamera();
   }
