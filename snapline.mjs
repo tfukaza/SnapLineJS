@@ -456,11 +456,11 @@ class ConnectorComponent extends ComponentBase {
     __publicField(this, "_connectorTotalOffsetY");
     __publicField(this, "prop");
     // Properties of the connector
-    __publicField(this, "lineArray");
+    __publicField(this, "outgoingLines");
+    __publicField(this, "incomingLines");
     __publicField(this, "type", ObjectTypes.connector);
     __publicField(this, "dom");
     __publicField(this, "parent");
-    __publicField(this, "peerConnectors");
     this.connectorX = 0;
     this.connectorY = 0;
     this.connectorTotalOffsetX = 0;
@@ -468,8 +468,8 @@ class ConnectorComponent extends ComponentBase {
     this.dom = dom;
     this.parent = parent;
     this.prop = parent.prop;
-    this.lineArray = [];
-    this.peerConnectors = [];
+    this.outgoingLines = [];
+    this.incomingLines = [];
     this.config = config;
     globals.gid++;
     this.name = config.name || globals.gid.toString();
@@ -487,7 +487,7 @@ class ConnectorComponent extends ComponentBase {
     console.debug(
       `Created line from connector ${this.gid} and started dragging`
     );
-    this.lineArray.unshift({
+    this.outgoingLines.unshift({
       svg: null,
       target: null,
       start: this,
@@ -499,6 +499,7 @@ class ConnectorComponent extends ComponentBase {
       requestDelete: false,
       completedDelete: false
     });
+    this.parent.outgoingLines.push(this.outgoingLines[0]);
     this.setAllLinePositions();
   }
   /**
@@ -509,8 +510,8 @@ class ConnectorComponent extends ComponentBase {
     let connectorX = 0;
     let connectorY = 0;
     const hover = this.g.hoverDOM;
-    if (this.lineArray.length == 0) {
-      console.warn(`Warning: svgLines is empty`);
+    if (this.outgoingLines.length == 0) {
+      console.error(`Error: Outgoing lines is empty`);
       return;
     }
     const [adjustedDeltaX, adjustedDeltaY] = this.g.camera.getWorldDeltaFromCameraDelta(this.g.dx, this.g.dy);
@@ -526,19 +527,23 @@ class ConnectorComponent extends ComponentBase {
       );
       if (distance < 40) {
         this.setLineXYPosition(
-          this.lineArray[0],
+          this.outgoingLines[0],
           connectorX - this.connectorX,
           connectorY - this.connectorY
         );
       } else {
         this.setLineXYPosition(
-          this.lineArray[0],
+          this.outgoingLines[0],
           adjustedDeltaX,
           adjustedDeltaY
         );
       }
     } else {
-      this.setLineXYPosition(this.lineArray[0], adjustedDeltaX, adjustedDeltaY);
+      this.setLineXYPosition(
+        this.outgoingLines[0],
+        adjustedDeltaX,
+        adjustedDeltaY
+      );
     }
   }
   /**
@@ -547,7 +552,6 @@ class ConnectorComponent extends ComponentBase {
    * If the user is hovering over an input connector, then the line will be connected to the input connector.
    */
   endDragOutLine() {
-    console.debug(`Ended dragging line from connector ${this.gid}`);
     const hover = this.g.hoverDOM;
     if (hover && hover.classList.contains("sl-connector")) {
       const gid = hover.getAttribute("sl-gid");
@@ -558,25 +562,21 @@ class ConnectorComponent extends ComponentBase {
       }
       const target = this.g.globalNodeTable[gid];
       if (this.connectToConnector(target) == false) {
-        this.deleteTmpLine();
+        this.deleteLine(0);
         return;
       }
       target.prop[target.name] = this.prop[this.name];
       target.updateFunction();
       this.setLineXYPosition(
-        this.lineArray[0],
+        this.outgoingLines[0],
         target.connectorX - this.connectorX,
         target.connectorY - this.connectorY
       );
     } else {
-      this.deleteTmpLine();
+      this.deleteLine(0);
     }
   }
   startPickUpLine(line) {
-    console.debug(
-      `Detached line from connector ${this.gid} and started dragging`
-    );
-    console.debug(`Line: `, this.lineArray);
     this.g.targetObject = line.start;
     [this.g.dx_offset, this.g.dy_offset] = this.g.camera.getCameraDeltaFromWorldDelta(
       this.connectorX - line.start.connectorX,
@@ -586,39 +586,38 @@ class ConnectorComponent extends ComponentBase {
     this.g.dy = this.g.dy_offset;
     line.start.disconnectFromConnector(this);
     this.disconnectFromConnector(line.start);
-    this.deleteLine(this.lineArray.indexOf(line));
+    this.deleteLine(this.incomingLines.indexOf(line));
     line.start.startDragOutLine();
   }
   connectToConnector(connector) {
-    if (connector.peerConnectors.some((e) => e === this)) {
-      console.debug("Already connected");
+    const currentIncomingLines = connector.incomingLines.filter(
+      (i) => !i.requestDelete
+    );
+    if (currentIncomingLines.some((i) => i.start == this)) {
+      console.warn(
+        `Connector ${connector} already has a line connected to this connector`
+      );
       return false;
     }
-    if (connector.config.maxConnectors === connector.peerConnectors.length) {
-      console.debug(
+    if (connector.config.maxConnectors === currentIncomingLines.length) {
+      console.warn(
         `Connector ${connector} already has max number of connectors`
       );
       return false;
     }
-    console.debug("Connecting to: ", connector);
-    connector.peerConnectors.push(this);
-    this.peerConnectors.push(connector);
     this.updateConnectorPosition();
-    this.lineArray[0].target = connector;
-    connector.lineArray.push(this.lineArray[0]);
+    this.outgoingLines[0].target = connector;
+    connector.incomingLines.push(this.outgoingLines[0]);
+    connector.parent.incomingLines.push(this.outgoingLines[0]);
     return true;
   }
   disconnectFromConnector(connector) {
-    console.debug("Disconnecting from connector: ", connector);
-    for (const svg of this.lineArray) {
-      if (svg.target == connector) {
-        svg.requestDelete = true;
+    for (const line of this.outgoingLines) {
+      if (line.target == connector) {
+        line.requestDelete = true;
         break;
       }
     }
-    this.peerConnectors = this.peerConnectors.filter(
-      (i) => i.gid != connector.gid
-    );
   }
   updateConnectorPosition() {
     this.connectorX = this.parent.positionX + this.connectorTotalOffsetX;
@@ -627,6 +626,24 @@ class ConnectorComponent extends ComponentBase {
   setLineXYPosition(entry, x, y) {
     entry.x2 = x;
     entry.y2 = y;
+  }
+  renderLinePosition(entry) {
+    const svg = entry.svg;
+    if (!svg) {
+      return;
+    }
+    this.setStyle(svg, {
+      position: "absolute",
+      overflow: "visible",
+      pointerEvents: "none",
+      willChange: "transform",
+      transform: `translate3d(${entry.connector_x}px, ${entry.connector_y}px, 0)`
+    });
+    const line = svg.children[0];
+    line.setAttribute("x1", "0");
+    line.setAttribute("y1", "0");
+    line.setAttribute("x2", "" + entry.x2);
+    line.setAttribute("y2", "" + entry.y2);
   }
   setLinePosition(entry) {
     entry.connector_x = entry.start.connectorX;
@@ -645,36 +662,12 @@ class ConnectorComponent extends ComponentBase {
   /* Updates the position of all lines connected to this connector */
   setAllLinePositions() {
     this.updateConnectorPosition();
-    for (const line of this.lineArray) {
+    for (const line of this.outgoingLines) {
       this.setLinePosition(line);
     }
-  }
-  renderAllLines(lineArray) {
-    for (const line of lineArray) {
-      if (!line.svg) {
-        const svgDom = this.createLineDOM();
-        line.svg = svgDom;
-      } else if (line.requestDelete && !line.completedDelete) {
-        this.g.canvas.removeChild(line.svg);
-        line.completedDelete = true;
-        continue;
-      }
-      line.connector_x = line.start.connectorX;
-      line.connector_y = line.start.connectorY;
-      if (line.target) {
-        line.x2 = line.target.connectorX - line.start.connectorX;
-        line.y2 = line.target.connectorY - line.start.connectorY;
-      }
-      line.svg.style.transform = `translate3d(${this.connectorX}px, ${this.connectorY}px, 0)`;
-      this.renderLinePosition(line);
+    for (const line of this.incomingLines) {
+      line.start.setLinePosition(line);
     }
-    this.filterDeletedLines(lineArray);
-  }
-  setRenderLineCallback(callback) {
-    this.renderAllLines = (svgLines) => {
-      this.filterDeletedLines(svgLines);
-      callback(svgLines);
-    };
   }
   updateDOMproperties() {
     const this_rect = this.dom.getBoundingClientRect();
@@ -712,58 +705,25 @@ class ConnectorComponent extends ComponentBase {
       dom.style[key] = style[key];
     }
   }
-  renderLinePosition(entry) {
-    const svg = entry.svg;
-    if (!svg) {
-      return;
-    }
-    this.setStyle(svg, {
-      position: "absolute",
-      overflow: "visible",
-      pointerEvents: "none",
-      willChange: "transform",
-      transform: `translate3d(${entry.connector_x}px, ${entry.connector_y}px, 0)`
-    });
-    const line = svg.children[0];
-    line.setAttribute("x1", "0");
-    line.setAttribute("y1", "0");
-    line.setAttribute("x2", "" + entry.x2);
-    line.setAttribute("y2", "" + entry.y2);
-  }
-  filterDeletedLines(svgLines) {
-    for (let i = 0; i < svgLines.length; i++) {
-      if (svgLines[i].requestDelete) {
-        svgLines.splice(i, 1);
-        i--;
-      }
-    }
-  }
-  deleteTmpLine() {
-    this.deleteLine(0);
-    this.renderAllLines(this.lineArray);
-  }
   deleteLine(i) {
-    if (this.lineArray.length == 0) {
+    if (this.outgoingLines.length == 0) {
       return void 0;
     }
-    const svg = this.lineArray[i];
+    const svg = this.outgoingLines[i];
     svg.requestDelete = true;
-    console.debug(`Deleting line: `, svg);
-    console.debug(`Line array: `, this.lineArray, this.lineArray.length);
     return svg;
   }
   deleteAllLines() {
-    for (const svg of this.lineArray) {
+    for (const svg of this.outgoingLines) {
       svg.requestDelete = true;
     }
   }
   componentCursorDown(_) {
-    console.debug(`Cursor down on connector ${this.gid}`, this.lineArray);
-    const incomingLines = this.lineArray.filter(
-      (e) => e.target === this && !e.requestDelete
+    const currentIncomingLines = this.incomingLines.filter(
+      (i) => !i.requestDelete
     );
-    if (incomingLines.length > 0) {
-      this.startPickUpLine(incomingLines[0]);
+    if (currentIncomingLines.length > 0) {
+      this.startPickUpLine(currentIncomingLines[0]);
       return;
     }
     if (this.config.allowDragOut) {
@@ -775,28 +735,29 @@ class ConnectorComponent extends ComponentBase {
   }
   componentCursorUp() {
     this.endDragOutLine();
+    this.parent._renderNodeLines();
   }
 }
 class NodeComponent extends Base {
-  // Style of the node
   constructor(dom, globals) {
     super(globals);
     __publicField(this, "type", ObjectTypes.node);
     __publicField(this, "nodeType");
-    /* Type of the node */
     __publicField(this, "dom");
-    /* The DOM element of the node */
     __publicField(this, "connectors");
     // Dictionary of all connectors in the node, using the name as the key
     __publicField(this, "components");
     // Dictionary of all components in the node except connectors
+    __publicField(this, "outgoingLines");
+    // Array of all lines going out of the node
+    __publicField(this, "incomingLines");
+    // Array of all lines coming into the node
     __publicField(this, "nodeWidth", 0);
     __publicField(this, "nodeHeight", 0);
     __publicField(this, "dragStartX", 0);
     __publicField(this, "dragStartY", 0);
-    //overlapping: lineObject | null; // Line that the node is overlapping with
     __publicField(this, "freeze");
-    /* If true, the node cannot be moved */
+    // If true, the node cannot be moved
     __publicField(this, "prop");
     // Properties of the node
     __publicField(this, "propSetCallback");
@@ -806,6 +767,8 @@ class NodeComponent extends Base {
     this.dom = dom;
     this.connectors = {};
     this.components = {};
+    this.outgoingLines = [];
+    this.incomingLines = [];
     this.dragStartX = this.positionX;
     this.dragStartY = this.positionY;
     this.freeze = false;
@@ -818,9 +781,7 @@ class NodeComponent extends Base {
           this.propSetCallback[prop](value);
         }
         if (prop in this.connectors) {
-          const peers = this.connectors[prop].lineArray.filter(
-            (line) => line.start == this.connectors[prop] && line.target && !line.requestDelete
-          ).map((line) => line.target);
+          const peers = this.connectors[prop].outgoingLines.filter((line) => line.target && !line.requestDelete).map((line) => line.target);
           if (peers) {
             for (const peer of peers) {
               if (!peer) continue;
@@ -846,6 +807,7 @@ class NodeComponent extends Base {
     this.addInputForm = this.addInputForm.bind(this);
     this.addPropSetCallback = this.addPropSetCallback.bind(this);
     this.setRenderNodeCallback = this.setRenderNodeCallback.bind(this);
+    this.setRenderLinesCallback = this.setRenderLinesCallback.bind(this);
   }
   initNode(dom) {
     this.dom = dom;
@@ -873,6 +835,56 @@ class NodeComponent extends Base {
   setNodeStyle(style) {
     this.nodeStyle = Object.assign({}, this.nodeStyle, style);
   }
+  filterDeletedLines(svgLines) {
+    for (let i = 0; i < svgLines.length; i++) {
+      if (svgLines[i].requestDelete) {
+        svgLines.splice(i, 1);
+        i--;
+      }
+    }
+  }
+  /**
+   * Renders the specified outgoing lines.
+   * This function can be called by the node or a connector.on the node.
+   * @param outgoingLines Array of all lines outgoing from the node or connector
+   */
+  _renderOutgoingLines(outgoingLines) {
+    for (const line of outgoingLines) {
+      const connector = line.start;
+      if (!line.svg) {
+        line.svg = connector.createLineDOM();
+      } else if (line.requestDelete && !line.completedDelete) {
+        this.g.canvas.removeChild(line.svg);
+        line.completedDelete = true;
+        continue;
+      }
+      if (!line.svg) {
+        continue;
+      }
+      line.connector_x = connector.connectorX;
+      line.connector_y = connector.connectorY;
+      if (line.target) {
+        line.x2 = line.target.connectorX - connector.connectorX;
+        line.y2 = line.target.connectorY - connector.connectorY;
+      }
+      line.svg.style.transform = `translate3d(${connector.connectorX}px, ${connector.connectorY}px, 0)`;
+      connector.renderLinePosition(line);
+    }
+    this.filterDeletedLines(outgoingLines);
+  }
+  setRenderLinesCallback(callback) {
+    this._renderOutgoingLines = (svgLines) => {
+      this.filterDeletedLines(svgLines);
+      callback(svgLines);
+    };
+  }
+  _renderNodeLines() {
+    this._renderOutgoingLines(this.outgoingLines);
+    for (const line of this.incomingLines) {
+      const peerNode = line.start.parent;
+      peerNode._renderOutgoingLines(peerNode.outgoingLines);
+    }
+  }
   renderNode(style) {
     if (!this.dom) return;
     for (const key in style) {
@@ -884,19 +896,12 @@ class NodeComponent extends Base {
     } else {
       this.dom.classList.remove("focus");
     }
-    for (const connector of Object.values(this.connectors)) {
-      connector.renderAllLines(connector.lineArray);
-    }
+    this._renderNodeLines();
   }
   setRenderNodeCallback(callback) {
     this.renderNode = (style) => {
       callback(style);
-      for (const connector of Object.values(this.connectors)) {
-        const lines = connector.lineArray.filter(
-          (line) => line.start == connector
-        );
-        connector.renderAllLines(lines);
-      }
+      this._renderNodeLines();
     };
   }
   addNodeToCanvas(x, y) {
@@ -1024,12 +1029,13 @@ class NodeComponent extends Base {
     console.debug("Update all nodes connected to " + varName);
     const connector = this.connectors[varName];
     if (!connector) return;
-    for (const peer of connector.peerConnectors) {
-      console.debug(
-        `Update input ${peer.name} connected to ${varName} with value ${this.prop[varName]}`
-      );
-      peer.parent.prop[peer.name] = this.prop[varName];
-      peer.updateFunction();
+    for (const peer of connector.outgoingLines) {
+      const peerConnector = peer.target;
+      if (!peerConnector) {
+        continue;
+      }
+      peerConnector.parent.prop[peerConnector.name] = this.prop[varName];
+      peerConnector.updateFunction();
     }
   }
   exec() {
@@ -1478,7 +1484,7 @@ class SnapLine {
       }
     } else if (target.type == ObjectTypes.connector) {
       const target2 = this.g.targetObject;
-      target2.renderAllLines(target2.lineArray);
+      target2.parent._renderNodeLines();
     }
   }
   step() {
