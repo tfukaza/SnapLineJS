@@ -74,8 +74,8 @@ export abstract class Base {
       `Base class mousedown event triggered on ${this.gid}, button: ${button}, clientX: ${clientX}, clientY: ${clientY}`,
     );
     this.g.targetObject = this;
-    this.g.mousedown_x = clientX;
-    this.g.mousedown_y = clientY;
+    [this.g.mousedown_x, this.g.mousedown_y] =
+      this.g.camera.getCameraFromScreen(clientX, clientY);
     this.g.dx = 0;
     this.g.dy = 0;
     this.g.dx_offset = 0;

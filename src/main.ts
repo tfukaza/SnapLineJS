@@ -6,7 +6,7 @@ import { InputControl, cursorState } from "./input";
 
 // Uncomment the theme you want to use
 import "./theme/standard_light.scss";
-// import './theme/standard_dark.scss';
+// import "./theme/standard_dark.scss";
 // import './theme/retro.scss';
 
 /**
@@ -23,7 +23,7 @@ export default class SnapLine {
   _inputControl: InputControl | null = null;
 
   constructor() {
-    this.g = null as any;
+    this.g = {} as any;
 
     this._containerStyle = {
       position: "relative",
@@ -58,10 +58,10 @@ export default class SnapLine {
       _currentMouseDown: cursorState.none,
       mousedown_x: 0,
       mousedown_y: 0,
-      mouse_x: 0,
-      mouse_y: 0,
-      mouse_x_world: 0,
-      mouse_y_world: 0,
+      mouseCameraX: 0,
+      mouseCameraY: 0,
+      mouseWorldX: 0,
+      mouseWorldY: 0,
       dx: 0,
       dy: 0,
       dx_offset: 0,
@@ -96,6 +96,7 @@ export default class SnapLine {
       height: "0px",
       transform: this.g.camera.canvasStyle,
     });
+
     this._setBackgroundStyle({
       width: this.g.camera.cameraWidth * 10 + "px",
       height: this.g.camera.cameraHeight * 10 + "px",
@@ -234,8 +235,10 @@ export default class SnapLine {
       node.offFocus();
     }
 
-    g.mousedown_x = clientX;
-    g.mousedown_y = clientY;
+    [g.mousedown_x, g.mousedown_y] = this.g.camera.getCameraFromScreen(
+      clientX,
+      clientY,
+    );
 
     if (
       button == cursorState.mouseMiddle ||
@@ -264,17 +267,18 @@ export default class SnapLine {
     const g = this.g;
 
     g.hoverDOM = document.elementFromPoint(clientX, clientY);
-    g.mouse_x = clientX - g.canvasContainer.offsetLeft;
-    g.mouse_y = clientY - g.canvasContainer.offsetTop;
-
-    /* Adjust mouse position to world coordinates */
-    [g.mouse_x_world, g.mouse_y_world] = this.g.camera.getWorldFromCamera(
-      g.mouse_x,
-      g.mouse_y,
+    [g.mouseCameraX, g.mouseCameraY] = this.g.camera.getCameraFromScreen(
+      clientX,
+      clientY,
     );
 
-    g.dx = clientX - g.mousedown_x + g.dx_offset;
-    g.dy = clientY - g.mousedown_y + g.dy_offset;
+    [g.mouseWorldX, g.mouseWorldY] = this.g.camera.getWorldFromCamera(
+      g.mouseCameraX,
+      g.mouseCameraY,
+    );
+
+    g.dx = g.mouseCameraX - g.mousedown_x;
+    g.dy = g.mouseCameraY - g.mousedown_y;
 
     // Do nothing if mouse is not pressed or touch is not active
     // if (button == cursorState.none) {
@@ -299,30 +303,35 @@ export default class SnapLine {
           cursor: "grabbing",
         });
         this._setBackgroundStyle({
-          transform: `translate(${this.g.camera.cameraX + -this.g.camera.cameraWidth * 5}px, ${this.g.camera.cameraY + -this.g.camera.cameraHeight * 5}px)`,
-          backgroundPosition: `${-this.g.camera.cameraX}px ${-this.g.camera.cameraY}px`,
+          transform: `translate(${this.g.camera.cameraPositionX + -this.g.camera.cameraWidth * 5}px, ${this.g.camera.cameraPositionY + -this.g.camera.cameraHeight * 5}px)`,
+          backgroundPosition: `${-this.g.camera.cameraPositionX}px ${-this.g.camera.cameraPositionY}px`,
         });
       } else if (
         g._currentMouseDown == cursorState.mouseLeft ||
         g._currentMouseDown == cursorState.touchSingle
       ) {
         // Handle selection box
+        let [left, top] = [
+          Math.min(g.mousedown_x, g.mouseCameraX),
+          Math.min(g.mousedown_y, g.mouseCameraY),
+        ];
         this._setSelectionBoxStyle({
           width: Math.abs(g.dx) + "px",
           height: Math.abs(g.dy) + "px",
-          left: Math.min(g.mousedown_x, g.mouse_x) + "px",
-          top: Math.min(g.mousedown_y, g.mouse_y) + "px",
+          left: left + "px",
+          top: top + "px",
           opacity: "1",
+          position: "absolute",
         });
         // Check if any nodes are inside the selection box
         const [adjStartX, adjStartY] = this.g.camera.getWorldFromCamera(
-          Math.min(g.mousedown_x, g.mouse_x),
-          Math.min(g.mousedown_y, g.mouse_y),
+          left,
+          top,
         );
 
         const [adjEndX, adjEndY] = this.g.camera.getWorldFromCamera(
-          Math.max(g.mousedown_x, g.mouse_x),
-          Math.max(g.mousedown_y, g.mouse_y),
+          Math.max(g.mousedown_x, g.mouseCameraX),
+          Math.max(g.mousedown_y, g.mouseCameraY),
         );
 
         const selectedNodes = [];
@@ -439,14 +448,14 @@ export default class SnapLine {
     _____: number,
     deltaY: number,
   ) {
-    this.g.camera.handleScroll(deltaY, this.g.mouse_x, this.g.mouse_y);
+    this.g.camera.handleScroll(
+      deltaY,
+      this.g.mouseCameraX,
+      this.g.mouseCameraY,
+    );
     this._setCanvasStyle({
       transform: this.g.camera.canvasStyle,
     });
-    console.debug(
-      "Zooming",
-      `Camera position: ${this.g.camera.cameraX}, ${this.g.camera.cameraY}`,
-    );
   }
 
   /**
@@ -502,8 +511,8 @@ export default class SnapLine {
   addNodeAtMouse(node: NodeComponent, e: MouseEvent) {
     this.g.ignoreMouseUp = true;
 
-    const x = this.g.mouse_x_world;
-    const y = this.g.mouse_y_world;
+    const x = this.g.mouseWorldX;
+    const y = this.g.mouseWorldY;
 
     console.debug("Adding node at " + x + ", " + y);
 
@@ -511,8 +520,8 @@ export default class SnapLine {
     node.setStartPositions();
 
     this.g._currentMouseDown = cursorState.mouseLeft;
-    this.g.mousedown_x = this.g.mouse_x;
-    this.g.mousedown_y = this.g.mouse_y;
+    this.g.mousedown_x = this.g.mouseCameraX;
+    this.g.mousedown_y = this.g.mouseCameraY;
     this.g.focusNodes = [node];
     this.g.targetObject = node;
 

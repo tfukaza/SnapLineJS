@@ -11,8 +11,8 @@
     }
   },
   "scripts": {
-    "dev:vanilla": "FRAMEWORK=vanilla npx vite build --mode development --watch  & FRAMEWORK=vanilla npx vite serve demo/vanilla --config demo/vanilla/vite.config.mjs",
-    "dev:react": "FRAMEWORK=react npx vite build --mode development --watch    & FRAMEWORK=react npx vite serve demo/react --config demo/react/vite.config.mjs",
+    "dev:vanilla": "FRAMEWORK=vanilla npx vite build --mode development --watch  & FRAMEWORK=vanilla npx vite serve demo/vanilla --config demo/vanilla/vite.config.mjs --host",
+    "dev:react": "FRAMEWORK=react npx vite build --mode development --watch    & FRAMEWORK=react npx vite serve demo/react --config demo/react/vite.config.mjs --host",
     "dev:all": "concurrently --kill-others \"npm run dev:vanilla\" \"npm run dev:react\"",
     "test": "start-server-and-test dev:all \"localhost:3001|localhost:3002\" jest",
     "format": "prettier --write src",
