@@ -23,6 +23,10 @@ input:focus {
   background-size: 32px 32px;
 }
 
+#sl-canvas {
+  // transition: transform 0.1s;
+}
+
 .sl-node {
   font-family: "Inter", sans-serif;
   min-width: 150px;

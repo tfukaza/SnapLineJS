@@ -16,8 +16,8 @@ class NodeComponent extends Base {
   dom: HTMLElement | null;
   connectors: { [key: string]: ConnectorComponent }; // Dictionary of all connectors in the node, using the name as the key
   components: { [key: string]: ComponentBase }; // Dictionary of all components in the node except connectors
-  outgoingLines: lineObject[]; // Array of all lines going out of the node
-  incomingLines: lineObject[]; // Array of all lines coming into the node
+  allOutgoingLines: { [key: string]: lineObject[] }; // Dictionary of all lines going out of the node
+  allIncomingLines: { [key: string]: lineObject[] }; // Dictionary of all lines coming into the node
 
   nodeWidth = 0;
   nodeHeight = 0;
@@ -39,8 +39,8 @@ class NodeComponent extends Base {
     this.dom = dom;
     this.connectors = {};
     this.components = {};
-    this.outgoingLines = [];
-    this.incomingLines = [];
+    this.allOutgoingLines = {};
+    this.allIncomingLines = {};
 
     this.dragStartX = this.positionX;
     this.dragStartY = this.positionY;
@@ -126,7 +126,7 @@ class NodeComponent extends Base {
 
   filterDeletedLines(svgLines: lineObject[]) {
     for (let i = 0; i < svgLines.length; i++) {
-      if (svgLines[i].requestDelete) {
+      if (svgLines[i].requestDelete && svgLines[i].completedDelete) {
         svgLines.splice(i, 1);
         i--;
       }
@@ -139,6 +139,11 @@ class NodeComponent extends Base {
    * @param outgoingLines Array of all lines outgoing from the node or connector
    */
   _renderOutgoingLines(outgoingLines: lineObject[]) {
+    // console.debug(
+    //   "Rendering outgoing lines",
+    //   outgoingLines,
+    //   outgoingLines.length,
+    // );
     for (const line of outgoingLines) {
       const connector = line.start;
       if (!line.svg) {
@@ -161,6 +166,7 @@ class NodeComponent extends Base {
       line.svg.style.transform = `translate3d(${connector.connectorX}px, ${connector.connectorY}px, 0)`;
       connector.renderLinePosition(line);
     }
+
     this.filterDeletedLines(outgoingLines);
   }
 
@@ -171,14 +177,31 @@ class NodeComponent extends Base {
     };
   }
 
+  _iterateDict(
+    dict: { [key: string]: any },
+    callback: (lines: lineObject[]) => void,
+    bind: any = this,
+  ) {
+    for (const key in dict) {
+      callback.bind(bind)(dict[key]);
+    }
+  }
+
   _renderNodeLines() {
-    this._renderOutgoingLines(this.outgoingLines);
+    // Flatten the allOutgoingLines object into an array and call the renderLines function
+    this._iterateDict(this.allOutgoingLines, this._renderOutgoingLines);
     // For incoming lines, the renderLines function of the peer node is called.
     // This is to prevent duplicate rendering of lines on some declarative frontend frameworks.
-    for (const line of this.incomingLines) {
-      const peerNode = line.start.parent;
-      peerNode._renderOutgoingLines(peerNode.outgoingLines);
-    }
+    this._iterateDict(this.allIncomingLines, (lines: lineObject[]) => {
+      for (const line of lines) {
+        const peerNode = line.start.parent;
+        this._iterateDict(
+          peerNode.allOutgoingLines,
+          peerNode._renderOutgoingLines,
+          peerNode,
+        );
+      }
+    });
   }
 
   renderNode(style: any) {
@@ -225,11 +248,15 @@ class NodeComponent extends Base {
     maxConnectors = 1,
     allowDragOut = true,
   ) {
+    this.allOutgoingLines[name] = [];
+    this.allIncomingLines[name] = [];
     const connector = new ConnectorComponent(
       dom,
       { name: name, maxConnectors: maxConnectors, allowDragOut: allowDragOut },
       this,
       this.g,
+      this.allOutgoingLines[name],
+      this.allIncomingLines[name],
     );
     this.connectors[name] = connector;
     this.prop[name] = null;
@@ -374,11 +401,13 @@ class NodeComponent extends Base {
   }
 
   onFocus() {
+    console.debug("On focus");
     this.setNodeStyle({ _focus: true });
     this.renderNode(this.nodeStyle);
   }
 
   offFocus() {
+    console.debug("Off focus");
     this.setNodeStyle({ _focus: false });
     this.renderNode(this.nodeStyle);
   }

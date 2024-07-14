@@ -35,6 +35,8 @@ class ConnectorComponent extends ComponentBase {
     config: ConnectorConfig,
     parent: NodeComponent,
     globals: GlobalStats,
+    outgoingLines: lineObject[],
+    incomingLines: lineObject[],
   ) {
     super(config, parent, globals);
 
@@ -45,8 +47,8 @@ class ConnectorComponent extends ComponentBase {
     this.dom = dom;
     this.parent = parent;
     this.prop = parent.prop;
-    this.outgoingLines = [];
-    this.incomingLines = [];
+    this.outgoingLines = outgoingLines;
+    this.incomingLines = incomingLines;
     this.config = config;
     globals.gid++;
     this.name = config.name || globals.gid.toString();
@@ -54,6 +56,8 @@ class ConnectorComponent extends ComponentBase {
     this.dom.setAttribute("sl-gid", this.gid.toString());
 
     this.bindFunction(this.dom);
+
+    console.log(config);
   }
 
   /**
@@ -78,7 +82,7 @@ class ConnectorComponent extends ComponentBase {
       requestDelete: false,
       completedDelete: false,
     });
-    this.parent.outgoingLines.push(this.outgoingLines[0]);
+    //this.parent.allOutgoingLines.push(this.outgoingLines[0]);
 
     this.setAllLinePositions();
   }
@@ -107,6 +111,7 @@ class ConnectorComponent extends ComponentBase {
       const targetConnector: ConnectorComponent = this.g.globalNodeTable[
         gid
       ] as ConnectorComponent;
+      console.debug("Hovering over input connector", targetConnector);
       targetConnector.updateConnectorPosition();
       connectorX = targetConnector.connectorX;
       connectorY = targetConnector.connectorY;
@@ -204,7 +209,7 @@ class ConnectorComponent extends ComponentBase {
 
     if (connector.config.maxConnectors === currentIncomingLines.length) {
       console.warn(
-        `Connector ${connector} already has max number of connectors`,
+        `Connector ${connector.name} already has max number of connectors (${connector.config.maxConnectors}) connected`,
       );
       return false;
     }
@@ -213,7 +218,6 @@ class ConnectorComponent extends ComponentBase {
 
     this.outgoingLines[0].target = connector;
     connector.incomingLines.push(this.outgoingLines[0]);
-    connector.parent.incomingLines.push(this.outgoingLines[0]);
 
     return true;
   }
@@ -310,6 +314,8 @@ class ConnectorComponent extends ComponentBase {
     svg.classList.add("sl-connector-svg");
     line.classList.add("sl-connector-line");
     line.setAttribute("stroke-width", "4");
+
+    console.debug(`Created line from connector ${this.gid}`);
 
     this.g.canvas!.appendChild(svg);
 
