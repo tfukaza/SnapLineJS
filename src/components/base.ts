@@ -26,7 +26,7 @@ export abstract class Base {
    * @param dom The DOM element to bind the function to
    */
   bindFunction(dom: HTMLElement) {
-    dom.onmousedown = this.domMouseDown.bind(this);
+    //dom.onmousedown = this.domMouseDown.bind(this);
     dom.ontouchstart = this.domTouchStart.bind(this);
     dom.onpointerdown = this.domMouseDown.bind(this);
   }

@@ -256,14 +256,14 @@ export default class SnapLine {
    */
   onCursorMove(
     _: Event,
-    element: Element | null,
+    ___: Element | null,
     __: cursorState,
     clientX: number,
     clientY: number,
   ) {
     const g = this.g;
 
-    g.hoverDOM = element;
+    g.hoverDOM = document.elementFromPoint(clientX, clientY);
     g.mouse_x = clientX - g.canvasContainer.offsetLeft;
     g.mouse_y = clientY - g.canvasContainer.offsetTop;
 

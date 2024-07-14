@@ -179,7 +179,6 @@ class InputControl {
       case 2:
         return cursorState.mouseRight;
       default:
-        console.warn("Invalid mouse button");
         return cursorState.none;
     }
   }
