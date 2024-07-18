@@ -8,7 +8,6 @@ export default defineConfig(({ command, mode }) => {
       port: 3002,
       open: false,
       strictPort: true,
-
       preTransformRequests: false,
     },
   };

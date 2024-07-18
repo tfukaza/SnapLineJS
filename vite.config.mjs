@@ -13,6 +13,8 @@ export default defineConfig(({ command, mode }) => {
       case "react":
         outputDir = "demo/react/src/lib";
         break;
+      case "test":
+        break;
       default:
         throw new Error("Invalid FRAMEWORK_ENV");
     }
@@ -25,7 +27,7 @@ export default defineConfig(({ command, mode }) => {
         filename: "snapline",
       },
       outDir: outputDir,
-      minify: "terser",
+      minify: mode === "production" ? "terser" : false,
       terserOptions: {
         toplevel: true,
         mangle: {

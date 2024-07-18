@@ -1,6 +1,6 @@
 import SnapLine from "./lib/snapline.mjs";
 
-const sl = new SnapLine("node-editor");
+const sl = new SnapLine();
 
 let addNodeMenu = null;
 

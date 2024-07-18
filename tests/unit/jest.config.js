@@ -1,7 +1,6 @@
 / @type {import('jest').Config} */;
 const config = {
-  preset: "jest-puppeteer",
-  // Other Jest configurations...
+  testEnvironment: "jsdom",
 };
 
 module.exports = config;

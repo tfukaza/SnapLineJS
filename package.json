@@ -14,10 +14,12 @@
     "dev:vanilla": "FRAMEWORK=vanilla npx vite build --mode development --watch  & FRAMEWORK=vanilla npx vite serve demo/vanilla --config demo/vanilla/vite.config.mjs --host",
     "dev:react": "FRAMEWORK=react npx vite build --mode development --watch    & FRAMEWORK=react npx vite serve demo/react --config demo/react/vite.config.mjs --host",
     "dev:all": "concurrently --kill-others \"npm run dev:vanilla\" \"npm run dev:react\"",
-    "test": "start-server-and-test dev:all \"localhost:3001|localhost:3002\" jest",
+    "test:e2e": "start-server-and-test dev:all \"localhost:3001|localhost:3002\" 'jest ./tests/e2e --config ./tests/e2e/jest.config.js'",
+    "test:unit": "npm run build:dev && jest ./tests/unit --config ./tests/unit/jest.config.js",
     "format": "prettier --write src",
     "lint": "eslint src --ext .ts",
-    "build": "vite build --mode production"
+    "build": "vite build --mode production",
+    "build:dev": "FRAMEWORK=test npx vite build --mode development"
   },
   "repository": {
     "type": "git",
@@ -38,6 +40,7 @@
     "concurrently": "^8.2.2",
     "eslint": "^8.57.0",
     "jest": "^29.7.0",
+    "jest-environment-jsdom": "^29.7.0",
     "jest-puppeteer": "^10.0.1",
     "prettier": "3.3.2",
     "puppeteer": "^22.13.0",

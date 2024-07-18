@@ -18,13 +18,51 @@ describe("Check that the demo site loads the expected nodes after startup.", () 
   );
 });
 
-// describe("Demo website should have 3 lines connecting 4 nodes", () => {
-//   beforeAll(async () => {
-//     await page.goto("http://localhost:3001");
-//   });
+describe("Test the basic interactions with nodes.", () => {
+  beforeAll(async () => {
+    for (const [name, port] of hyperparameter) {
+      await page.goto(`http://localhost:${port}`);
+    }
+  });
 
-//   it('should have svgs that has data attribute "snapline-type" = "line"', async () => {
-//     const lines = await page.$$("svg[data-snapline-type='line']");
-//     expect(lines.length).toBe(3);
-//   });
-// });
+  it.each(hyperparameter)(
+    "[%s, %i] should be able to press and select a node",
+    async (name, port) => {
+      await page.goto(`http://localhost:${port}`);
+      const node = await page.$("div[data-snapline-type='node']");
+      expect(node).not.toBeNull();
+      await node.click();
+      const selected = await node.evaluate((node) =>
+        node.classList.contains("sl-focus"),
+      );
+      expect(selected).toBe(true);
+    },
+  );
+
+  it.each(hyperparameter)(
+    "[%s, %i] should be able to press and drag a node",
+    async (name, port) => {
+      await page.goto(`http://localhost:${port}`);
+      const node = await page.waitForSelector("div[data-snapline-type='node']");
+      expect(node).not.toBeNull();
+
+      let { startX, startY } = await page.evaluate((el) => {
+        const { x, y } = el.getBoundingClientRect();
+        return { startX: x, startY: y };
+      }, node);
+
+      await page.mouse.move(startX + 10, startY + 10);
+      await page.mouse.down();
+      await page.mouse.move(startX + 20, startY + 20);
+      await page.mouse.up();
+
+      const { endX, endY } = await page.evaluate((el) => {
+        const { x, y } = el.getBoundingClientRect();
+        return { endX: x, endY: y };
+      }, node);
+
+      expect(endX - startX).toBeCloseTo(10);
+      expect(endY - startY).toBeCloseTo(10);
+    },
+  );
+});
