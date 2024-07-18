@@ -2412,7 +2412,7 @@ class InputControl {
         console.log("Gesture move");
         e.button = 1;
         this._callFuncWithCallbackParam(this._onCursorMove, e);
-        this._callFuncWithScrollCallbackParam(this._onScroll, e, e.ds);
+        this._callFuncWithScrollCallbackParam(this._onScroll, e, e.ds / 2.5);
       },
       onend: (e) => {
         console.log("end");
@@ -2609,8 +2609,7 @@ class Base {
       `Base class mousedown event triggered on ${this.gid}, button: ${button}, clientX: ${clientX}, clientY: ${clientY}`
     );
     this.g.targetObject = this;
-    this.g.mousedown_x = clientX;
-    this.g.mousedown_y = clientY;
+    [this.g.mousedown_x, this.g.mousedown_y] = this.g.camera.getCameraFromScreen(clientX, clientY);
     this.g.dx = 0;
     this.g.dy = 0;
     this.g.dx_offset = 0;
@@ -2824,12 +2823,12 @@ class ConnectorComponent extends ComponentBase {
   }
   startPickUpLine(line) {
     this.g.targetObject = line.start;
-    [this.g.dx_offset, this.g.dy_offset] = this.g.camera.getCameraDeltaFromWorldDelta(
+    let [dx_offset, dy_offset] = this.g.camera.getCameraDeltaFromWorldDelta(
       this.connectorX - line.start.connectorX,
       this.connectorY - line.start.connectorY
     );
-    this.g.dx = this.g.dx_offset;
-    this.g.dy = this.g.dy_offset;
+    this.g.dx = dx_offset;
+    this.g.dy = dy_offset;
     line.start.disconnectFromConnector(this);
     this.disconnectFromConnector(line.start);
     this.deleteLine(this.incomingLines.indexOf(line));
@@ -3058,6 +3057,7 @@ class NodeComponent extends Base {
   initNode(dom) {
     this.dom = dom;
     this.dom.id = this.gid;
+    dom.setAttribute("data-snapline-type", "node");
     this.renderNode(this.nodeStyle);
     this.bindFunction(this.dom);
     new ResizeObserver(() => {
@@ -3316,18 +3316,29 @@ class Camera {
   constructor(container, canvas) {
     /**
      * Represents a camera that can be used to pan and zoom the view of a DOM element.
+     * This class maintains 3 coordinate systems:
+     * - Device coordinates: The x,y coordinates of the pointer on the device screen.
+     *   (0,0) is the top left corner of the screen and the x,y coordinates increase as you move right and down.
+     * - Camera coordinates: The x,y coordinates of the camera view.
+     *   (0,0) is the top left corner of the camera view and the x,y coordinates increase as you move right and down.
+     * - World coordinates: The x,y coordinates of the world that the camera is viewing.
+     *   (0,0) is the CENTER of the world and the x,y coordinates increase as you move right and down.
      */
     __publicField(this, "containerDom");
     // The DOM that represents the camera view
+    __publicField(this, "containerOffsetX");
+    // The x coordinate of the container DOM on the device screen
+    __publicField(this, "containerOffsetY");
+    // The y coordinate of the container DOM on the device screen
     __publicField(this, "canvasDom");
     // The dom that the camera is rendering
     __publicField(this, "cameraWidth");
-    // The width of the camera view
+    // The width of the camera view. This should be the same as the container width.
     __publicField(this, "cameraHeight");
-    // The height of the camera view
-    __publicField(this, "cameraX");
+    // The height of the camera view. This should be the same as the container height.
+    __publicField(this, "cameraPositionX");
     // Position of the center of the camera
-    __publicField(this, "cameraY");
+    __publicField(this, "cameraPositionY");
     __publicField(this, "cameraPanStartX");
     // Initial position of the camera when panning
     __publicField(this, "cameraPanStartY");
@@ -3335,11 +3346,13 @@ class Camera {
     // The zoom level of the camera, 1 means no zoom, smaller values zoom out, larger values zoom in
     __publicField(this, "canvasStyle");
     this.containerDom = container;
+    this.containerOffsetX = container.offsetLeft;
+    this.containerOffsetY = container.offsetTop;
     this.canvasDom = canvas;
     this.cameraWidth = container.clientWidth;
     this.cameraHeight = container.clientHeight;
-    this.cameraX = 0;
-    this.cameraY = 0;
+    this.cameraPositionX = 0;
+    this.cameraPositionY = 0;
     this.cameraPanStartX = 0;
     this.cameraPanStartY = 0;
     this.zoom = 1;
@@ -3364,10 +3377,13 @@ class Camera {
     const t2 = -cameraY * zoom + cameraHeight / 2;
     return `${s1},0,0,0,0,${s2},0,0,0,0,1,0,${t1},${t2},0,1`;
   }
+  /**
+   * Updates the camera view based on the current camera position and zoom level
+   */
   updateCamera() {
     const matrix = this.worldToCameraMatrix(
-      this.cameraX,
-      this.cameraY,
+      this.cameraPositionX,
+      this.cameraPositionY,
       this.zoom,
       this.containerDom.clientWidth,
       this.containerDom.clientHeight
@@ -3377,58 +3393,119 @@ class Camera {
   /**
    * Handle the scroll event to zoom in and out of the camera view
    * @param deltaZoom Amount of scroll
-   * @param mouseX Position of the mouse on the device screen
-   * @param mouseY
+   * @param cameraX The x coordinate of the pointer in the camera view
+   * @param cameraY The y coordinate of the pointer in the camera view
    */
-  handleScroll(deltaZoom, mouseX, mouseY) {
-    mouseX -= this.containerDom.offsetLeft;
-    mouseY -= this.containerDom.offsetTop;
+  handleScroll(deltaZoom, cameraX, cameraY) {
     if (this.zoom + deltaZoom < 0.2) {
       deltaZoom = 0.2 - this.zoom;
     } else if (this.zoom + deltaZoom > 1) {
       deltaZoom = 1 - this.zoom;
     }
     const zoomRatio = this.zoom / (this.zoom + deltaZoom);
-    this.cameraX -= this.cameraWidth / this.zoom * (zoomRatio - 1) * (1 - (this.cameraWidth * 1.5 - mouseX) / this.cameraWidth);
-    this.cameraY -= this.cameraHeight / this.zoom * (zoomRatio - 1) * (1 - (this.cameraHeight * 1.5 - mouseY) / this.cameraHeight);
+    this.cameraPositionX -= this.cameraWidth / this.zoom * (zoomRatio - 1) * (1 - (this.cameraWidth * 1.5 - cameraX) / this.cameraWidth);
+    this.cameraPositionY -= this.cameraHeight / this.zoom * (zoomRatio - 1) * (1 - (this.cameraHeight * 1.5 - cameraY) / this.cameraHeight);
     this.zoom += deltaZoom;
     this.updateCamera();
   }
+  /**
+   * Updates the camera position based on the change in mouse position.
+   * Compared to the 3 stage process of handlePanStart, handlePanDrag, and handlePanEnd functions,
+   * using this functions may cause a slight deviance between mouse movement and camera movement
+   * as the camera position is updated based on the change in mouse position.
+   * @param deltaX  Change in mouse position
+   * @param deltaY  Change in mouse position
+   */
   handlePan(deltaX, deltaY) {
-    this.cameraX += deltaX / this.zoom;
-    this.cameraY += deltaY / this.zoom;
+    this.cameraPositionX += deltaX / this.zoom;
+    this.cameraPositionY += deltaY / this.zoom;
     this.updateCamera();
   }
+  /**
+   * Should be called when a user presses the pointer down to start panning the camera.
+   * This function is the start of a 3-stage process to pan the camera:
+   *    handlePanStart -> handlePanDrag -> handlePanEnd
+   * This allows camera pans based on the absolute position of the pointer relative to when the pan started.
+   */
   handlePanStart() {
-    this.cameraPanStartX = this.cameraX;
-    this.cameraPanStartY = this.cameraY;
+    this.cameraPanStartX = this.cameraPositionX;
+    this.cameraPanStartY = this.cameraPositionY;
   }
+  /**
+   * Updates the camera position based on the change in mouse position, relative to the start of the pan.
+   * This function should be called after handlePanStart and before handlePanEnd.
+   * @param deltaX  Change in mouse position
+   * @param deltaY  Change in mouse position
+   */
   handlePanDrag(deltaX, deltaY) {
-    this.cameraX = -deltaX / this.zoom + this.cameraPanStartX;
-    this.cameraY = -deltaY / this.zoom + this.cameraPanStartY;
+    this.cameraPositionX = -deltaX / this.zoom + this.cameraPanStartX;
+    this.cameraPositionY = -deltaY / this.zoom + this.cameraPanStartY;
     this.updateCamera();
   }
+  /**
+   * Should be called when a user releases the pointer to end panning the camera.
+   * This function is the end of a 3-stage process to pan the camera:
+   *    handlePanStart -> handlePanDrag -> handlePanEnd
+   */
   handlePanEnd() {
     this.cameraPanStartX = 0;
     this.cameraPanStartY = 0;
   }
+  /**
+   * Converts the x and y coordinates of the world to the x and y coordinates of the camera view.
+   * @param worldX  The x coordinate of the point in the world
+   * @param worldY  The y coordinate of the point in the world
+   * @returns The x and y coordinates of the point in the camera view
+   */
   getCameraFromWorld(worldX, worldY) {
-    const c_x = (worldX - this.cameraX) * this.zoom + this.cameraWidth / 2;
-    const c_y = (worldY - this.cameraY) * this.zoom + this.cameraHeight / 2;
+    const c_x = (worldX - this.cameraPositionX) * this.zoom + this.cameraWidth / 2;
+    const c_y = (worldY - this.cameraPositionY) * this.zoom + this.cameraHeight / 2;
     return [c_x, c_y];
   }
-  getWorldFromCamera(mouseX, mouseY) {
-    mouseX = mouseX - this.containerDom.offsetLeft;
-    mouseY = mouseY - this.containerDom.offsetTop;
-    const w_x = (mouseX - this.cameraWidth / 2) / this.zoom + this.cameraX;
-    const w_y = (mouseY - this.cameraHeight / 2) / this.zoom + this.cameraY;
+  /**
+   * Converts the x and y coordinates of the camera view to the x and y coordinates of the device screen.
+   * @param cameraX The x coordinate of the point in the camera view
+   * @param cameraY The y coordinate of the point in the camera view
+   * @returns
+   */
+  getScreenFromCamera(cameraX, cameraY) {
+    const s_x = cameraX + this.containerOffsetX;
+    const s_y = cameraY + this.containerOffsetY;
+    return [s_x, s_y];
+  }
+  /**
+   * Converts the x and y coordinates of the camera view to the x and y coordinates of the world.
+   * @param mouseX
+   * @param mouseY
+   * @returns
+   */
+  getWorldFromCamera(cameraX, cameraY) {
+    const w_x = (cameraX - this.cameraWidth / 2) / this.zoom + this.cameraPositionX;
+    const w_y = (cameraY - this.cameraHeight / 2) / this.zoom + this.cameraPositionY;
     return [w_x, w_y];
   }
+  getCameraFromScreen(mouseX, mouseY) {
+    mouseX = mouseX - this.containerOffsetX;
+    mouseY = mouseY - this.containerOffsetY;
+    return [mouseX, mouseY];
+  }
+  /**
+   * Converts the change in x and y coordinates of the world to the change in x and y coordinates of the camera view.
+   * @param worldDeltaX
+   * @param worldDeltaY
+   * @returns
+   */
   getCameraDeltaFromWorldDelta(worldDeltaX, worldDeltaY) {
     const c_dx = worldDeltaX * this.zoom;
     const c_dy = worldDeltaY * this.zoom;
     return [c_dx, c_dy];
   }
+  /**
+   * Converts the change in x and y coordinates of the camera view to the change in x and y coordinates of the world.
+   * @param cameraDeltaX
+   * @param cameraDeltaY
+   * @returns
+   */
   getWorldDeltaFromCameraDelta(cameraDeltaX, cameraDeltaY) {
     const w_dx = cameraDeltaX / this.zoom;
     const w_dy = cameraDeltaY / this.zoom;
@@ -3444,7 +3521,7 @@ class SnapLine {
     __publicField(this, "_selectionBoxStyle", {});
     __publicField(this, "_backgroundStyle", {});
     __publicField(this, "_inputControl", null);
-    this.g = null;
+    this.g = {};
     this._containerStyle = {
       position: "relative",
       overflow: "hidden"
@@ -3467,10 +3544,10 @@ class SnapLine {
       _currentMouseDown: cursorState.none,
       mousedown_x: 0,
       mousedown_y: 0,
-      mouse_x: 0,
-      mouse_y: 0,
-      mouse_x_world: 0,
-      mouse_y_world: 0,
+      mouseCameraX: 0,
+      mouseCameraY: 0,
+      mouseWorldX: 0,
+      mouseWorldY: 0,
       dx: 0,
       dy: 0,
       dx_offset: 0,
@@ -3596,8 +3673,10 @@ class SnapLine {
     for (const node of g.globalNodeList) {
       node.offFocus();
     }
-    g.mousedown_x = clientX;
-    g.mousedown_y = clientY;
+    [g.mousedown_x, g.mousedown_y] = this.g.camera.getCameraFromScreen(
+      clientX,
+      clientY
+    );
     if (button == cursorState.mouseMiddle || button == cursorState.touchDouble) {
       this.g.camera.handlePanStart();
     }
@@ -3614,14 +3693,16 @@ class SnapLine {
   onCursorMove(_, ___, __, clientX, clientY) {
     const g = this.g;
     g.hoverDOM = document.elementFromPoint(clientX, clientY);
-    g.mouse_x = clientX - g.canvasContainer.offsetLeft;
-    g.mouse_y = clientY - g.canvasContainer.offsetTop;
-    [g.mouse_x_world, g.mouse_y_world] = this.g.camera.getWorldFromCamera(
-      g.mouse_x,
-      g.mouse_y
+    [g.mouseCameraX, g.mouseCameraY] = this.g.camera.getCameraFromScreen(
+      clientX,
+      clientY
     );
-    g.dx = clientX - g.mousedown_x + g.dx_offset;
-    g.dy = clientY - g.mousedown_y + g.dy_offset;
+    [g.mouseWorldX, g.mouseWorldY] = this.g.camera.getWorldFromCamera(
+      g.mouseCameraX,
+      g.mouseCameraY
+    );
+    g.dx = g.mouseCameraX - g.mousedown_x;
+    g.dy = g.mouseCameraY - g.mousedown_y;
     if (g.dx !== 0 || g.dy !== 0) {
       g.mouseHasMoved = true;
     }
@@ -3633,24 +3714,29 @@ class SnapLine {
           cursor: "grabbing"
         });
         this._setBackgroundStyle({
-          transform: `translate(${this.g.camera.cameraX + -this.g.camera.cameraWidth * 5}px, ${this.g.camera.cameraY + -this.g.camera.cameraHeight * 5}px)`,
-          backgroundPosition: `${-this.g.camera.cameraX}px ${-this.g.camera.cameraY}px`
+          transform: `translate(${this.g.camera.cameraPositionX + -this.g.camera.cameraWidth * 5}px, ${this.g.camera.cameraPositionY + -this.g.camera.cameraHeight * 5}px)`,
+          backgroundPosition: `${-this.g.camera.cameraPositionX}px ${-this.g.camera.cameraPositionY}px`
         });
       } else if (g._currentMouseDown == cursorState.mouseLeft || g._currentMouseDown == cursorState.touchSingle) {
+        let [left, top] = [
+          Math.min(g.mousedown_x, g.mouseCameraX),
+          Math.min(g.mousedown_y, g.mouseCameraY)
+        ];
         this._setSelectionBoxStyle({
           width: Math.abs(g.dx) + "px",
           height: Math.abs(g.dy) + "px",
-          left: Math.min(g.mousedown_x, g.mouse_x) + "px",
-          top: Math.min(g.mousedown_y, g.mouse_y) + "px",
-          opacity: "1"
+          left: left + "px",
+          top: top + "px",
+          opacity: "1",
+          position: "absolute"
         });
         const [adjStartX, adjStartY] = this.g.camera.getWorldFromCamera(
-          Math.min(g.mousedown_x, g.mouse_x),
-          Math.min(g.mousedown_y, g.mouse_y)
+          left,
+          top
         );
         const [adjEndX, adjEndY] = this.g.camera.getWorldFromCamera(
-          Math.max(g.mousedown_x, g.mouse_x),
-          Math.max(g.mousedown_y, g.mouse_y)
+          Math.max(g.mousedown_x, g.mouseCameraX),
+          Math.max(g.mousedown_y, g.mouseCameraY)
         );
         const selectedNodes = [];
         for (const node of g.globalNodeList) {
@@ -3724,14 +3810,14 @@ class SnapLine {
    * @param deltaY: The amount the user scrolled.
    */
   onZoom(_, __, ______, ____, _____, deltaY) {
-    this.g.camera.handleScroll(deltaY, this.g.mouse_x, this.g.mouse_y);
+    this.g.camera.handleScroll(
+      deltaY,
+      this.g.mouseCameraX,
+      this.g.mouseCameraY
+    );
     this._setCanvasStyle({
       transform: this.g.camera.canvasStyle
     });
-    console.debug(
-      "Zooming",
-      `Camera position: ${this.g.camera.cameraX}, ${this.g.camera.cameraY}`
-    );
   }
   /**
    * Renders elements currently in the canvas.
@@ -3772,14 +3858,14 @@ class SnapLine {
   }
   addNodeAtMouse(node, e) {
     this.g.ignoreMouseUp = true;
-    const x = this.g.mouse_x_world;
-    const y = this.g.mouse_y_world;
+    const x = this.g.mouseWorldX;
+    const y = this.g.mouseWorldY;
     console.debug("Adding node at " + x + ", " + y);
     this.addNode(node, x, y);
     node.setStartPositions();
     this.g._currentMouseDown = cursorState.mouseLeft;
-    this.g.mousedown_x = this.g.mouse_x;
-    this.g.mousedown_y = this.g.mouse_y;
+    this.g.mousedown_x = this.g.mouseCameraX;
+    this.g.mousedown_y = this.g.mouseCameraY;
     this.g.focusNodes = [node];
     this.g.targetObject = node;
     for (const node2 of this.g.globalNodeList) {
