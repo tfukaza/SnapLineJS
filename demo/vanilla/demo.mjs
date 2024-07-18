@@ -1,13 +1,11 @@
 import SnapLine from "./lib/snapline.mjs";
 
-const sl = new SnapLine("node-editor");
+const sl = new SnapLine();
 
 let addNodeMenu = null;
-let themeMenu = null;
 
 document.addEventListener("DOMContentLoaded", function () {
   addNodeMenu = document.getElementById("addNodeButton");
-  themeMenu = document.getElementById("themeButton");
 
   document
     .getElementById("addNodeButton")
@@ -34,6 +32,11 @@ document.addEventListener("DOMContentLoaded", function () {
   console.debug("initSnapLine", canvasContainer, canvas, background, selection);
 
   sl.initSnapLine(canvasContainer, canvas, background, selection);
+
+  addNodeAuto("node-constant", -250, -150);
+  addNodeAuto("node-constant", -250, 0);
+  addNodeAuto("node-math", 0, -150);
+  addNodeAuto("node-print", 250, -150);
 });
 
 document.addEventListener("click", function (e) {
@@ -46,6 +49,13 @@ function toggleMenu(e, id) {
   }
 
   e.stopPropagation();
+}
+
+function addNodeAuto(name, x, y) {
+  let ele = document.createElement(name);
+  let node = sl.createNode(ele);
+  ele.initComponent(node);
+  sl.addNode(node, x, y);
 }
 
 function addNode(e, name) {

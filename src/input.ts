@@ -107,7 +107,7 @@ class InputControl {
         console.log("Gesture move");
         e.button = 1; // Middle mouse button, indicating a camera pan
         this._callFuncWithCallbackParam(this._onCursorMove, e);
-        this._callFuncWithScrollCallbackParam(this._onScroll, e, e.ds);
+        this._callFuncWithScrollCallbackParam(this._onScroll, e, e.ds / 2.5);
       },
       onend: (e: any) => {
         console.log("end");

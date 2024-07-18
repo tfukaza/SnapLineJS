@@ -96,6 +96,7 @@ class NodeComponent extends Base {
   initNode(dom: HTMLElement) {
     this.dom = dom;
     this.dom.id = this.gid;
+    dom.setAttribute("data-snapline-type", "node");
 
     this.renderNode(this.nodeStyle);
 

@@ -31,6 +31,10 @@ export default function App() {
       slBackground.current,
       slSelection.current,
     );
+    handleSelectNode(null, "constant");
+    handleSelectNode(null, "constant");
+    handleSelectNode(null, "math");
+    handleSelectNode(null, "print");
   }, []);
 
   function typeToNode(node) {

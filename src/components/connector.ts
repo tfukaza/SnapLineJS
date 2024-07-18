@@ -181,13 +181,12 @@ class ConnectorComponent extends ComponentBase {
     // Hand over control to the peer output
     this.g.targetObject = line.start;
 
-    [this.g.dx_offset, this.g.dy_offset] =
-      this.g.camera.getCameraDeltaFromWorldDelta(
-        this.connectorX - line.start.connectorX,
-        this.connectorY - line.start.connectorY,
-      );
-    this.g.dx = this.g.dx_offset;
-    this.g.dy = this.g.dy_offset;
+    let [dx_offset, dy_offset] = this.g.camera.getCameraDeltaFromWorldDelta(
+      this.connectorX - line.start.connectorX,
+      this.connectorY - line.start.connectorY,
+    );
+    this.g.dx = dx_offset;
+    this.g.dy = dy_offset;
 
     line.start.disconnectFromConnector(this);
     this.disconnectFromConnector(line.start);

@@ -41,22 +41,15 @@ export interface GlobalStats {
   _currentMouseDown: cursorState; // Current mouse button being pressed
   mousedown_x: number; // Initial mouse  position when mouse is pressed
   mousedown_y: number;
-  mouse_x: number; // Current mouse position, in camera space
-  mouse_y: number;
-  mouse_x_world: number; // Current mouse position, in world space
-  mouse_y_world: number;
+  mouseCameraX: number; // Location of the mouse in camera space
+  mouseCameraY: number;
+  mouseWorldX: number; // Current mouse position, in world space
+  mouseWorldY: number;
   dx: number; // How much the mouse has moved since being pressed
   dy: number;
   dx_offset: number; // Offset for dx and dy
   dy_offset: number;
 
-  // camera_x: number; // Current camera position
-  // camera_y: number;
-  // camera_pan_start_x: number; // Initial camera position when camera is being panned
-  // camera_pan_start_y: number;
-  // zoom: number;
-  // cameraWidth: number;
-  // cameraHeight: number;
   camera: Camera;
 
   overrideDrag: boolean;
