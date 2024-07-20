@@ -26,3 +26,7 @@ dist-ssr
 
 demo/vanilla/lib/*
 demo/react/src/lib/*
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
