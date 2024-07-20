@@ -5,7 +5,7 @@ export default defineConfig(({ command, mode }) => {
   return {
     plugins: [react()],
     server: {
-      port: 3002,
+      port: 3001,
       open: false,
       strictPort: true,
       preTransformRequests: false,
