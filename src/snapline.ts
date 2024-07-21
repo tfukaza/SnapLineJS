@@ -1,19 +1,20 @@
 import { GlobalStats, ObjectTypes } from "./types";
 import { NodeComponent } from "./components/node";
 import { ConnectorComponent } from "./components/connector";
+import { returnUpdatedDict } from "./helper";
+import { setDomStyle } from "./helper";
 import Camera from "./camera";
 import { InputControl, cursorState } from "./input";
 
 // Uncomment the theme you want to use
 import "./theme/standard_light.scss";
 // import "./theme/standard_dark.scss";
-// import './theme/retro.scss';
 
 /**
  * SnapLine class manages all the global states for the library.
  */
 export default class SnapLine {
-  g: GlobalStats; // Global state
+  g: GlobalStats;
 
   _containerStyle: { [key: string]: string } = {};
   _canvasStyle: { [key: string]: string } = {};
@@ -22,154 +23,47 @@ export default class SnapLine {
 
   _inputControl: InputControl | null = null;
 
-  constructor() {
-    this.g = {} as any;
+  // ============== Private functions ==============
 
-    this._containerStyle = {
-      position: "relative",
-      overflow: "hidden",
-    };
-    this._selectionBoxStyle = {
-      position: "absolute",
-      pointerEvents: "none",
-    };
-
-    // Public functions
-    this.initSnapLine = this.initSnapLine.bind(this);
-    this.setRenderCanvasCallback = this.setRenderCanvasCallback.bind(this);
-    this.setRenderBackgroundCallback =
-      this.setRenderBackgroundCallback.bind(this);
-    this.setRenderSelectionBoxCallback =
-      this.setRenderSelectionBoxCallback.bind(this);
-  }
-
-  initSnapLine(
-    containerDom: HTMLElement,
-    canvasDom: HTMLElement,
-    backgroundDom: HTMLElement,
-    selectionBoxDom: HTMLElement,
-  ) {
-    this.g = {
-      canvas: canvasDom,
-      canvasContainer: containerDom,
-      canvasBackground: backgroundDom,
-      selectionBox: selectionBoxDom,
-
-      _currentMouseDown: cursorState.none,
-      mousedown_x: 0,
-      mousedown_y: 0,
-      mouseCameraX: 0,
-      mouseCameraY: 0,
-      mouseWorldX: 0,
-      mouseWorldY: 0,
-      dx: 0,
-      dy: 0,
-      dx_offset: 0,
-      dy_offset: 0,
-
-      camera: new Camera(containerDom, canvasDom),
-
-      overrideDrag: false,
-
-      targetObject: null,
-      focusNodes: [],
-      hoverDOM: null,
-      gid: 0,
-
-      globalNodeList: [],
-      globalNodeTable: {},
-
-      mouseHasMoved: false,
-      ignoreMouseUp: false,
-
-      prevTouches: null,
-      prevSingleTouchTime: 0,
-
-      snapline: this,
-    };
-
-    this._setCanvasStyle({
-      position: "relative",
-      top: "0px",
-      left: "0px",
-      width: "0px",
-      height: "0px",
-      transform: this.g.camera.canvasStyle,
-    });
-
-    this._setBackgroundStyle({
-      width: this.g.camera.cameraWidth * 10 + "px",
-      height: this.g.camera.cameraHeight * 10 + "px",
-      transform: `translate(${-this.g.camera.cameraWidth * 5}px, ${-this.g.camera.cameraHeight * 5}px)`,
-      transformOrigin: "center",
-      zIndex: "0",
-      position: "absolute",
-    });
-
+  /**
+   * Main loop for rendering the canvas.
+   */
+  #step(): void {
+    this._renderElements();
     this._renderCanvas(this._canvasStyle);
     this._renderBackground(this._backgroundStyle);
     this._renderSelectionBox(this._selectionBoxStyle);
 
-    this._inputControl = new InputControl(containerDom);
-    this._inputControl.setCursorDownCallback(this.onCursorDown.bind(this));
-    this._inputControl.setCursorMoveCallback(this.onCursorMove.bind(this));
-    this._inputControl.setCursorUpCallback(this.onCursorUp.bind(this));
-    this._inputControl.setScrollCallback(this.onZoom.bind(this));
-
-    window.requestAnimationFrame(this.step.bind(this));
+    window.requestAnimationFrame(this.#step.bind(this));
   }
 
-  _setCanvasStyle(newStyle: Record<string, string>) {
-    this._canvasStyle = Object.assign({}, this._canvasStyle, newStyle);
-    this._canvasStyle._requestUpdate = "true";
+  // ============== Hidden functions ==============
+
+  /**
+   * Update the dictionary containing the CSS style for the canvas.
+   * @param newStyle The new style to be added to the canvas.
+   */
+  _setCanvasStyle(newStyle: { [key: string]: string }) {
+    this._canvasStyle = returnUpdatedDict(this._canvasStyle, newStyle);
   }
 
-  _setBackgroundStyle(newStyle: Record<string, string>) {
-    this._backgroundStyle = Object.assign({}, this._backgroundStyle, newStyle);
-    this._backgroundStyle._requestUpdate = "true";
+  /**
+   * Update the dictionary containing the CSS style for the background.
+   * @param newStyle The new style to be added to the background.
+   */
+  _setBackgroundStyle(newStyle: { [key: string]: string }) {
+    this._backgroundStyle = returnUpdatedDict(this._backgroundStyle, newStyle);
   }
 
-  _setSelectionBoxStyle(newStyle: Record<string, string>) {
-    this._selectionBoxStyle = Object.assign(
-      {},
+  /**
+   * Update the dictionary containing the CSS style for the selection box.
+   * @param newStyle The new style to be added to the selection box.
+   */
+  _setSelectionBoxStyle(newStyle: { [key: string]: string }) {
+    this._selectionBoxStyle = returnUpdatedDict(
       this._selectionBoxStyle,
       newStyle,
     );
-    this._selectionBoxStyle._requestUpdate = "true";
-  }
-
-  _renderCanvas(style: Record<string, string>) {
-    for (const key in style) {
-      this.g.canvas.style[key as any] = style[key];
-    }
-  }
-
-  _renderBackground(style: Record<string, string>) {
-    for (const key in style) {
-      this.g.canvasBackground.style[key as any] = style[key];
-    }
-  }
-
-  _renderSelectionBox(style: Record<string, string>) {
-    for (const key in style) {
-      this.g.selectionBox.style[key as any] = style[key];
-    }
-  }
-
-  setRenderCanvasCallback(callback: (style: Record<string, string>) => void) {
-    this._renderCanvas = callback;
-  }
-
-  setRenderBackgroundCallback(
-    callback: (style: Record<string, string>) => void,
-  ) {
-    this._renderBackground = callback;
-  }
-
-  setRenderSelectionBoxCallback(
-    callback: (style: Record<string, string>) => void,
-  ) {
-    this._renderSelectionBox = callback;
   }
 
   /**
@@ -185,7 +79,7 @@ export default class SnapLine {
    * @param clientY: The y position of the cursor.
    * @returns
    */
-  onCursorDown(
+  _onCursorDown(
     _: Event,
     element: Element | null,
     button: cursorState,
@@ -257,7 +151,7 @@ export default class SnapLine {
    * @param clientY
    * @returns
    */
-  onCursorMove(
+  _onCursorMove(
     _: Event,
     ___: Element | null,
     __: cursorState,
@@ -358,11 +252,11 @@ export default class SnapLine {
       if (g.targetObject.type == ObjectTypes.node) {
         // If the object being dragged is a node, then handle mouse move for all selected nodes
         for (const node of g.focusNodes) {
-          node.onDrag();
+          node._onDrag();
         }
       } else {
         // Otherwise, just handle mouse move for the selected object
-        g.targetObject.onDrag();
+        g.targetObject._onDrag();
       }
     }
   }
@@ -371,7 +265,7 @@ export default class SnapLine {
    * Event handler when mouse or touchscreen is released.
    * @returns
    */
-  onCursorUp(
+  _onCursorUp(
     _: Event,
     __: Element | null,
     ___: cursorState,
@@ -440,7 +334,7 @@ export default class SnapLine {
    * Event handler for mouse scroll events.
    * @param deltaY: The amount the user scrolled.
    */
-  onZoom(
+  _onZoom(
     _: Event,
     __: Element | null,
     ______: cursorState,
@@ -459,9 +353,37 @@ export default class SnapLine {
   }
 
   /**
-   * Renders elements currently in the canvas.
+   * Applies the canvas CSS styles to the canvas DOM element.
+   * This function is typically used in vanilla JS projects which does not have a reactive system to automatically update the DOM.
+   * @param style Dictionary of CSS styles to be applied to the canvas.
    */
-  _renderElements() {
+  _renderCanvas(style: { [key: string]: string }) {
+    setDomStyle(this.g.canvas, style);
+  }
+
+  /**
+   * Applies the background CSS styles to the background DOM element.
+   * This function is typically used in vanilla JS projects which does not have a reactive system to automatically update the DOM.
+   * @param style Dictionary of CSS styles to be applied to the background.
+   */
+  _renderBackground(style: { [key: string]: string }) {
+    setDomStyle(this.g.canvasBackground, style);
+  }
+
+  /**
+   * Applies the selection box CSS styles to the selection box DOM element.
+   * This function is typically used in vanilla JS projects which does not have a reactive system to automatically update the DOM.
+   * @param style Dictionary of CSS styles to be applied to the selection box.
+   */
+  _renderSelectionBox(style: { [key: string]: string }) {
+    setDomStyle(this.g.selectionBox, style);
+  }
+
+  /**
+   * Renders elements currently in the canvas.
+   * This function is used by Vanilla JS projects that do not have a reactive system to automatically update the DOM.
+   */
+  _renderElements(): void {
     const target: any = this.g.targetObject; // The object that is currently selected
 
     if (target == null) {
@@ -471,7 +393,7 @@ export default class SnapLine {
     if (target.type == ObjectTypes.node) {
       // If the target object is a node, render the node
       for (const node of this.g.focusNodes) {
-        node.renderNode(node.nodeStyle);
+        node._renderNode(node.nodeStyle);
       }
     } else if (target.type == ObjectTypes.connector) {
       // If the target object is an output connector, render the lines
@@ -480,74 +402,206 @@ export default class SnapLine {
     }
   }
 
-  step() {
-    this._renderElements();
+  // ============== Public functions ==============
+
+  /**
+   * Constructor for SnapLine class.
+   */
+  constructor() {
+    this.g = {} as any;
+
+    this._containerStyle = {
+      position: "relative",
+      overflow: "hidden",
+    };
+    this._selectionBoxStyle = {
+      position: "absolute",
+      pointerEvents: "none",
+    };
+
+    this.init = this.init.bind(this);
+    this.setRenderCanvasCallback = this.setRenderCanvasCallback.bind(this);
+    this.setRenderBackgroundCallback =
+      this.setRenderBackgroundCallback.bind(this);
+    this.setRenderSelectionBoxCallback =
+      this.setRenderSelectionBoxCallback.bind(this);
+  }
+
+  /**
+   * Initialize global stats, dom elements, and event listeners for the library.
+   * @param containerDom: The element that will be used to render the canvas and it's nodes.
+   * @param canvasDom: The canvas element that will contain the nodes and all other components. It should be a direct child of the containerDom.
+   * @param backgroundDom: The background element that will be used to render the background of the canvas. It should be a direct child of the containerDom.
+   * @param selectionBoxDom: The element that will be used as the selection box. It should be a direct child of the containerDom.
+   */
+  init(
+    containerDom: HTMLElement,
+    canvasDom: HTMLElement,
+    backgroundDom: HTMLElement,
+    selectionBoxDom: HTMLElement,
+  ) {
+    /* Initialize global stats */
+    this.g = {
+      canvas: canvasDom,
+      canvasContainer: containerDom,
+      canvasBackground: backgroundDom,
+      selectionBox: selectionBoxDom,
+
+      _currentMouseDown: cursorState.none,
+      mousedown_x: 0,
+      mousedown_y: 0,
+      mouseCameraX: 0,
+      mouseCameraY: 0,
+      mouseWorldX: 0,
+      mouseWorldY: 0,
+      dx: 0,
+      dy: 0,
+      dx_offset: 0,
+      dy_offset: 0,
+
+      camera: new Camera(containerDom, canvasDom),
+
+      overrideDrag: false,
+
+      targetObject: null,
+      focusNodes: [],
+      hoverDOM: null,
+      gid: 0,
+
+      globalNodeList: [],
+      globalNodeTable: {},
+
+      mouseHasMoved: false,
+      ignoreMouseUp: false,
+
+      prevTouches: null,
+      prevSingleTouchTime: 0,
+
+      snapline: this,
+    };
+
+    this._setCanvasStyle({
+      position: "relative",
+      top: "0px",
+      left: "0px",
+      width: "0px",
+      height: "0px",
+      transform: this.g.camera.canvasStyle,
+    });
+
+    this._setBackgroundStyle({
+      width: this.g.camera.cameraWidth * 10 + "px",
+      height: this.g.camera.cameraHeight * 10 + "px",
+      transform: `translate(${-this.g.camera.cameraWidth * 5}px, ${-this.g.camera.cameraHeight * 5}px)`,
+      transformOrigin: "center",
+      zIndex: "0",
+      position: "absolute",
+    });
+
     this._renderCanvas(this._canvasStyle);
     this._renderBackground(this._backgroundStyle);
     this._renderSelectionBox(this._selectionBoxStyle);
 
-    window.requestAnimationFrame(this.step.bind(this));
+    this._inputControl = new InputControl(containerDom);
+    this._inputControl.setCursorDownCallback(this._onCursorDown.bind(this));
+    this._inputControl.setCursorMoveCallback(this._onCursorMove.bind(this));
+    this._inputControl.setCursorUpCallback(this._onCursorUp.bind(this));
+    this._inputControl.setScrollCallback(this._onZoom.bind(this));
+
+    window.requestAnimationFrame(this.#step.bind(this));
   }
 
-  addNodeObject(): [
-    NodeComponent,
-    Record<string, NodeComponent | ConnectorComponent>,
-  ] {
-    const n: NodeComponent = new NodeComponent(null, this.g);
-    this.g.globalNodeTable[n.gid] = n;
-    return [n, this.g.globalNodeTable];
+  /**
+   * Creates an instance of a node.
+   * Note that this function will not add the DOM to the canvas.
+   * The caller must manually add the DOM using document.appendChild() or use a framework that will automatically add the DOM.
+   *
+   * @param dom: The DOM element that will be used as the node. If null, NodeComponent.init() must be called later to specify the DOM element.
+   * @param x: The x position of the node.
+   * @param y: The y position of the node.
+   * @returns A reference to the node.
+   */
+  createNode(dom: HTMLElement | null = null, x: number = 0, y: number = 0) {
+    const node: NodeComponent = new NodeComponent(dom, x, y, this.g);
+    this.g.globalNodeTable[node.gid] = node;
+    return node;
   }
 
-  createNode(dom: HTMLElement) {
-    const n: NodeComponent = new NodeComponent(dom, this.g);
-    this.g.globalNodeTable[n.gid] = n;
-    return n;
-  }
+  // addNodeAtMouse(node: NodeComponent, e: MouseEvent) {
+  //   this.g.ignoreMouseUp = true;
 
-  addNode(node: NodeComponent, x: number, y: number) {
-    node.addNodeToCanvas(x, y);
-  }
+  //   const x = this.g.mouseWorldX;
+  //   const y = this.g.mouseWorldY;
 
-  addNodeAtMouse(node: NodeComponent, e: MouseEvent) {
-    this.g.ignoreMouseUp = true;
+  //   console.debug("Adding node at " + x + ", " + y);
 
-    const x = this.g.mouseWorldX;
-    const y = this.g.mouseWorldY;
+  //   this.addNode(node, x, y);
+  //   node.setStartPositions();
 
-    console.debug("Adding node at " + x + ", " + y);
+  //   this.g._currentMouseDown = cursorState.mouseLeft;
+  //   this.g.mousedown_x = this.g.mouseCameraX;
+  //   this.g.mousedown_y = this.g.mouseCameraY;
+  //   this.g.focusNodes = [node];
+  //   this.g.targetObject = node;
 
-    this.addNode(node, x, y);
-    node.setStartPositions();
+  //   for (const node of this.g.globalNodeList) {
+  //     node.offFocus();
+  //   }
 
-    this.g._currentMouseDown = cursorState.mouseLeft;
-    this.g.mousedown_x = this.g.mouseCameraX;
-    this.g.mousedown_y = this.g.mouseCameraY;
-    this.g.focusNodes = [node];
-    this.g.targetObject = node;
+  //   this._onCursorMove(e, null, this.g._currentMouseDown, e.clientX, e.clientY);
+  // }
 
-    for (const node of this.g.globalNodeList) {
-      node.offFocus();
+  /**
+   * Deletes a node from the canvas.
+   * Note that this function will not remove the DOM from the canvas - the caller
+   * must manually remove the DOM using document.removeChild() or use a framework that will automatically remove the DOM.
+   * @param gid The global id of the node to be deleted.
+   * @returns True if the node was successfully deleted, false otherwise.
+   */
+  deleteNode(gid: string): boolean {
+    if (!(gid in this.g.globalNodeTable)) {
+      console.error("Node not found: " + gid);
+      return false;
     }
-
-    this.onCursorMove(e, null, this.g._currentMouseDown, e.clientX, e.clientY);
-  }
-
-  deleteNode(id: string) {
-    if (!(id in this.g.globalNodeTable)) {
-      console.error("Node not found: " + id);
-      return null;
-    }
-    this.g.globalNodeTable[id].destroy();
-    const { [id]: _, ...rest } = this.g.globalNodeTable;
+    this.g.globalNodeTable[gid].delete();
+    const { [gid]: _, ...rest } = this.g.globalNodeTable;
     this.g.globalNodeTable = rest;
 
-    return id;
+    return true;
   }
 
-  focusNode(id: string) {
-    if (!(id in this.g.globalNodeTable)) return null;
-    const node = this.g.globalNodeTable[id];
+  /**
+   * Focus on a node with the given global id.
+   * @param gid The global id of the node to be focused.
+   * @returns True if the node was successfully focused, false otherwise.
+   */
+  focusNode(gid: string): boolean {
+    if (!(gid in this.g.globalNodeTable)) return false;
+    const node = this.g.globalNodeTable[gid];
     node.onFocus();
-    return id;
+    return true;
+  }
+
+  /**
+   * Set the canvas render function to the given callback.
+   * @param gid The global id of the node to be unfocused.
+   * @returns True if the node was successfully unfocused, false otherwise.
+   */
+  setRenderCanvasCallback(
+    callback: (style: { [key: string]: string }) => void,
+  ) {
+    this._renderCanvas = callback;
+  }
+
+  setRenderBackgroundCallback(
+    callback: (style: { [key: string]: string }) => void,
+  ) {
+    this._renderBackground = callback;
+  }
+
+  setRenderSelectionBoxCallback(
+    callback: (style: { [key: string]: string }) => void,
+  ) {
+    this._renderSelectionBox = callback;
   }
 }

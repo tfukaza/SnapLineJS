@@ -81,10 +81,10 @@ export abstract class Base {
     this.g.dx_offset = 0;
     this.g.dy_offset = 0;
 
-    this.componentCursorDown(prop);
+    this._componentCursorDown(prop);
   }
 
-  componentCursorDown(_: customCursorDownProp): void {
+  _componentCursorDown(_: customCursorDownProp): void {
     console.debug(
       `Base class componentCursorDown event triggered on ${this.gid} with prop ${JSON.stringify(_)}`,
     );
@@ -96,10 +96,10 @@ export abstract class Base {
    * Triggered when the dom of this object is released.
    */
   domCursorUp(): void {
-    this.componentCursorUp();
+    this._componentCursorUp();
   }
 
-  componentCursorUp(): void {
+  _componentCursorUp(): void {
     // To be implemented by the child class
   }
 
@@ -120,7 +120,7 @@ export abstract class Base {
   /**
    *  Called for every frame when the object is being dragged.
    */
-  onDrag(): void {
+  _onDrag(): void {
     // To be implemented by the child class
   }
 
@@ -134,7 +134,7 @@ export abstract class Base {
   /**
    *  Called when the object is being deleted.
    */
-  destroy(): void {
+  delete(): void {
     // To be implemented by the child class
   }
 }

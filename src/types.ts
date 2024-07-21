@@ -2,7 +2,7 @@ import { Base } from "./components/base";
 import { ConnectorComponent } from "./components/connector";
 import { NodeComponent } from "./components/node";
 import Camera from "./camera";
-import SnapLine from "./main";
+import SnapLine from "./snapline";
 import { cursorState } from "./input";
 
 export enum ObjectTypes {
