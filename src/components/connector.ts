@@ -325,6 +325,7 @@ class ConnectorComponent extends ComponentBase {
     } else {
       this.deleteLine(0);
     }
+    this.parent._renderOutgoingLines(this.outgoingLines, this.name);
   }
 
   /**

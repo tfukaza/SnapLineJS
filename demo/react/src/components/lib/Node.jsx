@@ -6,22 +6,29 @@ import Lines from "./Lines";
 
 export default function Node({ nodeObject, children }) {
   let [node, setNode] = useState(nodeObject);
-  let [nodeStyle, setNodeStyle] = useState(node.nodeStyle);
-  let [lineList, setLineList] = useState(node.outgoingLines);
+  let [nodeStyle, setNodeStyle] = useState(node.getNodeStyle());
+  let [lineDict, setLineDict] = useState(node.getLines());
 
   let nodeDom = useRef(null);
 
   useEffect(() => {
     node.setRenderNodeCallback(setNodeStyle);
-    node.setRenderLinesCallback((lines) => {
-      setLineList([...lines]);
+    node.setRenderLinesCallback((lines, name) => {
+      setLineDict((prev) => {
+        prev[name] = lines;
+        return { ...prev };
+      });
     });
+
     node.init(nodeDom.current);
   }, []);
 
   return (
     <>
-      <Lines lineList={lineList} />
+      {Object.keys(lineDict).map((name, index) => (
+        <Lines lineList={lineDict[name]} key={index} />
+      ))}
+
       <div
         className={"sl-node " + (nodeStyle["_focus"] ? "focus" : "")}
         ref={nodeDom}

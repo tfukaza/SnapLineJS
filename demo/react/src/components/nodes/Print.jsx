@@ -1,18 +1,18 @@
 import React from "react";
 import { useState } from "react";
-import Node from "./lib/Node";
-import Output from "./lib/Output";
-import InputNumber from "./lib/InputNumber";
+import Node from "../lib/Node";
+import Output from "../lib/Output";
+import InputNumber from "../lib/InputNumber";
 
 export default function PrintNode(nodeObject) {
   let [node, setNode] = useState(nodeObject);
-  let [lineList, setLineList] = useState(node.svgLines || []);
+
   let [printText, setPrintText] = useState("0");
 
   function updateText(e, name) {}
 
   return (
-    <Node nodeObject={node} lineList={lineList}>
+    <Node nodeObject={node}>
       <div className="sl-row">
         <h2>{printText}</h2>
       </div>

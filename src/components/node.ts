@@ -74,7 +74,7 @@ class NodeComponent extends Base {
    */
   _filterDeletedLines(svgLines: lineObject[]) {
     for (let i = 0; i < svgLines.length; i++) {
-      if (svgLines[i].requestDelete && svgLines[i].completedDelete) {
+      if (svgLines[i].requestDelete) {
         svgLines.splice(i, 1);
         i--;
       }
@@ -86,7 +86,7 @@ class NodeComponent extends Base {
    * This function can be called by the node or a connector.on the node.
    * @param outgoingLines Array of all lines outgoing from the node or connector
    */
-  _renderOutgoingLines(outgoingLines: lineObject[]): void {
+  _renderOutgoingLines(outgoingLines: lineObject[], key?: string) {
     for (const line of outgoingLines) {
       const connector = line.start;
       if (!line.svg) {
@@ -293,6 +293,10 @@ class NodeComponent extends Base {
     this.onFocus = this.onFocus.bind(this);
     this.offFocus = this.offFocus.bind(this);
     this.getConnector = this.getConnector.bind(this);
+    this.getLines = this.getLines.bind(this);
+    this.getNodeStyle = this.getNodeStyle.bind(this);
+    this.getProp = this.getProp.bind(this);
+    this.setProp = this.setProp.bind(this);
 
     this.setRenderNodeCallback = this.setRenderNodeCallback.bind(this);
     this.setRenderLinesCallback = this.setRenderLinesCallback.bind(this);
@@ -342,10 +346,13 @@ class NodeComponent extends Base {
    * Sets the callback function that is called when lines owned by the node (i.e. outgoing lines) are rendered.
    * @param
    */
-  setRenderLinesCallback(callback: (svgLines: lineObject[]) => void) {
-    this._renderOutgoingLines = (svgLines: lineObject[]) => {
-      callback(svgLines);
+  setRenderLinesCallback(
+    callback: (svgLines: lineObject[], name: string) => void,
+  ) {
+    this._renderOutgoingLines = (svgLines: lineObject[], name: string) => {
       this._filterDeletedLines(svgLines);
+      console.log("Rendering lines", svgLines);
+      callback(svgLines, name);
     };
   }
 
@@ -409,6 +416,14 @@ class NodeComponent extends Base {
     for (const connector of Object.values(this._connectors)) {
       connector.delete();
     }
+  }
+
+  getLines(): { [key: string]: lineObject[] } {
+    return this._allOutgoingLines;
+  }
+
+  getNodeStyle(): { [key: string]: any } {
+    return this._nodeStyle;
   }
 
   getProp(name: string) {

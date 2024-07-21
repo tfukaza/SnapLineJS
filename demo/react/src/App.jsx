@@ -1,55 +1,16 @@
 import React from "react";
 import { useState } from "react";
-import { useRef } from "react";
-import { useEffect } from "react";
 import SnapLine from "./lib/snapline.mjs";
-import MathNode from "./components/Math";
-import PrintNode from "./components/Print";
-import LerpNode from "./components/Lerp";
-import ConstantNode from "./components/Constant";
+import SnapLineReact from "./SnapLineReact";
+import NodeSelect from "./NodeSelect";
+import MathNode from "./components/nodes/Math";
+import ConstantNode from "./components/nodes/Constant";
+import LerpNode from "./components/nodes/Lerp";
+import PrintNode from "./components/nodes/Print";
 
 export default function App() {
-  const [snapLine] = useState(() => new SnapLine()); // SnapLine object
-  const slContainer = useRef(null); // div to contain the canvas
-  const slCanvas = useRef(null); // canvas that contains the nodes
-  const slBackground = useRef(null); // Background of the canvas
-  const slSelection = useRef(null); // selection box
-
-  const [nodes, setNodes] = useState([]); // List of nodes
-
-  const [slCanvasStyle, setSlCanvasStyle] = useState(null);
-  const [slBackgroundStyle, setSlBackgroundStyle] = useState(null);
-  const [slSelectionStyle, setSlSelectionStyle] = useState(null);
-
-  useEffect(() => {
-    snapLine.setRenderCanvasCallback(setSlCanvasStyle);
-    snapLine.setRenderBackgroundCallback(setSlBackgroundStyle);
-    snapLine.setRenderSelectionBoxCallback(setSlSelectionStyle);
-    snapLine.initSnapLine(
-      slContainer.current,
-      slCanvas.current,
-      slBackground.current,
-      slSelection.current,
-    );
-    handleSelectNode(null, "constant");
-    handleSelectNode(null, "constant");
-    handleSelectNode(null, "math");
-    handleSelectNode(null, "print");
-  }, []);
-
-  function typeToNode(node) {
-    let type = node.nodeType;
-    if (type === "math") {
-      return <MathNode {...node} />;
-    } else if (type === "print") {
-      return <PrintNode {...node} />;
-    } else if (type === "lerp") {
-      return <LerpNode {...node} />;
-    } else if (type === "constant") {
-      return <ConstantNode {...node} />;
-    }
-  }
-
+  const [snapLine] = useState(() => new SnapLine());
+  const [nodes, setNodes] = useState([]);
   const [chooseNodeToggle, setChooseNodeToggle] = useState(false);
 
   function menuClick(e, type) {
@@ -58,35 +19,11 @@ export default function App() {
     }
   }
 
-  function handleSelectNode(e, type) {
-    let [node, newNodeDict] = snapLine.addNodeObject();
-    node.nodeType = type;
-    let newNodeList = Object.values(newNodeDict);
-    setNodes([...newNodeList]);
-  }
-
   return (
     <main>
       <link rel="stylesheet" href={`lib/style.css`} />
 
-      <div
-        className="sl-container"
-        ref={slContainer}
-        style={{ width: "100%", height: "100vh", overflow: "hidden" }}
-        id="sl-canvas-container"
-      >
-        <div ref={slCanvas} id="slCanvas" style={slCanvasStyle}>
-          <div
-            ref={slBackground}
-            id="sl-background"
-            style={slBackgroundStyle}
-          ></div>
-          {nodes.map((node, index) => {
-            return typeToNode(node);
-          })}
-        </div>
-        <div ref={slSelection} id="sl-selection" style={slSelectionStyle}></div>
-      </div>
+      <SnapLineReact snapLine={snapLine}>{nodes}</SnapLineReact>
 
       <nav className="navbar">
         <div className="sl-dropdown">
@@ -97,38 +34,33 @@ export default function App() {
           >
             Add Node
             <ul className="hide" id="addNodeMenu">
-              <li>
-                <button
-                  className="sl-btn"
-                  onClick={(e) => handleSelectNode(e, "math")}
-                >
-                  Math
-                </button>
-              </li>
-              <li>
-                <button
-                  className="sl-btn"
-                  onClick={(e) => handleSelectNode(e, "print")}
-                >
-                  Print
-                </button>
-              </li>
-              <li>
-                <button
-                  className="sl-btn"
-                  onClick={(e) => handleSelectNode(e, "constant")}
-                >
-                  Constant
-                </button>
-              </li>
-              <li>
-                <button
-                  className="sl-btn"
-                  onClick={(e) => handleSelectNode(e, "lerp")}
-                >
-                  Lerp
-                </button>
-              </li>
+              <NodeSelect
+                snapLine={snapLine}
+                name="Math"
+                component={MathNode}
+                setNodes={setNodes}
+              />
+
+              <NodeSelect
+                snapLine={snapLine}
+                name="Constant"
+                component={ConstantNode}
+                setNodes={setNodes}
+              />
+
+              <NodeSelect
+                snapLine={snapLine}
+                name="Lerp"
+                component={LerpNode}
+                setNodes={setNodes}
+              />
+
+              <NodeSelect
+                snapLine={snapLine}
+                name="Print"
+                component={PrintNode}
+                setNodes={setNodes}
+              />
             </ul>
           </div>
         </div>

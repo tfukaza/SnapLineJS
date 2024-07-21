@@ -1,30 +1,7 @@
-import { ComponentConfig } from "./types";
 import { lineObject } from "./types";
 
 function isBetween(x: number, a: number, b: number) {
   return (x >= a && x <= b) || (x >= b && x <= a);
-}
-
-// function worldToCamera(x: number, y: number, g: GlobalStats) {
-//   const s1 = g.zoom;
-//   const s2 = g.zoom;
-//   const t1 = -x * g.zoom + g.cameraWidth / 2;
-//   const t2 = -y * g.zoom + g.cameraHeight / 2;
-//   return `${s1},0,0,0,0,${s2},0,0,0,0,1,0,${t1},${t2},0,1`;
-// }
-
-function addLabel(dom: HTMLElement, config: ComponentConfig) {
-  if (config.class === "") {
-    return;
-  }
-  const label = document.createElement("span");
-  label.classList.add("sl-label");
-  label.innerText = config.class;
-  label.style.zIndex = "99";
-
-  dom.appendChild(label);
-
-  return label;
 }
 
 /**
@@ -49,14 +26,20 @@ function returnUpdatedDict(
  * @param dict: The dictionary to iterate through.
  * @param callback: The callback function to call on each value.
  * @param bind: The object to bind to the callback function.
+ * @param includeKey: A boolean that determines whether to include the key in the callback function.
  */
 function iterateDict(
   dict: { [key: string]: any },
-  callback: (lines: lineObject[]) => void,
+  callback: (lines: lineObject[], key?: string) => void,
   bind: any,
+  includeKey: boolean = false,
 ) {
   for (const key in dict) {
-    callback.bind(bind)(dict[key]);
+    if (includeKey) {
+      callback.bind(bind)(dict[key], key);
+    } else {
+      callback.bind(bind)(dict[key]);
+    }
   }
 }
 
@@ -77,4 +60,4 @@ function setDomStyle(
   }
 }
 
-export { isBetween, addLabel, returnUpdatedDict, iterateDict, setDomStyle };
+export { isBetween, returnUpdatedDict, iterateDict, setDomStyle };

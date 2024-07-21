@@ -1,13 +1,13 @@
 import React from "react";
 import { useState } from "react";
-import Node from "./lib/Node";
-import Output from "./lib/Output";
+import Node from "../lib/Node";
+import Output from "../lib/Output";
 
-export default function ConstantNode(nodeObject) {
+export default function ConstantNode({ nodeObject }) {
   let [node, setNode] = useState(nodeObject);
 
   function updateText(e) {
-    node.prop.floatOutput = e.target.value;
+    node.setProp("floatOutput", e.target.value);
   }
 
   return (
@@ -20,7 +20,7 @@ export default function ConstantNode(nodeObject) {
         <input
           className="sl-input"
           type="number"
-          value={node.prop.floatOutput || 0}
+          value={node.getProp("floatOutput") || 0}
           onChange={(e) => updateText(e)}
         />
       </div>
