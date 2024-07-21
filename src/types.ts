@@ -72,13 +72,23 @@ export interface GlobalStats {
   snapline: SnapLine;
 }
 
-export interface ComponentConfig {
-  name: string;
+export interface SnapLineConfig {
+  backgroundZIndex?: number;
+  canvasZIndex?: number;
 }
 
-export interface ConnectorConfig extends ComponentConfig {
-  maxConnectors: number;
-  allowDragOut: boolean;
+export interface NodeConfig {
+  nodeClass?: string; // Type of node
+}
+
+export interface FormConfig {
+  name?: string;
+}
+
+export interface ConnectorConfig {
+  name?: string;
+  maxConnectors?: number;
+  allowDragOut?: boolean;
 }
 
 export type inputType =

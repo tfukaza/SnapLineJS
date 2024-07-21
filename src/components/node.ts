@@ -4,33 +4,29 @@ import {
   lineObject,
   ObjectTypes,
   customCursorDownProp,
+  NodeConfig,
 } from "../types";
 import { ConnectorComponent } from "./connector";
-import { InputForm } from "./component";
-import { ComponentBase } from "./component";
+import { InputForm } from "./input";
+import { ComponentBase } from "./base";
 import { returnUpdatedDict, iterateDict, setDomStyle } from "../helper";
 
 class NodeComponent extends Base {
-  type: ObjectTypes = ObjectTypes.node;
-  nodeType: string;
-
-  dom: HTMLElement | null;
-  connectors: { [key: string]: ConnectorComponent }; // Dictionary of all connectors in the node, using the name as the key
-  components: { [key: string]: ComponentBase }; // Dictionary of all components in the node except connectors
-  allOutgoingLines: { [key: string]: lineObject[] }; // Dictionary of all lines going out of the node
-  allIncomingLines: { [key: string]: lineObject[] }; // Dictionary of all lines coming into the node
-
-  nodeWidth = 0;
-  nodeHeight = 0;
-  dragStartX = 0;
-  dragStartY = 0;
-
-  freeze: boolean; // If true, the node cannot be moved
-
-  prop: { [key: string]: any }; // Properties of the node
-  propSetCallback: { [key: string]: (value: any) => void }; // Callbacks called when a property is set
-
-  nodeStyle: any;
+  _type: ObjectTypes = ObjectTypes.node;
+  _config: NodeConfig;
+  _dom: HTMLElement | null;
+  _connectors: { [key: string]: ConnectorComponent }; // Dictionary of all connectors in the node, using the name as the key
+  _components: { [key: string]: ComponentBase }; // Dictionary of all components in the node except connectors
+  _allOutgoingLines: { [key: string]: lineObject[] }; // Dictionary of all lines going out of the node
+  _allIncomingLines: { [key: string]: lineObject[] }; // Dictionary of all lines coming into the node
+  _nodeWidth = 0;
+  _nodeHeight = 0;
+  _dragStartX = 0;
+  _dragStartY = 0;
+  _freeze: boolean; // If true, the node cannot be moved
+  _prop: { [key: string]: any }; // Properties of the node
+  _propSetCallback: { [key: string]: (value: any) => void }; // Callbacks called when a property is set
+  _nodeStyle: any;
 
   // ================= Private functions =================
 
@@ -41,10 +37,10 @@ class NodeComponent extends Base {
    * @returns
    */
   #updateDomProperties() {
-    if (!this.dom) return;
-    this.nodeHeight = this.dom.offsetHeight;
-    this.nodeWidth = this.dom.offsetWidth;
-    for (const connector of Object.values(this.connectors)) {
+    if (!this._dom) return;
+    this._nodeHeight = this._dom.offsetHeight;
+    this._nodeWidth = this._dom.offsetWidth;
+    for (const connector of Object.values(this._connectors)) {
       connector._updateDomProperties();
     }
     // this._setNodeStyle({
@@ -57,8 +53,8 @@ class NodeComponent extends Base {
    * Sets the starting position of the node when it is dragged.
    */
   #setStartPositions() {
-    this.dragStartX = this.positionX;
-    this.dragStartY = this.positionY;
+    this._dragStartX = this.positionX;
+    this._dragStartY = this.positionY;
   }
 
   // ================= Hidden functions =================
@@ -69,7 +65,7 @@ class NodeComponent extends Base {
    * @param style CSS style object
    */
   _setNodeStyle(style: any) {
-    this.nodeStyle = returnUpdatedDict(this.nodeStyle, style);
+    this._nodeStyle = returnUpdatedDict(this._nodeStyle, style);
   }
 
   /**
@@ -121,14 +117,14 @@ class NodeComponent extends Base {
    * Renders all lines connected to the node.
    */
   _renderNodeLines(): void {
-    iterateDict(this.allOutgoingLines, this._renderOutgoingLines, this);
+    iterateDict(this._allOutgoingLines, this._renderOutgoingLines, this);
     iterateDict(
-      this.allIncomingLines,
+      this._allIncomingLines,
       (lines: lineObject[]) => {
         for (const line of lines) {
           const peerNode = line.start.parent;
           iterateDict(
-            peerNode.allOutgoingLines,
+            peerNode._allOutgoingLines,
             peerNode._renderOutgoingLines,
             peerNode,
           );
@@ -143,21 +139,19 @@ class NodeComponent extends Base {
    * @param style CSS style object
    */
   _renderNode(style: any) {
-    if (!this.dom) return;
-    setDomStyle(this.dom, style);
+    if (!this._dom) return;
+    setDomStyle(this._dom, style);
 
     if (style._focus) {
-      this.dom.classList.add("focus");
+      this._dom.classList.add("focus");
     } else {
-      this.dom.classList.remove("focus");
+      this._dom.classList.remove("focus");
     }
 
     this._renderNodeLines();
   }
 
   _componentCursorDown(_: customCursorDownProp): void {
-    console.debug(`Node class mousedown event triggered on ${this.gid}!`);
-
     let isInFocusNodes = false;
     for (let i = 0; i < this.g.focusNodes.length; i++) {
       if (this.g.focusNodes[i].gid == this.gid) {
@@ -185,14 +179,14 @@ class NodeComponent extends Base {
   }
 
   _componentCursorUp() {
-    if (this.freeze) return;
+    if (this._freeze) return;
 
     const [dx, dy] = this.g.camera.getWorldDeltaFromCameraDelta(
       this.g.dx,
       this.g.dy,
     );
-    this.positionX = this.dragStartX + dx;
-    this.positionY = this.dragStartY + dy;
+    this.positionX = this._dragStartX + dx;
+    this.positionY = this._dragStartY + dy;
 
     /* If the mouse has not moved since being pressed, then it is a regular click
             unselect other nodes in focusNodes */
@@ -209,7 +203,7 @@ class NodeComponent extends Base {
       return;
     }
 
-    this._renderNode(this.nodeStyle);
+    this._renderNode(this._nodeStyle);
 
     // if (this.overlapping == null) {
     //   return;
@@ -234,22 +228,22 @@ class NodeComponent extends Base {
    * and updates the DOM element accordingly.
    */
   _onDrag(): void {
-    if (this.freeze) return;
+    if (this._freeze) return;
 
     const [adjustedDeltaX, adjustedDeltaY] =
       this.g.camera.getWorldDeltaFromCameraDelta(this.g.dx, this.g.dy);
 
-    this.positionX = this.dragStartX + adjustedDeltaX;
-    this.positionY = this.dragStartY + adjustedDeltaY;
+    this.positionX = this._dragStartX + adjustedDeltaX;
+    this.positionY = this._dragStartY + adjustedDeltaY;
     this._setNodeStyle({
       transform: `translate3d(${this.positionX}px, ${this.positionY}px, 0)`,
     });
 
-    for (const connector of Object.values(this.connectors)) {
+    for (const connector of Object.values(this._connectors)) {
       connector._setAllLinePositions();
     }
 
-    if (Object.keys(this.connectors).length == 0) return;
+    if (Object.keys(this._connectors).length == 0) return;
   }
 
   // ================= Public functions =================
@@ -259,51 +253,28 @@ class NodeComponent extends Base {
     x: number,
     y: number,
     globals: GlobalStats,
+    config: NodeConfig = {},
   ) {
     super(globals);
 
-    this.nodeType = "";
+    this._config = config;
 
-    this.dom = dom;
-    this.connectors = {};
-    this.components = {};
-    this.allOutgoingLines = {};
-    this.allIncomingLines = {};
+    this._dom = dom;
+    this._connectors = {};
+    this._components = {};
+    this._allOutgoingLines = {};
+    this._allIncomingLines = {};
 
     this.positionX = x;
     this.positionY = y;
-    this.dragStartX = this.positionX;
-    this.dragStartY = this.positionY;
+    this._dragStartX = this.positionX;
+    this._dragStartY = this.positionY;
 
-    this.freeze = false;
+    this._freeze = false;
 
-    this.prop = {};
-    this.prop = new Proxy(this.prop, {
-      set: (target, prop, value) => {
-        prop = prop.toString();
-        target[prop] = value;
-        if (this.propSetCallback[prop]) {
-          this.propSetCallback[prop](value);
-        }
-        if (prop in this.connectors) {
-          const peers = this.connectors[prop].outgoingLines
-            .filter((line) => line.target && !line.requestDelete)
-            .map((line) => line.target);
-          if (peers) {
-            for (const peer of peers) {
-              if (!peer) continue;
-              peer.parent.prop[peer.name] = value;
-              if (peer.parent.propSetCallback[peer.name]) {
-                peer.parent.propSetCallback[peer.name](value);
-              }
-            }
-          }
-        }
-        return true;
-      },
-    });
+    this._prop = {};
 
-    this.propSetCallback = {};
+    this._propSetCallback = {};
 
     this._setNodeStyle({
       willChange: "transform",
@@ -317,7 +288,7 @@ class NodeComponent extends Base {
     this.init = this.init.bind(this);
     this.addConnector = this.addConnector.bind(this);
     this.addInputForm = this.addInputForm.bind(this);
-    this.addPropSetCallback = this.addPropSetCallback.bind(this);
+    this.addSetPropCallback = this.addSetPropCallback.bind(this);
     this.delete = this.delete.bind(this);
     this.onFocus = this.onFocus.bind(this);
     this.offFocus = this.offFocus.bind(this);
@@ -330,8 +301,8 @@ class NodeComponent extends Base {
       transform: `translate3d(${this.positionX}px, ${this.positionY}px, 0)`,
     });
 
-    if (this.dom) {
-      this.init(this.dom);
+    if (this._dom) {
+      this.init(this._dom);
     }
   }
 
@@ -340,17 +311,20 @@ class NodeComponent extends Base {
    * @param dom
    */
   init(dom: HTMLElement) {
-    this.dom = dom;
-    this.dom.id = this.gid;
+    this._dom = dom;
+    this._dom.id = this.gid;
     dom.setAttribute("data-snapline-type", "node");
+    if (this._config?.nodeClass) {
+      dom.setAttribute("data-snapline-class", this._config.nodeClass);
+    }
 
-    this._renderNode(this.nodeStyle);
+    this._renderNode(this._nodeStyle);
 
-    this.bindFunction(this.dom);
+    this.bindFunction(this._dom);
     new ResizeObserver(() => {
       this.#updateDomProperties();
-      this._renderNode(this.nodeStyle);
-    }).observe(this.dom);
+      this._renderNode(this._nodeStyle);
+    }).observe(this._dom);
   }
 
   /**
@@ -380,21 +354,21 @@ class NodeComponent extends Base {
    * @param name
    */
   getConnector(name: string): ConnectorComponent | null {
-    if (!(name in this.connectors)) {
+    if (!(name in this._connectors)) {
       console.error(`Connector ${name} does not exist in node ${this.gid}`);
       return null;
     }
-    return this.connectors[name];
+    return this._connectors[name];
   }
 
   onFocus() {
     this._setNodeStyle({ _focus: true });
-    this._renderNode(this.nodeStyle);
+    this._renderNode(this._nodeStyle);
   }
 
   offFocus() {
     this._setNodeStyle({ _focus: false });
-    this._renderNode(this.nodeStyle);
+    this._renderNode(this._nodeStyle);
   }
 
   addConnector(
@@ -403,37 +377,65 @@ class NodeComponent extends Base {
     maxConnectors = 1,
     allowDragOut = true,
   ) {
-    this.allOutgoingLines[name] = [];
-    this.allIncomingLines[name] = [];
+    this._allOutgoingLines[name] = [];
+    this._allIncomingLines[name] = [];
     const connector = new ConnectorComponent(
       dom,
       { name: name, maxConnectors: maxConnectors, allowDragOut: allowDragOut },
       this,
       this.g,
-      this.allOutgoingLines[name],
-      this.allIncomingLines[name],
+      this._allOutgoingLines[name],
+      this._allIncomingLines[name],
     );
-    this.connectors[name] = connector;
-    this.prop[name] = null;
+    this._connectors[name] = connector;
+    this._prop[name] = null;
     return connector;
   }
 
   addInputForm(dom: HTMLElement, name: string) {
-    const input = new InputForm(dom, { name: name }, this, this.g);
-    this.prop[name] = null;
+    const input = new InputForm(dom, this, this.g, { name: name });
+    this._prop[name] = null;
 
     return input;
   }
 
-  addPropSetCallback(callback: (value: any) => void, name: string) {
-    this.propSetCallback[name] = callback;
+  addSetPropCallback(callback: (value: any) => void, name: string) {
+    this._propSetCallback[name] = callback;
   }
 
   delete() {
-    this.g.canvas?.removeChild(this.dom!);
+    this.g.canvas?.removeChild(this._dom!);
     // Todo: disconnect all connectors
-    for (const connector of Object.values(this.connectors)) {
+    for (const connector of Object.values(this._connectors)) {
       connector.delete();
+    }
+  }
+
+  getProp(name: string) {
+    return this._prop[name];
+  }
+
+  setProp(name: string, value: any) {
+    if (name in this._propSetCallback) {
+      this._propSetCallback[name](value);
+    }
+    this._prop[name] = value;
+
+    if (!(name in this._connectors)) {
+      return;
+    }
+    const peers = this._connectors[name].outgoingLines
+      .filter((line) => line.target && !line.requestDelete)
+      .map((line) => line.target);
+    if (!peers) {
+      return;
+    }
+    for (const peer of peers) {
+      if (!peer) continue;
+      peer.parent._prop[peer.name] = value;
+      if (peer.parent._propSetCallback[peer.name]) {
+        peer.parent._propSetCallback[peer.name](value);
+      }
     }
   }
 }

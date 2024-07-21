@@ -99,7 +99,7 @@ export default class SnapLine {
     // If the user is dragging a line when another cursor down event is detected, then the line should be deleted.
     if (
       this.g.targetObject &&
-      this.g.targetObject.type == ObjectTypes.connector
+      this.g.targetObject._type == ObjectTypes.connector
     ) {
       const connector = this.g.targetObject as ConnectorComponent;
       connector.domCursorUp();
@@ -234,9 +234,9 @@ export default class SnapLine {
         // TODO: Optimize this
         for (const node of g.globalNodeList) {
           if (
-            node.positionX + node.nodeWidth > adjStartX &&
+            node.positionX + node._nodeWidth > adjStartX &&
             node.positionX < adjEndX &&
-            node.positionY + node.nodeHeight > adjStartY &&
+            node.positionY + node._nodeHeight > adjStartY &&
             node.positionY < adjEndY
           ) {
             node.onFocus();
@@ -249,7 +249,7 @@ export default class SnapLine {
       }
     } else {
       // If an object is selected, then this drag is for that object
-      if (g.targetObject.type == ObjectTypes.node) {
+      if (g.targetObject._type == ObjectTypes.node) {
         // If the object being dragged is a node, then handle mouse move for all selected nodes
         for (const node of g.focusNodes) {
           node._onDrag();
@@ -291,7 +291,7 @@ export default class SnapLine {
           left: "0px",
           top: "0px",
         });
-      } else if (g.targetObject.type == ObjectTypes.node) {
+      } else if (g.targetObject._type == ObjectTypes.node) {
         // If the object being dragged was a node, then handle mouse up for all selected nodes */
         for (const node of g.focusNodes) {
           node.domCursorUp();
@@ -390,12 +390,12 @@ export default class SnapLine {
       return;
     }
 
-    if (target.type == ObjectTypes.node) {
+    if (target._type == ObjectTypes.node) {
       // If the target object is a node, render the node
       for (const node of this.g.focusNodes) {
-        node._renderNode(node.nodeStyle);
+        node._renderNode(node._nodeStyle);
       }
-    } else if (target.type == ObjectTypes.connector) {
+    } else if (target._type == ObjectTypes.connector) {
       // If the target object is an output connector, render the lines
       const target = this.g.targetObject as ConnectorComponent;
       target.parent._renderNodeLines();

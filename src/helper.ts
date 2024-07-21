@@ -14,12 +14,12 @@ function isBetween(x: number, a: number, b: number) {
 // }
 
 function addLabel(dom: HTMLElement, config: ComponentConfig) {
-  if (config.name === "") {
+  if (config.class === "") {
     return;
   }
   const label = document.createElement("span");
   label.classList.add("sl-label");
-  label.innerText = config.name;
+  label.innerText = config.class;
   label.style.zIndex = "99";
 
   dom.appendChild(label);

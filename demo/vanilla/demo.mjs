@@ -117,9 +117,9 @@ customElements.define(
       this._nodeRef = nodeRef;
 
       nodeRef.addConnector(this._input_1, "input_1", 1, false);
-      nodeRef.addPropSetCallback(this.calculateMath.bind(this), "input_1");
+      nodeRef.addSetPropCallback(this.calculateMath.bind(this), "input_1");
       nodeRef.addConnector(this._input_2, "input_2", 1, false);
-      nodeRef.addPropSetCallback(this.calculateMath.bind(this), "input_2");
+      nodeRef.addSetPropCallback(this.calculateMath.bind(this), "input_2");
       nodeRef.addConnector(this._result, "result", 0, true);
 
       this._form_1.addEventListener("input", this.updateText1.bind(this));
@@ -132,9 +132,9 @@ customElements.define(
     }
 
     calculateMath(_) {
-      let input1 = +this._nodeRef.prop.input_1;
-      let input2 = +this._nodeRef.prop.input_2;
-      let operation = this._nodeRef.prop.operation;
+      let input1 = +this._nodeRef.getProp("input_1");
+      let input2 = +this._nodeRef.getProp("input_2");
+      let operation = this._nodeRef.getProp("operation");
 
       let result = 0;
 
@@ -148,26 +148,26 @@ customElements.define(
         result = input1 / input2;
       }
 
-      this._nodeRef.prop.result = result;
+      this._nodeRef.setProp("result", result);
     }
 
     updateText1(_) {
-      this._nodeRef.prop.input_1 = this._form_1.value;
+      this._nodeRef.setProp("input_1", this._form_1.value);
     }
 
     updateText2(_) {
-      this._nodeRef.prop.input_2 = this._form_2.value;
+      this._nodeRef.setProp("input_2", this._form_2.value);
     }
 
     updateOperation(_) {
-      this._nodeRef.prop.operation = this._operation.value;
+      this._nodeRef.setProp("operation", this._operation.value);
       this.calculateMath.call(this);
     }
 
     initMath() {
-      this._nodeRef.prop.input_1 = 0;
-      this._nodeRef.prop.input_2 = 0;
-      this._nodeRef.prop.operation = "+";
+      this._nodeRef.setProp("input_1", 0);
+      this._nodeRef.setProp("input_2", 0);
+      this._nodeRef.setProp("operation", "+");
       this.calculateMath.call(this);
     }
   },
@@ -201,9 +201,9 @@ customElements.define(
       this._nodeRef = nodeRef;
 
       nodeRef.addConnector(this._input_1, "input_1", 1, false);
-      nodeRef.addPropSetCallback(this.calculateMath.bind(this), "input_1");
+      nodeRef.addSetPropCallback(this.calculateMath.bind(this), "input_1");
       nodeRef.addConnector(this._input_2, "input_2", 1, false);
-      nodeRef.addPropSetCallback(this.calculateMath.bind(this), "input_2");
+      nodeRef.addSetPropCallback(this.calculateMath.bind(this), "input_2");
       nodeRef.addConnector(this._result, "result", 0, true);
 
       this._form_1.addEventListener("input", this.updateText1.bind(this));
@@ -214,33 +214,33 @@ customElements.define(
     }
 
     calculateMath(_) {
-      let input1 = +this._nodeRef.prop.input_1;
-      let input2 = +this._nodeRef.prop.input_2;
-      let alpha = this._nodeRef.prop.alpha;
+      let input1 = +this._nodeRef.getProp("input_1");
+      let input2 = +this._nodeRef.getProp("input_2");
+      let alpha = +this._nodeRef.getProp("alpha");
 
       let result = input1 + ((input2 - input1) * alpha) / 100;
 
-      this._nodeRef.prop.result = result;
+      this._nodeRef.setProp("result", result);
     }
 
     updateText1(e) {
-      this._nodeRef.prop.input_1 = this._form_1.value;
+      this._nodeRef.setProp("input_1", this._form_1.value);
     }
 
     updateText2(e) {
-      this._nodeRef.prop.input_2 = this._form_2.value;
+      this._nodeRef.setProp("input_2", this._form_2.value);
     }
 
     updateAlpha(e) {
-      this._nodeRef.prop.alpha = this._alpha.value;
+      this._nodeRef.setProp("alpha", this._alpha.value);
       this.calculateMath.call(this);
       e.stopPropagation();
     }
 
     initMath() {
-      this._nodeRef.prop.input_1 = 0;
-      this._nodeRef.prop.input_2 = 0;
-      this._nodeRef.prop.alpha = 50;
+      this._nodeRef.setProp("input_1", 0);
+      this._nodeRef.setProp("input_2", 100);
+      this._nodeRef.setProp("alpha", 50);
       this.calculateMath.call(this);
     }
   },
@@ -268,9 +268,8 @@ customElements.define(
 
     initComponent(nodeRef) {
       this._nodeRef = nodeRef;
-
       nodeRef.addConnector(this._input, "input", 1, false);
-      nodeRef.addPropSetCallback(this.printValue.bind(this), "input");
+      nodeRef.addSetPropCallback(this.printValue.bind(this), "input");
     }
 
     printValue(value) {
@@ -307,7 +306,7 @@ customElements.define(
     }
 
     updateText(e) {
-      this._nodeRef.prop.output = this._value.value;
+      this._nodeRef.setProp("output", this._value.value);
     }
   },
 );

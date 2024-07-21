@@ -5,7 +5,7 @@ import {
   lineObject,
   ConnectorConfig,
 } from "../types";
-import { ComponentBase } from "./component";
+import { ComponentBase } from "./base";
 import { NodeComponent } from "./node";
 import { LineElement } from "../types";
 import { setDomStyle } from "../helper";
@@ -23,7 +23,7 @@ class ConnectorComponent extends ComponentBase {
   prop: { [key: string]: any }; // Properties of the connector
   outgoingLines: lineObject[];
   incomingLines: lineObject[];
-  type: ObjectTypes = ObjectTypes.connector;
+  _type: ObjectTypes = ObjectTypes.connector;
   dom: HTMLElement;
   parent: NodeComponent;
 
@@ -79,11 +79,11 @@ class ConnectorComponent extends ComponentBase {
 
   _updateDomProperties() {
     const this_rect = this.dom.getBoundingClientRect();
-    if (!this.parent.dom) {
+    if (!this.parent._dom) {
       console.error(`Parent DOM is null`);
       return;
     }
-    const parent_rect = this.parent.dom.getBoundingClientRect();
+    const parent_rect = this.parent._dom.getBoundingClientRect();
 
     // getBoundingClientRect returns size shown on screen, so we need to convert it to world coordinates
     const [adjLeft, adjTop] = this.g.camera.getWorldDeltaFromCameraDelta(
@@ -179,11 +179,11 @@ class ConnectorComponent extends ComponentBase {
     outgoingLines: lineObject[],
     incomingLines: lineObject[],
   ) {
-    super(config, parent, globals);
+    super(parent, globals);
 
     this.dom = dom;
     this.parent = parent;
-    this.prop = parent.prop;
+    this.prop = parent._prop;
     this.outgoingLines = outgoingLines;
     this.incomingLines = incomingLines;
     this.config = config;

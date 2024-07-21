@@ -1,5 +1,6 @@
 import { cursorState } from "../input";
 import { GlobalStats, ObjectTypes, customCursorDownProp } from "../types";
+import { NodeComponent } from "./node";
 
 /**
  * Base class for all classes.
@@ -11,14 +12,14 @@ export abstract class Base {
   gid: string; /* Unique identifier for the object */
   positionX: number; /* Position of the object in x-axis */
   positionY: number;
-  type: ObjectTypes; /* Type of the object */
+  _type: ObjectTypes; /* Type of the object */
 
   constructor(globals: GlobalStats) {
     this.g = globals;
     this.gid = (++globals.gid).toString();
     this.positionX = 0;
     this.positionY = 0;
-    this.type = ObjectTypes.unspecified;
+    this._type = ObjectTypes.unspecified;
   }
 
   /**
@@ -136,5 +137,19 @@ export abstract class Base {
    */
   delete(): void {
     // To be implemented by the child class
+  }
+}
+
+/**
+ * Components refer to any element that is part of a node.
+ */
+export class ComponentBase extends Base {
+  parent: NodeComponent | null;
+  dom: HTMLElement | null;
+
+  constructor(parent: NodeComponent | null, globals: GlobalStats) {
+    super(globals);
+    this.parent = parent;
+    this.dom = null;
   }
 }
