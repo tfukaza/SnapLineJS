@@ -47,10 +47,10 @@ class NodeComponent extends Base {
     for (const connector of Object.values(this.connectors)) {
       connector._updateDomProperties();
     }
-    this._setNodeStyle({
-      width: this.nodeWidth + "px",
-      height: this.nodeHeight + "px",
-    });
+    // this._setNodeStyle({
+    //   width: this.nodeWidth + "px",
+    //   height: this.nodeHeight + "px",
+    // });
   }
 
   /**
@@ -270,6 +270,8 @@ class NodeComponent extends Base {
     this.allOutgoingLines = {};
     this.allIncomingLines = {};
 
+    this.positionX = x;
+    this.positionY = y;
     this.dragStartX = this.positionX;
     this.dragStartY = this.positionY;
 
@@ -316,12 +318,13 @@ class NodeComponent extends Base {
     this.addConnector = this.addConnector.bind(this);
     this.addInputForm = this.addInputForm.bind(this);
     this.addPropSetCallback = this.addPropSetCallback.bind(this);
+    this.delete = this.delete.bind(this);
+    this.onFocus = this.onFocus.bind(this);
+    this.offFocus = this.offFocus.bind(this);
+    this.getConnector = this.getConnector.bind(this);
 
     this.setRenderNodeCallback = this.setRenderNodeCallback.bind(this);
     this.setRenderLinesCallback = this.setRenderLinesCallback.bind(this);
-
-    this.positionX = x;
-    this.positionY = y;
 
     this._setNodeStyle({
       transform: `translate3d(${this.positionX}px, ${this.positionY}px, 0)`,

@@ -4,6 +4,11 @@ const sl = new SnapLine();
 
 let addNodeMenu = null;
 
+let container = null;
+let canvas = null;
+let background = null;
+let selection = null;
+
 document.addEventListener("DOMContentLoaded", function () {
   addNodeMenu = document.getElementById("addNodeButton");
 
@@ -24,19 +29,27 @@ document.addEventListener("DOMContentLoaded", function () {
     .getElementById("constantButton")
     .addEventListener("mouseup", (e) => addNode(e, "node-constant"));
 
-  const canvasContainer = document.getElementById("sl-canvas-container");
-  const canvas = document.getElementById("sl-canvas");
-  const background = document.getElementById("sl-background");
-  const selection = document.getElementById("sl-selection");
+  container = document.getElementById("sl-canvas-container");
+  canvas = document.getElementById("sl-canvas");
+  background = document.getElementById("sl-background");
+  selection = document.getElementById("sl-selection");
 
-  console.debug("initSnapLine", canvasContainer, canvas, background, selection);
+  sl.init(container, canvas, background, selection);
 
-  sl.initSnapLine(canvasContainer, canvas, background, selection);
+  let node1 = addNode("node-constant", -250, -150);
+  let node2 = addNode("node-constant", -250, 0);
+  let node3 = addNode("node-math", 0, -150);
+  let node4 = addNode("node-print", 250, -150);
 
-  addNodeAuto("node-constant", -250, -150);
-  addNodeAuto("node-constant", -250, 0);
-  addNodeAuto("node-math", 0, -150);
-  addNodeAuto("node-print", 250, -150);
+  node1
+    .getConnector("output")
+    .connectToConnector(node3.getConnector("input_1"), null);
+  node2
+    .getConnector("output")
+    .connectToConnector(node3.getConnector("input_2"), null);
+  node3
+    .getConnector("result")
+    .connectToConnector(node4.getConnector("input"), null);
 });
 
 document.addEventListener("click", function (e) {
@@ -51,24 +64,28 @@ function toggleMenu(e, id) {
   e.stopPropagation();
 }
 
-function addNodeAuto(name, x, y) {
+function addNode(name, x, y) {
   let ele = document.createElement(name);
-  let node = sl.createNode(ele);
-  ele.initComponent(node);
-  sl.addNode(node, x, y);
-}
-
-function addNode(e, name) {
-  // Create a new Web Component element based on the node type
-  let ele = document.createElement(name);
-  let node = sl.createNode(ele);
-
+  ele.classList.add("sl-node");
+  let node = sl.createNode(ele, x, y);
   ele.initComponent(node);
 
-  sl.addNodeAtMouse(node, e);
+  canvas.appendChild(ele);
 
-  toggleMenu(e, "addNodeMenu");
+  return node;
 }
+
+// function addNode(e, name) {
+//   // Create a new Web Component element based on the node type
+//   let ele = document.createElement(name);
+//   let node = sl.createNode(ele);
+
+//   ele.initComponent(node);
+
+//   sl.addNodeAtMouse(node, e);
+
+//   toggleMenu(e, "addNodeMenu");
+// }
 
 customElements.define(
   "node-math",
@@ -98,7 +115,7 @@ customElements.define(
 
     initComponent(nodeRef) {
       this._nodeRef = nodeRef;
-      nodeRef.initNode(this._node);
+
       nodeRef.addConnector(this._input_1, "input_1", 1, false);
       nodeRef.addPropSetCallback(this.calculateMath.bind(this), "input_1");
       nodeRef.addConnector(this._input_2, "input_2", 1, false);
@@ -165,8 +182,6 @@ customElements.define(
       const template = document.getElementById("node-lerp").content;
       const templateClone = template.cloneNode(true);
 
-      console.debug("node-math", templateClone);
-
       this._node = templateClone.querySelector(".sl-node");
       this._input_1 = templateClone.querySelector("#input_1");
       this._input_2 = templateClone.querySelector("#input_2");
@@ -184,7 +199,7 @@ customElements.define(
 
     initComponent(nodeRef) {
       this._nodeRef = nodeRef;
-      nodeRef.initNode(this._node);
+
       nodeRef.addConnector(this._input_1, "input_1", 1, false);
       nodeRef.addPropSetCallback(this.calculateMath.bind(this), "input_1");
       nodeRef.addConnector(this._input_2, "input_2", 1, false);
@@ -253,7 +268,7 @@ customElements.define(
 
     initComponent(nodeRef) {
       this._nodeRef = nodeRef;
-      nodeRef.initNode(this._node);
+
       nodeRef.addConnector(this._input, "input", 1, false);
       nodeRef.addPropSetCallback(this.printValue.bind(this), "input");
     }
@@ -286,7 +301,6 @@ customElements.define(
 
     initComponent(nodeRef) {
       this._nodeRef = nodeRef;
-      nodeRef.initNode(this._node);
       nodeRef.addConnector(this._output, "output", 1, true);
 
       this._value.addEventListener("input", this.updateText.bind(this));

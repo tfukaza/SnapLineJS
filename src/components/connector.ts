@@ -91,9 +91,10 @@ class ConnectorComponent extends ComponentBase {
       this_rect.top - parent_rect.top,
     );
     const [adjWidth, adjHeight] = this.g.camera.getWorldDeltaFromCameraDelta(
-      this_rect.width,
-      this_rect.height,
+      this_rect.width / 2, // Get the center of the connector
+      this_rect.height / 2,
     );
+
     this._connectorTotalOffsetX = adjLeft + adjWidth;
     this._connectorTotalOffsetY = adjTop + adjHeight;
 
@@ -180,10 +181,6 @@ class ConnectorComponent extends ComponentBase {
   ) {
     super(config, parent, globals);
 
-    this.connectorX = 0;
-    this.connectorY = 0;
-    this._connectorTotalOffsetX = 0;
-    this._connectorTotalOffsetY = 0;
     this.dom = dom;
     this.parent = parent;
     this.prop = parent.prop;
@@ -195,9 +192,16 @@ class ConnectorComponent extends ComponentBase {
     this.g.globalNodeTable[this.gid] = this;
     this.dom.setAttribute("sl-gid", this.gid.toString());
 
+    this.connectorX = 0;
+    this.connectorY = 0;
+    this._connectorTotalOffsetX = 0;
+    this._connectorTotalOffsetY = 0;
+    this._updateDomProperties();
+
     this.bindFunction(this.dom);
 
-    console.log(config);
+    this.connectToConnector = this.connectToConnector.bind(this);
+    this.disconnectFromConnector = this.disconnectFromConnector.bind(this);
   }
 
   /**
@@ -375,6 +379,7 @@ class ConnectorComponent extends ComponentBase {
 
     if (line == null) {
       line = this.createLine(null);
+      this.outgoingLines.unshift(line);
     }
 
     this._updateDomProperties();

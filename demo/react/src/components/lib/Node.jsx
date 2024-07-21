@@ -16,7 +16,7 @@ export default function Node({ nodeObject, children }) {
     node.setRenderLinesCallback((lines) => {
       setLineList([...lines]);
     });
-    node.initNode(nodeDom.current);
+    node.init(nodeDom.current);
   }, []);
 
   return (
