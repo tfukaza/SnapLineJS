@@ -1,6 +1,13 @@
 var __defProp = Object.defineProperty;
+var __typeError = (msg) => {
+  throw TypeError(msg);
+};
 var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
 var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "symbol" ? key + "" : key, value);
+var __accessCheck = (obj, member, msg) => member.has(obj) || __typeError("Cannot " + msg);
+var __privateAdd = (obj, member, value) => member.has(obj) ? __typeError("Cannot add the same private member more than once") : member instanceof WeakSet ? member.add(obj) : member.set(obj, value);
+var __privateMethod = (obj, member, method) => (__accessCheck(obj, member, "access private method"), method);
+var _ConnectorComponent_instances, setLineXYPosition_fn, _NodeComponent_instances, updateDomProperties_fn, setStartPositions_fn, _SnapLine_instances, step_fn;
 var ObjectTypes = /* @__PURE__ */ ((ObjectTypes2) => {
   ObjectTypes2[ObjectTypes2["node"] = 0] = "node";
   ObjectTypes2[ObjectTypes2["connector"] = 1] = "connector";
@@ -2554,12 +2561,12 @@ class Base {
     __publicField(this, "positionX");
     /* Position of the object in x-axis */
     __publicField(this, "positionY");
-    __publicField(this, "type");
+    __publicField(this, "_type");
     this.g = globals;
     this.gid = (++globals.gid).toString();
     this.positionX = 0;
     this.positionY = 0;
-    this.type = ObjectTypes.unspecified;
+    this._type = ObjectTypes.unspecified;
   }
   /**
    * Binds the mousedown event to the given DOM element.
@@ -2614,9 +2621,9 @@ class Base {
     this.g.dy = 0;
     this.g.dx_offset = 0;
     this.g.dy_offset = 0;
-    this.componentCursorDown(prop);
+    this._componentCursorDown(prop);
   }
-  componentCursorDown(_) {
+  _componentCursorDown(_) {
     console.debug(
       `Base class componentCursorDown event triggered on ${this.gid} with prop ${JSON.stringify(_)}`
     );
@@ -2626,9 +2633,9 @@ class Base {
    * Triggered when the dom of this object is released.
    */
   domCursorUp() {
-    this.componentCursorUp();
+    this._componentCursorUp();
   }
-  componentCursorUp() {
+  _componentCursorUp() {
   }
   /**
    *  Focuses on the object.
@@ -2643,7 +2650,7 @@ class Base {
   /**
    *  Called for every frame when the object is being dragged.
    */
-  onDrag() {
+  _onDrag() {
   }
   /**
    *  Called for every frame when the camera is being panned.
@@ -2653,65 +2660,64 @@ class Base {
   /**
    *  Called when the object is being deleted.
    */
-  destroy() {
+  delete() {
   }
 }
 class ComponentBase extends Base {
-  constructor(config, parent, globals) {
+  constructor(parent, globals) {
     super(globals);
     __publicField(this, "parent");
-    __publicField(this, "config");
     __publicField(this, "dom");
-    this.config = config;
     this.parent = parent;
     this.dom = null;
   }
 }
-class InputForm extends ComponentBase {
-  // Properties of the component
-  constructor(dom, config, parent, globals) {
-    super(config, parent, globals);
-    __publicField(this, "name");
-    // Name of the component
-    __publicField(this, "dom");
-    // The DOM element of the component
-    __publicField(this, "prop");
-    this.name = config.name;
-    this.prop = parent.prop;
-    this.dom = dom;
+function returnUpdatedDict(currentDict, newDict) {
+  const updatedDict = Object.assign({}, currentDict, newDict);
+  updatedDict._requestUpdate = "true";
+  return updatedDict;
+}
+function iterateDict(dict, callback, bind, includeKey = false) {
+  for (const key in dict) {
+    if (includeKey) {
+      callback.bind(bind)(dict[key], key);
+    } else {
+      callback.bind(bind)(dict[key]);
+    }
   }
-  bindFunction(_) {
-  }
-  addInputUpdateListener(event, func) {
-    this.dom.addEventListener(event, func.bind(this));
+}
+function setDomStyle(dom, newStyle) {
+  for (const key in newStyle) {
+    if (key[0] == "_") {
+      continue;
+    }
+    dom.style[key] = newStyle[key];
   }
 }
 class ConnectorComponent extends ComponentBase {
+  /** ==================== Public methods ==================== */
   constructor(dom, config, parent, globals, outgoingLines, incomingLines) {
-    super(config, parent, globals);
+    super(parent, globals);
+    __privateAdd(this, _ConnectorComponent_instances);
     __publicField(this, "config");
     __publicField(this, "name");
     // Name of the connector. This should describe the data associated with the connector
     __publicField(this, "connectorX");
     // Location of the connector on canvas
     __publicField(this, "connectorY");
-    __publicField(this, "connectorTotalOffsetX");
+    __publicField(this, "_connectorTotalOffsetX");
     // Location of the connector relative to the location of parent Node
     __publicField(this, "_connectorTotalOffsetY");
     __publicField(this, "prop");
     // Properties of the connector
     __publicField(this, "outgoingLines");
     __publicField(this, "incomingLines");
-    __publicField(this, "type", ObjectTypes.connector);
+    __publicField(this, "_type", ObjectTypes.connector);
     __publicField(this, "dom");
     __publicField(this, "parent");
-    this.connectorX = 0;
-    this.connectorY = 0;
-    this.connectorTotalOffsetX = 0;
-    this._connectorTotalOffsetY = 0;
     this.dom = dom;
     this.parent = parent;
-    this.prop = parent.prop;
+    this.prop = parent._prop;
     this.outgoingLines = outgoingLines;
     this.incomingLines = incomingLines;
     this.config = config;
@@ -2719,21 +2725,132 @@ class ConnectorComponent extends ComponentBase {
     this.name = config.name || globals.gid.toString();
     this.g.globalNodeTable[this.gid] = this;
     this.dom.setAttribute("sl-gid", this.gid.toString());
+    this.connectorX = 0;
+    this.connectorY = 0;
+    this._connectorTotalOffsetX = 0;
+    this._connectorTotalOffsetY = 0;
+    this._updateDomProperties();
     this.bindFunction(this.dom);
-    console.log(config);
+    this.connectToConnector = this.connectToConnector.bind(this);
+    this.disconnectFromConnector = this.disconnectFromConnector.bind(this);
   }
   updateFunction() {
   }
-  /**
-   * Begins the line drag operation, which will create a temporary line
-   * extending from the connector to the mouse cursor.
-   */
-  startDragOutLine() {
-    console.debug(
-      `Created line from connector ${this.gid} and started dragging`
+  // ==================== Hidden methods ====================
+  _componentCursorDown(_) {
+    const currentIncomingLines = this.incomingLines.filter(
+      (i) => !i.requestDelete
     );
-    this.outgoingLines.unshift({
-      svg: null,
+    if (currentIncomingLines.length > 0) {
+      this.startPickUpLine(currentIncomingLines[0]);
+      return;
+    }
+    if (this.config.allowDragOut) {
+      this.startDragOutLine();
+    }
+  }
+  _onDrag() {
+    this.runDragOutLine();
+  }
+  _componentCursorUp() {
+    this.endDragOutLine();
+    this.parent._renderNodeLines();
+  }
+  _createLineDOM() {
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+    svg.appendChild(line);
+    svg.classList.add("sl-connector-svg");
+    line.classList.add("sl-connector-line");
+    line.setAttribute("stroke-width", "4");
+    console.debug(`Created line from connector ${this.gid}`);
+    this.g.canvas.appendChild(svg);
+    return svg;
+  }
+  _updateDomProperties() {
+    const this_rect = this.dom.getBoundingClientRect();
+    if (!this.parent._dom) {
+      console.error(`Parent DOM is null`);
+      return;
+    }
+    const parent_rect = this.parent._dom.getBoundingClientRect();
+    const [adjLeft, adjTop] = this.g.camera.getWorldDeltaFromCameraDelta(
+      this_rect.left - parent_rect.left,
+      this_rect.top - parent_rect.top
+    );
+    const [adjWidth, adjHeight] = this.g.camera.getWorldDeltaFromCameraDelta(
+      this_rect.width / 2,
+      // Get the center of the connector
+      this_rect.height / 2
+    );
+    this._connectorTotalOffsetX = adjLeft + adjWidth;
+    this._connectorTotalOffsetY = adjTop + adjHeight;
+    this.connectorX = this.parent.positionX + this._connectorTotalOffsetX;
+    this.connectorY = this.parent.positionY + this._connectorTotalOffsetY;
+  }
+  deleteLine(i) {
+    if (this.outgoingLines.length == 0) {
+      return void 0;
+    }
+    const svg = this.outgoingLines[i];
+    svg.requestDelete = true;
+    return svg;
+  }
+  deleteAllLines() {
+    for (const svg of this.outgoingLines) {
+      svg.requestDelete = true;
+    }
+  }
+  _renderLinePosition(entry) {
+    const svg = entry.svg;
+    if (!svg) {
+      return;
+    }
+    setDomStyle(svg, {
+      position: "absolute",
+      overflow: "visible",
+      pointerEvents: "none",
+      willChange: "transform",
+      transform: `translate3d(${entry.connector_x}px, ${entry.connector_y}px, 0)`
+    });
+    const line = svg.children[0];
+    line.setAttribute("x1", "0");
+    line.setAttribute("y1", "0");
+    line.setAttribute("x2", "" + entry.x2);
+    line.setAttribute("y2", "" + entry.y2);
+  }
+  /**
+   * Updates the start and end positions of the line.
+   * @param entry The line to update.
+   */
+  _setLinePosition(entry) {
+    entry.connector_x = entry.start.connectorX;
+    entry.connector_y = entry.start.connectorY;
+    if (!entry.target) {
+      const [adjustedDeltaX, adjustedDeltaY] = this.g.camera.getWorldDeltaFromCameraDelta(this.g.dx, this.g.dy);
+      __privateMethod(this, _ConnectorComponent_instances, setLineXYPosition_fn).call(this, entry, adjustedDeltaX, adjustedDeltaY);
+    } else {
+      __privateMethod(this, _ConnectorComponent_instances, setLineXYPosition_fn).call(this, entry, entry.target.connectorX - entry.start.connectorX, entry.target.connectorY - entry.start.connectorY);
+    }
+  }
+  /* Updates the position of all lines connected to this connector */
+  _setAllLinePositions() {
+    this._updateDomProperties();
+    for (const line of this.outgoingLines) {
+      this._setLinePosition(line);
+    }
+    for (const line of this.incomingLines) {
+      line.start._setLinePosition(line);
+    }
+  }
+  /**
+   * Creates a new line extending from this connector.
+   * @param svg The SVG element to create the line in.
+   * @returns The line object that was created.
+   */
+  createLine(svg) {
+    const line = {
+      svg,
       target: null,
       start: this,
       connector_x: this.connectorX,
@@ -2743,8 +2860,19 @@ class ConnectorComponent extends ComponentBase {
       connector: this,
       requestDelete: false,
       completedDelete: false
-    });
-    this.setAllLinePositions();
+    };
+    return line;
+  }
+  /**
+   * Begins the line drag operation, which will create a temporary line
+   * extending from the connector to the mouse cursor.
+   */
+  startDragOutLine() {
+    console.debug(
+      `Created line from connector ${this.gid} and started dragging`
+    );
+    this.outgoingLines.unshift(this.createLine(null));
+    this._setAllLinePositions();
   }
   /**
    * Called when the user drags the line extending from the connector.
@@ -2764,31 +2892,19 @@ class ConnectorComponent extends ComponentBase {
       if (!gid) return;
       const targetConnector = this.g.globalNodeTable[gid];
       console.debug("Hovering over input connector", targetConnector);
-      targetConnector.updateConnectorPosition();
+      targetConnector._updateDomProperties();
       connectorX = targetConnector.connectorX;
       connectorY = targetConnector.connectorY;
       distance = Math.sqrt(
         Math.pow(this.connectorX + adjustedDeltaX - connectorX, 2) + Math.pow(this.connectorY + adjustedDeltaY - connectorY, 2)
       );
       if (distance < 40) {
-        this.setLineXYPosition(
-          this.outgoingLines[0],
-          connectorX - this.connectorX,
-          connectorY - this.connectorY
-        );
+        __privateMethod(this, _ConnectorComponent_instances, setLineXYPosition_fn).call(this, this.outgoingLines[0], connectorX - this.connectorX, connectorY - this.connectorY);
       } else {
-        this.setLineXYPosition(
-          this.outgoingLines[0],
-          adjustedDeltaX,
-          adjustedDeltaY
-        );
+        __privateMethod(this, _ConnectorComponent_instances, setLineXYPosition_fn).call(this, this.outgoingLines[0], adjustedDeltaX, adjustedDeltaY);
       }
     } else {
-      this.setLineXYPosition(
-        this.outgoingLines[0],
-        adjustedDeltaX,
-        adjustedDeltaY
-      );
+      __privateMethod(this, _ConnectorComponent_instances, setLineXYPosition_fn).call(this, this.outgoingLines[0], adjustedDeltaX, adjustedDeltaY);
     }
   }
   /**
@@ -2806,21 +2922,22 @@ class ConnectorComponent extends ComponentBase {
         return;
       }
       const target = this.g.globalNodeTable[gid];
-      if (this.connectToConnector(target) == false) {
+      if (this.connectToConnector(target, this.outgoingLines[0]) == false) {
         this.deleteLine(0);
         return;
       }
       target.prop[target.name] = this.prop[this.name];
       target.updateFunction();
-      this.setLineXYPosition(
-        this.outgoingLines[0],
-        target.connectorX - this.connectorX,
-        target.connectorY - this.connectorY
-      );
+      __privateMethod(this, _ConnectorComponent_instances, setLineXYPosition_fn).call(this, this.outgoingLines[0], target.connectorX - this.connectorX, target.connectorY - this.connectorY);
     } else {
       this.deleteLine(0);
     }
+    this.parent._renderOutgoingLines(this.outgoingLines, this.name);
   }
+  /**
+   * Begins the process of dragging a line that is already connected to another connector.
+   * @param line The line that is being dragged.
+   */
   startPickUpLine(line) {
     this.g.targetObject = line.start;
     let [dx_offset, dy_offset] = this.g.camera.getCameraDeltaFromWorldDelta(
@@ -2834,7 +2951,14 @@ class ConnectorComponent extends ComponentBase {
     this.deleteLine(this.incomingLines.indexOf(line));
     line.start.startDragOutLine();
   }
-  connectToConnector(connector) {
+  /**
+   * Logically connects this connector to another connector.
+   *
+   * @param connector The connector to connect to.
+   * @param line The line to connect to the connector. If null, a new line will be created.
+   * @returns True if the connection was successful, false otherwise.
+   */
+  connectToConnector(connector, line) {
     const currentIncomingLines = connector.incomingLines.filter(
       (i) => !i.requestDelete
     );
@@ -2850,11 +2974,19 @@ class ConnectorComponent extends ComponentBase {
       );
       return false;
     }
-    this.updateConnectorPosition();
-    this.outgoingLines[0].target = connector;
-    connector.incomingLines.push(this.outgoingLines[0]);
+    if (line == null) {
+      line = this.createLine(null);
+      this.outgoingLines.unshift(line);
+    }
+    this._updateDomProperties();
+    line.target = connector;
+    connector.incomingLines.push(line);
     return true;
   }
+  /**
+   * Logically disconnects this connector from another connector.
+   * @param connector The connector to disconnect from.
+   */
   disconnectFromConnector(connector) {
     for (const line of this.outgoingLines) {
       if (line.target == connector) {
@@ -2863,227 +2995,115 @@ class ConnectorComponent extends ComponentBase {
       }
     }
   }
-  updateConnectorPosition() {
-    this.connectorX = this.parent.positionX + this.connectorTotalOffsetX;
-    this.connectorY = this.parent.positionY + this._connectorTotalOffsetY;
+}
+_ConnectorComponent_instances = new WeakSet();
+// ==================== Private methods ====================
+setLineXYPosition_fn = function(entry, x, y) {
+  entry.x2 = x;
+  entry.y2 = y;
+};
+class InputForm extends ComponentBase {
+  // Properties of the component
+  constructor(dom, parent, globals, config = {}) {
+    super(parent, globals);
+    __publicField(this, "name");
+    // Name of the component
+    __publicField(this, "dom");
+    // The DOM element of the component
+    __publicField(this, "prop");
+    this.name = config.name || "";
+    this.prop = parent._prop;
+    this.dom = dom;
   }
-  setLineXYPosition(entry, x, y) {
-    entry.x2 = x;
-    entry.y2 = y;
+  bindFunction(_) {
   }
-  renderLinePosition(entry) {
-    const svg = entry.svg;
-    if (!svg) {
-      return;
-    }
-    this.setStyle(svg, {
-      position: "absolute",
-      overflow: "visible",
-      pointerEvents: "none",
-      willChange: "transform",
-      transform: `translate3d(${entry.connector_x}px, ${entry.connector_y}px, 0)`
-    });
-    const line = svg.children[0];
-    line.setAttribute("x1", "0");
-    line.setAttribute("y1", "0");
-    line.setAttribute("x2", "" + entry.x2);
-    line.setAttribute("y2", "" + entry.y2);
-  }
-  setLinePosition(entry) {
-    entry.connector_x = entry.start.connectorX;
-    entry.connector_y = entry.start.connectorY;
-    if (!entry.target) {
-      const [adjustedDeltaX, adjustedDeltaY] = this.g.camera.getWorldDeltaFromCameraDelta(this.g.dx, this.g.dy);
-      this.setLineXYPosition(entry, adjustedDeltaX, adjustedDeltaY);
-    } else {
-      this.setLineXYPosition(
-        entry,
-        entry.target.connectorX - entry.start.connectorX,
-        entry.target.connectorY - entry.start.connectorY
-      );
-    }
-  }
-  /* Updates the position of all lines connected to this connector */
-  setAllLinePositions() {
-    this.updateConnectorPosition();
-    for (const line of this.outgoingLines) {
-      this.setLinePosition(line);
-    }
-    for (const line of this.incomingLines) {
-      line.start.setLinePosition(line);
-    }
-  }
-  updateDOMproperties() {
-    const this_rect = this.dom.getBoundingClientRect();
-    if (!this.parent.dom) {
-      console.error(`Parent DOM is null`);
-      return;
-    }
-    const parent_rect = this.parent.dom.getBoundingClientRect();
-    const [adjLeft, adjTop] = this.g.camera.getWorldDeltaFromCameraDelta(
-      this_rect.left - parent_rect.left,
-      this_rect.top - parent_rect.top
-    );
-    const [adjWidth, adjHeight] = this.g.camera.getWorldDeltaFromCameraDelta(
-      this_rect.width / 2,
-      this_rect.height / 2
-    );
-    this.connectorTotalOffsetX = adjLeft + adjWidth;
-    this._connectorTotalOffsetY = adjTop + adjHeight;
-  }
-  createLineDOM() {
-    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-    const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
-    svg.appendChild(line);
-    svg.classList.add("sl-connector-svg");
-    line.classList.add("sl-connector-line");
-    line.setAttribute("stroke-width", "4");
-    console.debug(`Created line from connector ${this.gid}`);
-    this.g.canvas.appendChild(svg);
-    return svg;
-  }
-  setStyle(dom, style) {
-    if (!dom) {
-      return;
-    }
-    for (const key in style) {
-      dom.style[key] = style[key];
-    }
-  }
-  deleteLine(i) {
-    if (this.outgoingLines.length == 0) {
-      return void 0;
-    }
-    const svg = this.outgoingLines[i];
-    svg.requestDelete = true;
-    return svg;
-  }
-  deleteAllLines() {
-    for (const svg of this.outgoingLines) {
-      svg.requestDelete = true;
-    }
-  }
-  componentCursorDown(_) {
-    const currentIncomingLines = this.incomingLines.filter(
-      (i) => !i.requestDelete
-    );
-    if (currentIncomingLines.length > 0) {
-      this.startPickUpLine(currentIncomingLines[0]);
-      return;
-    }
-    if (this.config.allowDragOut) {
-      this.startDragOutLine();
-    }
-  }
-  onDrag() {
-    this.runDragOutLine();
-  }
-  componentCursorUp() {
-    this.endDragOutLine();
-    this.parent._renderNodeLines();
+  addInputUpdateListener(event, func) {
+    this.dom.addEventListener(event, func.bind(this));
   }
 }
 class NodeComponent extends Base {
-  constructor(dom, globals) {
+  // ================= Public functions =================
+  constructor(dom, x, y, globals, config = {}) {
     super(globals);
-    __publicField(this, "type", ObjectTypes.node);
-    __publicField(this, "nodeType");
-    __publicField(this, "dom");
-    __publicField(this, "connectors");
+    __privateAdd(this, _NodeComponent_instances);
+    __publicField(this, "_type", ObjectTypes.node);
+    __publicField(this, "_config");
+    __publicField(this, "_dom");
+    __publicField(this, "_connectors");
     // Dictionary of all connectors in the node, using the name as the key
-    __publicField(this, "components");
+    __publicField(this, "_components");
     // Dictionary of all components in the node except connectors
-    __publicField(this, "allOutgoingLines");
+    __publicField(this, "_allOutgoingLines");
     // Dictionary of all lines going out of the node
-    __publicField(this, "allIncomingLines");
+    __publicField(this, "_allIncomingLines");
     // Dictionary of all lines coming into the node
-    __publicField(this, "nodeWidth", 0);
-    __publicField(this, "nodeHeight", 0);
-    __publicField(this, "dragStartX", 0);
-    __publicField(this, "dragStartY", 0);
-    __publicField(this, "freeze");
+    __publicField(this, "_nodeWidth", 0);
+    __publicField(this, "_nodeHeight", 0);
+    __publicField(this, "_dragStartX", 0);
+    __publicField(this, "_dragStartY", 0);
+    __publicField(this, "_freeze");
     // If true, the node cannot be moved
-    __publicField(this, "prop");
+    __publicField(this, "_prop");
     // Properties of the node
-    __publicField(this, "propSetCallback");
+    __publicField(this, "_propSetCallback");
     // Callbacks called when a property is set
-    __publicField(this, "nodeStyle");
-    this.nodeType = "";
-    this.dom = dom;
-    this.connectors = {};
-    this.components = {};
-    this.allOutgoingLines = {};
-    this.allIncomingLines = {};
-    this.dragStartX = this.positionX;
-    this.dragStartY = this.positionY;
-    this.freeze = false;
-    this.prop = {};
-    this.prop = new Proxy(this.prop, {
-      set: (target, prop, value) => {
-        prop = prop.toString();
-        target[prop] = value;
-        if (this.propSetCallback[prop]) {
-          this.propSetCallback[prop](value);
-        }
-        if (prop in this.connectors) {
-          const peers = this.connectors[prop].outgoingLines.filter((line) => line.target && !line.requestDelete).map((line) => line.target);
-          if (peers) {
-            for (const peer of peers) {
-              if (!peer) continue;
-              peer.parent.prop[peer.name] = value;
-              if (peer.parent.propSetCallback[peer.name]) {
-                peer.parent.propSetCallback[peer.name](value);
-              }
-            }
-          }
-        }
-        return true;
-      }
-    });
-    this.propSetCallback = {};
-    this.setNodeStyle({
+    __publicField(this, "_nodeStyle");
+    this._config = config;
+    this._dom = dom;
+    this._connectors = {};
+    this._components = {};
+    this._allOutgoingLines = {};
+    this._allIncomingLines = {};
+    this.positionX = x;
+    this.positionY = y;
+    this._dragStartX = this.positionX;
+    this._dragStartY = this.positionY;
+    this._freeze = false;
+    this._prop = {};
+    this._propSetCallback = {};
+    this._setNodeStyle({
       willChange: "transform",
       position: "absolute",
       transformOrigin: "top left"
     });
     this.g.globalNodeList.push(this);
-    this.initNode = this.initNode.bind(this);
+    this.init = this.init.bind(this);
     this.addConnector = this.addConnector.bind(this);
     this.addInputForm = this.addInputForm.bind(this);
-    this.addPropSetCallback = this.addPropSetCallback.bind(this);
+    this.addSetPropCallback = this.addSetPropCallback.bind(this);
+    this.delete = this.delete.bind(this);
+    this.onFocus = this.onFocus.bind(this);
+    this.offFocus = this.offFocus.bind(this);
+    this.getConnector = this.getConnector.bind(this);
+    this.getLines = this.getLines.bind(this);
+    this.getNodeStyle = this.getNodeStyle.bind(this);
+    this.getProp = this.getProp.bind(this);
+    this.setProp = this.setProp.bind(this);
     this.setRenderNodeCallback = this.setRenderNodeCallback.bind(this);
     this.setRenderLinesCallback = this.setRenderLinesCallback.bind(this);
-  }
-  initNode(dom) {
-    this.dom = dom;
-    this.dom.id = this.gid;
-    dom.setAttribute("data-snapline-type", "node");
-    this.renderNode(this.nodeStyle);
-    this.bindFunction(this.dom);
-    new ResizeObserver(() => {
-      this.updateDOMproperties();
-    }).observe(this.dom);
-  }
-  /**
-   * Updates the DOM properties of the node, such as height, width, etc.
-   * Also updates the DOM properties of all connectors.
-   * Called when the node is first created, and when the node is resized.
-   * @returns
-   */
-  updateDOMproperties() {
-    if (!this.dom) return;
-    this.nodeHeight = this.dom.offsetHeight;
-    this.nodeWidth = this.dom.offsetWidth;
-    for (const connector of Object.values(this.connectors)) {
-      connector.updateDOMproperties();
+    this._setNodeStyle({
+      transform: `translate3d(${this.positionX}px, ${this.positionY}px, 0)`
+    });
+    if (this._dom) {
+      this.init(this._dom);
     }
   }
-  setNodeStyle(style) {
-    this.nodeStyle = Object.assign({}, this.nodeStyle, style);
+  // ================= Hidden functions =================
+  /**
+   * Sets the CSS style of the node.
+   * Some styles are not CSS properties but internal properties, which are prefixed with an underscore.
+   * @param style CSS style object
+   */
+  _setNodeStyle(style) {
+    this._nodeStyle = returnUpdatedDict(this._nodeStyle, style);
   }
-  filterDeletedLines(svgLines) {
+  /**
+   * Filters out lines that have been requested to be deleted.
+   * @param svgLines Array of all lines outgoing from the node or connector
+   */
+  _filterDeletedLines(svgLines) {
     for (let i = 0; i < svgLines.length; i++) {
-      if (svgLines[i].requestDelete && svgLines[i].completedDelete) {
+      if (svgLines[i].requestDelete) {
         svgLines.splice(i, 1);
         i--;
       }
@@ -3094,11 +3114,11 @@ class NodeComponent extends Base {
    * This function can be called by the node or a connector.on the node.
    * @param outgoingLines Array of all lines outgoing from the node or connector
    */
-  _renderOutgoingLines(outgoingLines) {
+  _renderOutgoingLines(outgoingLines, key) {
     for (const line of outgoingLines) {
       const connector = line.start;
       if (!line.svg) {
-        line.svg = connector.createLineDOM();
+        line.svg = connector._createLineDOM();
       } else if (line.requestDelete && !line.completedDelete) {
         this.g.canvas.removeChild(line.svg);
         line.completedDelete = true;
@@ -3114,110 +3134,46 @@ class NodeComponent extends Base {
         line.y2 = line.target.connectorY - connector.connectorY;
       }
       line.svg.style.transform = `translate3d(${connector.connectorX}px, ${connector.connectorY}px, 0)`;
-      connector.renderLinePosition(line);
+      connector._renderLinePosition(line);
     }
-    this.filterDeletedLines(outgoingLines);
+    this._filterDeletedLines(outgoingLines);
   }
-  setRenderLinesCallback(callback) {
-    this._renderOutgoingLines = (svgLines) => {
-      this.filterDeletedLines(svgLines);
-      callback(svgLines);
-    };
-  }
-  _iterateDict(dict, callback, bind = this) {
-    for (const key in dict) {
-      callback.bind(bind)(dict[key]);
-    }
-  }
+  /**
+   * Renders all lines connected to the node.
+   */
   _renderNodeLines() {
-    this._iterateDict(this.allOutgoingLines, this._renderOutgoingLines);
-    this._iterateDict(this.allIncomingLines, (lines) => {
-      for (const line of lines) {
-        const peerNode = line.start.parent;
-        this._iterateDict(
-          peerNode.allOutgoingLines,
-          peerNode._renderOutgoingLines,
-          peerNode
-        );
-      }
-    });
+    iterateDict(this._allOutgoingLines, this._renderOutgoingLines, this);
+    iterateDict(
+      this._allIncomingLines,
+      (lines) => {
+        for (const line of lines) {
+          const peerNode = line.start.parent;
+          iterateDict(
+            peerNode._allOutgoingLines,
+            peerNode._renderOutgoingLines,
+            peerNode
+          );
+        }
+      },
+      this
+    );
   }
-  renderNode(style) {
-    if (!this.dom) return;
-    for (const key in style) {
-      if (key[0] == "_") continue;
-      this.dom.style[key] = style[key];
-    }
+  /**
+   * Renders the node with the specified style.
+   * @param style CSS style object
+   */
+  _renderNode(style) {
+    if (!this._dom) return;
+    setDomStyle(this._dom, style);
     if (style._focus) {
-      this.dom.classList.add("focus");
+      this._dom.classList.add("focus");
     } else {
-      this.dom.classList.remove("focus");
+      this._dom.classList.remove("focus");
     }
     this._renderNodeLines();
   }
-  setRenderNodeCallback(callback) {
-    this.renderNode = (style) => {
-      callback(style);
-      this._renderNodeLines();
-    };
-  }
-  addNodeToCanvas(x, y) {
-    this.positionX = x;
-    this.positionY = y;
-    this.nodeWidth = this.dom.offsetWidth;
-    this.nodeHeight = this.dom.offsetHeight;
-    this.setNodeStyle({
-      transform: `translate3d(${this.positionX}px, ${this.positionY}px, 0)`
-    });
-    this.renderNode(this.nodeStyle);
-    this.updateDOMproperties();
-    this.g.canvas.appendChild(this.dom);
-  }
-  addConnector(dom, name, maxConnectors = 1, allowDragOut = true) {
-    this.allOutgoingLines[name] = [];
-    this.allIncomingLines[name] = [];
-    const connector = new ConnectorComponent(
-      dom,
-      { name, maxConnectors, allowDragOut },
-      this,
-      this.g,
-      this.allOutgoingLines[name],
-      this.allIncomingLines[name]
-    );
-    this.connectors[name] = connector;
-    this.prop[name] = null;
-    return connector;
-  }
-  addInputForm(dom, name) {
-    const input = new InputForm(dom, { name }, this, this.g);
-    this.prop[name] = null;
-    return input;
-  }
-  addPropSetCallback(callback, name) {
-    this.propSetCallback[name] = callback;
-  }
-  // findInput(id: string): InputConnector | null {
-  //   for (const input of Object.values(this.inputConnectors)) {
-  //     if (input.name == id) {
-  //       return input;
-  //     }
-  //   }
-  //   return null;
-  // }
-  // findOutput(id: string): OutputConnector | null {
-  //   for (const output of Object.values(this.outputConnectors)) {
-  //     if (output.name == id) {
-  //       return output;
-  //     }
-  //   }
-  //   return null;
-  // }
-  setStartPositions() {
-    this.dragStartX = this.positionX;
-    this.dragStartY = this.positionY;
-  }
-  componentCursorDown(_) {
-    console.debug(`Node class mousedown event triggered on ${this.gid}!`);
+  _componentCursorDown(_) {
+    var _a;
     let isInFocusNodes = false;
     for (let i = 0; i < this.g.focusNodes.length; i++) {
       if (this.g.focusNodes[i].gid == this.gid) {
@@ -3233,22 +3189,20 @@ class NodeComponent extends Base {
       this.onFocus();
     } else {
       for (let i = 0; i < this.g.focusNodes.length; i++) {
-        this.g.focusNodes[i].setStartPositions();
+        __privateMethod(_a = this.g.focusNodes[i], _NodeComponent_instances, setStartPositions_fn).call(_a);
       }
     }
-    this.setStartPositions();
+    __privateMethod(this, _NodeComponent_instances, setStartPositions_fn).call(this);
   }
-  componentCursorUp() {
-    if (this.freeze) return;
+  _componentCursorUp() {
+    if (this._freeze) return;
     const [dx, dy] = this.g.camera.getWorldDeltaFromCameraDelta(
       this.g.dx,
       this.g.dy
     );
-    this.positionX = this.dragStartX + dx;
-    this.positionY = this.dragStartY + dy;
-    console.debug("Mouse has moved: " + this.g.mouseHasMoved);
+    this.positionX = this._dragStartX + dx;
+    this.positionY = this._dragStartY + dy;
     if (!this.g.mouseHasMoved && this.g.targetObject && this.g.targetObject.gid == this.gid) {
-      console.debug("Mouse has not moved");
       for (let i = 0; i < this.g.focusNodes.length; i++) {
         this.g.focusNodes[i].offFocus();
       }
@@ -3256,61 +3210,168 @@ class NodeComponent extends Base {
       this.onFocus();
       return;
     }
-    this.renderNode(this.nodeStyle);
+    this._renderNode(this._nodeStyle);
   }
   /**
-   * Fired every time requestAnimationFrame is called,
-   * if this object is being dragged.
+   * Fired every time requestAnimationFrame is called if this object is being dragged.
    * It reads the internal states like current mouse position,
    * and updates the DOM element accordingly.
-   * @returns
    */
-  onDrag() {
-    if (this.freeze) return;
+  _onDrag() {
+    if (this._freeze) return;
     const [adjustedDeltaX, adjustedDeltaY] = this.g.camera.getWorldDeltaFromCameraDelta(this.g.dx, this.g.dy);
-    this.positionX = this.dragStartX + adjustedDeltaX;
-    this.positionY = this.dragStartY + adjustedDeltaY;
-    this.setNodeStyle({
+    this.positionX = this._dragStartX + adjustedDeltaX;
+    this.positionY = this._dragStartY + adjustedDeltaY;
+    this._setNodeStyle({
       transform: `translate3d(${this.positionX}px, ${this.positionY}px, 0)`
     });
-    for (const connector of Object.values(this.connectors)) {
-      connector.setAllLinePositions();
+    for (const connector of Object.values(this._connectors)) {
+      connector._setAllLinePositions();
     }
-    if (Object.keys(this.connectors).length == 0) return;
+    if (Object.keys(this._connectors).length == 0) return;
+  }
+  /**
+   * Assigns the DOM element to the node.
+   * @param dom
+   */
+  init(dom) {
+    var _a;
+    this._dom = dom;
+    this._dom.id = this.gid;
+    dom.setAttribute("data-snapline-type", "node");
+    if ((_a = this._config) == null ? void 0 : _a.nodeClass) {
+      dom.setAttribute("data-snapline-class", this._config.nodeClass);
+    }
+    this._renderNode(this._nodeStyle);
+    this.bindFunction(this._dom);
+    new ResizeObserver(() => {
+      __privateMethod(this, _NodeComponent_instances, updateDomProperties_fn).call(this);
+      this._renderNode(this._nodeStyle);
+    }).observe(this._dom);
+  }
+  /**
+   * Sets the callback function that is called when the node is rendered.
+   * @param callback
+   */
+  setRenderNodeCallback(callback) {
+    this._renderNode = (style) => {
+      callback(style);
+      this._renderNodeLines();
+    };
+  }
+  /**
+   * Sets the callback function that is called when lines owned by the node (i.e. outgoing lines) are rendered.
+   * @param
+   */
+  setRenderLinesCallback(callback) {
+    this._renderOutgoingLines = (svgLines, name) => {
+      this._filterDeletedLines(svgLines);
+      console.log("Rendering lines", svgLines);
+      callback(svgLines, name);
+    };
+  }
+  /**
+   * Returns the connector with the specified name.
+   * @param name
+   */
+  getConnector(name) {
+    if (!(name in this._connectors)) {
+      console.error(`Connector ${name} does not exist in node ${this.gid}`);
+      return null;
+    }
+    return this._connectors[name];
   }
   onFocus() {
-    console.debug("On focus");
-    this.setNodeStyle({ _focus: true });
-    this.renderNode(this.nodeStyle);
+    this._setNodeStyle({ _focus: true });
+    this._renderNode(this._nodeStyle);
   }
   offFocus() {
-    console.debug("Off focus");
-    this.setNodeStyle({ _focus: false });
-    this.renderNode(this.nodeStyle);
+    this._setNodeStyle({ _focus: false });
+    this._renderNode(this._nodeStyle);
   }
-  evaluate(varName) {
-    console.debug("Update all nodes connected to " + varName);
-    const connector = this.connectors[varName];
-    if (!connector) return;
-    for (const peer of connector.outgoingLines) {
-      const peerConnector = peer.target;
-      if (!peerConnector) {
-        continue;
-      }
-      peerConnector.parent.prop[peerConnector.name] = this.prop[varName];
-      peerConnector.updateFunction();
+  addConnector(dom, name, maxConnectors = 1, allowDragOut = true) {
+    this._allOutgoingLines[name] = [];
+    this._allIncomingLines[name] = [];
+    const connector = new ConnectorComponent(
+      dom,
+      { name, maxConnectors, allowDragOut },
+      this,
+      this.g,
+      this._allOutgoingLines[name],
+      this._allIncomingLines[name]
+    );
+    this._connectors[name] = connector;
+    this._prop[name] = null;
+    return connector;
+  }
+  addInputForm(dom, name) {
+    const input = new InputForm(dom, this, this.g, { name });
+    this._prop[name] = null;
+    return input;
+  }
+  addSetPropCallback(callback, name) {
+    this._propSetCallback[name] = callback;
+  }
+  delete() {
+    var _a;
+    (_a = this.g.canvas) == null ? void 0 : _a.removeChild(this._dom);
+    for (const connector of Object.values(this._connectors)) {
+      connector.delete();
     }
   }
-  exec() {
+  getLines() {
+    return this._allOutgoingLines;
   }
-  destroy() {
-    var _a;
-    (_a = this.g.canvas) == null ? void 0 : _a.removeChild(this.dom);
-    for (const connector of Object.values(this.connectors)) {
-      connector.destroy();
+  getNodeStyle() {
+    return this._nodeStyle;
+  }
+  getProp(name) {
+    return this._prop[name];
+  }
+  setProp(name, value) {
+    if (name in this._propSetCallback) {
+      this._propSetCallback[name](value);
+    }
+    this._prop[name] = value;
+    if (!(name in this._connectors)) {
+      return;
+    }
+    const peers = this._connectors[name].outgoingLines.filter((line) => line.target && !line.requestDelete).map((line) => line.target);
+    if (!peers) {
+      return;
+    }
+    for (const peer of peers) {
+      if (!peer) continue;
+      peer.parent._prop[peer.name] = value;
+      if (peer.parent._propSetCallback[peer.name]) {
+        peer.parent._propSetCallback[peer.name](value);
+      }
     }
   }
 }
+_NodeComponent_instances = new WeakSet();
+// ================= Private functions =================
+/**
+ * Updates the DOM properties of the node, such as height, width, etc.
+ * Also updates the DOM properties of all connectors.
+ * Called when the node is first created, and when the node is resized.
+ * @returns
+ */
+updateDomProperties_fn = function() {
+  if (!this._dom) return;
+  this._nodeHeight = this._dom.offsetHeight;
+  this._nodeWidth = this._dom.offsetWidth;
+  for (const connector of Object.values(this._connectors)) {
+    connector._updateDomProperties();
+  }
+};
+/**
+ * Sets the starting position of the node when it is dragged.
+ */
+setStartPositions_fn = function() {
+  this._dragStartX = this.positionX;
+  this._dragStartY = this.positionY;
+};
 class Camera {
   // The CSS transform style that should be applied to the DOM element
   constructor(container, canvas) {
@@ -3513,9 +3574,13 @@ class Camera {
   }
 }
 class SnapLine {
+  // ============== Public functions ==============
+  /**
+   * Constructor for SnapLine class.
+   */
   constructor() {
+    __privateAdd(this, _SnapLine_instances);
     __publicField(this, "g");
-    // Global state
     __publicField(this, "_containerStyle", {});
     __publicField(this, "_canvasStyle", {});
     __publicField(this, "_selectionBoxStyle", {});
@@ -3530,12 +3595,273 @@ class SnapLine {
       position: "absolute",
       pointerEvents: "none"
     };
-    this.initSnapLine = this.initSnapLine.bind(this);
+    this.init = this.init.bind(this);
     this.setRenderCanvasCallback = this.setRenderCanvasCallback.bind(this);
     this.setRenderBackgroundCallback = this.setRenderBackgroundCallback.bind(this);
     this.setRenderSelectionBoxCallback = this.setRenderSelectionBoxCallback.bind(this);
   }
-  initSnapLine(containerDom, canvasDom, backgroundDom, selectionBoxDom) {
+  // ============== Hidden functions ==============
+  /**
+   * Update the dictionary containing the CSS style for the canvas.
+   * @param newStyle The new style to be added to the canvas.
+   */
+  _setCanvasStyle(newStyle) {
+    this._canvasStyle = returnUpdatedDict(this._canvasStyle, newStyle);
+  }
+  /**
+   * Update the dictionary containing the CSS style for the background.
+   * @param newStyle The new style to be added to the background.
+   */
+  _setBackgroundStyle(newStyle) {
+    this._backgroundStyle = returnUpdatedDict(this._backgroundStyle, newStyle);
+  }
+  /**
+   * Update the dictionary containing the CSS style for the selection box.
+   * @param newStyle The new style to be added to the selection box.
+   */
+  _setSelectionBoxStyle(newStyle) {
+    this._selectionBoxStyle = returnUpdatedDict(
+      this._selectionBoxStyle,
+      newStyle
+    );
+  }
+  /**
+   * Event handler when mouse or touchscreen is pressed.
+   * Can be called by mousedown ot touch start.
+   * Because most elements have stopPropagation on mousedown,
+   * this will only be called if the user clicks on the canvas background.
+   *
+   * Usually this means the user is performing a camera pan or selecting multiple nodes.
+   *
+   * @param button: The mouse button that was pressed.
+   * @param clientX: The x position of the cursor.
+   * @param clientY: The y position of the cursor.
+   * @returns
+   */
+  _onCursorDown(_, element, button, clientX, clientY) {
+    if (element !== this.g.canvasContainer && element !== this.g.canvasBackground) {
+      console.debug("Ignoring cursor down event");
+      return;
+    }
+    this.g._currentMouseDown = button;
+    if (this.g.targetObject && this.g.targetObject._type == ObjectTypes.connector) {
+      const connector = this.g.targetObject;
+      connector.domCursorUp();
+    }
+    const g = this.g;
+    if (g.overrideDrag) {
+      return;
+    }
+    if (g._currentMouseDown != cursorState.none) {
+      this._setSelectionBoxStyle({
+        width: "0px",
+        height: "0px",
+        left: "0px",
+        top: "0px",
+        pointerEvents: "none",
+        opacity: "0"
+      });
+    }
+    g.focusNodes = [];
+    for (const node of g.globalNodeList) {
+      node.offFocus();
+    }
+    [g.mousedown_x, g.mousedown_y] = this.g.camera.getCameraFromScreen(
+      clientX,
+      clientY
+    );
+    if (button == cursorState.mouseMiddle || button == cursorState.touchDouble) {
+      this.g.camera.handlePanStart();
+    }
+  }
+  /**
+   * Handle cursor move events.
+   * This usually means the camera is panned or a selection box is being drawn.
+   *
+   * @param target
+   * @param clientX
+   * @param clientY
+   * @returns
+   */
+  _onCursorMove(_, ___, __, clientX, clientY) {
+    const g = this.g;
+    g.hoverDOM = document.elementFromPoint(clientX, clientY);
+    [g.mouseCameraX, g.mouseCameraY] = this.g.camera.getCameraFromScreen(
+      clientX,
+      clientY
+    );
+    [g.mouseWorldX, g.mouseWorldY] = this.g.camera.getWorldFromCamera(
+      g.mouseCameraX,
+      g.mouseCameraY
+    );
+    g.dx = g.mouseCameraX - g.mousedown_x;
+    g.dy = g.mouseCameraY - g.mousedown_y;
+    if (g.dx !== 0 || g.dy !== 0) {
+      g.mouseHasMoved = true;
+    }
+    if (g.targetObject == null) {
+      if (g._currentMouseDown == cursorState.mouseMiddle || g._currentMouseDown == cursorState.touchDouble) {
+        this.g.camera.handlePanDrag(g.dx, g.dy);
+        this._setCanvasStyle({
+          transform: this.g.camera.canvasStyle,
+          cursor: "grabbing"
+        });
+        this._setBackgroundStyle({
+          transform: `translate(${this.g.camera.cameraPositionX + -this.g.camera.cameraWidth * 5}px, ${this.g.camera.cameraPositionY + -this.g.camera.cameraHeight * 5}px)`,
+          backgroundPosition: `${-this.g.camera.cameraPositionX}px ${-this.g.camera.cameraPositionY}px`
+        });
+      } else if (g._currentMouseDown == cursorState.mouseLeft || g._currentMouseDown == cursorState.touchSingle) {
+        let [left, top] = [
+          Math.min(g.mousedown_x, g.mouseCameraX),
+          Math.min(g.mousedown_y, g.mouseCameraY)
+        ];
+        this._setSelectionBoxStyle({
+          width: Math.abs(g.dx) + "px",
+          height: Math.abs(g.dy) + "px",
+          left: left + "px",
+          top: top + "px",
+          opacity: "1",
+          position: "absolute"
+        });
+        const [adjStartX, adjStartY] = this.g.camera.getWorldFromCamera(
+          left,
+          top
+        );
+        const [adjEndX, adjEndY] = this.g.camera.getWorldFromCamera(
+          Math.max(g.mousedown_x, g.mouseCameraX),
+          Math.max(g.mousedown_y, g.mouseCameraY)
+        );
+        const selectedNodes = [];
+        for (const node of g.globalNodeList) {
+          if (node.positionX + node._nodeWidth > adjStartX && node.positionX < adjEndX && node.positionY + node._nodeHeight > adjStartY && node.positionY < adjEndY) {
+            node.onFocus();
+            selectedNodes.push(node);
+          } else {
+            node.offFocus();
+          }
+        }
+        g.focusNodes = selectedNodes;
+      }
+    } else {
+      if (g.targetObject._type == ObjectTypes.node) {
+        for (const node of g.focusNodes) {
+          node._onDrag();
+        }
+      } else {
+        g.targetObject._onDrag();
+      }
+    }
+  }
+  /**
+   * Event handler when mouse or touchscreen is released.
+   * @returns
+   */
+  _onCursorUp(_, __, ___, ____, _____) {
+    const g = this.g;
+    if (g.ignoreMouseUp) {
+      g.ignoreMouseUp = false;
+      return;
+    }
+    if (g._currentMouseDown == cursorState.mouseLeft || g._currentMouseDown == cursorState.touchSingle) {
+      if (g.targetObject == null) {
+        this._setSelectionBoxStyle({
+          width: "0px",
+          height: "0px",
+          left: "0px",
+          top: "0px"
+        });
+      } else if (g.targetObject._type == ObjectTypes.node) {
+        for (const node of g.focusNodes) {
+          node.domCursorUp();
+        }
+      } else {
+        g.targetObject.domCursorUp();
+      }
+    } else if (g._currentMouseDown == cursorState.mouseMiddle || g._currentMouseDown == cursorState.touchDouble) {
+      this.g.camera.handlePanEnd();
+    }
+    g._currentMouseDown = cursorState.none;
+    if (g.overrideDrag) {
+      this._setCanvasStyle({
+        cursor: "default"
+      });
+    }
+    g.overrideDrag = false;
+    this._setCanvasStyle({
+      cursor: "default"
+    });
+    g.targetObject = null;
+    console.debug("targetObject set to null");
+    g.dx = 0;
+    g.dy = 0;
+    g.dx_offset = 0;
+    g.dy_offset = 0;
+    g.mouseHasMoved = false;
+  }
+  /**
+   * Event handler for mouse scroll events.
+   * @param deltaY: The amount the user scrolled.
+   */
+  _onZoom(_, __, ______, ____, _____, deltaY) {
+    this.g.camera.handleScroll(
+      deltaY,
+      this.g.mouseCameraX,
+      this.g.mouseCameraY
+    );
+    this._setCanvasStyle({
+      transform: this.g.camera.canvasStyle
+    });
+  }
+  /**
+   * Applies the canvas CSS styles to the canvas DOM element.
+   * This function is typically used in vanilla JS projects which does not have a reactive system to automatically update the DOM.
+   * @param style Dictionary of CSS styles to be applied to the canvas.
+   */
+  _renderCanvas(style) {
+    setDomStyle(this.g.canvas, style);
+  }
+  /**
+   * Applies the background CSS styles to the background DOM element.
+   * This function is typically used in vanilla JS projects which does not have a reactive system to automatically update the DOM.
+   * @param style Dictionary of CSS styles to be applied to the background.
+   */
+  _renderBackground(style) {
+    setDomStyle(this.g.canvasBackground, style);
+  }
+  /**
+   * Applies the selection box CSS styles to the selection box DOM element.
+   * This function is typically used in vanilla JS projects which does not have a reactive system to automatically update the DOM.
+   * @param style Dictionary of CSS styles to be applied to the selection box.
+   */
+  _renderSelectionBox(style) {
+    setDomStyle(this.g.selectionBox, style);
+  }
+  /**
+   * Renders elements currently in the canvas.
+   * This function is used by Vanilla JS projects that do not have a reactive system to automatically update the DOM.
+   */
+  _renderElements() {
+    const target = this.g.targetObject;
+    if (target == null) {
+      return;
+    }
+    if (target._type == ObjectTypes.node) {
+      for (const node of this.g.focusNodes) {
+        node._renderNode(node._nodeStyle);
+      }
+    } else if (target._type == ObjectTypes.connector) {
+      const target2 = this.g.targetObject;
+      target2.parent._renderNodeLines();
+    }
+  }
+  /**
+   * Initialize global stats, dom elements, and event listeners for the library.
+   * @param containerDom: The element that will be used to render the canvas and it's nodes.
+   * @param canvasDom: The canvas element that will contain the nodes and all other components. It should be a direct child of the containerDom.
+   * @param backgroundDom: The background element that will be used to render the background of the canvas. It should be a direct child of the containerDom.
+   * @param selectionBoxDom: The element that will be used as the selection box. It should be a direct child of the containerDom.
+   */
+  init(containerDom, canvasDom, backgroundDom, selectionBoxDom) {
     this.g = {
       canvas: canvasDom,
       canvasContainer: containerDom,
@@ -3586,43 +3912,77 @@ class SnapLine {
     this._renderBackground(this._backgroundStyle);
     this._renderSelectionBox(this._selectionBoxStyle);
     this._inputControl = new InputControl(containerDom);
-    this._inputControl.setCursorDownCallback(this.onCursorDown.bind(this));
-    this._inputControl.setCursorMoveCallback(this.onCursorMove.bind(this));
-    this._inputControl.setCursorUpCallback(this.onCursorUp.bind(this));
-    this._inputControl.setScrollCallback(this.onZoom.bind(this));
-    window.requestAnimationFrame(this.step.bind(this));
+    this._inputControl.setCursorDownCallback(this._onCursorDown.bind(this));
+    this._inputControl.setCursorMoveCallback(this._onCursorMove.bind(this));
+    this._inputControl.setCursorUpCallback(this._onCursorUp.bind(this));
+    this._inputControl.setScrollCallback(this._onZoom.bind(this));
+    window.requestAnimationFrame(__privateMethod(this, _SnapLine_instances, step_fn).bind(this));
   }
-  _setCanvasStyle(newStyle) {
-    this._canvasStyle = Object.assign({}, this._canvasStyle, newStyle);
-    this._canvasStyle._requestUpdate = "true";
+  /**
+   * Creates an instance of a node.
+   * Note that this function will not add the DOM to the canvas.
+   * The caller must manually add the DOM using document.appendChild() or use a framework that will automatically add the DOM.
+   *
+   * @param dom: The DOM element that will be used as the node. If null, NodeComponent.init() must be called later to specify the DOM element.
+   * @param x: The x position of the node.
+   * @param y: The y position of the node.
+   * @returns A reference to the node.
+   */
+  createNode(dom = null, x = 0, y = 0) {
+    const node = new NodeComponent(dom, x, y, this.g);
+    this.g.globalNodeTable[node.gid] = node;
+    return node;
   }
-  _setBackgroundStyle(newStyle) {
-    this._backgroundStyle = Object.assign({}, this._backgroundStyle, newStyle);
-    this._backgroundStyle._requestUpdate = "true";
-  }
-  _setSelectionBoxStyle(newStyle) {
-    this._selectionBoxStyle = Object.assign(
-      {},
-      this._selectionBoxStyle,
-      newStyle
-    );
-    this._selectionBoxStyle._requestUpdate = "true";
-  }
-  _renderCanvas(style) {
-    for (const key in style) {
-      this.g.canvas.style[key] = style[key];
+  // addNodeAtMouse(node: NodeComponent, e: MouseEvent) {
+  //   this.g.ignoreMouseUp = true;
+  //   const x = this.g.mouseWorldX;
+  //   const y = this.g.mouseWorldY;
+  //   console.debug("Adding node at " + x + ", " + y);
+  //   this.addNode(node, x, y);
+  //   node.setStartPositions();
+  //   this.g._currentMouseDown = cursorState.mouseLeft;
+  //   this.g.mousedown_x = this.g.mouseCameraX;
+  //   this.g.mousedown_y = this.g.mouseCameraY;
+  //   this.g.focusNodes = [node];
+  //   this.g.targetObject = node;
+  //   for (const node of this.g.globalNodeList) {
+  //     node.offFocus();
+  //   }
+  //   this._onCursorMove(e, null, this.g._currentMouseDown, e.clientX, e.clientY);
+  // }
+  /**
+   * Deletes a node from the canvas.
+   * Note that this function will not remove the DOM from the canvas - the caller
+   * must manually remove the DOM using document.removeChild() or use a framework that will automatically remove the DOM.
+   * @param gid The global id of the node to be deleted.
+   * @returns True if the node was successfully deleted, false otherwise.
+   */
+  deleteNode(gid) {
+    if (!(gid in this.g.globalNodeTable)) {
+      console.error("Node not found: " + gid);
+      return false;
     }
+    this.g.globalNodeTable[gid].delete();
+    const { [gid]: _, ...rest } = this.g.globalNodeTable;
+    this.g.globalNodeTable = rest;
+    return true;
   }
-  _renderBackground(style) {
-    for (const key in style) {
-      this.g.canvasBackground.style[key] = style[key];
-    }
+  /**
+   * Focus on a node with the given global id.
+   * @param gid The global id of the node to be focused.
+   * @returns True if the node was successfully focused, false otherwise.
+   */
+  focusNode(gid) {
+    if (!(gid in this.g.globalNodeTable)) return false;
+    const node = this.g.globalNodeTable[gid];
+    node.onFocus();
+    return true;
   }
-  _renderSelectionBox(style) {
-    for (const key in style) {
-      this.g.selectionBox.style[key] = style[key];
-    }
-  }
+  /**
+   * Set the canvas render function to the given callback.
+   * @param gid The global id of the node to be unfocused.
+   * @returns True if the node was successfully unfocused, false otherwise.
+   */
   setRenderCanvasCallback(callback) {
     this._renderCanvas = callback;
   }
@@ -3632,264 +3992,19 @@ class SnapLine {
   setRenderSelectionBoxCallback(callback) {
     this._renderSelectionBox = callback;
   }
-  /**
-   * Event handler when mouse or touchscreen is pressed.
-   * Can be called by mousedown ot touch start.
-   * Because most elements have stopPropagation on mousedown,
-   * this will only be called if the user clicks on the canvas background.
-   *
-   * Usually this means the user is performing a camera pan or selecting multiple nodes.
-   *
-   * @param button: The mouse button that was pressed.
-   * @param clientX: The x position of the cursor.
-   * @param clientY: The y position of the cursor.
-   * @returns
-   */
-  onCursorDown(_, element, button, clientX, clientY) {
-    if (element !== this.g.canvasContainer && element !== this.g.canvasBackground) {
-      console.debug("Ignoring cursor down event");
-      return;
-    }
-    this.g._currentMouseDown = button;
-    if (this.g.targetObject && this.g.targetObject.type == ObjectTypes.connector) {
-      const connector = this.g.targetObject;
-      connector.domCursorUp();
-    }
-    const g = this.g;
-    if (g.overrideDrag) {
-      return;
-    }
-    if (g._currentMouseDown != cursorState.none) {
-      this._setSelectionBoxStyle({
-        width: "0px",
-        height: "0px",
-        left: "0px",
-        top: "0px",
-        pointerEvents: "none",
-        opacity: "0"
-      });
-    }
-    g.focusNodes = [];
-    for (const node of g.globalNodeList) {
-      node.offFocus();
-    }
-    [g.mousedown_x, g.mousedown_y] = this.g.camera.getCameraFromScreen(
-      clientX,
-      clientY
-    );
-    if (button == cursorState.mouseMiddle || button == cursorState.touchDouble) {
-      this.g.camera.handlePanStart();
-    }
-  }
-  /**
-   * Handle cursor move events.
-   * This usually means the camera is panned or a selection box is being drawn.
-   *
-   * @param target
-   * @param clientX
-   * @param clientY
-   * @returns
-   */
-  onCursorMove(_, ___, __, clientX, clientY) {
-    const g = this.g;
-    g.hoverDOM = document.elementFromPoint(clientX, clientY);
-    [g.mouseCameraX, g.mouseCameraY] = this.g.camera.getCameraFromScreen(
-      clientX,
-      clientY
-    );
-    [g.mouseWorldX, g.mouseWorldY] = this.g.camera.getWorldFromCamera(
-      g.mouseCameraX,
-      g.mouseCameraY
-    );
-    g.dx = g.mouseCameraX - g.mousedown_x;
-    g.dy = g.mouseCameraY - g.mousedown_y;
-    if (g.dx !== 0 || g.dy !== 0) {
-      g.mouseHasMoved = true;
-    }
-    if (g.targetObject == null) {
-      if (g._currentMouseDown == cursorState.mouseMiddle || g._currentMouseDown == cursorState.touchDouble) {
-        this.g.camera.handlePanDrag(g.dx, g.dy);
-        this._setCanvasStyle({
-          transform: this.g.camera.canvasStyle,
-          cursor: "grabbing"
-        });
-        this._setBackgroundStyle({
-          transform: `translate(${this.g.camera.cameraPositionX + -this.g.camera.cameraWidth * 5}px, ${this.g.camera.cameraPositionY + -this.g.camera.cameraHeight * 5}px)`,
-          backgroundPosition: `${-this.g.camera.cameraPositionX}px ${-this.g.camera.cameraPositionY}px`
-        });
-      } else if (g._currentMouseDown == cursorState.mouseLeft || g._currentMouseDown == cursorState.touchSingle) {
-        let [left, top] = [
-          Math.min(g.mousedown_x, g.mouseCameraX),
-          Math.min(g.mousedown_y, g.mouseCameraY)
-        ];
-        this._setSelectionBoxStyle({
-          width: Math.abs(g.dx) + "px",
-          height: Math.abs(g.dy) + "px",
-          left: left + "px",
-          top: top + "px",
-          opacity: "1",
-          position: "absolute"
-        });
-        const [adjStartX, adjStartY] = this.g.camera.getWorldFromCamera(
-          left,
-          top
-        );
-        const [adjEndX, adjEndY] = this.g.camera.getWorldFromCamera(
-          Math.max(g.mousedown_x, g.mouseCameraX),
-          Math.max(g.mousedown_y, g.mouseCameraY)
-        );
-        const selectedNodes = [];
-        for (const node of g.globalNodeList) {
-          if (node.positionX + node.nodeWidth > adjStartX && node.positionX < adjEndX && node.positionY + node.nodeHeight > adjStartY && node.positionY < adjEndY) {
-            node.onFocus();
-            selectedNodes.push(node);
-          } else {
-            node.offFocus();
-          }
-        }
-        g.focusNodes = selectedNodes;
-      }
-    } else {
-      if (g.targetObject.type == ObjectTypes.node) {
-        for (const node of g.focusNodes) {
-          node.onDrag();
-        }
-      } else {
-        g.targetObject.onDrag();
-      }
-    }
-  }
-  /**
-   * Event handler when mouse or touchscreen is released.
-   * @returns
-   */
-  onCursorUp(_, __, ___, ____, _____) {
-    const g = this.g;
-    if (g.ignoreMouseUp) {
-      g.ignoreMouseUp = false;
-      return;
-    }
-    if (g._currentMouseDown == cursorState.mouseLeft || g._currentMouseDown == cursorState.touchSingle) {
-      if (g.targetObject == null) {
-        this._setSelectionBoxStyle({
-          width: "0px",
-          height: "0px",
-          left: "0px",
-          top: "0px"
-        });
-      } else if (g.targetObject.type == ObjectTypes.node) {
-        for (const node of g.focusNodes) {
-          node.domCursorUp();
-        }
-      } else {
-        g.targetObject.domCursorUp();
-      }
-    } else if (g._currentMouseDown == cursorState.mouseMiddle || g._currentMouseDown == cursorState.touchDouble) {
-      this.g.camera.handlePanEnd();
-    }
-    g._currentMouseDown = cursorState.none;
-    if (g.overrideDrag) {
-      this._setCanvasStyle({
-        cursor: "default"
-      });
-    }
-    g.overrideDrag = false;
-    this._setCanvasStyle({
-      cursor: "default"
-    });
-    g.targetObject = null;
-    console.debug("targetObject set to null");
-    g.dx = 0;
-    g.dy = 0;
-    g.dx_offset = 0;
-    g.dy_offset = 0;
-    g.mouseHasMoved = false;
-  }
-  /**
-   * Event handler for mouse scroll events.
-   * @param deltaY: The amount the user scrolled.
-   */
-  onZoom(_, __, ______, ____, _____, deltaY) {
-    this.g.camera.handleScroll(
-      deltaY,
-      this.g.mouseCameraX,
-      this.g.mouseCameraY
-    );
-    this._setCanvasStyle({
-      transform: this.g.camera.canvasStyle
-    });
-  }
-  /**
-   * Renders elements currently in the canvas.
-   */
-  _renderElements() {
-    const target = this.g.targetObject;
-    if (target == null) {
-      return;
-    }
-    if (target.type == ObjectTypes.node) {
-      for (const node of this.g.focusNodes) {
-        node.renderNode(node.nodeStyle);
-      }
-    } else if (target.type == ObjectTypes.connector) {
-      const target2 = this.g.targetObject;
-      target2.parent._renderNodeLines();
-    }
-  }
-  step() {
-    this._renderElements();
-    this._renderCanvas(this._canvasStyle);
-    this._renderBackground(this._backgroundStyle);
-    this._renderSelectionBox(this._selectionBoxStyle);
-    window.requestAnimationFrame(this.step.bind(this));
-  }
-  addNodeObject() {
-    const n = new NodeComponent(null, this.g);
-    this.g.globalNodeTable[n.gid] = n;
-    return [n, this.g.globalNodeTable];
-  }
-  createNode(dom) {
-    const n = new NodeComponent(dom, this.g);
-    this.g.globalNodeTable[n.gid] = n;
-    return n;
-  }
-  addNode(node, x, y) {
-    node.addNodeToCanvas(x, y);
-  }
-  addNodeAtMouse(node, e) {
-    this.g.ignoreMouseUp = true;
-    const x = this.g.mouseWorldX;
-    const y = this.g.mouseWorldY;
-    console.debug("Adding node at " + x + ", " + y);
-    this.addNode(node, x, y);
-    node.setStartPositions();
-    this.g._currentMouseDown = cursorState.mouseLeft;
-    this.g.mousedown_x = this.g.mouseCameraX;
-    this.g.mousedown_y = this.g.mouseCameraY;
-    this.g.focusNodes = [node];
-    this.g.targetObject = node;
-    for (const node2 of this.g.globalNodeList) {
-      node2.offFocus();
-    }
-    this.onCursorMove(e, null, this.g._currentMouseDown, e.clientX, e.clientY);
-  }
-  deleteNode(id) {
-    if (!(id in this.g.globalNodeTable)) {
-      console.error("Node not found: " + id);
-      return null;
-    }
-    this.g.globalNodeTable[id].destroy();
-    const { [id]: _, ...rest } = this.g.globalNodeTable;
-    this.g.globalNodeTable = rest;
-    return id;
-  }
-  focusNode(id) {
-    if (!(id in this.g.globalNodeTable)) return null;
-    const node = this.g.globalNodeTable[id];
-    node.onFocus();
-    return id;
-  }
 }
+_SnapLine_instances = new WeakSet();
+// ============== Private functions ==============
+/**
+ * Main loop for rendering the canvas.
+ */
+step_fn = function() {
+  this._renderElements();
+  this._renderCanvas(this._canvasStyle);
+  this._renderBackground(this._backgroundStyle);
+  this._renderSelectionBox(this._selectionBoxStyle);
+  window.requestAnimationFrame(__privateMethod(this, _SnapLine_instances, step_fn).bind(this));
+};
 export {
   SnapLine as default
 };
