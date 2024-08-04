@@ -1,13 +1,12 @@
 import React, { useEffect } from "react";
 import { useState } from "react";
 import { useRef } from "react";
-import Node from "./lib/Node";
-import Output from "./lib/Output";
-import InputNumber from "./lib/InputNumber";
+import Node from "../lib/Node";
+import Output from "../lib/Output";
+import InputNumber from "../lib/InputNumber";
 
 export default function LerpNode(nodeObject) {
   let [node, setNode] = useState(nodeObject);
-  let [lineList, setLineList] = useState(node.svgLines || []);
   let rangeDom = useRef(null);
 
   useEffect(() => {
@@ -40,7 +39,7 @@ export default function LerpNode(nodeObject) {
   }
 
   return (
-    <Node nodeObject={node} lineList={lineList}>
+    <Node nodeObject={node}>
       <div className="sl-row right">
         <span className="sl-label right">Result</span>
         <Output nodeObject={node} setLineList={setLineList} name="result" />

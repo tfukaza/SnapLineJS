@@ -11,8 +11,8 @@
     }
   },
   "scripts": {
-    "dev:vanilla": "FRAMEWORK=vanilla vite build --mode development --watch & server:vanilla",
-    "dev:react": "FRAMEWORK=react vite build --mode development --watch & server:react",
+    "dev:vanilla": "FRAMEWORK=vanilla vite build --mode development --watch & npm run server:vanilla",
+    "dev:react": "FRAMEWORK=react vite build --mode development --watch & npm run server:react",
     "server:vanilla": "FRAMEWORK=vanilla vite serve demo/vanilla --config demo/vanilla/vite.config.mjs",
     "server:react": "FRAMEWORK=react vite serve demo/react --config demo/react/vite.config.mjs",
     "dev:all": "concurrently --kill-others \"npm run dev:vanilla\" \"npm run dev:react\"",

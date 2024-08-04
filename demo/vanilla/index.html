@@ -16,49 +16,43 @@
   </head>
 
   <template id="node-math">
-    <div class="sl-node" sl-init="initMath">
-      <div class="sl-row right">
-        <span class="sl-label right">Result</span>
-        <span class="sl-connector right" id="result"></span>
-      </div>
-      <div class="sl-row">
-        <select class="sl-input" sl-name="operation" id="operation">
-          <option value="+">Add</option>
-          <option value="-">Subtract</option>
-          <option value="*">Multiply</option>
-          <option value="/">Divide</option>
-        </select>
-      </div>
-      <div class="sl-row">
-        <span class="sl-connector left" id="input_1"></span>
-        <span class="sl-label">Input 1</span>
-        <input class="sl-input" type="number" value="0" id="form_1" />
-      </div>
-      <div class="sl-row">
-        <span class="sl-connector left" id="input_2"></span>
-        <span class="sl-label">Input 2</span>
-        <input class="sl-input" type="number" value="0" id="form_2" />
-      </div>
+    <div class="sl-row right">
+      <span class="sl-label right">Result</span>
+      <span class="sl-connector right" id="result"></span>
+    </div>
+    <div class="sl-row">
+      <select class="sl-input" sl-name="operation" id="operation">
+        <option value="+">Add</option>
+        <option value="-">Subtract</option>
+        <option value="*">Multiply</option>
+        <option value="/">Divide</option>
+      </select>
+    </div>
+    <div class="sl-row">
+      <span class="sl-connector left" id="input_1"></span>
+      <span class="sl-label">Input 1</span>
+      <input class="sl-input" type="number" value="0" id="form_1" />
+    </div>
+    <div class="sl-row">
+      <span class="sl-connector left" id="input_2"></span>
+      <span class="sl-label">Input 2</span>
+      <input class="sl-input" type="number" value="0" id="form_2" />
     </div>
   </template>
 
   <template id="node-print">
-    <div class="sl-node" sl-init="initMath">
-      <div class="sl-row">
-        <span class="sl-connector left" id="input"></span>
-        <span class="sl-label" id="print"> </span>
-      </div>
+    <div class="sl-row">
+      <span class="sl-connector left" id="input"></span>
+      <span class="sl-label" id="print"> </span>
     </div>
   </template>
 
   <template id="node-constant">
-    <div class="sl-node">
-      <div class="sl-row right">
-        <span class="sl-connector right" id="output"></span>
-      </div>
-      <div class="sl-row">
-        <input class="sl-input" id="value" type="number" value="0" />
-      </div>
+    <div class="sl-row right">
+      <span class="sl-connector right" id="output"></span>
+    </div>
+    <div class="sl-row">
+      <input class="sl-input" id="value" type="number" value="0" />
     </div>
   </template>
 

@@ -5,9 +5,10 @@ import {
   lineObject,
   ConnectorConfig,
 } from "../types";
-import { ComponentBase } from "./component";
+import { ComponentBase } from "./base";
 import { NodeComponent } from "./node";
 import { LineElement } from "../types";
+import { setDomStyle } from "../helper";
 
 /**
  * Connector components connect together nodes using lines.
@@ -17,12 +18,12 @@ class ConnectorComponent extends ComponentBase {
   name: string; // Name of the connector. This should describe the data associated with the connector
   connectorX: number; // Location of the connector on canvas
   connectorY: number;
-  connectorTotalOffsetX: number; // Location of the connector relative to the location of parent Node
+  _connectorTotalOffsetX: number; // Location of the connector relative to the location of parent Node
   _connectorTotalOffsetY: number;
   prop: { [key: string]: any }; // Properties of the connector
   outgoingLines: lineObject[];
   incomingLines: lineObject[];
-  type: ObjectTypes = ObjectTypes.connector;
+  _type: ObjectTypes = ObjectTypes.connector;
   dom: HTMLElement;
   parent: NodeComponent;
 
@@ -30,6 +31,146 @@ class ConnectorComponent extends ComponentBase {
     // Abstract function
   }
 
+  // ==================== Private methods ====================
+
+  #setLineXYPosition(entry: lineObject, x: number, y: number) {
+    entry.x2 = x;
+    entry.y2 = y;
+  }
+
+  // ==================== Hidden methods ====================
+
+  _componentCursorDown(_: customCursorDownProp): void {
+    const currentIncomingLines = this.incomingLines.filter(
+      (i) => !i.requestDelete,
+    );
+    if (currentIncomingLines.length > 0) {
+      this.startPickUpLine(currentIncomingLines[0]);
+      return;
+    }
+    if (this.config.allowDragOut) {
+      this.startDragOutLine();
+    }
+  }
+
+  _onDrag(): void {
+    this.runDragOutLine();
+  }
+
+  _componentCursorUp(): void {
+    this.endDragOutLine();
+    this.parent._renderNodeLines();
+  }
+
+  _createLineDOM(): SVGSVGElement {
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+    svg.appendChild(line);
+    svg.classList.add("sl-connector-svg");
+    line.classList.add("sl-connector-line");
+    line.setAttribute("stroke-width", "4");
+
+    console.debug(`Created line from connector ${this.gid}`);
+
+    this.g.canvas!.appendChild(svg);
+
+    return svg;
+  }
+
+  _updateDomProperties() {
+    const this_rect = this.dom.getBoundingClientRect();
+    if (!this.parent._dom) {
+      console.error(`Parent DOM is null`);
+      return;
+    }
+    const parent_rect = this.parent._dom.getBoundingClientRect();
+
+    // getBoundingClientRect returns size shown on screen, so we need to convert it to world coordinates
+    const [adjLeft, adjTop] = this.g.camera.getWorldDeltaFromCameraDelta(
+      this_rect.left - parent_rect.left,
+      this_rect.top - parent_rect.top,
+    );
+    const [adjWidth, adjHeight] = this.g.camera.getWorldDeltaFromCameraDelta(
+      this_rect.width / 2, // Get the center of the connector
+      this_rect.height / 2,
+    );
+
+    this._connectorTotalOffsetX = adjLeft + adjWidth;
+    this._connectorTotalOffsetY = adjTop + adjHeight;
+
+    this.connectorX = this.parent.positionX + this._connectorTotalOffsetX;
+    this.connectorY = this.parent.positionY + this._connectorTotalOffsetY;
+  }
+
+  deleteLine(i: number): lineObject | undefined {
+    if (this.outgoingLines.length == 0) {
+      return undefined;
+    }
+
+    const svg = this.outgoingLines[i];
+    svg.requestDelete = true;
+
+    return svg;
+  }
+
+  deleteAllLines() {
+    for (const svg of this.outgoingLines) {
+      svg.requestDelete = true;
+    }
+  }
+
+  _renderLinePosition(entry: lineObject) {
+    const svg: LineElement = entry.svg;
+    if (!svg) {
+      return;
+    }
+    setDomStyle(svg, {
+      position: "absolute",
+      overflow: "visible",
+      pointerEvents: "none",
+      willChange: "transform",
+      transform: `translate3d(${entry.connector_x}px, ${entry.connector_y}px, 0)`,
+    });
+    const line = svg.children[0] as SVGLineElement;
+    line.setAttribute("x1", "" + 0);
+    line.setAttribute("y1", "" + 0);
+    line.setAttribute("x2", "" + entry.x2);
+    line.setAttribute("y2", "" + entry.y2);
+  }
+
+  /**
+   * Updates the start and end positions of the line.
+   * @param entry The line to update.
+   */
+  _setLinePosition(entry: lineObject) {
+    entry.connector_x = entry.start.connectorX;
+    entry.connector_y = entry.start.connectorY;
+    if (!entry.target) {
+      const [adjustedDeltaX, adjustedDeltaY] =
+        this.g.camera.getWorldDeltaFromCameraDelta(this.g.dx, this.g.dy);
+      /* If entry.to is not set, then this line is currently being dragged */
+      this.#setLineXYPosition(entry, adjustedDeltaX, adjustedDeltaY);
+    } else {
+      this.#setLineXYPosition(
+        entry,
+        entry.target.connectorX - entry.start.connectorX,
+        entry.target.connectorY - entry.start.connectorY,
+      );
+    }
+  }
+
+  /* Updates the position of all lines connected to this connector */
+  _setAllLinePositions() {
+    this._updateDomProperties();
+    for (const line of this.outgoingLines) {
+      this._setLinePosition(line);
+    }
+    for (const line of this.incomingLines) {
+      line.start._setLinePosition(line);
+    }
+  }
+
+  /** ==================== Public methods ==================== */
   constructor(
     dom: HTMLElement,
     config: ConnectorConfig,
@@ -38,15 +179,11 @@ class ConnectorComponent extends ComponentBase {
     outgoingLines: lineObject[],
     incomingLines: lineObject[],
   ) {
-    super(config, parent, globals);
+    super(parent, globals);
 
-    this.connectorX = 0;
-    this.connectorY = 0;
-    this.connectorTotalOffsetX = 0;
-    this._connectorTotalOffsetY = 0;
     this.dom = dom;
     this.parent = parent;
-    this.prop = parent.prop;
+    this.prop = parent._prop;
     this.outgoingLines = outgoingLines;
     this.incomingLines = incomingLines;
     this.config = config;
@@ -55,23 +192,26 @@ class ConnectorComponent extends ComponentBase {
     this.g.globalNodeTable[this.gid] = this;
     this.dom.setAttribute("sl-gid", this.gid.toString());
 
+    this.connectorX = 0;
+    this.connectorY = 0;
+    this._connectorTotalOffsetX = 0;
+    this._connectorTotalOffsetY = 0;
+    this._updateDomProperties();
+
     this.bindFunction(this.dom);
 
-    console.log(config);
+    this.connectToConnector = this.connectToConnector.bind(this);
+    this.disconnectFromConnector = this.disconnectFromConnector.bind(this);
   }
 
   /**
-   * Begins the line drag operation, which will create a temporary line
-   * extending from the connector to the mouse cursor.
+   * Creates a new line extending from this connector.
+   * @param svg The SVG element to create the line in.
+   * @returns The line object that was created.
    */
-  startDragOutLine() {
-    console.debug(
-      `Created line from connector ${this.gid} and started dragging`,
-    );
-    // Insert the temporary line into the svgLines array at index 0.
-    // The 'start' field is set to this connector, and the 'target' field is set to null.
-    this.outgoingLines.unshift({
-      svg: null,
+  createLine(svg: SVGElement | null): lineObject {
+    const line: lineObject = {
+      svg,
       target: null,
       start: this,
       connector_x: this.connectorX,
@@ -81,10 +221,20 @@ class ConnectorComponent extends ComponentBase {
       connector: this,
       requestDelete: false,
       completedDelete: false,
-    });
-    //this.parent.allOutgoingLines.push(this.outgoingLines[0]);
+    };
+    return line;
+  }
 
-    this.setAllLinePositions();
+  /**
+   * Begins the line drag operation, which will create a temporary line
+   * extending from the connector to the mouse cursor.
+   */
+  startDragOutLine(): void {
+    console.debug(
+      `Created line from connector ${this.gid} and started dragging`,
+    );
+    this.outgoingLines.unshift(this.createLine(null));
+    this._setAllLinePositions();
   }
 
   /**
@@ -112,7 +262,7 @@ class ConnectorComponent extends ComponentBase {
         gid
       ] as ConnectorComponent;
       console.debug("Hovering over input connector", targetConnector);
-      targetConnector.updateConnectorPosition();
+      targetConnector._updateDomProperties();
       connectorX = targetConnector.connectorX;
       connectorY = targetConnector.connectorY;
       distance = Math.sqrt(
@@ -122,13 +272,13 @@ class ConnectorComponent extends ComponentBase {
 
       // Handle snapping to the input connector
       if (distance < 40) {
-        this.setLineXYPosition(
+        this.#setLineXYPosition(
           this.outgoingLines[0],
           connectorX - this.connectorX,
           connectorY - this.connectorY,
         );
       } else {
-        this.setLineXYPosition(
+        this.#setLineXYPosition(
           this.outgoingLines[0],
           adjustedDeltaX,
           adjustedDeltaY,
@@ -136,7 +286,7 @@ class ConnectorComponent extends ComponentBase {
       }
     } else {
       // Update the line position to the current mouse cursor position
-      this.setLineXYPosition(
+      this.#setLineXYPosition(
         this.outgoingLines[0],
         adjustedDeltaX,
         adjustedDeltaY,
@@ -159,7 +309,7 @@ class ConnectorComponent extends ComponentBase {
         return;
       }
       const target = this.g.globalNodeTable[gid] as ConnectorComponent;
-      if (this.connectToConnector(target) == false) {
+      if (this.connectToConnector(target, this.outgoingLines[0]) == false) {
         this.deleteLine(0);
         return;
       }
@@ -167,7 +317,7 @@ class ConnectorComponent extends ComponentBase {
       target.prop[target.name] = this.prop[this.name]; // Logically connect the input to the output
       target.updateFunction(); // Update the input
 
-      this.setLineXYPosition(
+      this.#setLineXYPosition(
         this.outgoingLines[0],
         target.connectorX - this.connectorX,
         target.connectorY - this.connectorY,
@@ -175,8 +325,13 @@ class ConnectorComponent extends ComponentBase {
     } else {
       this.deleteLine(0);
     }
+    this.parent._renderOutgoingLines(this.outgoingLines, this.name);
   }
 
+  /**
+   * Begins the process of dragging a line that is already connected to another connector.
+   * @param line The line that is being dragged.
+   */
   startPickUpLine(line: lineObject) {
     // Hand over control to the peer output
     this.g.targetObject = line.start;
@@ -194,7 +349,17 @@ class ConnectorComponent extends ComponentBase {
     line.start.startDragOutLine();
   }
 
-  connectToConnector(connector: ConnectorComponent): boolean {
+  /**
+   * Logically connects this connector to another connector.
+   *
+   * @param connector The connector to connect to.
+   * @param line The line to connect to the connector. If null, a new line will be created.
+   * @returns True if the connection was successful, false otherwise.
+   */
+  connectToConnector(
+    connector: ConnectorComponent,
+    line: lineObject | null,
+  ): boolean {
     const currentIncomingLines = connector.incomingLines.filter(
       (i) => !i.requestDelete,
     );
@@ -213,14 +378,22 @@ class ConnectorComponent extends ComponentBase {
       return false;
     }
 
-    this.updateConnectorPosition();
+    if (line == null) {
+      line = this.createLine(null);
+      this.outgoingLines.unshift(line);
+    }
 
-    this.outgoingLines[0].target = connector;
-    connector.incomingLines.push(this.outgoingLines[0]);
+    this._updateDomProperties();
+    line.target = connector;
+    connector.incomingLines.push(line);
 
     return true;
   }
 
+  /**
+   * Logically disconnects this connector from another connector.
+   * @param connector The connector to disconnect from.
+   */
   disconnectFromConnector(connector: ConnectorComponent) {
     for (const line of this.outgoingLines) {
       if (line.target == connector) {
@@ -228,145 +401,6 @@ class ConnectorComponent extends ComponentBase {
         break;
       }
     }
-  }
-
-  updateConnectorPosition() {
-    this.connectorX = this.parent.positionX + this.connectorTotalOffsetX;
-    this.connectorY = this.parent.positionY + this._connectorTotalOffsetY;
-  }
-
-  setLineXYPosition(entry: lineObject, x: number, y: number) {
-    entry.x2 = x;
-    entry.y2 = y;
-  }
-
-  renderLinePosition(entry: lineObject) {
-    const svg: LineElement = entry.svg;
-    if (!svg) {
-      return;
-    }
-    this.setStyle(svg, {
-      position: "absolute",
-      overflow: "visible",
-      pointerEvents: "none",
-      willChange: "transform",
-      transform: `translate3d(${entry.connector_x}px, ${entry.connector_y}px, 0)`,
-    });
-    const line = svg.children[0] as SVGLineElement;
-    line.setAttribute("x1", "" + 0);
-    line.setAttribute("y1", "" + 0);
-    line.setAttribute("x2", "" + entry.x2);
-    line.setAttribute("y2", "" + entry.y2);
-  }
-
-  setLinePosition(entry: lineObject) {
-    entry.connector_x = entry.start.connectorX;
-    entry.connector_y = entry.start.connectorY;
-    if (!entry.target) {
-      const [adjustedDeltaX, adjustedDeltaY] =
-        this.g.camera.getWorldDeltaFromCameraDelta(this.g.dx, this.g.dy);
-      /* If entry.to is not set, then this line is currently being dragged */
-      this.setLineXYPosition(entry, adjustedDeltaX, adjustedDeltaY);
-    } else {
-      this.setLineXYPosition(
-        entry,
-        entry.target.connectorX - entry.start.connectorX,
-        entry.target.connectorY - entry.start.connectorY,
-      );
-    }
-  }
-
-  /* Updates the position of all lines connected to this connector */
-  setAllLinePositions() {
-    this.updateConnectorPosition();
-    for (const line of this.outgoingLines) {
-      this.setLinePosition(line);
-    }
-    for (const line of this.incomingLines) {
-      line.start.setLinePosition(line);
-    }
-  }
-
-  updateDOMproperties() {
-    const this_rect = this.dom.getBoundingClientRect();
-    if (!this.parent.dom) {
-      console.error(`Parent DOM is null`);
-      return;
-    }
-    const parent_rect = this.parent.dom.getBoundingClientRect();
-    const [adjLeft, adjTop] = this.g.camera.getWorldDeltaFromCameraDelta(
-      this_rect.left - parent_rect.left,
-      this_rect.top - parent_rect.top,
-    );
-    const [adjWidth, adjHeight] = this.g.camera.getWorldDeltaFromCameraDelta(
-      this_rect.width / 2,
-      this_rect.height / 2,
-    );
-    this.connectorTotalOffsetX = adjLeft + adjWidth;
-    this._connectorTotalOffsetY = adjTop + adjHeight;
-  }
-
-  createLineDOM(): SVGSVGElement {
-    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-    const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
-    svg.appendChild(line);
-    svg.classList.add("sl-connector-svg");
-    line.classList.add("sl-connector-line");
-    line.setAttribute("stroke-width", "4");
-
-    console.debug(`Created line from connector ${this.gid}`);
-
-    this.g.canvas!.appendChild(svg);
-
-    return svg;
-  }
-
-  setStyle(dom: LineElement, style: any) {
-    if (!dom) {
-      return;
-    }
-    for (const key in style) {
-      dom.style[key as any] = style[key];
-    }
-  }
-
-  deleteLine(i: number): lineObject | undefined {
-    if (this.outgoingLines.length == 0) {
-      return undefined;
-    }
-
-    const svg = this.outgoingLines[i];
-    svg.requestDelete = true;
-
-    return svg;
-  }
-
-  deleteAllLines() {
-    for (const svg of this.outgoingLines) {
-      svg.requestDelete = true;
-    }
-  }
-
-  componentCursorDown(_: customCursorDownProp): void {
-    const currentIncomingLines = this.incomingLines.filter(
-      (i) => !i.requestDelete,
-    );
-    if (currentIncomingLines.length > 0) {
-      this.startPickUpLine(currentIncomingLines[0]);
-      return;
-    }
-    if (this.config.allowDragOut) {
-      this.startDragOutLine();
-    }
-  }
-
-  onDrag(): void {
-    this.runDragOutLine();
-  }
-
-  componentCursorUp(): void {
-    this.endDragOutLine();
-    this.parent._renderNodeLines();
   }
 }
 

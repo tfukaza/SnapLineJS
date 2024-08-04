@@ -22,7 +22,7 @@ export default defineConfig(({ command, mode }) => {
   return {
     build: {
       lib: {
-        entry: resolve(__dirname, "src/main.ts"),
+        entry: resolve(__dirname, "src/index.ts"),
         name: "SnapLineJs",
         filename: "snapline",
       },
@@ -32,7 +32,7 @@ export default defineConfig(({ command, mode }) => {
         toplevel: true,
         mangle: {
           properties: {
-            regex: /^_/,
+            regex: /^(_|#)/,
           },
         },
         module: true,

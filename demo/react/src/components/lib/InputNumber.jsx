@@ -22,7 +22,7 @@ export default function InputNumber({ nodeObject, name, updateText, setProp }) {
       <input
         className="sl-input"
         type="number"
-        value={node.prop[name] || 0}
+        value={node.getProp(name) || 0}
         onChange={(e) => updateText(e, name)}
         ref={formDom}
       />

@@ -9,7 +9,7 @@ export default function Input({ nodeObject, name, setProp }) {
 
   useEffect(() => {
     node.addConnector(inputDom.current, name, 1, false);
-    node.addPropSetCallback(setProp, name);
+    node.addSetPropCallback(setProp, name);
   }, []);
 
   return <span className="sl-connector left" ref={inputDom}></span>;

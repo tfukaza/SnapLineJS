@@ -1,24 +1,26 @@
 import React from "react";
 import { useState } from "react";
 import { useEffect } from "react";
-import Node from "./lib/Node";
-import Output from "./lib/Output";
-import InputNumber from "./lib/InputNumber";
+import Node from "../lib/Node";
+import Output from "../lib/Output";
+import InputNumber from "../lib/InputNumber";
 
-export default function MathNode(nodeObject) {
+export default function MathNode({ nodeObject }) {
   let [node, setNode] = useState(nodeObject);
 
+  console.log(node);
+
   useEffect(() => {
-    node.prop.operation = "+";
-    node.prop.input_1 = 0;
-    node.prop.input_2 = 0;
-    node.prop.result = 0;
+    node.setProp("operation", "+");
+    node.setProp("input_1", 0);
+    node.setProp("input_2", 0);
+    node.setProp("result", 0);
   }, []);
 
   function calculateMath() {
-    let input1 = +node.prop.input_1;
-    let input2 = +node.prop.input_2;
-    let operation = node.prop.operation;
+    let input1 = +node.getProp("input_1");
+    let input2 = +node.getProp("input_2");
+    let operation = node.getProp("operation");
 
     let result = 0;
 
@@ -32,16 +34,16 @@ export default function MathNode(nodeObject) {
       result = input1 / input2;
     }
 
-    node.prop.result = result;
+    node.setProp("result", result);
   }
 
   function updateText(e, name) {
-    node.prop[name] = e.target.value;
+    node.setProp(name, e.target.value);
     calculateMath();
   }
 
   function updateOperation(e) {
-    node.prop.operation = e.target.value;
+    node.setProp("operation", e.target.value);
     calculateMath();
   }
 

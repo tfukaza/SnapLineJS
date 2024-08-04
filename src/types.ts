@@ -2,7 +2,7 @@ import { Base } from "./components/base";
 import { ConnectorComponent } from "./components/connector";
 import { NodeComponent } from "./components/node";
 import Camera from "./camera";
-import SnapLine from "./main";
+import SnapLine from "./snapline";
 import { cursorState } from "./input";
 
 export enum ObjectTypes {
@@ -72,13 +72,23 @@ export interface GlobalStats {
   snapline: SnapLine;
 }
 
-export interface ComponentConfig {
-  name: string;
+export interface SnapLineConfig {
+  backgroundZIndex?: number;
+  canvasZIndex?: number;
 }
 
-export interface ConnectorConfig extends ComponentConfig {
-  maxConnectors: number;
-  allowDragOut: boolean;
+export interface NodeConfig {
+  nodeClass?: string; // Type of node
+}
+
+export interface FormConfig {
+  name?: string;
+}
+
+export interface ConnectorConfig {
+  name?: string;
+  maxConnectors?: number;
+  allowDragOut?: boolean;
 }
 
 export type inputType =

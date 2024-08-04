@@ -4,6 +4,11 @@ const sl = new SnapLine();
 
 let addNodeMenu = null;
 
+let container = null;
+let canvas = null;
+let background = null;
+let selection = null;
+
 document.addEventListener("DOMContentLoaded", function () {
   addNodeMenu = document.getElementById("addNodeButton");
 
@@ -24,19 +29,27 @@ document.addEventListener("DOMContentLoaded", function () {
     .getElementById("constantButton")
     .addEventListener("mouseup", (e) => addNode(e, "node-constant"));
 
-  const canvasContainer = document.getElementById("sl-canvas-container");
-  const canvas = document.getElementById("sl-canvas");
-  const background = document.getElementById("sl-background");
-  const selection = document.getElementById("sl-selection");
+  container = document.getElementById("sl-canvas-container");
+  canvas = document.getElementById("sl-canvas");
+  background = document.getElementById("sl-background");
+  selection = document.getElementById("sl-selection");
 
-  console.debug("initSnapLine", canvasContainer, canvas, background, selection);
+  sl.init(container, canvas, background, selection);
 
-  sl.initSnapLine(canvasContainer, canvas, background, selection);
+  let node1 = addNode("node-constant", -250, -150);
+  let node2 = addNode("node-constant", -250, 0);
+  let node3 = addNode("node-math", 0, -150);
+  let node4 = addNode("node-print", 250, -150);
 
-  addNodeAuto("node-constant", -250, -150);
-  addNodeAuto("node-constant", -250, 0);
-  addNodeAuto("node-math", 0, -150);
-  addNodeAuto("node-print", 250, -150);
+  node1
+    .getConnector("output")
+    .connectToConnector(node3.getConnector("input_1"), null);
+  node2
+    .getConnector("output")
+    .connectToConnector(node3.getConnector("input_2"), null);
+  node3
+    .getConnector("result")
+    .connectToConnector(node4.getConnector("input"), null);
 });
 
 document.addEventListener("click", function (e) {
@@ -51,24 +64,28 @@ function toggleMenu(e, id) {
   e.stopPropagation();
 }
 
-function addNodeAuto(name, x, y) {
+function addNode(name, x, y) {
   let ele = document.createElement(name);
-  let node = sl.createNode(ele);
-  ele.initComponent(node);
-  sl.addNode(node, x, y);
-}
-
-function addNode(e, name) {
-  // Create a new Web Component element based on the node type
-  let ele = document.createElement(name);
-  let node = sl.createNode(ele);
-
+  ele.classList.add("sl-node");
+  let node = sl.createNode(ele, x, y);
   ele.initComponent(node);
 
-  sl.addNodeAtMouse(node, e);
+  canvas.appendChild(ele);
 
-  toggleMenu(e, "addNodeMenu");
+  return node;
 }
+
+// function addNode(e, name) {
+//   // Create a new Web Component element based on the node type
+//   let ele = document.createElement(name);
+//   let node = sl.createNode(ele);
+
+//   ele.initComponent(node);
+
+//   sl.addNodeAtMouse(node, e);
+
+//   toggleMenu(e, "addNodeMenu");
+// }
 
 customElements.define(
   "node-math",
@@ -98,11 +115,11 @@ customElements.define(
 
     initComponent(nodeRef) {
       this._nodeRef = nodeRef;
-      nodeRef.initNode(this._node);
+
       nodeRef.addConnector(this._input_1, "input_1", 1, false);
-      nodeRef.addPropSetCallback(this.calculateMath.bind(this), "input_1");
+      nodeRef.addSetPropCallback(this.calculateMath.bind(this), "input_1");
       nodeRef.addConnector(this._input_2, "input_2", 1, false);
-      nodeRef.addPropSetCallback(this.calculateMath.bind(this), "input_2");
+      nodeRef.addSetPropCallback(this.calculateMath.bind(this), "input_2");
       nodeRef.addConnector(this._result, "result", 0, true);
 
       this._form_1.addEventListener("input", this.updateText1.bind(this));
@@ -115,9 +132,9 @@ customElements.define(
     }
 
     calculateMath(_) {
-      let input1 = +this._nodeRef.prop.input_1;
-      let input2 = +this._nodeRef.prop.input_2;
-      let operation = this._nodeRef.prop.operation;
+      let input1 = +this._nodeRef.getProp("input_1");
+      let input2 = +this._nodeRef.getProp("input_2");
+      let operation = this._nodeRef.getProp("operation");
 
       let result = 0;
 
@@ -131,26 +148,26 @@ customElements.define(
         result = input1 / input2;
       }
 
-      this._nodeRef.prop.result = result;
+      this._nodeRef.setProp("result", result);
     }
 
     updateText1(_) {
-      this._nodeRef.prop.input_1 = this._form_1.value;
+      this._nodeRef.setProp("input_1", this._form_1.value);
     }
 
     updateText2(_) {
-      this._nodeRef.prop.input_2 = this._form_2.value;
+      this._nodeRef.setProp("input_2", this._form_2.value);
     }
 
     updateOperation(_) {
-      this._nodeRef.prop.operation = this._operation.value;
+      this._nodeRef.setProp("operation", this._operation.value);
       this.calculateMath.call(this);
     }
 
     initMath() {
-      this._nodeRef.prop.input_1 = 0;
-      this._nodeRef.prop.input_2 = 0;
-      this._nodeRef.prop.operation = "+";
+      this._nodeRef.setProp("input_1", 0);
+      this._nodeRef.setProp("input_2", 0);
+      this._nodeRef.setProp("operation", "+");
       this.calculateMath.call(this);
     }
   },
@@ -164,8 +181,6 @@ customElements.define(
 
       const template = document.getElementById("node-lerp").content;
       const templateClone = template.cloneNode(true);
-
-      console.debug("node-math", templateClone);
 
       this._node = templateClone.querySelector(".sl-node");
       this._input_1 = templateClone.querySelector("#input_1");
@@ -184,11 +199,11 @@ customElements.define(
 
     initComponent(nodeRef) {
       this._nodeRef = nodeRef;
-      nodeRef.initNode(this._node);
+
       nodeRef.addConnector(this._input_1, "input_1", 1, false);
-      nodeRef.addPropSetCallback(this.calculateMath.bind(this), "input_1");
+      nodeRef.addSetPropCallback(this.calculateMath.bind(this), "input_1");
       nodeRef.addConnector(this._input_2, "input_2", 1, false);
-      nodeRef.addPropSetCallback(this.calculateMath.bind(this), "input_2");
+      nodeRef.addSetPropCallback(this.calculateMath.bind(this), "input_2");
       nodeRef.addConnector(this._result, "result", 0, true);
 
       this._form_1.addEventListener("input", this.updateText1.bind(this));
@@ -199,33 +214,33 @@ customElements.define(
     }
 
     calculateMath(_) {
-      let input1 = +this._nodeRef.prop.input_1;
-      let input2 = +this._nodeRef.prop.input_2;
-      let alpha = this._nodeRef.prop.alpha;
+      let input1 = +this._nodeRef.getProp("input_1");
+      let input2 = +this._nodeRef.getProp("input_2");
+      let alpha = +this._nodeRef.getProp("alpha");
 
       let result = input1 + ((input2 - input1) * alpha) / 100;
 
-      this._nodeRef.prop.result = result;
+      this._nodeRef.setProp("result", result);
     }
 
     updateText1(e) {
-      this._nodeRef.prop.input_1 = this._form_1.value;
+      this._nodeRef.setProp("input_1", this._form_1.value);
     }
 
     updateText2(e) {
-      this._nodeRef.prop.input_2 = this._form_2.value;
+      this._nodeRef.setProp("input_2", this._form_2.value);
     }
 
     updateAlpha(e) {
-      this._nodeRef.prop.alpha = this._alpha.value;
+      this._nodeRef.setProp("alpha", this._alpha.value);
       this.calculateMath.call(this);
       e.stopPropagation();
     }
 
     initMath() {
-      this._nodeRef.prop.input_1 = 0;
-      this._nodeRef.prop.input_2 = 0;
-      this._nodeRef.prop.alpha = 50;
+      this._nodeRef.setProp("input_1", 0);
+      this._nodeRef.setProp("input_2", 100);
+      this._nodeRef.setProp("alpha", 50);
       this.calculateMath.call(this);
     }
   },
@@ -253,9 +268,8 @@ customElements.define(
 
     initComponent(nodeRef) {
       this._nodeRef = nodeRef;
-      nodeRef.initNode(this._node);
       nodeRef.addConnector(this._input, "input", 1, false);
-      nodeRef.addPropSetCallback(this.printValue.bind(this), "input");
+      nodeRef.addSetPropCallback(this.printValue.bind(this), "input");
     }
 
     printValue(value) {
@@ -286,14 +300,13 @@ customElements.define(
 
     initComponent(nodeRef) {
       this._nodeRef = nodeRef;
-      nodeRef.initNode(this._node);
       nodeRef.addConnector(this._output, "output", 1, true);
 
       this._value.addEventListener("input", this.updateText.bind(this));
     }
 
     updateText(e) {
-      this._nodeRef.prop.output = this._value.value;
+      this._nodeRef.setProp("output", this._value.value);
     }
   },
 );

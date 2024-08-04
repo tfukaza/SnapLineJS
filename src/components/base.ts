@@ -1,5 +1,6 @@
 import { cursorState } from "../input";
 import { GlobalStats, ObjectTypes, customCursorDownProp } from "../types";
+import { NodeComponent } from "./node";
 
 /**
  * Base class for all classes.
@@ -11,14 +12,14 @@ export abstract class Base {
   gid: string; /* Unique identifier for the object */
   positionX: number; /* Position of the object in x-axis */
   positionY: number;
-  type: ObjectTypes; /* Type of the object */
+  _type: ObjectTypes; /* Type of the object */
 
   constructor(globals: GlobalStats) {
     this.g = globals;
     this.gid = (++globals.gid).toString();
     this.positionX = 0;
     this.positionY = 0;
-    this.type = ObjectTypes.unspecified;
+    this._type = ObjectTypes.unspecified;
   }
 
   /**
@@ -81,10 +82,10 @@ export abstract class Base {
     this.g.dx_offset = 0;
     this.g.dy_offset = 0;
 
-    this.componentCursorDown(prop);
+    this._componentCursorDown(prop);
   }
 
-  componentCursorDown(_: customCursorDownProp): void {
+  _componentCursorDown(_: customCursorDownProp): void {
     console.debug(
       `Base class componentCursorDown event triggered on ${this.gid} with prop ${JSON.stringify(_)}`,
     );
@@ -96,10 +97,10 @@ export abstract class Base {
    * Triggered when the dom of this object is released.
    */
   domCursorUp(): void {
-    this.componentCursorUp();
+    this._componentCursorUp();
   }
 
-  componentCursorUp(): void {
+  _componentCursorUp(): void {
     // To be implemented by the child class
   }
 
@@ -120,7 +121,7 @@ export abstract class Base {
   /**
    *  Called for every frame when the object is being dragged.
    */
-  onDrag(): void {
+  _onDrag(): void {
     // To be implemented by the child class
   }
 
@@ -134,7 +135,21 @@ export abstract class Base {
   /**
    *  Called when the object is being deleted.
    */
-  destroy(): void {
+  delete(): void {
     // To be implemented by the child class
+  }
+}
+
+/**
+ * Components refer to any element that is part of a node.
+ */
+export class ComponentBase extends Base {
+  parent: NodeComponent | null;
+  dom: HTMLElement | null;
+
+  constructor(parent: NodeComponent | null, globals: GlobalStats) {
+    super(globals);
+    this.parent = parent;
+    this.dom = null;
   }
 }
