@@ -66,8 +66,8 @@ class ConnectorComponent extends ComponentBase {
     const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
     const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
     svg.appendChild(line);
-    svg.classList.add("sl-connector-svg");
-    line.classList.add("sl-connector-line");
+    svg.setAttribute("data-snapline-type", "connector-svg");
+    line.setAttribute("data-snapline-type", "connector-line");
     line.setAttribute("stroke-width", "4");
 
     console.debug(`Created line from connector ${this.gid}`);
@@ -190,7 +190,8 @@ class ConnectorComponent extends ComponentBase {
     globals.gid++;
     this.name = config.name || globals.gid.toString();
     this.g.globalNodeTable[this.gid] = this;
-    this.dom.setAttribute("sl-gid", this.gid.toString());
+    this.dom.setAttribute("data-snapline-gid", this.gid.toString());
+    this.dom.setAttribute("data-snapline-type", "connector");
 
     this.connectorX = 0;
     this.connectorY = 0;
@@ -254,9 +255,9 @@ class ConnectorComponent extends ComponentBase {
     const [adjustedDeltaX, adjustedDeltaY] =
       this.g.camera.getWorldDeltaFromCameraDelta(this.g.dx, this.g.dy);
 
-    if (hover && hover.classList.contains("sl-connector")) {
+    if (hover && hover.getAttribute("data-snapline-type") == "connector") {
       // If the node has a class of "sl-input-connector", then it is an input connector
-      const gid = hover.getAttribute("sl-gid");
+      const gid = hover.getAttribute("data-snapline-gid");
       if (!gid) return;
       const targetConnector: ConnectorComponent = this.g.globalNodeTable[
         gid
@@ -301,8 +302,8 @@ class ConnectorComponent extends ComponentBase {
    */
   endDragOutLine() {
     const hover: HTMLElement | null = this.g.hoverDOM as HTMLElement;
-    if (hover && hover.classList.contains("sl-connector")) {
-      const gid = hover.getAttribute("sl-gid");
+    if (hover && hover.classList.contains("snapline-connector")) {
+      const gid = hover.getAttribute("data-snapline-gid");
       console.debug("Connected to input connector: ", gid);
       if (!gid) {
         console.error(`Error: gid is null`);

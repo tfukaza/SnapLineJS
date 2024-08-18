@@ -18,16 +18,16 @@ document.addEventListener("DOMContentLoaded", function () {
 
   document
     .getElementById("mathButton")
-    .addEventListener("mouseup", (e) => addNode(e, "node-math"));
+    .addEventListener("mouseup", (e) => addNode(e, "sl-node-math"));
   document
     .getElementById("lerpButton")
-    .addEventListener("mouseup", (e) => addNode(e, "node-lerp"));
+    .addEventListener("mouseup", (e) => addNode(e, "sl-node-lerp"));
   document
     .getElementById("printButton")
-    .addEventListener("mouseup", (e) => addNode(e, "node-print"));
+    .addEventListener("mouseup", (e) => addNode(e, "sl-node-print"));
   document
     .getElementById("constantButton")
-    .addEventListener("mouseup", (e) => addNode(e, "node-constant"));
+    .addEventListener("mouseup", (e) => addNode(e, "sl-node-number"));
 
   container = document.getElementById("sl-canvas-container");
   canvas = document.getElementById("sl-canvas");
@@ -36,10 +36,10 @@ document.addEventListener("DOMContentLoaded", function () {
 
   sl.init(container, canvas, background, selection);
 
-  let node1 = addNode("node-constant", -250, -150);
-  let node2 = addNode("node-constant", -250, 0);
-  let node3 = addNode("node-math", 0, -150);
-  let node4 = addNode("node-print", 250, -150);
+  let node1 = addNode("sl-node-number", -250, -150);
+  let node2 = addNode("sl-node-number", -250, 0);
+  let node3 = addNode("sl-node-math", 0, -150);
+  let node4 = addNode("sl-node-print", 250, -150);
 
   node1
     .getConnector("output")
@@ -66,8 +66,9 @@ function toggleMenu(e, id) {
 
 function addNode(name, x, y) {
   let ele = document.createElement(name);
-  ele.classList.add("sl-node");
-  let node = sl.createNode(ele, x, y);
+  let node = sl.createNode(ele, x, y, {
+    nodeClass: name.split("-")[2],
+  });
   ele.initComponent(node);
 
   canvas.appendChild(ele);
@@ -88,17 +89,15 @@ function addNode(name, x, y) {
 // }
 
 customElements.define(
-  "node-math",
+  "sl-node-math",
   class extends HTMLElement {
     constructor() {
       super();
 
-      const template = document.getElementById("node-math").content;
-      const templateClone = template.cloneNode(true);
-
-      console.debug("node-math", templateClone);
-
-      this._node = templateClone.querySelector(".sl-node");
+      const templateClone = document
+        .getElementById("node-math")
+        .content.cloneNode(true);
+      this._node = templateClone;
       this._input_1 = templateClone.querySelector("#input_1");
       this._input_2 = templateClone.querySelector("#input_2");
       this._form_1 = templateClone.querySelector("#form_1");
@@ -174,15 +173,16 @@ customElements.define(
 );
 
 customElements.define(
-  "node-lerp",
+  "sl-node-lerp",
   class extends HTMLElement {
     constructor() {
       super();
 
-      const template = document.getElementById("node-lerp").content;
-      const templateClone = template.cloneNode(true);
+      const templateClone = document
+        .getElementById("node-lerp")
+        .content.cloneNode(true);
 
-      this._node = templateClone.querySelector(".sl-node");
+      this._node = templateClone;
       this._input_1 = templateClone.querySelector("#input_1");
       this._input_2 = templateClone.querySelector("#input_2");
       this._form_1 = templateClone.querySelector("#form_1");
@@ -247,15 +247,16 @@ customElements.define(
 );
 
 customElements.define(
-  "node-print",
+  "sl-node-print",
   class extends HTMLElement {
     constructor() {
       super();
 
-      const template = document.getElementById("node-print").content;
-      const templateClone = template.cloneNode(true);
+      const templateClone = document
+        .getElementById("node-print")
+        .content.cloneNode(true);
 
-      this._node = templateClone.querySelector(".sl-node");
+      this._node = templateClone;
       this._input = templateClone.querySelector("#input");
       this._print = templateClone.querySelector("#print");
 
@@ -279,15 +280,15 @@ customElements.define(
 );
 
 customElements.define(
-  "node-constant",
+  "sl-node-number",
   class extends HTMLElement {
     constructor() {
       super();
 
-      const template = document.getElementById("node-constant").content;
-      const templateClone = template.cloneNode(true);
-
-      this._node = templateClone.querySelector(".sl-node");
+      const templateClone = document
+        .getElementById("node-number")
+        .content.cloneNode(true);
+      this._node = templateClone;
       this._value = templateClone.querySelector("#value");
       this._output = templateClone.querySelector("#output");
 
@@ -295,7 +296,7 @@ customElements.define(
     }
 
     connectedCallback() {
-      this.append(this.templateClone);
+      this.append(this._node);
     }
 
     initComponent(nodeRef) {

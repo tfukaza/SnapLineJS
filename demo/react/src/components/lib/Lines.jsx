@@ -13,7 +13,7 @@ export default function Lines(props) {
         };
         return (
           <svg
-            className="sl-svg-line"
+            className="sl-connector-svg"
             key={index}
             width="4"
             height="4"

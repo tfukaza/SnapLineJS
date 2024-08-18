@@ -143,9 +143,9 @@ class NodeComponent extends Base {
     setDomStyle(this._dom, style);
 
     if (style._focus) {
-      this._dom.classList.add("focus");
+      this._dom.setAttribute("data-snapline-state", "focus");
     } else {
-      this._dom.classList.remove("focus");
+      this._dom.setAttribute("data-snapline-state", "idle");
     }
 
     this._renderNodeLines();
@@ -318,6 +318,7 @@ class NodeComponent extends Base {
     this._dom = dom;
     this._dom.id = this.gid;
     dom.setAttribute("data-snapline-type", "node");
+    dom.setAttribute("data-snapline-state", "idle");
     if (this._config?.nodeClass) {
       dom.setAttribute("data-snapline-class", this._config.nodeClass);
     }

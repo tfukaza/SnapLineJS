@@ -1,4 +1,4 @@
-import { GlobalStats, ObjectTypes } from "./types";
+import { GlobalStats, NodeConfig, ObjectTypes } from "./types";
 import { NodeComponent } from "./components/node";
 import { ConnectorComponent } from "./components/connector";
 import { returnUpdatedDict } from "./helper";
@@ -494,7 +494,6 @@ export default class SnapLine {
       height: this.g.camera.cameraHeight * 10 + "px",
       transform: `translate(${-this.g.camera.cameraWidth * 5}px, ${-this.g.camera.cameraHeight * 5}px)`,
       transformOrigin: "center",
-      zIndex: "0",
       position: "absolute",
     });
 
@@ -521,8 +520,13 @@ export default class SnapLine {
    * @param y: The y position of the node.
    * @returns A reference to the node.
    */
-  createNode(dom: HTMLElement | null = null, x: number = 0, y: number = 0) {
-    const node: NodeComponent = new NodeComponent(dom, x, y, this.g);
+  createNode(
+    dom: HTMLElement | null = null,
+    x: number = 0,
+    y: number = 0,
+    config: NodeConfig,
+  ) {
+    const node: NodeComponent = new NodeComponent(dom, x, y, this.g, config);
     this.g.globalNodeTable[node.gid] = node;
     return node;
   }
