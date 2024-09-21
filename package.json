@@ -16,11 +16,13 @@
     "server:vanilla": "FRAMEWORK=vanilla vite serve demo/vanilla --config demo/vanilla/vite.config.mjs",
     "server:react": "FRAMEWORK=react vite serve demo/react --config demo/react/vite.config.mjs",
     "dev:all": "concurrently --kill-others \"npm run dev:vanilla\" \"npm run dev:react\"",
-    "test:e2e": "start-server-and-test server:vanilla http://localhost:3001 'playwright test'",
+    "test": "start-server-and-test server:vanilla http://localhost:3001 'playwright test'",
+    "test:ui": "start-server-and-test server:vanilla http://localhost:3001 'playwright test --ui'",
     "format": "prettier --write src",
     "lint": "eslint src --ext .ts",
     "build": "vite build --mode production",
-    "build:dev": "FRAMEWORK=test npx vite build --mode development"
+    "build:dev": "FRAMEWORK=test npx vite build --mode development",
+    "wdio": "wdio run ./wdio.conf.ts"
   },
   "repository": {
     "type": "git",

@@ -47,9 +47,9 @@ document.addEventListener("DOMContentLoaded", function () {
   node2
     .getConnector("output")
     .connectToConnector(node3.getConnector("input_2"), null);
-  node3
-    .getConnector("result")
-    .connectToConnector(node4.getConnector("input"), null);
+  // node3
+  //   .getConnector("result")
+  //   .connectToConnector(node4.getConnector("input"), null);
 });
 
 document.addEventListener("click", function (e) {

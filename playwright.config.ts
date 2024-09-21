@@ -6,7 +6,7 @@ const framework = process.env.FRAMEWORK || "vanilla";
  * See https://playwright.dev/docs/test-configuration.
  */
 export default defineConfig({
-  testDir: "./tests/e2e",
+  testDir: "./tests",
 
   fullyParallel: true,
   retries: process.env.CI ? 2 : 0,

@@ -106,8 +106,8 @@ export interface lineObject {
   svg: SVGElement | null;
   target: ConnectorComponent | null;
   start: ConnectorComponent;
-  connector_x: number;
-  connector_y: number;
+  x1: number;
+  y1: number;
   x2: number;
   y2: number;
   connector: ConnectorComponent | null;

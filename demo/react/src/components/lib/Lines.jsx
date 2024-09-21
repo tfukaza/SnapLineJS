@@ -9,7 +9,7 @@ export default function Lines(props) {
           overflow: "visible",
           pointerEvents: "none",
           willChange: "transform",
-          transform: `translate3d(${line.connector_x}px, ${line.connector_y}px, 0)`,
+          transform: `translate3d(${line.x1}px, ${line.y1}px, 0)`,
         };
         return (
           <svg

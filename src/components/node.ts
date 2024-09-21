@@ -100,11 +100,11 @@ class NodeComponent extends Base {
       if (!line.svg) {
         continue;
       }
-      line.connector_x = connector.connectorX;
-      line.connector_y = connector.connectorY;
+      line.x1 = connector.connectorX;
+      line.y1 = connector.connectorY;
       if (line.target) {
-        line.x2 = line.target.connectorX - connector.connectorX;
-        line.y2 = line.target.connectorY - connector.connectorY;
+        line.x2 = line.target.connectorX;
+        line.y2 = line.target.connectorY;
       }
       line.svg.style.transform = `translate3d(${connector.connectorX}px, ${connector.connectorY}px, 0)`;
       connector._renderLinePosition(line);
