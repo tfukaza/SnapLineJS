@@ -1,4 +1,4 @@
-import interact from "interactjs";
+// import interact from "interactjs";
 
 export enum cursorState {
   none = 0,
@@ -29,12 +29,18 @@ export type scrollCallbackFunction = (
 
 export type keyCallbackFunction = (event: KeyboardEvent) => void;
 
+export type touchData = {
+  x: number;
+  y: number;
+  target: Element | null;
+}
+
 class InputControl {
   /**
    * Functions as a middleware that converts mouse and touch events into a unified event format.
    */
   _dom: HTMLElement;
-  _touchControl: any;
+  _document: Document;
 
   _onCursorDown: null | callbackFunction;
   _onCursorMove: null | callbackFunction;
@@ -46,16 +52,22 @@ class InputControl {
   _pointerMode: "pointer" | "gesture" | "none";
 
   _currentCursorState: cursorState;
+  _sortedTouchID: number[]; // List of touches for touch events, sorted by the times they are pressed
+  _touch_0: touchData | null;
+  _touch_1: touchData | null;
 
-  constructor(dom: HTMLElement) {
-    // dom.addEventListener("mouseup", this.onMouseUp.bind(this));
-    // dom.addEventListener("mousemove", this.onMouseMove.bind(this));
-    // dom.addEventListener("mousedown", this.onMouseDown.bind(this));
+  constructor(dom: HTMLElement, document: Document) {
+
     dom.addEventListener("wheel", this.onWheel.bind(this));
     dom.addEventListener("keydown", this.onKeyDown.bind(this));
 
+    document.addEventListener("mousedown", this.onMouseDown.bind(this));
     document.addEventListener("mousemove", this.onMouseMove.bind(this));
     document.addEventListener("mouseup", this.onMouseUp.bind(this));
+
+    document.addEventListener("touchstart", this.onTouchStart.bind(this));
+    document.addEventListener("touchmove", this.onTouchMove.bind(this));
+    document.addEventListener("touchend", this.onTouchEnd.bind(this));
 
     this._onCursorDown = null;
     this._onCursorMove = null;
@@ -69,53 +81,11 @@ class InputControl {
     this._pointerMode = "none";
 
     this._dom = dom;
-    this._touchControl = interact(dom);
-    this._touchControl
-      .on("down", (e: PointerEvent) => {
-        console.log("Pointer down");
-        this._callFuncWithCallbackParam(this._onCursorDown, e);
-        this._pointerMode = "pointer";
-      })
-      .on("move", (e: PointerEvent) => {
-        if (this._pointerMode === "gesture") {
-          return;
-        }
-        console.log("Pointer move");
-        this._callFuncWithCallbackParam(this._onCursorMove, e);
-      })
-      .on("up", (e: PointerEvent) => {
-        console.log("Pointer up");
-        this._callFuncWithCallbackParam(this._onCursorUp, e);
-        this._pointerMode = "none";
-      });
+    this._document = document;
 
-    this._touchControl.gesturable({
-      onstart: (e: any) => {
-        console.log("Gesture start");
-        if (this._pointerMode === "pointer") {
-          this._callFuncWithCallbackParam(this._onCursorUp, e);
-        }
-        e.button = 1; // Middle mouse button, indicating a camera pan
-        this._callFuncWithCallbackParam(this._onCursorDown, e);
-        this._pointerMode = "gesture";
-      },
-      onmove: (e: any) => {
-        if (this._pointerMode !== "gesture") {
-          this._pointerMode = "gesture";
-        }
-
-        console.log("Gesture move");
-        e.button = 1; // Middle mouse button, indicating a camera pan
-        this._callFuncWithCallbackParam(this._onCursorMove, e);
-        this._callFuncWithScrollCallbackParam(this._onScroll, e, e.ds / 2.5);
-      },
-      onend: (e: any) => {
-        console.log("end");
-        e.button = 1; // Middle mouse button, indicating a camera pan
-        this._callFuncWithCallbackParam(this._onCursorUp, e);
-        this._pointerMode = "none";
-      },
-    });
+    this._sortedTouchID = [];
+    this._touch_0 = null; 
+    this._touch_1 = null; 
   }
 
   private _callFuncWithCallbackParam(
@@ -124,7 +94,7 @@ class InputControl {
   ) {
     func?.(
       e,
-      e.target instanceof Element ? e.target : null,
+      e.target as Element | null,
       this.convertMouseToCursorState(e.button),
       e.clientX,
       e.clientY,
@@ -138,7 +108,7 @@ class InputControl {
   ) {
     func?.(
       e,
-      e.target instanceof Element ? e.target : null,
+      e.target as Element | null, 
       this.convertMouseToCursorState(e.button),
       e.clientX,
       e.clientY,
@@ -191,7 +161,7 @@ class InputControl {
   onMouseDown(e: MouseEvent) {
     this._onCursorDown?.(
       e,
-      e.target instanceof Element ? e.target : null,
+      e.target as Element | null,   
       this.convertMouseToCursorState(e.button),
       e.clientX,
       e.clientY,
@@ -203,7 +173,7 @@ class InputControl {
    * @param e
    */
   onMouseMove(e: MouseEvent) {
-    const element = document.elementFromPoint(e.clientX, e.clientY);
+    const element = this._document.elementFromPoint(e.clientX, e.clientY);
 
     this._onCursorMove?.(
       e,
@@ -221,7 +191,7 @@ class InputControl {
   onMouseUp(e: MouseEvent) {
     this._onCursorUp?.(
       e,
-      e.target instanceof Element ? e.target : null,
+      e.target as Element | null,
       this.convertMouseToCursorState(e.button),
       e.clientX,
       e.clientY,
@@ -235,11 +205,11 @@ class InputControl {
   onWheel(e: WheelEvent) {
     this._onScroll?.(
       e,
-      e.target instanceof Element ? e.target : null,
+      e.target as Element | null,
       cursorState.mouseMiddle,
       e.clientX,
       e.clientY,
-      e.deltaY / 1000,
+      e.deltaY,
     );
   }
 
@@ -251,6 +221,153 @@ class InputControl {
   onKeyDown(e: KeyboardEvent) {
     this._onKeyDown?.(e);
   }
+
+  updateTouch(identifier: number, touchList: TouchList, data: touchData | null): touchData | null {
+    let touchMatched = null; 
+    for (let i = 0; i < touchList.length; i++) {
+      const touch = touchList[i];
+      if (touch && touch.identifier === identifier) {
+        touchMatched = touch;
+        break;
+      }
+    }
+    
+    if (touchMatched && data) {
+      data.x = touchMatched.clientX;
+      data.y = touchMatched.clientY;
+      data.target = touchMatched.target as Element | null;
+      return data;
+    } 
+
+    return null;
+  }
+
+  onTouchStart(e: TouchEvent) {
+    const newTouchList = e.changedTouches;
+    // Add the touch to the touch list
+    for (let i = 0; i < newTouchList.length; i++) {
+      const touch = newTouchList[i];
+      if (touch) {
+        this._sortedTouchID.unshift(touch.identifier);
+      }
+    }
+
+    if (this._sortedTouchID.length > 0) {
+      this._touch_0 = {
+        x: newTouchList[0].clientX,
+        y: newTouchList[0].clientY,
+        target: newTouchList[0].target as Element | null,
+      }
+    }
+    if (this._sortedTouchID.length > 1) {
+      this._touch_1 = {
+        x: newTouchList[1].clientX,
+        y: newTouchList[1].clientY,
+        target: newTouchList[1].target as Element | null,
+      }
+    }
+
+    if (this._touch_0) {
+      this._onCursorDown?.(
+        e,
+        newTouchList[0].target as Element | null,
+        cursorState.mouseLeft,
+        this._touch_0.x,
+        this._touch_0.y,
+      );
+    }
+  }
+
+  onTouchMove(e: TouchEvent) {
+    const touchList = e.touches;
+    const updatedTouches = [];
+    const prevTouch_0 = this._touch_0 ? { ...this._touch_0 } : null;
+    const prevTouch_1 = this._touch_1 ? { ...this._touch_1 } : null;
+
+    if (this._touch_0) {      
+      this._touch_0 = this.updateTouch(this._sortedTouchID[0], touchList, this._touch_0);
+    }
+    if (this._touch_1) {
+      this._touch_1 = this.updateTouch(this._sortedTouchID[1], touchList, this._touch_1);
+    }
+
+    // If there is only one touch point, treat it as a mouse event
+    if (this._touch_0 && !this._touch_1) {
+      this._onCursorMove?.(
+        e,
+        this._touch_0.target,
+        cursorState.mouseLeft,
+        this._touch_0.x,
+        this._touch_0.y,
+      );
+      return;
+    }
+
+    if (!(this._touch_0 && this._touch_1)) {
+      return;
+    }
+
+    const middleX = (this._touch_0.x + this._touch_1.x) / 2;
+    const middleY = (this._touch_0.y + this._touch_1.y) / 2;
+    const span = Math.sqrt(Math.pow(this._touch_0.x - this._touch_1.x, 2) + Math.pow(this._touch_0.y - this._touch_1.y, 2));
+
+    let deltaX = 0;
+    let deltaY = 0;
+    let deltaSpan = 0;
+    
+    if (prevTouch_0 && prevTouch_1) {    
+      const prevMiddleX = (prevTouch_0.x + prevTouch_1.x) / 2;
+      const prevMiddleY = (prevTouch_0.y + prevTouch_1.y) / 2;
+      deltaX = middleX - prevMiddleX;
+      deltaY = middleY - prevMiddleY;
+      const prevSpan = Math.sqrt(Math.pow(prevTouch_0.x - prevTouch_1.x, 2) + Math.pow(prevTouch_0.y - prevTouch_1.y, 2));
+      deltaSpan = span - prevSpan;
+    }
+
+    this._onCursorMove?.(
+      e,
+      this._touch_0.target, // TODO: find element at middle of two touch points
+      cursorState.mouseMiddle,
+      middleX,
+      middleY,
+    );
+    this._onScroll?.(
+      e,
+      this._touch_0.target,
+      cursorState.mouseMiddle,
+      middleX,
+      middleY,
+      deltaSpan,
+    );
+    
+  }
+
+  onTouchEnd(e: TouchEvent) {
+
+    for (let i = 0; i < e.changedTouches.length; i++) {
+      const touch = e.changedTouches.item(i);
+      for (const touchID of this._sortedTouchID) {
+        if (touchID === touch.identifier) {
+          this._sortedTouchID.splice(this._sortedTouchID.indexOf(touchID), 1);
+          break;
+        }
+      }
+    }
+
+    this._touch_0 = this.updateTouch(this._sortedTouchID[0], this._touch_0);
+    this._touch_1 = this.updateTouch(this._sortedTouchID[1], this._touch_1);
+
+    if (this._touch_0) {
+      this._onCursorUp?.(
+        this._touch_0,
+        this._touch_0.target,
+        cursorState.mouseLeft,
+        this._touch_0.x,
+        this._touch_0.y,
+      );
+    } 
+  }
+  
 }
 
 export { InputControl };

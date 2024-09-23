@@ -501,7 +501,7 @@ export default class SnapLine {
     this._renderBackground(this._backgroundStyle);
     this._renderSelectionBox(this._selectionBoxStyle);
 
-    this._inputControl = new InputControl(containerDom);
+    this._inputControl = new InputControl(containerDom, document);
     this._inputControl.setCursorDownCallback(this._onCursorDown.bind(this));
     this._inputControl.setCursorMoveCallback(this._onCursorMove.bind(this));
     this._inputControl.setCursorUpCallback(this._onCursorUp.bind(this));
