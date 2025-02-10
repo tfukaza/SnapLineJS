@@ -22,14 +22,8 @@ npm run dev-react
 
 ## Testing
 
-Run end-to-end tests:
+Run tests:
 
 ```
-npm run test:e2e
-```
-
-Run unit tests:
-
-```
-npm run test:ut
+npm run test
 ```

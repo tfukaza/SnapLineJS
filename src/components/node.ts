@@ -89,9 +89,9 @@ class NodeComponent extends Base {
   _renderOutgoingLines(outgoingLines: lineObject[], key?: string) {
     for (const line of outgoingLines) {
       const connector = line.start;
-      if (!line.svg) {
+      if (!line.svg && !line.requestDelete) {
         line.svg = connector._createLineDOM();
-      } else if (line.requestDelete && !line.completedDelete) {
+      } else if (line.requestDelete && !line.completedDelete && line.svg) {
         this.g.canvas.removeChild(line.svg as Node);
         line.completedDelete = true;
         continue;
@@ -100,11 +100,11 @@ class NodeComponent extends Base {
       if (!line.svg) {
         continue;
       }
-      line.connector_x = connector.connectorX;
-      line.connector_y = connector.connectorY;
+      line.x1 = connector.connectorX;
+      line.y1 = connector.connectorY;
       if (line.target) {
-        line.x2 = line.target.connectorX - connector.connectorX;
-        line.y2 = line.target.connectorY - connector.connectorY;
+        line.x2 = line.target.connectorX;
+        line.y2 = line.target.connectorY;
       }
       line.svg.style.transform = `translate3d(${connector.connectorX}px, ${connector.connectorY}px, 0)`;
       connector._renderLinePosition(line);
@@ -143,9 +143,9 @@ class NodeComponent extends Base {
     setDomStyle(this._dom, style);
 
     if (style._focus) {
-      this._dom.classList.add("focus");
+      this._dom.setAttribute("data-snapline-state", "focus");
     } else {
-      this._dom.classList.remove("focus");
+      this._dom.setAttribute("data-snapline-state", "idle");
     }
 
     this._renderNodeLines();
@@ -318,6 +318,7 @@ class NodeComponent extends Base {
     this._dom = dom;
     this._dom.id = this.gid;
     dom.setAttribute("data-snapline-type", "node");
+    dom.setAttribute("data-snapline-state", "idle");
     if (this._config?.nodeClass) {
       dom.setAttribute("data-snapline-class", this._config.nodeClass);
     }
@@ -351,7 +352,7 @@ class NodeComponent extends Base {
   ) {
     this._renderOutgoingLines = (svgLines: lineObject[], name: string) => {
       this._filterDeletedLines(svgLines);
-      console.log("Rendering lines", svgLines);
+
       callback(svgLines, name);
     };
   }

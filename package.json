@@ -13,14 +13,16 @@
   "scripts": {
     "dev:vanilla": "FRAMEWORK=vanilla vite build --mode development --watch & npm run server:vanilla",
     "dev:react": "FRAMEWORK=react vite build --mode development --watch & npm run server:react",
-    "server:vanilla": "FRAMEWORK=vanilla vite serve demo/vanilla --config demo/vanilla/vite.config.mjs",
-    "server:react": "FRAMEWORK=react vite serve demo/react --config demo/react/vite.config.mjs",
+    "server:vanilla": "FRAMEWORK=vanilla vite serve demo/vanilla --config demo/vanilla/vite.config.mjs --host",
+    "server:react": "FRAMEWORK=react vite serve demo/react --config demo/react/vite.config.mjs --host",
     "dev:all": "concurrently --kill-others \"npm run dev:vanilla\" \"npm run dev:react\"",
-    "test:e2e": "start-server-and-test server:vanilla http://localhost:3001 'playwright test'",
+    "test": "start-server-and-test server:vanilla http://localhost:3001 'playwright test'",
+    "test:ui": "start-server-and-test server:vanilla http://localhost:3001 'playwright test --ui'",
     "format": "prettier --write src",
     "lint": "eslint src --ext .ts",
     "build": "vite build --mode production",
-    "build:dev": "FRAMEWORK=test npx vite build --mode development"
+    "build:dev": "FRAMEWORK=test npx vite build --mode development",
+    "wdio": "wdio run ./wdio.conf.ts"
   },
   "repository": {
     "type": "git",
@@ -42,6 +44,7 @@
     "@vitejs/plugin-react": "^4.3.1",
     "concurrently": "^8.2.2",
     "eslint": "^8.57.0",
+    "jsdom": "^25.0.1",
     "prettier": "3.3.2",
     "puppeteer": "^22.13.0",
     "react": "^18.2.0",
@@ -54,8 +57,5 @@
     "typescript-eslint": "^7.15.0",
     "uglify-js": "^3.17.4",
     "vite": "^5.3.2"
-  },
-  "dependencies": {
-    "interactjs": "^1.10.27"
   }
 }

@@ -1,4 +1,4 @@
-import { GlobalStats, ObjectTypes } from "./types";
+import { GlobalStats, NodeConfig, ObjectTypes } from "./types";
 import { NodeComponent } from "./components/node";
 import { ConnectorComponent } from "./components/connector";
 import { returnUpdatedDict } from "./helper";
@@ -343,7 +343,7 @@ export default class SnapLine {
     deltaY: number,
   ) {
     this.g.camera.handleScroll(
-      deltaY,
+      deltaY / 1000,
       this.g.mouseCameraX,
       this.g.mouseCameraY,
     );
@@ -494,7 +494,6 @@ export default class SnapLine {
       height: this.g.camera.cameraHeight * 10 + "px",
       transform: `translate(${-this.g.camera.cameraWidth * 5}px, ${-this.g.camera.cameraHeight * 5}px)`,
       transformOrigin: "center",
-      zIndex: "0",
       position: "absolute",
     });
 
@@ -502,7 +501,7 @@ export default class SnapLine {
     this._renderBackground(this._backgroundStyle);
     this._renderSelectionBox(this._selectionBoxStyle);
 
-    this._inputControl = new InputControl(containerDom);
+    this._inputControl = new InputControl(containerDom, document);
     this._inputControl.setCursorDownCallback(this._onCursorDown.bind(this));
     this._inputControl.setCursorMoveCallback(this._onCursorMove.bind(this));
     this._inputControl.setCursorUpCallback(this._onCursorUp.bind(this));
@@ -521,8 +520,13 @@ export default class SnapLine {
    * @param y: The y position of the node.
    * @returns A reference to the node.
    */
-  createNode(dom: HTMLElement | null = null, x: number = 0, y: number = 0) {
-    const node: NodeComponent = new NodeComponent(dom, x, y, this.g);
+  createNode(
+    dom: HTMLElement | null = null,
+    x: number = 0,
+    y: number = 0,
+    config: NodeConfig,
+  ) {
+    const node: NodeComponent = new NodeComponent(dom, x, y, this.g, config);
     this.g.globalNodeTable[node.gid] = node;
     return node;
   }

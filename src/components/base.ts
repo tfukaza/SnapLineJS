@@ -29,7 +29,7 @@ export abstract class Base {
   bindFunction(dom: HTMLElement) {
     //dom.onmousedown = this.domMouseDown.bind(this);
     dom.ontouchstart = this.domTouchStart.bind(this);
-    dom.onpointerdown = this.domMouseDown.bind(this);
+    dom.onmousedown = this.domMouseDown.bind(this);
   }
 
   domMouseDown(e: MouseEvent): void {
@@ -49,6 +49,9 @@ export abstract class Base {
       clientX: e.touches[0].clientX,
       clientY: e.touches[0].clientY,
     });
+    // Touch control has more states than mouse control, so we need to pass the event to the
+    // inputControl to handle the touch event.
+    this.g.snapline._inputControl?.onTouchStart(e);
     e.stopPropagation();
   }
 

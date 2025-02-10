@@ -30,7 +30,8 @@ export default function Node({ nodeObject, children }) {
       ))}
 
       <div
-        className={"sl-node " + (nodeStyle["_focus"] ? "focus" : "")}
+        className={"sl-node"}
+        data-snapline-state={nodeStyle["_focus"] ? "focus" : "idle"}
         ref={nodeDom}
         style={nodeStyle}
       >

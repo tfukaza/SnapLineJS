@@ -24,17 +24,20 @@ class Camera {
   canvasStyle: string; // The CSS transform style that should be applied to the DOM element
 
   constructor(container: HTMLElement, canvas: HTMLElement) {
+    let containerRect = container.getBoundingClientRect();
     this.containerDom = container;
-    this.containerOffsetX = container.offsetLeft;
-    this.containerOffsetY = container.offsetTop;
+    this.containerOffsetX = containerRect.left;
+    this.containerOffsetY = containerRect.top;
     this.canvasDom = canvas;
-    this.cameraWidth = container.clientWidth;
-    this.cameraHeight = container.clientHeight;
+    this.cameraWidth = containerRect.width;
+    this.cameraHeight = containerRect.height;
     this.cameraPositionX = 0;
     this.cameraPositionY = 0;
     this.cameraPanStartX = 0;
     this.cameraPanStartY = 0;
     this.zoom = 1;
+
+    console.debug("Camera initialized", this);
 
     this.canvasStyle = "";
     this.updateCamera();

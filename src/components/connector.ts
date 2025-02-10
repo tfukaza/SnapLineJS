@@ -66,8 +66,8 @@ class ConnectorComponent extends ComponentBase {
     const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
     const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
     svg.appendChild(line);
-    svg.classList.add("sl-connector-svg");
-    line.classList.add("sl-connector-line");
+    svg.setAttribute("data-snapline-type", "connector-svg");
+    line.setAttribute("data-snapline-type", "connector-line");
     line.setAttribute("stroke-width", "4");
 
     console.debug(`Created line from connector ${this.gid}`);
@@ -104,6 +104,7 @@ class ConnectorComponent extends ComponentBase {
 
   deleteLine(i: number): lineObject | undefined {
     if (this.outgoingLines.length == 0) {
+      console.warn(`Error: Outgoing lines is empty`);
       return undefined;
     }
 
@@ -129,13 +130,13 @@ class ConnectorComponent extends ComponentBase {
       overflow: "visible",
       pointerEvents: "none",
       willChange: "transform",
-      transform: `translate3d(${entry.connector_x}px, ${entry.connector_y}px, 0)`,
+      transform: `translate3d(${entry.x1}px, ${entry.y1}px, 0)`,
     });
     const line = svg.children[0] as SVGLineElement;
     line.setAttribute("x1", "" + 0);
     line.setAttribute("y1", "" + 0);
-    line.setAttribute("x2", "" + entry.x2);
-    line.setAttribute("y2", "" + entry.y2);
+    line.setAttribute("x2", "" + (entry.x2 - entry.x1));
+    line.setAttribute("y2", "" + (entry.y2 - entry.y1));
   }
 
   /**
@@ -143,18 +144,17 @@ class ConnectorComponent extends ComponentBase {
    * @param entry The line to update.
    */
   _setLinePosition(entry: lineObject) {
-    entry.connector_x = entry.start.connectorX;
-    entry.connector_y = entry.start.connectorY;
+    entry.x1 = entry.start.connectorX;
+    entry.y1 = entry.start.connectorY;
     if (!entry.target) {
-      const [adjustedDeltaX, adjustedDeltaY] =
-        this.g.camera.getWorldDeltaFromCameraDelta(this.g.dx, this.g.dy);
+      const [adjustedX, adjustedY] = this.g.camera.getWorldFromCamera(this.g.mousedown_x + this.g.dx, this.g.mousedown_y + this.g.dy);
       /* If entry.to is not set, then this line is currently being dragged */
-      this.#setLineXYPosition(entry, adjustedDeltaX, adjustedDeltaY);
+      this.#setLineXYPosition(entry, adjustedX, adjustedY);
     } else {
       this.#setLineXYPosition(
         entry,
-        entry.target.connectorX - entry.start.connectorX,
-        entry.target.connectorY - entry.start.connectorY,
+        entry.target.connectorX,
+        entry.target.connectorY,
       );
     }
   }
@@ -190,7 +190,8 @@ class ConnectorComponent extends ComponentBase {
     globals.gid++;
     this.name = config.name || globals.gid.toString();
     this.g.globalNodeTable[this.gid] = this;
-    this.dom.setAttribute("sl-gid", this.gid.toString());
+    this.dom.setAttribute("data-snapline-gid", this.gid.toString());
+    this.dom.setAttribute("data-snapline-type", "connector");
 
     this.connectorX = 0;
     this.connectorY = 0;
@@ -214,8 +215,8 @@ class ConnectorComponent extends ComponentBase {
       svg,
       target: null,
       start: this,
-      connector_x: this.connectorX,
-      connector_y: this.connectorY,
+      x1: this.connectorX,
+      y1: this.connectorY,
       x2: 0,
       y2: 0,
       connector: this,
@@ -251,12 +252,12 @@ class ConnectorComponent extends ComponentBase {
       return;
     }
 
-    const [adjustedDeltaX, adjustedDeltaY] =
-      this.g.camera.getWorldDeltaFromCameraDelta(this.g.dx, this.g.dy);
+    const [adjustedX, adjustedY] =
+      this.g.camera.getWorldFromCamera(this.g.mousedown_x + this.g.dx, this.g.mousedown_y + this.g.dy);
 
-    if (hover && hover.classList.contains("sl-connector")) {
+    if (hover && hover.getAttribute("data-snapline-type") == "connector") {
       // If the node has a class of "sl-input-connector", then it is an input connector
-      const gid = hover.getAttribute("sl-gid");
+      const gid = hover.getAttribute("data-snapline-gid");
       if (!gid) return;
       const targetConnector: ConnectorComponent = this.g.globalNodeTable[
         gid
@@ -266,30 +267,30 @@ class ConnectorComponent extends ComponentBase {
       connectorX = targetConnector.connectorX;
       connectorY = targetConnector.connectorY;
       distance = Math.sqrt(
-        Math.pow(this.connectorX + adjustedDeltaX - connectorX, 2) +
-          Math.pow(this.connectorY + adjustedDeltaY - connectorY, 2),
+        Math.pow(this.connectorX + adjustedX - connectorX, 2) +
+          Math.pow(this.connectorY + adjustedY - connectorY, 2),
       );
 
       // Handle snapping to the input connector
       if (distance < 40) {
         this.#setLineXYPosition(
           this.outgoingLines[0],
-          connectorX - this.connectorX,
-          connectorY - this.connectorY,
+          connectorX,
+          connectorY,
         );
       } else {
         this.#setLineXYPosition(
           this.outgoingLines[0],
-          adjustedDeltaX,
-          adjustedDeltaY,
+          adjustedX,
+          adjustedY,
         );
       }
     } else {
       // Update the line position to the current mouse cursor position
       this.#setLineXYPosition(
         this.outgoingLines[0],
-        adjustedDeltaX,
-        adjustedDeltaY,
+        adjustedX,
+        adjustedY,
       );
     }
   }
@@ -301,8 +302,8 @@ class ConnectorComponent extends ComponentBase {
    */
   endDragOutLine() {
     const hover: HTMLElement | null = this.g.hoverDOM as HTMLElement;
-    if (hover && hover.classList.contains("sl-connector")) {
-      const gid = hover.getAttribute("sl-gid");
+    if (hover && hover.getAttribute("data-snapline-type") == "connector") {
+      const gid = hover.getAttribute("data-snapline-gid");
       console.debug("Connected to input connector: ", gid);
       if (!gid) {
         console.error(`Error: gid is null`);
@@ -319,8 +320,8 @@ class ConnectorComponent extends ComponentBase {
 
       this.#setLineXYPosition(
         this.outgoingLines[0],
-        target.connectorX - this.connectorX,
-        target.connectorY - this.connectorY,
+        target.connectorX,
+        target.connectorY,
       );
     } else {
       this.deleteLine(0);
@@ -336,12 +337,11 @@ class ConnectorComponent extends ComponentBase {
     // Hand over control to the peer output
     this.g.targetObject = line.start;
 
-    let [dx_offset, dy_offset] = this.g.camera.getCameraDeltaFromWorldDelta(
-      this.connectorX - line.start.connectorX,
-      this.connectorY - line.start.connectorY,
-    );
-    this.g.dx = dx_offset;
-    this.g.dy = dy_offset;
+    // let [dx_offset, dy_offset] = this.g.camera.getCameraDeltaFromWorldDelta(
+    //   this.connectorX - line.start.connectorX,
+    //   this.connectorY - line.start.connectorY,
+    // );
+    // line.x1
 
     line.start.disconnectFromConnector(this);
     this.disconnectFromConnector(line.start);
