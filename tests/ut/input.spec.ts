@@ -197,7 +197,7 @@ test.describe("Test touch input handler", () => {
     expect(called).toBe(true);
   });
 
-  test("When two touches are started, the last one should be used", async ({ page }) => {
+  test("When two touches are started simultaneously, it should be treated as a middle mouse button click", async ({ page }) => {
     page.on('console', msg => console.log(msg.text()));
     const [inputControl, window, document, target] = initInputControl();
     const eventStart = initTouchEvent(window, "touchstart", target, [],  [{
@@ -215,9 +215,9 @@ test.describe("Test touch input handler", () => {
       called = true;
       expect(e).toBeDefined();
       expect(callbackTarget).toBe(target);
-      expect(button).toBe(cursorState.mouseLeft);
-      expect(x).toBe(100);
-      expect(y).toBe(100);
+      expect(button).toBe(cursorState.mouseMiddle);
+      expect(x).toBe(150);
+      expect(y).toBe(150);
     };
 
     target.dispatchEvent(eventStart);

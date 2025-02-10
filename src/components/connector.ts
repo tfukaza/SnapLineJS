@@ -104,6 +104,7 @@ class ConnectorComponent extends ComponentBase {
 
   deleteLine(i: number): lineObject | undefined {
     if (this.outgoingLines.length == 0) {
+      console.warn(`Error: Outgoing lines is empty`);
       return undefined;
     }
 

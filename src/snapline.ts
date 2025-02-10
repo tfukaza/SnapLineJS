@@ -343,7 +343,7 @@ export default class SnapLine {
     deltaY: number,
   ) {
     this.g.camera.handleScroll(
-      deltaY,
+      deltaY / 1000,
       this.g.mouseCameraX,
       this.g.mouseCameraY,
     );

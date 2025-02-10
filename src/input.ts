@@ -33,6 +33,7 @@ export type touchData = {
   x: number;
   y: number;
   target: Element | null;
+  identifier: number;
 }
 
 class InputControl {
@@ -52,9 +53,9 @@ class InputControl {
   _pointerMode: "pointer" | "gesture" | "none";
 
   _currentCursorState: cursorState;
-  _sortedTouchID: number[]; // List of touches for touch events, sorted by the times they are pressed
-  _touch_0: touchData | null;
-  _touch_1: touchData | null;
+  _sortedTouchArray: touchData[]; // List of touches for touch events, sorted by the times they are pressed
+  _sortedTouchDict: { [key: number]: touchData }; // Dictionary of touches for touch events, indexed by the touch identifier
+
 
   constructor(dom: HTMLElement, document: Document) {
 
@@ -83,9 +84,10 @@ class InputControl {
     this._dom = dom;
     this._document = document;
 
-    this._sortedTouchID = [];
-    this._touch_0 = null; 
-    this._touch_1 = null; 
+    this._sortedTouchArray = [];
+    this._sortedTouchDict = {};
+
+
   }
 
   private _callFuncWithCallbackParam(
@@ -222,118 +224,113 @@ class InputControl {
     this._onKeyDown?.(e);
   }
 
-  updateTouch(identifier: number, touchList: TouchList, data: touchData | null): touchData | null {
-    let touchMatched = null; 
-    for (let i = 0; i < touchList.length; i++) {
-      const touch = touchList[i];
-      if (touch && touch.identifier === identifier) {
-        touchMatched = touch;
-        break;
-      }
-    }
-    
-    if (touchMatched && data) {
-      data.x = touchMatched.clientX;
-      data.y = touchMatched.clientY;
-      data.target = touchMatched.target as Element | null;
-      return data;
-    } 
 
-    return null;
-  }
 
   onTouchStart(e: TouchEvent) {
     const newTouchList = e.changedTouches;
+    const prevSortedTouchArrayLength = this._sortedTouchArray.length;
     // Add the touch to the touch list
     for (let i = 0; i < newTouchList.length; i++) {
       const touch = newTouchList[i];
       if (touch) {
-        this._sortedTouchID.unshift(touch.identifier);
+        const data = {
+          x: touch.clientX,
+          y: touch.clientY,
+          target: touch.target as Element | null,
+          identifier: touch.identifier,
+        };
+
+        this._sortedTouchArray.unshift(data);
+        this._sortedTouchDict[touch.identifier] = data;
       }
     }
 
-    if (this._sortedTouchID.length > 0) {
-      this._touch_0 = {
-        x: newTouchList[0].clientX,
-        y: newTouchList[0].clientY,
-        target: newTouchList[0].target as Element | null,
-      }
-    }
-    if (this._sortedTouchID.length > 1) {
-      this._touch_1 = {
-        x: newTouchList[1].clientX,
-        y: newTouchList[1].clientY,
-        target: newTouchList[1].target as Element | null,
-      }
-    }
-
-    if (this._touch_0) {
+    if (this._sortedTouchArray.length === 1) {
       this._onCursorDown?.(
         e,
-        newTouchList[0].target as Element | null,
+        this._sortedTouchArray[0].target as Element | null,
         cursorState.mouseLeft,
-        this._touch_0.x,
-        this._touch_0.y,
+        this._sortedTouchArray[0].x,
+        this._sortedTouchArray[0].y,
       );
+      return;
+    }
+
+    if (this._sortedTouchArray.length === 2) {
+      if (prevSortedTouchArrayLength === 1) {
+        this._onCursorUp?.(
+          e,
+          this._sortedTouchArray[1].target as Element | null,
+          cursorState.mouseLeft,
+          this._sortedTouchArray[1].x,
+          this._sortedTouchArray[1].y,
+        );
+      }
+      const middleX = (this._sortedTouchArray[0].x + this._sortedTouchArray[1].x) / 2;
+      const middleY = (this._sortedTouchArray[0].y + this._sortedTouchArray[1].y) / 2;
+      this._onCursorDown?.(
+        e,
+        this._sortedTouchArray[0].target as Element | null,
+        cursorState.mouseMiddle,
+        middleX,
+        middleY,
+      );
+      return;
     }
   }
 
   onTouchMove(e: TouchEvent) {
-    const touchList = e.touches;
-    const updatedTouches = [];
-    const prevTouch_0 = this._touch_0 ? { ...this._touch_0 } : null;
-    const prevTouch_1 = this._touch_1 ? { ...this._touch_1 } : null;
+    const updatedTouchArray = e.touches;
+    const prevTouch_0 = this._sortedTouchArray.length > 0 ? { ...this._sortedTouchArray[0] } : null;
+    const prevTouch_1 = this._sortedTouchArray.length > 1 ? { ...this._sortedTouchArray[1] } : null;
 
-    if (this._touch_0) {      
-      this._touch_0 = this.updateTouch(this._sortedTouchID[0], touchList, this._touch_0);
-    }
-    if (this._touch_1) {
-      this._touch_1 = this.updateTouch(this._sortedTouchID[1], touchList, this._touch_1);
+    for (let i = 0; i < updatedTouchArray.length; i++) {
+      const touch = updatedTouchArray[i];
+      if (touch) {
+        const data = this._sortedTouchDict[touch.identifier];
+        data.x = touch.clientX;
+        data.y = touch.clientY;
+        data.target = touch.target as Element | null;
+      }
     }
 
     // If there is only one touch point, treat it as a mouse event
-    if (this._touch_0 && !this._touch_1) {
+    if (this._sortedTouchArray.length === 1) {
       this._onCursorMove?.(
         e,
-        this._touch_0.target,
+        this._sortedTouchArray[0].target,
         cursorState.mouseLeft,
-        this._touch_0.x,
-        this._touch_0.y,
+        this._sortedTouchArray[0].x,
+        this._sortedTouchArray[0].y,
       );
       return;
     }
 
-    if (!(this._touch_0 && this._touch_1)) {
+    if (this._sortedTouchArray.length < 2) {
       return;
     }
 
-    const middleX = (this._touch_0.x + this._touch_1.x) / 2;
-    const middleY = (this._touch_0.y + this._touch_1.y) / 2;
-    const span = Math.sqrt(Math.pow(this._touch_0.x - this._touch_1.x, 2) + Math.pow(this._touch_0.y - this._touch_1.y, 2));
+    const middleX = (this._sortedTouchArray[0].x + this._sortedTouchArray[1].x) / 2;
+    const middleY = (this._sortedTouchArray[0].y + this._sortedTouchArray[1].y) / 2;
+    const span = Math.sqrt(Math.pow(this._sortedTouchArray[0].x - this._sortedTouchArray[1].x, 2) + Math.pow(this._sortedTouchArray[0].y - this._sortedTouchArray[1].y, 2));
 
-    let deltaX = 0;
-    let deltaY = 0;
     let deltaSpan = 0;
     
     if (prevTouch_0 && prevTouch_1) {    
-      const prevMiddleX = (prevTouch_0.x + prevTouch_1.x) / 2;
-      const prevMiddleY = (prevTouch_0.y + prevTouch_1.y) / 2;
-      deltaX = middleX - prevMiddleX;
-      deltaY = middleY - prevMiddleY;
       const prevSpan = Math.sqrt(Math.pow(prevTouch_0.x - prevTouch_1.x, 2) + Math.pow(prevTouch_0.y - prevTouch_1.y, 2));
       deltaSpan = span - prevSpan;
     }
 
     this._onCursorMove?.(
       e,
-      this._touch_0.target, // TODO: find element at middle of two touch points
+      this._sortedTouchArray[0].target, // TODO: find element at middle of two touch points
       cursorState.mouseMiddle,
       middleX,
       middleY,
     );
     this._onScroll?.(
       e,
-      this._touch_0.target,
+      this._sortedTouchArray[0].target,
       cursorState.mouseMiddle,
       middleX,
       middleY,
@@ -344,28 +341,43 @@ class InputControl {
 
   onTouchEnd(e: TouchEvent) {
 
+    const endTouchIDs: number[] = [];
     for (let i = 0; i < e.changedTouches.length; i++) {
-      const touch = e.changedTouches.item(i);
-      for (const touchID of this._sortedTouchID) {
-        if (touchID === touch.identifier) {
-          this._sortedTouchID.splice(this._sortedTouchID.indexOf(touchID), 1);
-          break;
-        }
+      const touch = e.changedTouches[i];
+      if (touch) {
+        endTouchIDs.push(touch.identifier);
       }
     }
+    const deletedTouchArray = this._sortedTouchArray.filter(touch => endTouchIDs.includes(touch.identifier));
+    const prevSortedTouchArrayLength = this._sortedTouchArray.length;
+    this._sortedTouchArray = this._sortedTouchArray.filter(touch => !endTouchIDs.includes(touch.identifier));
+    for (let id of endTouchIDs) {
+      delete this._sortedTouchDict[id];
+    }
 
-    this._touch_0 = this.updateTouch(this._sortedTouchID[0], this._touch_0);
-    this._touch_1 = this.updateTouch(this._sortedTouchID[1], this._touch_1);
+    if (deletedTouchArray.length > 0) {
+      if (prevSortedTouchArrayLength === 1) {
+        this._onCursorUp?.(
+          e,
+          deletedTouchArray[0].target,
+          cursorState.mouseLeft,
+          deletedTouchArray[0].x,
+          deletedTouchArray[0].y,
+        );
+        return;
+      }
 
-    if (this._touch_0) {
-      this._onCursorUp?.(
-        this._touch_0,
-        this._touch_0.target,
-        cursorState.mouseLeft,
-        this._touch_0.x,
-        this._touch_0.y,
-      );
-    } 
+      if (prevSortedTouchArrayLength === 2) {
+        this._onCursorUp?.(
+          e,
+          deletedTouchArray[0].target,
+          cursorState.mouseMiddle,
+          deletedTouchArray[0].x,
+          deletedTouchArray[0].y,
+        );
+      }
+    }  
+  
   }
   
 }

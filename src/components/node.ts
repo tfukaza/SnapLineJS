@@ -89,9 +89,9 @@ class NodeComponent extends Base {
   _renderOutgoingLines(outgoingLines: lineObject[], key?: string) {
     for (const line of outgoingLines) {
       const connector = line.start;
-      if (!line.svg) {
+      if (!line.svg && !line.requestDelete) {
         line.svg = connector._createLineDOM();
-      } else if (line.requestDelete && !line.completedDelete) {
+      } else if (line.requestDelete && !line.completedDelete && line.svg) {
         this.g.canvas.removeChild(line.svg as Node);
         line.completedDelete = true;
         continue;
@@ -352,7 +352,7 @@ class NodeComponent extends Base {
   ) {
     this._renderOutgoingLines = (svgLines: lineObject[], name: string) => {
       this._filterDeletedLines(svgLines);
-      console.log("Rendering lines", svgLines);
+
       callback(svgLines, name);
     };
   }
