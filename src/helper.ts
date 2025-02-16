@@ -1,3 +1,4 @@
+import { LineComponent } from "./components/line";
 import { lineObject } from "./types";
 
 function isBetween(x: number, a: number, b: number) {
@@ -30,7 +31,7 @@ function returnUpdatedDict(
  */
 function iterateDict(
   dict: { [key: string]: any },
-  callback: (lines: lineObject[], key?: string) => void,
+  callback: (lines: LineComponent[], key?: string) => void,
   bind: any,
   includeKey: boolean = false,
 ) {

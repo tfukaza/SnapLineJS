@@ -2,14 +2,11 @@ import {
   GlobalStats,
   ObjectTypes,
   customCursorDownProp,
-  lineObject,
   ConnectorConfig,
 } from "../types";
 import { ComponentBase } from "./base";
 import { NodeComponent } from "./node";
-import { LineElement } from "../types";
-import { setDomStyle } from "../helper";
-
+import { LineComponent } from "./line";
 /**
  * Connector components connect together nodes using lines.
  */
@@ -21,8 +18,8 @@ class ConnectorComponent extends ComponentBase {
   _connectorTotalOffsetX: number; // Location of the connector relative to the location of parent Node
   _connectorTotalOffsetY: number;
   prop: { [key: string]: any }; // Properties of the connector
-  outgoingLines: lineObject[];
-  incomingLines: lineObject[];
+  outgoingLines: LineComponent[];
+  incomingLines: LineComponent[];
   _type: ObjectTypes = ObjectTypes.connector;
   dom: HTMLElement;
   parent: NodeComponent;
@@ -32,11 +29,6 @@ class ConnectorComponent extends ComponentBase {
   }
 
   // ==================== Private methods ====================
-
-  #setLineXYPosition(entry: lineObject, x: number, y: number) {
-    entry.x2 = x;
-    entry.y2 = y;
-  }
 
   // ==================== Hidden methods ====================
 
@@ -60,21 +52,6 @@ class ConnectorComponent extends ComponentBase {
   _componentCursorUp(): void {
     this.endDragOutLine();
     this.parent._renderNodeLines();
-  }
-
-  _createLineDOM(): SVGSVGElement {
-    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-    const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
-    svg.appendChild(line);
-    svg.setAttribute("data-snapline-type", "connector-svg");
-    line.setAttribute("data-snapline-type", "connector-line");
-    line.setAttribute("stroke-width", "4");
-
-    console.debug(`Created line from connector ${this.gid}`);
-
-    this.g.canvas!.appendChild(svg);
-
-    return svg;
   }
 
   _updateDomProperties() {
@@ -102,60 +79,43 @@ class ConnectorComponent extends ComponentBase {
     this.connectorY = this.parent.positionY + this._connectorTotalOffsetY;
   }
 
-  deleteLine(i: number): lineObject | undefined {
+  deleteLine(i: number): LineComponent | undefined {
     if (this.outgoingLines.length == 0) {
       console.warn(`Error: Outgoing lines is empty`);
       return undefined;
     }
 
-    const svg = this.outgoingLines[i];
-    svg.requestDelete = true;
+    const line = this.outgoingLines[i];
+    line.requestDelete = true;
 
-    return svg;
+    return line;
   }
 
   deleteAllLines() {
-    for (const svg of this.outgoingLines) {
-      svg.requestDelete = true;
+    for (const line of this.outgoingLines) {
+      line.requestDelete = true;
     }
   }
 
-  _renderLinePosition(entry: lineObject) {
-    const svg: LineElement = entry.svg;
-    if (!svg) {
-      return;
-    }
-    setDomStyle(svg, {
-      position: "absolute",
-      overflow: "visible",
-      pointerEvents: "none",
-      willChange: "transform",
-      transform: `translate3d(${entry.x1}px, ${entry.y1}px, 0)`,
-    });
-    const line = svg.children[0] as SVGLineElement;
-    line.setAttribute("x1", "" + 0);
-    line.setAttribute("y1", "" + 0);
-    line.setAttribute("x2", "" + (entry.x2 - entry.x1));
-    line.setAttribute("y2", "" + (entry.y2 - entry.y1));
+  _renderLinePosition(entry: LineComponent) {
+    entry.renderLine();
   }
 
   /**
    * Updates the start and end positions of the line.
    * @param entry The line to update.
    */
-  _setLinePosition(entry: lineObject) {
-    entry.x1 = entry.start.connectorX;
-    entry.y1 = entry.start.connectorY;
+  _setLinePosition(entry: LineComponent) {
+    entry.setLineStartAtConnector();
     if (!entry.target) {
-      const [adjustedX, adjustedY] = this.g.camera.getWorldFromCamera(this.g.mousedown_x + this.g.dx, this.g.mousedown_y + this.g.dy);
-      /* If entry.to is not set, then this line is currently being dragged */
-      this.#setLineXYPosition(entry, adjustedX, adjustedY);
-    } else {
-      this.#setLineXYPosition(
-        entry,
-        entry.target.connectorX,
-        entry.target.connectorY,
+      const [adjustedX, adjustedY] = this.g.camera.getWorldFromCamera(
+        this.g.mousedown_x + this.g.dx,
+        this.g.mousedown_y + this.g.dy,
       );
+      /* If entry.to is not set, then this line is currently being dragged */
+      entry.setLineEnd(adjustedX, adjustedY);
+    } else {
+      entry.setLineEndAtConnector();
     }
   }
 
@@ -176,8 +136,8 @@ class ConnectorComponent extends ComponentBase {
     config: ConnectorConfig,
     parent: NodeComponent,
     globals: GlobalStats,
-    outgoingLines: lineObject[],
-    incomingLines: lineObject[],
+    outgoingLines: LineComponent[],
+    incomingLines: LineComponent[],
   ) {
     super(parent, globals);
 
@@ -207,22 +167,19 @@ class ConnectorComponent extends ComponentBase {
 
   /**
    * Creates a new line extending from this connector.
-   * @param svg The SVG element to create the line in.
+   * @param dom The DOM element to create the line in.
    * @returns The line object that was created.
    */
-  createLine(svg: SVGElement | null): lineObject {
-    const line: lineObject = {
-      svg,
-      target: null,
-      start: this,
-      x1: this.connectorX,
-      y1: this.connectorY,
-      x2: 0,
-      y2: 0,
-      connector: this,
-      requestDelete: false,
-      completedDelete: false,
-    };
+  createLine(dom: HTMLElement | null): LineComponent {
+    const line = new LineComponent(
+      this.connectorX,
+      this.connectorY,
+      0,
+      0,
+      dom,
+      this,
+      this.g,
+    );
     return line;
   }
 
@@ -252,8 +209,10 @@ class ConnectorComponent extends ComponentBase {
       return;
     }
 
-    const [adjustedX, adjustedY] =
-      this.g.camera.getWorldFromCamera(this.g.mousedown_x + this.g.dx, this.g.mousedown_y + this.g.dy);
+    const [adjustedX, adjustedY] = this.g.camera.getWorldFromCamera(
+      this.g.mousedown_x + this.g.dx,
+      this.g.mousedown_y + this.g.dy,
+    );
 
     if (hover && hover.getAttribute("data-snapline-type") == "connector") {
       // If the node has a class of "sl-input-connector", then it is an input connector
@@ -273,25 +232,13 @@ class ConnectorComponent extends ComponentBase {
 
       // Handle snapping to the input connector
       if (distance < 40) {
-        this.#setLineXYPosition(
-          this.outgoingLines[0],
-          connectorX,
-          connectorY,
-        );
+        this.outgoingLines[0].setLineEnd(connectorX, connectorY);
       } else {
-        this.#setLineXYPosition(
-          this.outgoingLines[0],
-          adjustedX,
-          adjustedY,
-        );
+        this.outgoingLines[0].setLineEnd(adjustedX, adjustedY);
       }
     } else {
       // Update the line position to the current mouse cursor position
-      this.#setLineXYPosition(
-        this.outgoingLines[0],
-        adjustedX,
-        adjustedY,
-      );
+      this.outgoingLines[0].setLineEnd(adjustedX, adjustedY);
     }
   }
 
@@ -318,11 +265,7 @@ class ConnectorComponent extends ComponentBase {
       target.prop[target.name] = this.prop[this.name]; // Logically connect the input to the output
       target.updateFunction(); // Update the input
 
-      this.#setLineXYPosition(
-        this.outgoingLines[0],
-        target.connectorX,
-        target.connectorY,
-      );
+      this.outgoingLines[0].setLineEnd(target.connectorX, target.connectorY);
     } else {
       this.deleteLine(0);
     }
@@ -333,7 +276,7 @@ class ConnectorComponent extends ComponentBase {
    * Begins the process of dragging a line that is already connected to another connector.
    * @param line The line that is being dragged.
    */
-  startPickUpLine(line: lineObject) {
+  startPickUpLine(line: LineComponent) {
     // Hand over control to the peer output
     this.g.targetObject = line.start;
 
@@ -358,7 +301,7 @@ class ConnectorComponent extends ComponentBase {
    */
   connectToConnector(
     connector: ConnectorComponent,
-    line: lineObject | null,
+    line: LineComponent | null,
   ): boolean {
     const currentIncomingLines = connector.incomingLines.filter(
       (i) => !i.requestDelete,

@@ -1,4 +1,4 @@
-import { GlobalStats, NodeConfig, ObjectTypes } from "./types";
+import { CameraConfig, GlobalStats, NodeConfig, ObjectTypes } from "./types";
 import { NodeComponent } from "./components/node";
 import { ConnectorComponent } from "./components/connector";
 import { returnUpdatedDict } from "./helper";
@@ -13,9 +13,9 @@ import "./theme/standard_light.scss";
 /**
  * SnapLine class manages all the global states for the library.
  */
-export default class SnapLine {
+class SnapLine {
   g: GlobalStats;
-
+  cameraConfig: CameraConfig;
   _containerStyle: { [key: string]: string } = {};
   _canvasStyle: { [key: string]: string } = {};
   _selectionBoxStyle: { [key: string]: string } = {};
@@ -407,8 +407,15 @@ export default class SnapLine {
   /**
    * Constructor for SnapLine class.
    */
-  constructor() {
+  constructor(
+    config: CameraConfig = {
+      enableZoom: true,
+      enablePan: true,
+      panBounds: { top: null, left: null, right: null, bottom: null },
+    },
+  ) {
     this.g = {} as any;
+    this.cameraConfig = config;
 
     this._containerStyle = {
       position: "relative",
@@ -459,7 +466,7 @@ export default class SnapLine {
       dx_offset: 0,
       dy_offset: 0,
 
-      camera: new Camera(containerDom, canvasDom),
+      camera: new Camera(containerDom, canvasDom, this.cameraConfig),
 
       overrideDrag: false,
 
@@ -609,3 +616,5 @@ export default class SnapLine {
     this._renderSelectionBox = callback;
   }
 }
+
+export { SnapLine };

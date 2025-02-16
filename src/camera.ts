@@ -1,3 +1,5 @@
+import { CameraConfig } from "./types";
+
 class Camera {
   /**
    * Represents a camera that can be used to pan and zoom the view of a DOM element.
@@ -21,9 +23,15 @@ class Camera {
   cameraPanStartY: number;
   zoom: number; // The zoom level of the camera, 1 means no zoom, smaller values zoom out, larger values zoom in
 
+  config: CameraConfig;
+
   canvasStyle: string; // The CSS transform style that should be applied to the DOM element
 
-  constructor(container: HTMLElement, canvas: HTMLElement) {
+  constructor(
+    container: HTMLElement,
+    canvas: HTMLElement,
+    config: CameraConfig = {},
+  ) {
     let containerRect = container.getBoundingClientRect();
     this.containerDom = container;
     this.containerOffsetX = containerRect.left;
@@ -36,7 +44,13 @@ class Camera {
     this.cameraPanStartX = 0;
     this.cameraPanStartY = 0;
     this.zoom = 1;
-
+    const defaultConfig = {
+      enableZoom: true,
+      zoomBounds: { min: 0.2, max: 1 },
+      enablePan: true,
+      panBounds: { top: null, left: null, right: null, bottom: null },
+    };
+    this.config = { ...defaultConfig, ...config };
     console.debug("Camera initialized", this);
 
     this.canvasStyle = "";
@@ -90,6 +104,10 @@ class Camera {
    * @param cameraY The y coordinate of the pointer in the camera view
    */
   handleScroll(deltaZoom: number, cameraX: number, cameraY: number) {
+    if (!this.config.enableZoom) {
+      return;
+    }
+
     // Limit zoom
     if (this.zoom + deltaZoom < 0.2) {
       deltaZoom = 0.2 - this.zoom;
@@ -97,17 +115,26 @@ class Camera {
       deltaZoom = 1 - this.zoom;
     }
 
+    if (this.config.zoomBounds) {
+      if (this.zoom + deltaZoom < this.config.zoomBounds.min) {
+        deltaZoom = 0;
+      } else if (this.zoom + deltaZoom > this.config.zoomBounds.max) {
+        deltaZoom = 0;
+      }
+    }
+
     const zoomRatio = this.zoom / (this.zoom + deltaZoom); // Ratio of current zoom to new zoom
     // Move camera to zoom in on the mouse position
-    this.cameraPositionX -=
-      (this.cameraWidth / this.zoom) *
-      (zoomRatio - 1) *
-      (1 - (this.cameraWidth * 1.5 - cameraX) / this.cameraWidth);
-    this.cameraPositionY -=
-      (this.cameraHeight / this.zoom) *
-      (zoomRatio - 1) *
-      (1 - (this.cameraHeight * 1.5 - cameraY) / this.cameraHeight);
-
+    if (this.config.enablePan) {
+      this.cameraPositionX -=
+        (this.cameraWidth / this.zoom) *
+        (zoomRatio - 1) *
+        (1 - (this.cameraWidth * 1.5 - cameraX) / this.cameraWidth);
+      this.cameraPositionY -=
+        (this.cameraHeight / this.zoom) *
+        (zoomRatio - 1) *
+        (1 - (this.cameraHeight * 1.5 - cameraY) / this.cameraHeight);
+    }
     this.zoom += deltaZoom;
 
     this.updateCamera();
@@ -122,8 +149,12 @@ class Camera {
    * @param deltaY  Change in mouse position
    */
   handlePan(deltaX: number, deltaY: number) {
+    if (!this.config.enablePan) {
+      return;
+    }
     this.cameraPositionX += deltaX / this.zoom;
     this.cameraPositionY += deltaY / this.zoom;
+
     this.updateCamera();
   }
 
@@ -134,6 +165,9 @@ class Camera {
    * This allows camera pans based on the absolute position of the pointer relative to when the pan started.
    */
   handlePanStart() {
+    if (!this.config.enablePan) {
+      return;
+    }
     this.cameraPanStartX = this.cameraPositionX;
     this.cameraPanStartY = this.cameraPositionY;
   }
@@ -145,8 +179,37 @@ class Camera {
    * @param deltaY  Change in mouse position
    */
   handlePanDrag(deltaX: number, deltaY: number) {
+    if (!this.config.enablePan) {
+      return;
+    }
     this.cameraPositionX = -deltaX / this.zoom + this.cameraPanStartX;
     this.cameraPositionY = -deltaY / this.zoom + this.cameraPanStartY;
+    if (this.config.panBounds) {
+      if (
+        this.config.panBounds.left !== null &&
+        this.cameraPositionX < this.config.panBounds.left
+      ) {
+        this.cameraPositionX = this.config.panBounds.left + 1;
+      }
+      if (
+        this.config.panBounds.right !== null &&
+        this.cameraPositionX > this.config.panBounds.right
+      ) {
+        this.cameraPositionX = this.config.panBounds.right - 1;
+      }
+      if (
+        this.config.panBounds.top !== null &&
+        this.cameraPositionY < this.config.panBounds.top
+      ) {
+        this.cameraPositionY = this.config.panBounds.top - 1;
+      }
+      if (
+        this.config.panBounds.bottom !== null &&
+        this.cameraPositionY > this.config.panBounds.bottom
+      ) {
+        this.cameraPositionY = this.config.panBounds.bottom + 1;
+      }
+    }
     this.updateCamera();
   }
 
@@ -156,6 +219,9 @@ class Camera {
    *    handlePanStart -> handlePanDrag -> handlePanEnd
    */
   handlePanEnd() {
+    if (!this.config.enablePan) {
+      return;
+    }
     this.cameraPanStartX = 0;
     this.cameraPanStartY = 0;
   }

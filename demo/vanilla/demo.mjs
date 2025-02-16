@@ -1,4 +1,8 @@
-import SnapLine from "./lib/snapline.mjs";
+import {
+  SnapLine,
+  ConnectorComponent,
+  LineComponent,
+} from "./lib/snapline.mjs";
 
 const sl = new SnapLine();
 
@@ -9,25 +13,79 @@ let canvas = null;
 let background = null;
 let selection = null;
 
+let lineStyle = "black";
+
 document.addEventListener("DOMContentLoaded", function () {
   addNodeMenu = document.getElementById("addNodeButton");
 
-  document
-    .getElementById("addNodeButton")
-    .addEventListener("click", (e) => toggleMenu(e, "addNodeMenu"));
+  // document
+  //   .getElementById("addNodeButton")
+  //   .addEventListener("click", (e) => toggleMenu(e, "addNodeMenu"));
 
   document
     .getElementById("mathButton")
-    .addEventListener("mouseup", (e) => addNode(e, "sl-node-math"));
+    .addEventListener("mouseup", (e) => addNode("sl-node-math", 0, 0));
   document
     .getElementById("lerpButton")
-    .addEventListener("mouseup", (e) => addNode(e, "sl-node-lerp"));
+    .addEventListener("mouseup", (e) => addNode("sl-node-lerp", 0, 0));
   document
     .getElementById("printButton")
-    .addEventListener("mouseup", (e) => addNode(e, "sl-node-print"));
+    .addEventListener("mouseup", (e) => addNode("sl-node-print", 0, 0));
   document
     .getElementById("constantButton")
-    .addEventListener("mouseup", (e) => addNode(e, "sl-node-number"));
+    .addEventListener("mouseup", (e) => addNode("sl-node-number", 0, 0));
+
+  document.getElementById("enable-zoom").addEventListener("change", (e) => {
+    sl.g.camera.config.enableZoom = e.target.checked;
+  });
+
+  document.getElementById("zoom-min").addEventListener("input", (e) => {
+    sl.g.camera.config.zoomBounds.min = e.target.value;
+  });
+
+  document.getElementById("zoom-max").addEventListener("input", (e) => {
+    sl.g.camera.config.zoomBounds.max = e.target.value;
+  });
+
+  document.getElementById("enable-pan").addEventListener("change", (e) => {
+    sl.g.camera.config.enablePan = e.target.checked;
+  });
+
+  document.getElementById("pan-top").addEventListener("input", (e) => {
+    sl.g.camera.config.panBounds.top = e.target.value;
+  });
+
+  document.getElementById("pan-left").addEventListener("input", (e) => {
+    sl.g.camera.config.panBounds.left = e.target.value;
+  });
+
+  document.getElementById("pan-right").addEventListener("input", (e) => {
+    sl.g.camera.config.panBounds.right = e.target.value;
+  });
+
+  document.getElementById("pan-bottom").addEventListener("input", (e) => {
+    sl.g.camera.config.panBounds.bottom = e.target.value;
+  });
+
+  document.getElementById("line-style").addEventListener("change", (e) => {
+    lineStyle = e.target.value;
+  });
+
+  document
+    .getElementById("lock-position-button")
+    .addEventListener("click", (e) => {
+      sl.g.focusNodes.forEach((node) => {
+        node._config.lockPosition = true;
+      });
+    });
+
+  document
+    .getElementById("unlock-position-button")
+    .addEventListener("click", (e) => {
+      sl.g.focusNodes.forEach((node) => {
+        node._config.lockPosition = false;
+      });
+    });
 
   container = document.getElementById("sl-canvas-container");
   canvas = document.getElementById("sl-canvas");
@@ -52,18 +110,6 @@ document.addEventListener("DOMContentLoaded", function () {
   //   .connectToConnector(node4.getConnector("input"), null);
 });
 
-document.addEventListener("click", function (e) {
-  addNodeMenu.classList.remove("show-menu");
-});
-
-function toggleMenu(e, id) {
-  if (id === "addNodeMenu") {
-    addNodeMenu.classList.add("show-menu");
-  }
-
-  e.stopPropagation();
-}
-
 function addNode(name, x, y) {
   let ele = document.createElement(name);
   let node = sl.createNode(ele, x, y, {
@@ -74,6 +120,134 @@ function addNode(name, x, y) {
   canvas.appendChild(ele);
 
   return node;
+}
+
+class CustomConnector extends ConnectorComponent {
+  createLine(dom) {
+    let lineClass = null;
+    if (lineStyle == "curved") {
+      lineClass = CurvedLine;
+      const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+      const path = document.createElementNS(
+        "http://www.w3.org/2000/svg",
+        "path",
+      );
+      svg.appendChild(path);
+      path.setAttribute("stroke-width", "4");
+      path.setAttribute("fill", "none");
+      dom = svg;
+    } else if (lineStyle == "zigzag") {
+      lineClass = ZigZagLine;
+      const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+      const path = document.createElementNS(
+        "http://www.w3.org/2000/svg",
+        "path",
+      );
+      svg.appendChild(path);
+      path.setAttribute("stroke-width", "4");
+      path.setAttribute("fill", "none");
+      dom = svg;
+    } else {
+      lineClass = StraightLine;
+      const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+      const line = document.createElementNS(
+        "http://www.w3.org/2000/svg",
+        "line",
+      );
+      svg.appendChild(line);
+      line.setAttribute("stroke-width", "4");
+      dom = svg;
+    }
+    return new lineClass(
+      this.connectorX,
+      this.connectorY,
+      0,
+      0,
+      dom,
+      this,
+      this.g,
+    );
+  }
+}
+
+class StraightLine extends LineComponent {
+  renderLine() {
+    const svg = this.dom;
+    this.setDomStyle(svg, {
+      position: "absolute",
+      overflow: "visible",
+      pointerEvents: "none",
+      willChange: "transform",
+      transform: `translate3d(${this.x_start}px, ${this.y_start}px, 0)`,
+    });
+    const line = this.dom.children[0];
+    line.setAttribute("x1", "" + 0);
+    line.setAttribute("y1", "" + 0);
+    line.setAttribute("x2", "" + (this.x_end - this.x_start));
+    line.setAttribute("y2", "" + (this.y_end - this.y_start));
+  }
+}
+
+class CurvedLine extends LineComponent {
+  // createDefaultLine() {
+  //   // path.setAttribute("d", "M 0 0 C 100, 100 200, 0 300, 100");
+  //   return svg;
+  // }
+
+  renderLine() {
+    const svg = this.dom;
+    this.setDomStyle(svg, {
+      position: "absolute",
+      overflow: "visible",
+      pointerEvents: "none",
+      willChange: "transform",
+      transform: `translate3d(${this.x_start}px, ${this.y_start}px, 0)`,
+    });
+    const path = this.dom.children[0];
+    let dx = this.x_end - this.x_start;
+    let dy = this.y_end - this.y_start;
+    let x1 = Math.abs(dx / 2);
+    let y1 = 0;
+    let x2 = dx - Math.abs(dx / 2);
+    let y2 = dy;
+    let x3 = dx;
+    let y3 = dy;
+    path.setAttribute("d", `M 0,0 C ${x1}, ${y1} ${x2}, ${y2} ${x3}, ${y3}`);
+  }
+}
+
+class ZigZagLine extends LineComponent {
+  renderLine() {
+    const svg = this.dom;
+    this.setDomStyle(svg, {
+      position: "absolute",
+      overflow: "visible",
+      pointerEvents: "none",
+      willChange: "transform",
+      transform: `translate3d(${this.x_start}px, ${this.y_start}px, 0)`,
+    });
+    const path = this.dom.children[0];
+    let dx = this.x_end - this.x_start;
+    let dy = this.y_end - this.y_start;
+    if (dx > 0) {
+      let x1 = dx / 2;
+      let y1 = 0;
+      let x2 = dx / 2;
+      let y2 = dy;
+      let x3 = dx;
+      let y3 = dy;
+      path.setAttribute(
+        "d",
+        `M 0,0 L ${x1}, ${y1} L ${x2}, ${y2} L ${x3}, ${y3}`,
+      );
+    } else {
+      let offset = 10;
+      path.setAttribute(
+        "d",
+        `M 0,0 L ${offset}, 0 L ${offset}, ${dy / 2} L ${dx - offset}, ${dy / 2} L ${dx - offset}, ${dy} L ${dx} ${dy}`,
+      );
+    }
+  }
 }
 
 // function addNode(e, name) {
@@ -115,11 +289,11 @@ customElements.define(
     initComponent(nodeRef) {
       this._nodeRef = nodeRef;
 
-      nodeRef.addConnector(this._input_1, "input_1", 1, false);
+      nodeRef.addConnector(this._input_1, "input_1", 1, false, CustomConnector);
       nodeRef.addSetPropCallback(this.calculateMath.bind(this), "input_1");
-      nodeRef.addConnector(this._input_2, "input_2", 1, false);
+      nodeRef.addConnector(this._input_2, "input_2", 1, false, CustomConnector);
       nodeRef.addSetPropCallback(this.calculateMath.bind(this), "input_2");
-      nodeRef.addConnector(this._result, "result", 0, true);
+      nodeRef.addConnector(this._result, "result", 0, true, CustomConnector);
 
       this._form_1.addEventListener("input", this.updateText1.bind(this));
       this._form_2.addEventListener("input", this.updateText2.bind(this));
@@ -200,9 +374,9 @@ customElements.define(
     initComponent(nodeRef) {
       this._nodeRef = nodeRef;
 
-      nodeRef.addConnector(this._input_1, "input_1", 1, false);
+      nodeRef.addConnector(this._input_1, "input_1", 1, false, CustomConnector);
       nodeRef.addSetPropCallback(this.calculateMath.bind(this), "input_1");
-      nodeRef.addConnector(this._input_2, "input_2", 1, false);
+      nodeRef.addConnector(this._input_2, "input_2", 1, false, CustomConnector);
       nodeRef.addSetPropCallback(this.calculateMath.bind(this), "input_2");
       nodeRef.addConnector(this._result, "result", 0, true);
 
@@ -269,7 +443,7 @@ customElements.define(
 
     initComponent(nodeRef) {
       this._nodeRef = nodeRef;
-      nodeRef.addConnector(this._input, "input", 1, false);
+      nodeRef.addConnector(this._input, "input", 1, false, CustomConnector);
       nodeRef.addSetPropCallback(this.printValue.bind(this), "input");
     }
 
@@ -301,7 +475,7 @@ customElements.define(
 
     initComponent(nodeRef) {
       this._nodeRef = nodeRef;
-      nodeRef.addConnector(this._output, "output", 1, true);
+      nodeRef.addConnector(this._output, "output", 1, true, CustomConnector);
 
       this._value.addEventListener("input", this.updateText.bind(this));
     }

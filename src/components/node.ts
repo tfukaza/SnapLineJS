@@ -10,15 +10,15 @@ import { ConnectorComponent } from "./connector";
 import { InputForm } from "./input";
 import { ComponentBase } from "./base";
 import { returnUpdatedDict, iterateDict, setDomStyle } from "../helper";
-
+import { LineComponent } from "./line";
 class NodeComponent extends Base {
   _type: ObjectTypes = ObjectTypes.node;
   _config: NodeConfig;
   _dom: HTMLElement | null;
   _connectors: { [key: string]: ConnectorComponent }; // Dictionary of all connectors in the node, using the name as the key
   _components: { [key: string]: ComponentBase }; // Dictionary of all components in the node except connectors
-  _allOutgoingLines: { [key: string]: lineObject[] }; // Dictionary of all lines going out of the node
-  _allIncomingLines: { [key: string]: lineObject[] }; // Dictionary of all lines coming into the node
+  _allOutgoingLines: { [key: string]: LineComponent[] }; // Dictionary of all lines going out of the node
+  _allIncomingLines: { [key: string]: LineComponent[] }; // Dictionary of all lines coming into the node
   _nodeWidth = 0;
   _nodeHeight = 0;
   _dragStartX = 0;
@@ -72,7 +72,7 @@ class NodeComponent extends Base {
    * Filters out lines that have been requested to be deleted.
    * @param svgLines Array of all lines outgoing from the node or connector
    */
-  _filterDeletedLines(svgLines: lineObject[]) {
+  _filterDeletedLines(svgLines: LineComponent[]) {
     for (let i = 0; i < svgLines.length; i++) {
       if (svgLines[i].requestDelete) {
         svgLines.splice(i, 1);
@@ -86,28 +86,27 @@ class NodeComponent extends Base {
    * This function can be called by the node or a connector.on the node.
    * @param outgoingLines Array of all lines outgoing from the node or connector
    */
-  _renderOutgoingLines(outgoingLines: lineObject[], key?: string) {
+  _renderOutgoingLines(outgoingLines: LineComponent[], key?: string) {
     for (const line of outgoingLines) {
       const connector = line.start;
-      if (!line.svg && !line.requestDelete) {
-        line.svg = connector._createLineDOM();
-      } else if (line.requestDelete && !line.completedDelete && line.svg) {
-        this.g.canvas.removeChild(line.svg as Node);
+      if (!line.requestDelete && !line.initialRender) {
+        line.createLine();
+      } else if (line.requestDelete && !line.completedDelete) {
+        line.delete();
         line.completedDelete = true;
         continue;
       }
 
-      if (!line.svg) {
+      if (!line.dom) {
         continue;
       }
-      line.x1 = connector.connectorX;
-      line.y1 = connector.connectorY;
+      line.x_start = connector.connectorX;
+      line.y_start = connector.connectorY;
       if (line.target) {
-        line.x2 = line.target.connectorX;
-        line.y2 = line.target.connectorY;
+        line.x_end = line.target.connectorX;
+        line.y_end = line.target.connectorY;
       }
-      line.svg.style.transform = `translate3d(${connector.connectorX}px, ${connector.connectorY}px, 0)`;
-      connector._renderLinePosition(line);
+      line.renderLine();
     }
 
     this._filterDeletedLines(outgoingLines);
@@ -120,7 +119,7 @@ class NodeComponent extends Base {
     iterateDict(this._allOutgoingLines, this._renderOutgoingLines, this);
     iterateDict(
       this._allIncomingLines,
-      (lines: lineObject[]) => {
+      (lines: LineComponent[]) => {
         for (const line of lines) {
           const peerNode = line.start.parent;
           iterateDict(
@@ -180,7 +179,7 @@ class NodeComponent extends Base {
 
   _componentCursorUp() {
     if (this._freeze) return;
-
+    if (this._config.lockPosition) return;
     const [dx, dy] = this.g.camera.getWorldDeltaFromCameraDelta(
       this.g.dx,
       this.g.dy,
@@ -229,6 +228,7 @@ class NodeComponent extends Base {
    */
   _onDrag(): void {
     if (this._freeze) return;
+    if (this._config.lockPosition) return;
 
     const [adjustedDeltaX, adjustedDeltaY] =
       this.g.camera.getWorldDeltaFromCameraDelta(this.g.dx, this.g.dy);
@@ -348,12 +348,12 @@ class NodeComponent extends Base {
    * @param
    */
   setRenderLinesCallback(
-    callback: (svgLines: lineObject[], name: string) => void,
+    callback: (lines: LineComponent[], name: string) => void,
   ) {
-    this._renderOutgoingLines = (svgLines: lineObject[], name: string) => {
-      this._filterDeletedLines(svgLines);
+    this._renderOutgoingLines = (lines: LineComponent[], name: string) => {
+      this._filterDeletedLines(lines);
 
-      callback(svgLines, name);
+      callback(lines, name);
     };
   }
 
@@ -384,10 +384,14 @@ class NodeComponent extends Base {
     name: string,
     maxConnectors = 1,
     allowDragOut = true,
+    connectorClass: typeof ConnectorComponent | null = null,
   ) {
     this._allOutgoingLines[name] = [];
     this._allIncomingLines[name] = [];
-    const connector = new ConnectorComponent(
+    if (!connectorClass) {
+      connectorClass = ConnectorComponent;
+    }
+    const connector = new connectorClass(
       dom,
       { name: name, maxConnectors: maxConnectors, allowDragOut: allowDragOut },
       this,
@@ -412,14 +416,16 @@ class NodeComponent extends Base {
   }
 
   delete() {
-    this.g.canvas?.removeChild(this._dom!);
+    if (this._dom) {
+      this.g.canvas?.removeChild(this._dom);
+    }
     // Todo: disconnect all connectors
     for (const connector of Object.values(this._connectors)) {
       connector.delete();
     }
   }
 
-  getLines(): { [key: string]: lineObject[] } {
+  getLines(): { [key: string]: LineComponent[] } {
     return this._allOutgoingLines;
   }
 

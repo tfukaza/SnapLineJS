@@ -88,22 +88,75 @@
         </div>
         <div id="sl-selection"></div>
       </div>
-      <navbar class="navbar">
-        <div class="sl-dropdown">
-          <div id="addNodeButton" class="menu-button">
-            Add Node
-            <ul class="hide" id="addNodeMenu">
-              <li><button id="mathButton" class="sl-btn">Math</button></li>
-              <li><button id="printButton" class="sl-btn">Print</button></li>
-              <li><button id="lerpButton" class="sl-btn">Lerp</button></li>
+      <navbar class="control-center">
+        <div class="control-box">
+          <div class="control-box-header">
+            <h1>Add Node</h1>
+          </div>
+          <div class="control-box-content">
+            <ul>
+              <li><button id="mathButton" class="sl-btn">+ Math</button></li>
+              <li><button id="printButton" class="sl-btn">+ Print</button></li>
+              <li><button id="lerpButton" class="sl-btn">+ Lerp</button></li>
               <li>
-                <button id="constantButton" class="sl-btn">Constant</button>
+                <button id="constantButton" class="sl-btn">+ Constant</button>
               </li>
             </ul>
           </div>
         </div>
+        <div class="control-box">
+          <h1>Control Options</h1>
+
+          <div class="control-box-content">
+            <ul>
+              <li>
+                <input type="checkbox" id="enable-zoom" checked />
+                <label for="enable-zoom">Enable Zoom</label>
+                <input type="number" id="zoom-min" value="0.2" />
+                <input type="number" id="zoom-max" value="1" />
+              </li>
+              <li>
+                <input type="checkbox" id="enable-pan" checked />
+                <label for="enable-pan">Enable Pan</label>
+              </li>
+            </ul>
+          </div>
+
+          <div class="control-box-content" id="pan-limits-container">
+            <h2>Bounds</h2>
+            <div id="pan-limits">
+              <input type="number" id="pan-top" value="0" />
+              <input type="number" id="pan-left" value="0" />
+              <input type="number" id="pan-right" value="0" />
+              <input type="number" id="pan-bottom" value="0" />
+            </div>
+          </div>
+        </div>
+
+        <div class="control-box">
+          <h1>Line Options</h1>
+          <div class="control-box-content">
+            <label for="line-style">Line Style</label>
+            <select id="line-style">
+              <option value="straight">Straight</option>
+              <option value="curved">Curved</option>
+              <option value="zigzag">Zigzag</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="control-box">
+          <h1>Node Options</h1>
+          <div class="control-box-content">
+            <button id="lock-position-button" class="sl-btn">
+              Lock Position
+            </button>
+            <button id="unlock-position-button" class="sl-btn">
+              Unlock Position
+            </button>
+          </div>
+        </div>
       </navbar>
-      <div id="node-editor"></div>
     </main>
   </body>
 </html>

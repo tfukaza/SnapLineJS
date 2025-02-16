@@ -2,7 +2,7 @@ import { Base } from "./components/base";
 import { ConnectorComponent } from "./components/connector";
 import { NodeComponent } from "./components/node";
 import Camera from "./camera";
-import SnapLine from "./snapline";
+import { SnapLine } from "./snapline";
 import { cursorState } from "./input";
 
 export enum ObjectTypes {
@@ -30,6 +30,21 @@ export enum SnapLineDomType {
   background = 2,
   selectionBox = 3,
   invalid = 4,
+}
+
+export interface CameraConfig {
+  enableZoom?: boolean;
+  zoomBounds?: {
+    min: number;
+    max: number;
+  };
+  enablePan?: boolean;
+  panBounds?: {
+    top: number | null;
+    left: number | null;
+    right: number | null;
+    bottom: number | null;
+  };
 }
 
 export interface GlobalStats {
@@ -79,6 +94,7 @@ export interface SnapLineConfig {
 
 export interface NodeConfig {
   nodeClass?: string; // Type of node
+  lockPosition?: boolean;
 }
 
 export interface FormConfig {

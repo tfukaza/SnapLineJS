@@ -34,7 +34,7 @@ export type touchData = {
   y: number;
   target: Element | null;
   identifier: number;
-}
+};
 
 class InputControl {
   /**
@@ -56,13 +56,11 @@ class InputControl {
   _sortedTouchArray: touchData[]; // List of touches for touch events, sorted by the times they are pressed
   _sortedTouchDict: { [key: number]: touchData }; // Dictionary of touches for touch events, indexed by the touch identifier
 
-
   constructor(dom: HTMLElement, document: Document) {
-
     dom.addEventListener("wheel", this.onWheel.bind(this));
     dom.addEventListener("keydown", this.onKeyDown.bind(this));
 
-    document.addEventListener("mousedown", this.onMouseDown.bind(this));
+    dom.addEventListener("mousedown", this.onMouseDown.bind(this));
     document.addEventListener("mousemove", this.onMouseMove.bind(this));
     document.addEventListener("mouseup", this.onMouseUp.bind(this));
 
@@ -86,8 +84,6 @@ class InputControl {
 
     this._sortedTouchArray = [];
     this._sortedTouchDict = {};
-
-
   }
 
   private _callFuncWithCallbackParam(
@@ -110,7 +106,7 @@ class InputControl {
   ) {
     func?.(
       e,
-      e.target as Element | null, 
+      e.target as Element | null,
       this.convertMouseToCursorState(e.button),
       e.clientX,
       e.clientY,
@@ -163,11 +159,12 @@ class InputControl {
   onMouseDown(e: MouseEvent) {
     this._onCursorDown?.(
       e,
-      e.target as Element | null,   
+      e.target as Element | null,
       this.convertMouseToCursorState(e.button),
       e.clientX,
       e.clientY,
     );
+    e.preventDefault();
   }
 
   /**
@@ -213,6 +210,7 @@ class InputControl {
       e.clientY,
       e.deltaY,
     );
+    e.preventDefault();
   }
 
   /**
@@ -223,8 +221,6 @@ class InputControl {
   onKeyDown(e: KeyboardEvent) {
     this._onKeyDown?.(e);
   }
-
-
 
   onTouchStart(e: TouchEvent) {
     const newTouchList = e.changedTouches;
@@ -266,8 +262,10 @@ class InputControl {
           this._sortedTouchArray[1].y,
         );
       }
-      const middleX = (this._sortedTouchArray[0].x + this._sortedTouchArray[1].x) / 2;
-      const middleY = (this._sortedTouchArray[0].y + this._sortedTouchArray[1].y) / 2;
+      const middleX =
+        (this._sortedTouchArray[0].x + this._sortedTouchArray[1].x) / 2;
+      const middleY =
+        (this._sortedTouchArray[0].y + this._sortedTouchArray[1].y) / 2;
       this._onCursorDown?.(
         e,
         this._sortedTouchArray[0].target as Element | null,
@@ -281,8 +279,14 @@ class InputControl {
 
   onTouchMove(e: TouchEvent) {
     const updatedTouchArray = e.touches;
-    const prevTouch_0 = this._sortedTouchArray.length > 0 ? { ...this._sortedTouchArray[0] } : null;
-    const prevTouch_1 = this._sortedTouchArray.length > 1 ? { ...this._sortedTouchArray[1] } : null;
+    const prevTouch_0 =
+      this._sortedTouchArray.length > 0
+        ? { ...this._sortedTouchArray[0] }
+        : null;
+    const prevTouch_1 =
+      this._sortedTouchArray.length > 1
+        ? { ...this._sortedTouchArray[1] }
+        : null;
 
     for (let i = 0; i < updatedTouchArray.length; i++) {
       const touch = updatedTouchArray[i];
@@ -310,14 +314,22 @@ class InputControl {
       return;
     }
 
-    const middleX = (this._sortedTouchArray[0].x + this._sortedTouchArray[1].x) / 2;
-    const middleY = (this._sortedTouchArray[0].y + this._sortedTouchArray[1].y) / 2;
-    const span = Math.sqrt(Math.pow(this._sortedTouchArray[0].x - this._sortedTouchArray[1].x, 2) + Math.pow(this._sortedTouchArray[0].y - this._sortedTouchArray[1].y, 2));
+    const middleX =
+      (this._sortedTouchArray[0].x + this._sortedTouchArray[1].x) / 2;
+    const middleY =
+      (this._sortedTouchArray[0].y + this._sortedTouchArray[1].y) / 2;
+    const span = Math.sqrt(
+      Math.pow(this._sortedTouchArray[0].x - this._sortedTouchArray[1].x, 2) +
+        Math.pow(this._sortedTouchArray[0].y - this._sortedTouchArray[1].y, 2),
+    );
 
     let deltaSpan = 0;
-    
-    if (prevTouch_0 && prevTouch_1) {    
-      const prevSpan = Math.sqrt(Math.pow(prevTouch_0.x - prevTouch_1.x, 2) + Math.pow(prevTouch_0.y - prevTouch_1.y, 2));
+
+    if (prevTouch_0 && prevTouch_1) {
+      const prevSpan = Math.sqrt(
+        Math.pow(prevTouch_0.x - prevTouch_1.x, 2) +
+          Math.pow(prevTouch_0.y - prevTouch_1.y, 2),
+      );
       deltaSpan = span - prevSpan;
     }
 
@@ -336,11 +348,9 @@ class InputControl {
       middleY,
       deltaSpan,
     );
-    
   }
 
   onTouchEnd(e: TouchEvent) {
-
     const endTouchIDs: number[] = [];
     for (let i = 0; i < e.changedTouches.length; i++) {
       const touch = e.changedTouches[i];
@@ -348,9 +358,13 @@ class InputControl {
         endTouchIDs.push(touch.identifier);
       }
     }
-    const deletedTouchArray = this._sortedTouchArray.filter(touch => endTouchIDs.includes(touch.identifier));
+    const deletedTouchArray = this._sortedTouchArray.filter((touch) =>
+      endTouchIDs.includes(touch.identifier),
+    );
     const prevSortedTouchArrayLength = this._sortedTouchArray.length;
-    this._sortedTouchArray = this._sortedTouchArray.filter(touch => !endTouchIDs.includes(touch.identifier));
+    this._sortedTouchArray = this._sortedTouchArray.filter(
+      (touch) => !endTouchIDs.includes(touch.identifier),
+    );
     for (let id of endTouchIDs) {
       delete this._sortedTouchDict[id];
     }
@@ -376,10 +390,8 @@ class InputControl {
           deletedTouchArray[0].y,
         );
       }
-    }  
-  
+    }
   }
-  
 }
 
 export { InputControl };

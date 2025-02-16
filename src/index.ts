@@ -1,3 +1,6 @@
-import SnapLine from "./snapline";
+import { SnapLine } from "./snapline";
+import { LineComponent } from "./components/line";
+import { ConnectorComponent } from "./components/connector";
+import { NodeComponent } from "./components/node";
 
-export default SnapLine;
+export { SnapLine, LineComponent, ConnectorComponent, NodeComponent };
