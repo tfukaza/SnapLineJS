@@ -8,18 +8,27 @@ import { NodeComponent } from "./node";
  * such as position, id, etc.
  */
 export abstract class Base {
-  g: GlobalStats; /* Reference to the global stats object */
+  g: GlobalStats | null; /* Reference to the global stats object */
   gid: string; /* Unique identifier for the object */
   positionX: number; /* Position of the object in x-axis */
   positionY: number;
   _type: ObjectTypes; /* Type of the object */
 
-  constructor(globals: GlobalStats) {
-    this.g = globals;
-    this.gid = (++globals.gid).toString();
+  constructor() {
+    this.g = null;
+    this.gid = "";
     this.positionX = 0;
     this.positionY = 0;
     this._type = ObjectTypes.unspecified;
+  }
+
+  /**
+   * Updates the class with globals.
+   * @param globals: The globals object.
+   */
+  updateGlobals(globals: GlobalStats) {
+    this.g = globals;
+    this.gid = (++globals.gid).toString();
   }
 
   /**
@@ -43,6 +52,9 @@ export abstract class Base {
   }
 
   domTouchStart(e: TouchEvent): void {
+    if (this.g == null) {
+      return;
+    }
     console.debug(`Touch start event triggered on ${this.gid}`);
     this.domCursorDown({
       button: 0,
@@ -63,6 +75,9 @@ export abstract class Base {
    * @param clientY: The y-coordinate of the mouse click
    */
   domCursorDown(prop: customCursorDownProp): void {
+    if (this.g == null) {
+      return;
+    }
     const button = prop.button;
     const clientX = prop.clientX;
     const clientY = prop.clientY;
@@ -150,9 +165,16 @@ export class ComponentBase extends Base {
   parent: NodeComponent | null;
   dom: HTMLElement | null;
 
-  constructor(parent: NodeComponent | null, globals: GlobalStats) {
-    super(globals);
+  constructor(
+    parent: NodeComponent | null,
+    globals: GlobalStats | null = null,
+  ) {
+    super();
+
     this.parent = parent;
     this.dom = null;
+    if (globals) {
+      this.updateGlobals(globals);
+    }
   }
 }

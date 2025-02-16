@@ -30,7 +30,7 @@ class LineComponent extends ComponentBase {
     y_end: number,
     dom: HTMLElement | null,
     parent: ConnectorComponent,
-    globals: GlobalStats,
+    globals: GlobalStats | null = null,
   ) {
     super(parent as unknown as NodeComponent, globals);
     // if (!dom) {
@@ -38,11 +38,9 @@ class LineComponent extends ComponentBase {
     // } else {
     //   this.domSource = dom;
     // }
+    this.dom = null;
     if (dom) {
       this.init(dom);
-      this.dom = dom; // Need this to satisfy type checking
-    } else {
-      this.dom = null;
     }
     this.x_start = x_start;
     this.y_start = y_start;
@@ -107,6 +105,9 @@ class LineComponent extends ComponentBase {
    * @param dom The DOM element to create the line in.
    */
   createLine() {
+    if (this.g == null) {
+      return;
+    }
     // console.debug(`Creating line from connector ${this.start.gid}`);
     // if (this.domSource) {
     //   const newDom = this.domSource.cloneNode(true) as HTMLElement;
@@ -120,6 +121,9 @@ class LineComponent extends ComponentBase {
   }
 
   delete(): void {
+    if (this.g == null) {
+      return;
+    }
     if (this.dom) {
       this.g.canvas!.removeChild(this.dom);
     }

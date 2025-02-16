@@ -1,7 +1,6 @@
 import { Base } from "./base";
 import {
   GlobalStats,
-  lineObject,
   ObjectTypes,
   customCursorDownProp,
   NodeConfig,
@@ -23,7 +22,6 @@ class NodeComponent extends Base {
   _nodeHeight = 0;
   _dragStartX = 0;
   _dragStartY = 0;
-  _freeze: boolean; // If true, the node cannot be moved
   _prop: { [key: string]: any }; // Properties of the node
   _propSetCallback: { [key: string]: (value: any) => void }; // Callbacks called when a property is set
   _nodeStyle: any;
@@ -122,6 +120,7 @@ class NodeComponent extends Base {
       (lines: LineComponent[]) => {
         for (const line of lines) {
           const peerNode = line.start.parent;
+          if (!peerNode) continue;
           iterateDict(
             peerNode._allOutgoingLines,
             peerNode._renderOutgoingLines,
@@ -151,6 +150,9 @@ class NodeComponent extends Base {
   }
 
   _componentCursorDown(_: customCursorDownProp): void {
+    if (this.g == null) {
+      return;
+    }
     let isInFocusNodes = false;
     for (let i = 0; i < this.g.focusNodes.length; i++) {
       if (this.g.focusNodes[i].gid == this.gid) {
@@ -178,7 +180,9 @@ class NodeComponent extends Base {
   }
 
   _componentCursorUp() {
-    if (this._freeze) return;
+    if (this.g == null) {
+      return;
+    }
     if (this._config.lockPosition) return;
     const [dx, dy] = this.g.camera.getWorldDeltaFromCameraDelta(
       this.g.dx,
@@ -227,7 +231,9 @@ class NodeComponent extends Base {
    * and updates the DOM element accordingly.
    */
   _onDrag(): void {
-    if (this._freeze) return;
+    if (this.g == null) {
+      return;
+    }
     if (this._config.lockPosition) return;
 
     const [adjustedDeltaX, adjustedDeltaY] =
@@ -249,14 +255,13 @@ class NodeComponent extends Base {
   // ================= Public functions =================
 
   constructor(
-    dom: HTMLElement | null,
     x: number,
     y: number,
-    globals: GlobalStats,
+    dom: HTMLElement | null = null,
+    globals: GlobalStats | null = null,
     config: NodeConfig = {},
   ) {
-    super(globals);
-
+    super();
     this._config = config;
 
     this._dom = dom;
@@ -270,8 +275,6 @@ class NodeComponent extends Base {
     this._dragStartX = this.positionX;
     this._dragStartY = this.positionY;
 
-    this._freeze = false;
-
     this._prop = {};
 
     this._propSetCallback = {};
@@ -281,8 +284,6 @@ class NodeComponent extends Base {
       position: "absolute",
       transformOrigin: "top left",
     });
-
-    this.g.globalNodeList.push(this);
 
     /* Public functions */
     this.init = this.init.bind(this);
@@ -301,12 +302,17 @@ class NodeComponent extends Base {
     this.setRenderNodeCallback = this.setRenderNodeCallback.bind(this);
     this.setRenderLinesCallback = this.setRenderLinesCallback.bind(this);
 
+    this._type = ObjectTypes.node;
+
     this._setNodeStyle({
       transform: `translate3d(${this.positionX}px, ${this.positionY}px, 0)`,
     });
 
     if (this._dom) {
       this.init(this._dom);
+    }
+    if (globals) {
+      this.updateGlobals(globals);
     }
   }
 
@@ -315,8 +321,14 @@ class NodeComponent extends Base {
    * @param dom
    */
   init(dom: HTMLElement) {
+    console.log(`Initializing node ${this.gid}`);
+
     this._dom = dom;
     this._dom.id = this.gid;
+    let debugString =
+      `1 All outgoing lines keys: ` +
+      Object.keys(this._allOutgoingLines).join(", ");
+    console.debug(debugString);
     dom.setAttribute("data-snapline-type", "node");
     dom.setAttribute("data-snapline-state", "idle");
     if (this._config?.nodeClass) {
@@ -324,12 +336,24 @@ class NodeComponent extends Base {
     }
 
     this._renderNode(this._nodeStyle);
-
+    let debugString2 =
+      `2 All outgoing lines keys: ` +
+      Object.keys(this._allOutgoingLines).join(", ");
+    console.debug(debugString2);
     this.bindFunction(this._dom);
     new ResizeObserver(() => {
       this.#updateDomProperties();
       this._renderNode(this._nodeStyle);
     }).observe(this._dom);
+  }
+
+  updateGlobals(globals: GlobalStats) {
+    super.updateGlobals(globals);
+    this.g!.globalNodeList.push(this);
+
+    for (const connector of Object.values(this._connectors)) {
+      connector.updateGlobals(globals);
+    }
   }
 
   /**
@@ -386,23 +410,27 @@ class NodeComponent extends Base {
     allowDragOut = true,
     connectorClass: typeof ConnectorComponent | null = null,
   ) {
+    console.debug(`Adding connector ${name} to node ${this.gid}`);
     this._allOutgoingLines[name] = [];
     this._allIncomingLines[name] = [];
     if (!connectorClass) {
       connectorClass = ConnectorComponent;
     }
-    const connector = new connectorClass(
-      dom,
-      { name: name, maxConnectors: maxConnectors, allowDragOut: allowDragOut },
-      this,
-      this.g,
-      this._allOutgoingLines[name],
-      this._allIncomingLines[name],
-    );
+    const connector = new connectorClass(dom, this.g, {
+      name: name,
+      maxConnectors: maxConnectors,
+      allowDragOut: allowDragOut,
+    });
     this._connectors[name] = connector;
     this._prop[name] = null;
+
     return connector;
   }
+
+  addConnectorObject(connector: ConnectorComponent) {
+    connector.assignToNode(this);
+  }
+
 
   addInputForm(dom: HTMLElement, name: string) {
     const input = new InputForm(dom, this, this.g, { name: name });
@@ -416,7 +444,7 @@ class NodeComponent extends Base {
   }
 
   delete() {
-    if (this._dom) {
+    if (this._dom && this.g) {
       this.g.canvas?.removeChild(this._dom);
     }
     // Todo: disconnect all connectors
@@ -427,6 +455,10 @@ class NodeComponent extends Base {
 
   getLines(): { [key: string]: LineComponent[] } {
     return this._allOutgoingLines;
+  }
+
+  getAllLines(): LineComponent[] {
+    return Object.values(this._allOutgoingLines).flat();
   }
 
   getNodeStyle(): { [key: string]: any } {
@@ -454,6 +486,7 @@ class NodeComponent extends Base {
     }
     for (const peer of peers) {
       if (!peer) continue;
+      if (!peer.parent) continue;
       peer.parent._prop[peer.name] = value;
       if (peer.parent._propSetCallback[peer.name]) {
         peer.parent._propSetCallback[peer.name](value);

@@ -2,38 +2,42 @@ import React from "react";
 import { useState } from "react";
 import { useRef } from "react";
 import { useEffect } from "react";
-import Lines from "./Lines";
+import Line from "./Line";
 
 export default function Node({ nodeObject, children }) {
-  let [node, setNode] = useState(nodeObject);
-  let [nodeStyle, setNodeStyle] = useState(node.getNodeStyle());
-  let [lineDict, setLineDict] = useState(node.getLines());
+  let node = useRef(nodeObject);
+  let [nodeStyle, setNodeStyle] = useState(node.current.getNodeStyle());
+  let [lineList, setLineList] = useState(node.current.getAllLines());
 
   let nodeDom = useRef(null);
 
-  useEffect(() => {
-    node.setRenderNodeCallback(setNodeStyle);
-    node.setRenderLinesCallback((lines, name) => {
-      setLineDict((prev) => {
-        prev[name] = lines;
-        return { ...prev };
-      });
-    });
+  const updateNodeStyle = (style) => {
+    setNodeStyle(style);
+    nodeDom.current.style.transform = style.transform;
+    nodeDom.current.style.position = "absolute";
+    nodeDom.current.style.transformOrigin = "top left";
+  };
 
-    node.init(nodeDom.current);
+  useEffect(() => {
+    node.current.setRenderNodeCallback(updateNodeStyle);
+    node.current.setRenderLinesCallback(() => {
+      let lines = node.current.getAllLines();
+      setLineList(lines);
+    });
+    node.current.init(nodeDom.current);
   }, []);
 
   return (
     <>
-      {Object.keys(lineDict).map((name, index) => (
-        <Lines lineList={lineDict[name]} key={index} />
+      {lineList.map((line, index) => (
+        <Line key={index} line={line} />
       ))}
 
       <div
         className={"sl-node"}
         data-snapline-state={nodeStyle["_focus"] ? "focus" : "idle"}
         ref={nodeDom}
-        style={nodeStyle}
+        // style={nodeStyle}
       >
         {children}
       </div>

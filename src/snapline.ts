@@ -1,4 +1,10 @@
-import { CameraConfig, GlobalStats, NodeConfig, ObjectTypes } from "./types";
+import {
+  CameraConfig,
+  GlobalStats,
+  NodeConfig,
+  ObjectTypes,
+  SnapLineConfig,
+} from "./types";
 import { NodeComponent } from "./components/node";
 import { ConnectorComponent } from "./components/connector";
 import { returnUpdatedDict } from "./helper";
@@ -20,7 +26,6 @@ class SnapLine {
   _canvasStyle: { [key: string]: string } = {};
   _selectionBoxStyle: { [key: string]: string } = {};
   _backgroundStyle: { [key: string]: string } = {};
-
   _inputControl: InputControl | null = null;
 
   // ============== Private functions ==============
@@ -398,7 +403,9 @@ class SnapLine {
     } else if (target._type == ObjectTypes.connector) {
       // If the target object is an output connector, render the lines
       const target = this.g.targetObject as ConnectorComponent;
-      target.parent._renderNodeLines();
+      if (target.parent) {
+        target.parent._renderNodeLines();
+      }
     }
   }
 
@@ -407,15 +414,19 @@ class SnapLine {
   /**
    * Constructor for SnapLine class.
    */
-  constructor(
-    config: CameraConfig = {
-      enableZoom: true,
-      enablePan: true,
-      panBounds: { top: null, left: null, right: null, bottom: null },
-    },
-  ) {
+  constructor(config: SnapLineConfig = {}) {
     this.g = {} as any;
-    this.cameraConfig = config;
+    let defaultConfig: SnapLineConfig = {
+      cameraConfig: {
+        enableZoom: true,
+        enablePan: true,
+        panBounds: { top: null, left: null, right: null, bottom: null },
+      },
+    };
+    this.cameraConfig = {
+      ...defaultConfig.cameraConfig,
+      ...config.cameraConfig,
+    };
 
     this._containerStyle = {
       position: "relative",
@@ -518,24 +529,11 @@ class SnapLine {
   }
 
   /**
-   * Creates an instance of a node.
-   * Note that this function will not add the DOM to the canvas.
-   * The caller must manually add the DOM using document.appendChild() or use a framework that will automatically add the DOM.
-   *
-   * @param dom: The DOM element that will be used as the node. If null, NodeComponent.init() must be called later to specify the DOM element.
-   * @param x: The x position of the node.
-   * @param y: The y position of the node.
-   * @returns A reference to the node.
+   * Adds a node to the canvas.
+   * @param node The node to be added to the canvas.
    */
-  createNode(
-    dom: HTMLElement | null = null,
-    x: number = 0,
-    y: number = 0,
-    config: NodeConfig,
-  ) {
-    const node: NodeComponent = new NodeComponent(dom, x, y, this.g, config);
-    this.g.globalNodeTable[node.gid] = node;
-    return node;
+  addNode(node: NodeComponent) {
+    node.updateGlobals(this.g);
   }
 
   // addNodeAtMouse(node: NodeComponent, e: MouseEvent) {

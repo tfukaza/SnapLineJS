@@ -21,8 +21,7 @@ class ConnectorComponent extends ComponentBase {
   outgoingLines: LineComponent[];
   incomingLines: LineComponent[];
   _type: ObjectTypes = ObjectTypes.connector;
-  dom: HTMLElement;
-  parent: NodeComponent;
+  dom: HTMLElement | null;
 
   updateFunction(): void {
     // Abstract function
@@ -50,11 +49,17 @@ class ConnectorComponent extends ComponentBase {
   }
 
   _componentCursorUp(): void {
+    if (this.parent == null) {
+      return;
+    }
     this.endDragOutLine();
     this.parent._renderNodeLines();
   }
 
   _updateDomProperties() {
+    if (this.g == null || this.dom == null || this.parent == null) {
+      return;
+    }
     const this_rect = this.dom.getBoundingClientRect();
     if (!this.parent._dom) {
       console.error(`Parent DOM is null`);
@@ -106,6 +111,9 @@ class ConnectorComponent extends ComponentBase {
    * @param entry The line to update.
    */
   _setLinePosition(entry: LineComponent) {
+    if (this.g == null) {
+      return;
+    }
     entry.setLineStartAtConnector();
     if (!entry.target) {
       const [adjustedX, adjustedY] = this.g.camera.getWorldFromCamera(
@@ -132,26 +140,20 @@ class ConnectorComponent extends ComponentBase {
 
   /** ==================== Public methods ==================== */
   constructor(
-    dom: HTMLElement,
-    config: ConnectorConfig,
-    parent: NodeComponent,
-    globals: GlobalStats,
-    outgoingLines: LineComponent[],
-    incomingLines: LineComponent[],
+    // parent: NodeComponent,
+    // outgoingLines: LineComponent[],
+    // incomingLines: LineComponent[],
+    dom: HTMLElement | null = null,
+    globals: GlobalStats | null = null,
+    config: ConnectorConfig = {},
   ) {
-    super(parent, globals);
+    super(null, globals);
 
     this.dom = dom;
-    this.parent = parent;
-    this.prop = parent._prop;
-    this.outgoingLines = outgoingLines;
-    this.incomingLines = incomingLines;
+    this.prop = {};
+    this.outgoingLines = [];
+    this.incomingLines = [];
     this.config = config;
-    globals.gid++;
-    this.name = config.name || globals.gid.toString();
-    this.g.globalNodeTable[this.gid] = this;
-    this.dom.setAttribute("data-snapline-gid", this.gid.toString());
-    this.dom.setAttribute("data-snapline-type", "connector");
 
     this.connectorX = 0;
     this.connectorY = 0;
@@ -159,10 +161,48 @@ class ConnectorComponent extends ComponentBase {
     this._connectorTotalOffsetY = 0;
     this._updateDomProperties();
 
-    this.bindFunction(this.dom);
-
     this.connectToConnector = this.connectToConnector.bind(this);
     this.disconnectFromConnector = this.disconnectFromConnector.bind(this);
+
+    if (this.dom) {
+      this.init(this.dom);
+    }
+    if (this.g) {
+      this.updateGlobals(this.g);
+    }
+
+    this.name = config.name || this.gid || "";
+
+    console.log("Connector created", this, this.gid, this.name);
+  }
+
+  init(dom: HTMLElement) {
+    this.dom = dom;
+    this.bindFunction(this.dom);
+    this.dom.setAttribute("data-snapline-gid", this.gid.toString());
+    this.dom.setAttribute("data-snapline-type", "connector");
+  }
+
+  assignToNode(parent: NodeComponent) {
+    this.parent = parent;
+    this.parent._prop[this.name] = null;
+    this.prop = parent._prop;
+    this.parent._connectors[this.name] = this;
+    this.parent._allOutgoingLines[this.name] = [];
+    this.parent._allIncomingLines[this.name] = [];
+    this.outgoingLines = parent._allOutgoingLines[this.name];
+    this.incomingLines = parent._allIncomingLines[this.name];
+    if (parent.g && this.g == null) {
+      this.updateGlobals(parent.g);
+    }
+  }
+
+  updateGlobals(globals: GlobalStats) {
+    super.updateGlobals(globals);
+    this.g!.globalNodeTable[this.gid] = this;
+    if (this.dom) {
+      this.init(this.dom);
+    }
   }
 
   /**
@@ -171,6 +211,7 @@ class ConnectorComponent extends ComponentBase {
    * @returns The line object that was created.
    */
   createLine(dom: HTMLElement | null): LineComponent {
+    console.debug(`Creating line from connector ${this.gid}`);
     const line = new LineComponent(
       this.connectorX,
       this.connectorY,
@@ -199,6 +240,9 @@ class ConnectorComponent extends ComponentBase {
    * Called when the user drags the line extending from the connector.
    */
   runDragOutLine() {
+    if (this.g == null) {
+      return;
+    }
     let distance = 9999;
     let connectorX = 0;
     let connectorY = 0;
@@ -248,6 +292,9 @@ class ConnectorComponent extends ComponentBase {
    * If the user is hovering over an input connector, then the line will be connected to the input connector.
    */
   endDragOutLine() {
+    if (this.g == null) {
+      return;
+    }
     const hover: HTMLElement | null = this.g.hoverDOM as HTMLElement;
     if (hover && hover.getAttribute("data-snapline-type") == "connector") {
       const gid = hover.getAttribute("data-snapline-gid");
@@ -269,7 +316,9 @@ class ConnectorComponent extends ComponentBase {
     } else {
       this.deleteLine(0);
     }
-    this.parent._renderOutgoingLines(this.outgoingLines, this.name);
+    if (this.parent) {
+      this.parent._renderOutgoingLines(this.outgoingLines, this.name);
+    }
   }
 
   /**
@@ -277,6 +326,9 @@ class ConnectorComponent extends ComponentBase {
    * @param line The line that is being dragged.
    */
   startPickUpLine(line: LineComponent) {
+    if (this.g == null) {
+      return;
+    }
     // Hand over control to the peer output
     this.g.targetObject = line.start;
 

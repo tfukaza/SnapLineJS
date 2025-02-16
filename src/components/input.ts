@@ -13,7 +13,7 @@ class InputForm extends ComponentBase {
   constructor(
     dom: HTMLElement,
     parent: NodeComponent,
-    globals: GlobalStats,
+    globals: GlobalStats | null = null,
     config: FormConfig = {},
   ) {
     super(parent, globals);

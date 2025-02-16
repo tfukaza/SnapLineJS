@@ -90,6 +90,7 @@ export interface GlobalStats {
 export interface SnapLineConfig {
   backgroundZIndex?: number;
   canvasZIndex?: number;
+  cameraConfig?: CameraConfig;
 }
 
 export interface NodeConfig {
