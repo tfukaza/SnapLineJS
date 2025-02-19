@@ -26,6 +26,8 @@ class NodeComponent extends Base {
   _propSetCallback: { [key: string]: (value: any) => void }; // Callbacks called when a property is set
   _nodeStyle: any;
 
+  nodeDragStart: () => void;
+  nodeDragEnd: () => void;
   // ================= Private functions =================
 
   /**
@@ -175,7 +177,7 @@ class NodeComponent extends Base {
         this.g.focusNodes[i].#setStartPositions();
       }
     }
-
+    this.nodeDragStart();
     this.#setStartPositions();
   }
 
@@ -207,7 +209,7 @@ class NodeComponent extends Base {
     }
 
     this._renderNode(this._nodeStyle);
-
+    this.nodeDragEnd();
     // if (this.overlapping == null) {
     //   return;
     // }
@@ -314,6 +316,17 @@ class NodeComponent extends Base {
     if (globals) {
       this.updateGlobals(globals);
     }
+
+    // this._callbackIndex = {
+    //   nodeDragStart: (gid: string) => {},
+    //   nodeDragEnd: (gid: string) => {},
+    //   nodeSelect: (gid: string) => {},
+    //   nodeDeselect: (gid: string) => {},
+    //   nodeFocus: (gid: string) => {},
+    //   nodeBlur: (gid: string) => {},
+    // };
+    this.nodeDragStart = () => {};
+    this.nodeDragEnd = () => {};
   }
 
   /**
@@ -324,11 +337,6 @@ class NodeComponent extends Base {
     console.log(`Initializing node ${this.gid}`);
 
     this._dom = dom;
-    this._dom.id = this.gid;
-    let debugString =
-      `1 All outgoing lines keys: ` +
-      Object.keys(this._allOutgoingLines).join(", ");
-    console.debug(debugString);
     dom.setAttribute("data-snapline-type", "node");
     dom.setAttribute("data-snapline-state", "idle");
     if (this._config?.nodeClass) {
@@ -336,10 +344,6 @@ class NodeComponent extends Base {
     }
 
     this._renderNode(this._nodeStyle);
-    let debugString2 =
-      `2 All outgoing lines keys: ` +
-      Object.keys(this._allOutgoingLines).join(", ");
-    console.debug(debugString2);
     this.bindFunction(this._dom);
     new ResizeObserver(() => {
       this.#updateDomProperties();
@@ -349,6 +353,9 @@ class NodeComponent extends Base {
 
   updateGlobals(globals: GlobalStats) {
     super.updateGlobals(globals);
+    if (this._dom) {
+      this._dom.id = this.gid;
+    }
     this.g!.globalNodeList.push(this);
 
     for (const connector of Object.values(this._connectors)) {
@@ -430,7 +437,6 @@ class NodeComponent extends Base {
   addConnectorObject(connector: ConnectorComponent) {
     connector.assignToNode(this);
   }
-
 
   addInputForm(dom: HTMLElement, name: string) {
     const input = new InputForm(dom, this, this.g, { name: name });

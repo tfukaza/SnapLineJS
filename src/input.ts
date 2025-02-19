@@ -210,7 +210,6 @@ class InputControl {
       e.clientY,
       e.deltaY,
     );
-    e.preventDefault();
   }
 
   /**

@@ -13,6 +13,9 @@ export default defineConfig(({ command, mode }) => {
       case "react":
         outputDir = "demo/react/src/lib";
         break;
+      case "svelte":
+        outputDir = "demo/svelte/src/lib";
+        break;
       case "test":
         break;
       default:

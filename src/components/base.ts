@@ -44,11 +44,12 @@ export abstract class Base {
   domMouseDown(e: MouseEvent): void {
     console.debug(`Mouse down event triggered on ${this.gid}`);
     this.domCursorDown({
+      event: e,
       button: e.button,
       clientX: e.clientX,
       clientY: e.clientY,
     });
-    e.stopPropagation();
+    // e.stopPropagation();
   }
 
   domTouchStart(e: TouchEvent): void {
@@ -57,6 +58,7 @@ export abstract class Base {
     }
     console.debug(`Touch start event triggered on ${this.gid}`);
     this.domCursorDown({
+      event: e,
       button: 0,
       clientX: e.touches[0].clientX,
       clientY: e.touches[0].clientY,
@@ -64,7 +66,6 @@ export abstract class Base {
     // Touch control has more states than mouse control, so we need to pass the event to the
     // inputControl to handle the touch event.
     this.g.snapline._inputControl?.onTouchStart(e);
-    e.stopPropagation();
   }
 
   /**
@@ -90,8 +91,25 @@ export abstract class Base {
       this.g._currentMouseDown = cursorState.mouseRight;
     }
     console.debug(
-      `Base class mousedown event triggered on ${this.gid}, button: ${button}, clientX: ${clientX}, clientY: ${clientY}`,
+      `Base class mousedown event triggered on ${this.gid}, button: ${this.g._currentMouseDown}, clientX: ${clientX}, clientY: ${clientY}, class: ${this.constructor.name}`,
     );
+    // If there is a current target object, it means we were performing some action like dragging a line.
+    // In this case, we need to delete the line.
+    // if (
+    //   this.g.targetObject &&
+    //   this.g.targetObject._type == ObjectTypes.connector
+    // ) {
+    //   console.debug(
+    //     "Cursor event detected while dragging a line, deleting line",
+    //   );
+    //   const connector = this.g.targetObject as ConnectorComponent;
+    //   connector.domCursorUp();
+    // }
+    // Iterate through the dictionary values
+    for (const [gid, callback] of Object.entries(this.g.cursorUpCallback)) {
+      callback();
+    }
+    this.g.cursorUpCallback = {};
     this.g.targetObject = this;
     [this.g.mousedown_x, this.g.mousedown_y] =
       this.g.camera.getCameraFromScreen(clientX, clientY);
@@ -101,6 +119,9 @@ export abstract class Base {
     this.g.dy_offset = 0;
 
     this._componentCursorDown(prop);
+
+    prop.event.stopPropagation();
+    // prop.event.preventDefault();
   }
 
   _componentCursorDown(_: customCursorDownProp): void {
@@ -120,6 +141,26 @@ export abstract class Base {
 
   _componentCursorUp(): void {
     // To be implemented by the child class
+  }
+
+  addCursorUpCallback(callback: () => void): void {
+    if (this.g == null) {
+      return;
+    }
+    if (this.g.cursorUpCallback[this.gid]) {
+      console.warn(
+        `Cursor up callback already exists for ${this.gid}, ignoring new callback`,
+      );
+      return;
+    }
+    this.g.cursorUpCallback[this.gid] = callback.bind(this);
+  }
+
+  deleteCursorUpCallback(): void {
+    if (this.g == null) {
+      return;
+    }
+    delete this.g.cursorUpCallback[this.gid];
   }
 
   /**
@@ -155,6 +196,24 @@ export abstract class Base {
    */
   delete(): void {
     // To be implemented by the child class
+  }
+
+  getClassFromGid(gid: string): typeof Base | null {
+    if (this.g == null) {
+      return null;
+    }
+    return this.g.globalNodeTable[gid] as unknown as typeof Base;
+  }
+
+  getClassFromDOM(dom: HTMLElement): typeof Base | null {
+    if (this.g == null) {
+      return null;
+    }
+    const gid = dom.getAttribute("data-snapline-gid");
+    if (!gid) {
+      return null;
+    }
+    return this.getClassFromGid(gid);
   }
 }
 

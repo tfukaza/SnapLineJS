@@ -13,8 +13,10 @@
   "scripts": {
     "dev:vanilla": "FRAMEWORK=vanilla vite build --mode development --watch & npm run server:vanilla",
     "dev:react": "FRAMEWORK=react vite build --mode development --watch & npm run server:react",
+    "dev:svelte": "FRAMEWORK=svelte vite build --mode development --watch & npm run server:svelte",
     "server:vanilla": "FRAMEWORK=vanilla vite serve demo/vanilla --config demo/vanilla/vite.config.mjs --host",
     "server:react": "FRAMEWORK=react vite serve demo/react --config demo/react/vite.config.mjs --host",
+    "server:svelte": "FRAMEWORK=svelte vite serve demo/svelte --config demo/svelte/vite.config.mjs --host",
     "dev:all": "concurrently --kill-others \"npm run dev:vanilla\" \"npm run dev:react\"",
     "test": "start-server-and-test server:vanilla http://localhost:3001 'playwright test'",
     "test:ui": "start-server-and-test server:vanilla http://localhost:3001 'playwright test --ui'",
@@ -37,6 +39,7 @@
   "devDependencies": {
     "@eslint/js": "^9.6.0",
     "@playwright/test": "^1.45.2",
+    "@sveltejs/vite-plugin-svelte": "^5.0.3",
     "@types/eslint__js": "^8.42.3",
     "@types/node": "^20.14.11",
     "@typescript-eslint/eslint-plugin": "^7.0.1",
@@ -56,6 +59,6 @@
     "typescript": "^5.5.3",
     "typescript-eslint": "^7.15.0",
     "uglify-js": "^3.17.4",
-    "vite": "^5.3.2"
+    "vite": "^6.0.0"
   }
 }

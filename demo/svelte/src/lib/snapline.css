@@ -1,0 +1,111 @@
+textarea:focus,
+input:focus {
+  outline: none;
+}
+
+#sl-canvas-container {
+  position: relative;
+  overflow: hidden;
+}
+
+#sl-selection {
+  background-color: rgba(0, 0, 0, 0.067);
+  border: 2px solid rgba(0, 0, 0, 0.2078431373);
+  box-sizing: border-box;
+}
+
+#sl-background {
+  z-index: -2;
+  background-image: radial-gradient(circle at 1px 1px, rgb(169, 171, 181) 1px, transparent 0);
+  background-size: 32px 32px;
+}
+
+*[data-snapline-type=node] {
+  font-family: "Inter", sans-serif;
+  min-width: 150px;
+  border: 1px solid rgb(216, 216, 216);
+  border-radius: 8px;
+  background-color: rgb(255, 255, 255);
+  box-shadow: 0 5px 30px rgba(82, 84, 89, 0.2);
+  padding: 10px 16px;
+  cursor: move;
+  /* number input */
+  /* dropdown input */
+}
+*[data-snapline-type=node] * {
+  user-select: none;
+}
+*[data-snapline-type=node][data-snapline-state=focus] {
+  border: 1px solid rgb(0, 122, 255);
+}
+*[data-snapline-type=node] .sl-row {
+  display: flex;
+  align-items: center;
+  margin-bottom: 8px;
+}
+*[data-snapline-type=node] .sl-row.right {
+  justify-content: flex-end;
+}
+*[data-snapline-type=node] .sl-label {
+  min-width: 50px;
+  padding-right: 8px;
+  font-size: 14px;
+  color: rgb(97, 98, 100);
+}
+*[data-snapline-type=node] .sl-label.right {
+  text-align: right;
+}
+*[data-snapline-type=node] *[data-snapline-type=connector] {
+  width: 12px;
+  height: 12px;
+  background-color: rgb(255, 98, 103);
+  border: 2px solid rgb(224, 83, 88);
+  border-radius: 8px;
+  position: absolute;
+  cursor: pointer;
+}
+*[data-snapline-type=node] *[data-snapline-type=connector]:hover {
+  border-width: 3px;
+  border-color: rgb(255, 223, 230);
+}
+*[data-snapline-type=node] .sl-connector.right {
+  right: -8px;
+}
+*[data-snapline-type=node] .sl-connector.left {
+  left: -8px;
+}
+*[data-snapline-type=node] input[type=number] {
+  width: 100%;
+  padding: 4px 6px;
+  border: 1px solid rgb(216, 216, 216);
+  border-radius: 4px;
+  font-size: 14px;
+  color: rgb(97, 98, 100);
+  background-color: rgb(244, 244, 244);
+}
+*[data-snapline-type=node] select {
+  width: 100%;
+  padding: 4px 6px;
+  border: 1px solid rgb(216, 216, 216);
+  border-radius: 4px;
+  font-size: 14px;
+  color: rgb(97, 98, 100);
+  background-color: rgb(244, 244, 244);
+}
+
+*[data-snapline-type=connector-line] {
+  stroke-linecap: round;
+  stroke-width: 4px;
+  stroke: rgb(97, 98, 100);
+  filter: drop-shadow(0px 0px 2px rgba(78, 82, 90, 0.533));
+  z-index: -1;
+}
+*[data-snapline-type=connector-line].overlapping {
+  stroke: rgb(187, 187, 187);
+  filter: drop-shadow(0px 0px 8px rgba(44, 178, 142, 0.533));
+}
+
+#sl-selection-box {
+  border: 2px solid rgba(0, 123, 255, 0.515);
+  background-color: rgba(0, 123, 255, 0.1);
+}

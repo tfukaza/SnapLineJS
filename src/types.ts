@@ -47,13 +47,22 @@ export interface CameraConfig {
   };
 }
 
+export enum currentAction {
+  IDLE = 0,
+  DRAGGING = 1,
+  PANNING = 2,
+  CONNECTING = 3,
+  SELECTING = 4,
+}
+
 export interface GlobalStats {
   canvas: HTMLElement; // Root element
   canvasContainer: HTMLElement; // Container for all elements on canvas
   canvasBackground: HTMLElement; // Background of canvas
   selectionBox: HTMLElement; // Selection box
 
-  _currentMouseDown: cursorState; // Current mouse button being pressed
+  _currentMouseDown: cursorState; // Current mouse button being pressed. 0 if none, 1 if left, 2 if middle, 3 if right
+  currentAction: currentAction; // Current action being performed
   mousedown_x: number; // Initial mouse  position when mouse is pressed
   mousedown_y: number;
   mouseCameraX: number; // Location of the mouse in camera space
@@ -83,6 +92,12 @@ export interface GlobalStats {
 
   prevTouches: TouchList | null;
   prevSingleTouchTime: number;
+
+  cursorUpCallback: Record<
+    string,
+    () => void
+  > /* List of callbacks to be called when the cursor is up. Used by stateful entities 
+  that need to abort an action when the cursor is up. */;
 
   snapline: SnapLine;
 }
@@ -133,7 +148,17 @@ export interface lineObject {
 }
 
 export interface customCursorDownProp {
+  event: MouseEvent | TouchEvent;
   button: number; // Must be a number since it's from MouseEvent
   clientX: number;
   clientY: number;
 }
+
+// export interface callbackIndex {
+//   nodeDragStart: (gid: string) => void;
+//   nodeDragEnd: (gid: string) => void;
+//   nodeSelect: (gid: string) => void;
+//   nodeDeselect: (gid: string) => void;
+//   nodeFocus: (gid: string) => void;
+//   nodeBlur: (gid: string) => void;
+// }

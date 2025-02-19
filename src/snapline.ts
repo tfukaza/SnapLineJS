@@ -1,5 +1,6 @@
 import {
   CameraConfig,
+  currentAction,
   GlobalStats,
   NodeConfig,
   ObjectTypes,
@@ -11,7 +12,7 @@ import { returnUpdatedDict } from "./helper";
 import { setDomStyle } from "./helper";
 import Camera from "./camera";
 import { InputControl, cursorState } from "./input";
-
+// import { callbackIndex } from "./types";
 // Uncomment the theme you want to use
 import "./theme/standard_light.scss";
 // import "./theme/standard_dark.scss";
@@ -21,6 +22,7 @@ import "./theme/standard_light.scss";
  */
 class SnapLine {
   g: GlobalStats;
+  snaplineConfig: SnapLineConfig;
   cameraConfig: CameraConfig;
   _containerStyle: { [key: string]: string } = {};
   _canvasStyle: { [key: string]: string } = {};
@@ -28,6 +30,14 @@ class SnapLine {
   _backgroundStyle: { [key: string]: string } = {};
   _inputControl: InputControl | null = null;
 
+  // _callbackIndex: callbackIndex = {
+  //   nodeDragStart: (gid: string) => {},
+  //   nodeDragEnd: (gid: string) => {},
+  //   nodeSelect: (gid: string) => {},
+  //   nodeDeselect: (gid: string) => {},
+  //   nodeFocus: (gid: string) => {},
+  //   nodeBlur: (gid: string) => {},
+  // };
   // ============== Private functions ==============
 
   /**
@@ -99,6 +109,8 @@ class SnapLine {
       return;
     }
 
+    console.debug("Cursor down event detected");
+
     this.g._currentMouseDown = button;
 
     // If the user is dragging a line when another cursor down event is detected, then the line should be deleted.
@@ -106,6 +118,9 @@ class SnapLine {
       this.g.targetObject &&
       this.g.targetObject._type == ObjectTypes.connector
     ) {
+      console.debug(
+        "Cursor event detected while dragging a line, deleting line",
+      );
       const connector = this.g.targetObject as ConnectorComponent;
       connector.domCursorUp();
     }
@@ -134,6 +149,11 @@ class SnapLine {
       node.offFocus();
     }
 
+    let activeElement = document.activeElement;
+    if (activeElement) {
+      (activeElement as HTMLElement).blur();
+    }
+
     [g.mousedown_x, g.mousedown_y] = this.g.camera.getCameraFromScreen(
       clientX,
       clientY,
@@ -157,7 +177,7 @@ class SnapLine {
    * @returns
    */
   _onCursorMove(
-    _: Event,
+    e: Event,
     ___: Element | null,
     __: cursorState,
     clientX: number,
@@ -264,6 +284,8 @@ class SnapLine {
         g.targetObject._onDrag();
       }
     }
+
+    e.preventDefault();
   }
 
   /**
@@ -340,7 +362,7 @@ class SnapLine {
    * @param deltaY: The amount the user scrolled.
    */
   _onZoom(
-    _: Event,
+    e: Event,
     __: Element | null,
     ______: cursorState,
     ____: number,
@@ -355,6 +377,10 @@ class SnapLine {
     this._setCanvasStyle({
       transform: this.g.camera.canvasStyle,
     });
+
+    if (this.snaplineConfig?.cameraConfig?.enableZoom) {
+      e.preventDefault();
+    }
   }
 
   /**
@@ -391,6 +417,8 @@ class SnapLine {
   _renderElements(): void {
     const target: any = this.g.targetObject; // The object that is currently selected
 
+    // console.debug(`Current mouse state: ${this.g._currentMouseDown}`);
+
     if (target == null) {
       return;
     }
@@ -422,6 +450,10 @@ class SnapLine {
         enablePan: true,
         panBounds: { top: null, left: null, right: null, bottom: null },
       },
+    };
+    this.snaplineConfig = {
+      ...defaultConfig,
+      ...config,
     };
     this.cameraConfig = {
       ...defaultConfig.cameraConfig,
@@ -466,6 +498,7 @@ class SnapLine {
       selectionBox: selectionBoxDom,
 
       _currentMouseDown: cursorState.none,
+      currentAction: currentAction.IDLE,
       mousedown_x: 0,
       mousedown_y: 0,
       mouseCameraX: 0,
@@ -494,6 +527,8 @@ class SnapLine {
 
       prevTouches: null,
       prevSingleTouchTime: 0,
+
+      cursorUpCallback: {},
 
       snapline: this,
     };

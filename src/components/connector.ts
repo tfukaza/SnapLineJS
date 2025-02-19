@@ -7,6 +7,13 @@ import {
 import { ComponentBase } from "./base";
 import { NodeComponent } from "./node";
 import { LineComponent } from "./line";
+import { cursorState } from "../input";
+
+enum ConnectorState {
+  IDLE,
+  DRAGGING,
+}
+
 /**
  * Connector components connect together nodes using lines.
  */
@@ -22,19 +29,42 @@ class ConnectorComponent extends ComponentBase {
   incomingLines: LineComponent[];
   _type: ObjectTypes = ObjectTypes.connector;
   dom: HTMLElement | null;
+  _state: ConnectorState = ConnectorState.IDLE;
 
-  updateFunction(): void {
-    // Abstract function
-  }
+  connectorCursorDown: (currentIncomingLines: LineComponent[]) => void;
+  hoverWhileDragging: (
+    hover: HTMLElement,
+    line: LineComponent,
+    cursorX: number,
+    cursorY: number,
+  ) => [number, number] | void;
+  endLineDrag: (
+    target: HTMLElement | null,
+    line: LineComponent | null,
+    cursorX: number,
+    cursorY: number,
+  ) => void;
 
   // ==================== Private methods ====================
 
   // ==================== Hidden methods ====================
 
-  _componentCursorDown(_: customCursorDownProp): void {
+  _componentCursorDown(e: customCursorDownProp): void {
+    console.debug(
+      `ConnectorComponent _componentCursorDown event triggered on ${this.gid}, button: ${e.button}`,
+    );
     const currentIncomingLines = this.incomingLines.filter(
       (i) => !i.requestDelete,
     );
+    // Skip if it's not a left click
+    if (e.button != 0) {
+      return;
+    }
+
+    this.connectorCursorDown(currentIncomingLines);
+  }
+
+  _onConnectorCursorDown(currentIncomingLines: LineComponent[]): void {
     if (currentIncomingLines.length > 0) {
       this.startPickUpLine(currentIncomingLines[0]);
       return;
@@ -42,6 +72,8 @@ class ConnectorComponent extends ComponentBase {
     if (this.config.allowDragOut) {
       this.startDragOutLine();
     }
+    // e.event.preventDefault();
+    // e.event.stopPropagation();
   }
 
   _onDrag(): void {
@@ -86,7 +118,7 @@ class ConnectorComponent extends ComponentBase {
 
   deleteLine(i: number): LineComponent | undefined {
     if (this.outgoingLines.length == 0) {
-      console.warn(`Error: Outgoing lines is empty`);
+      // console.warn(`Error: Outgoing lines is empty`);
       return undefined;
     }
 
@@ -173,6 +205,9 @@ class ConnectorComponent extends ComponentBase {
 
     this.name = config.name || this.gid || "";
 
+    this.connectorCursorDown = this._onConnectorCursorDown.bind(this);
+    this.hoverWhileDragging = this._hoverWhileDragging.bind(this);
+    this.endLineDrag = this._endLineDrag.bind(this);
     console.log("Connector created", this, this.gid, this.name);
   }
 
@@ -221,6 +256,7 @@ class ConnectorComponent extends ComponentBase {
       this,
       this.g,
     );
+
     return line;
   }
 
@@ -234,6 +270,8 @@ class ConnectorComponent extends ComponentBase {
     );
     this.outgoingLines.unshift(this.createLine(null));
     this._setAllLinePositions();
+    this.addCursorUpCallback(this.endDragOutLine);
+    this._state = ConnectorState.DRAGGING;
   }
 
   /**
@@ -243,9 +281,10 @@ class ConnectorComponent extends ComponentBase {
     if (this.g == null) {
       return;
     }
-    let distance = 9999;
-    let connectorX = 0;
-    let connectorY = 0;
+    // Skip if there is no drag operation
+    if (this._state != ConnectorState.DRAGGING) {
+      return;
+    }
     const hover: HTMLElement | null = this.g.hoverDOM as HTMLElement;
 
     if (this.outgoingLines.length == 0) {
@@ -258,32 +297,64 @@ class ConnectorComponent extends ComponentBase {
       this.g.mousedown_y + this.g.dy,
     );
 
-    if (hover && hover.getAttribute("data-snapline-type") == "connector") {
-      // If the node has a class of "sl-input-connector", then it is an input connector
-      const gid = hover.getAttribute("data-snapline-gid");
-      if (!gid) return;
-      const targetConnector: ConnectorComponent = this.g.globalNodeTable[
-        gid
-      ] as ConnectorComponent;
-      console.debug("Hovering over input connector", targetConnector);
-      targetConnector._updateDomProperties();
-      connectorX = targetConnector.connectorX;
-      connectorY = targetConnector.connectorY;
-      distance = Math.sqrt(
-        Math.pow(this.connectorX + adjustedX - connectorX, 2) +
-          Math.pow(this.connectorY + adjustedY - connectorY, 2),
-      );
+    let line = this.outgoingLines[0];
 
-      // Handle snapping to the input connector
-      if (distance < 40) {
-        this.outgoingLines[0].setLineEnd(connectorX, connectorY);
-      } else {
-        this.outgoingLines[0].setLineEnd(adjustedX, adjustedY);
+    if (hover) {
+      const result = this._hoverWhileDragging(
+        hover,
+        line,
+        adjustedX,
+        adjustedY,
+      );
+      if (result) {
+        line.setLineEnd(result[0], result[1]);
+        return;
       }
-    } else {
-      // Update the line position to the current mouse cursor position
-      this.outgoingLines[0].setLineEnd(adjustedX, adjustedY);
     }
+    // Update the line position to the current mouse cursor position
+    line.setLineEnd(adjustedX, adjustedY);
+  }
+
+  _hoverWhileDragging(
+    hover: HTMLElement,
+    line: LineComponent,
+    cursorX: number,
+    cursorY: number,
+  ): [number, number] | void {
+    if (hover.getAttribute("data-snapline-type") != "connector") {
+      return;
+    }
+    const targetConnector = this.getClassFromDOM(
+      hover,
+    ) as unknown as ConnectorComponent;
+    if (targetConnector == null) {
+      console.error(`Error: targetConnector is null`);
+      return;
+    }
+    targetConnector._updateDomProperties();
+    const connectorX = targetConnector.connectorX;
+    const connectorY = targetConnector.connectorY;
+    const distance = Math.sqrt(
+      Math.pow(cursorX - connectorX, 2) + Math.pow(cursorY - connectorY, 2),
+    );
+
+    // Handle snapping to the input connector
+    if (distance < 40) {
+      return [connectorX, connectorY];
+    } else {
+      return [cursorX, cursorY];
+    }
+  }
+
+  _endLineDrag(
+    target: HTMLElement | null,
+    line: LineComponent | null,
+    cursorX: number,
+    cursorY: number,
+  ) {
+    console.debug(
+      `ConnectorComponent _endLineDrag event triggered on ${this.gid}, target: ${target}, cursorX: ${cursorX}, cursorY: ${cursorY}`,
+    );
   }
 
   /**
@@ -292,33 +363,53 @@ class ConnectorComponent extends ComponentBase {
    * If the user is hovering over an input connector, then the line will be connected to the input connector.
    */
   endDragOutLine() {
+    console.debug("Ending line drag operation");
     if (this.g == null) {
       return;
     }
     const hover: HTMLElement | null = this.g.hoverDOM as HTMLElement;
     if (hover && hover.getAttribute("data-snapline-type") == "connector") {
-      const gid = hover.getAttribute("data-snapline-gid");
-      console.debug("Connected to input connector: ", gid);
-      if (!gid) {
-        console.error(`Error: gid is null`);
+      const target = this.getClassFromDOM(
+        hover,
+      ) as unknown as ConnectorComponent;
+      if (target == null) {
+        console.error(`Error: target is null`);
+        this._endLineDragCleanup();
         return;
       }
-      const target = this.g.globalNodeTable[gid] as ConnectorComponent;
       if (this.connectToConnector(target, this.outgoingLines[0]) == false) {
+        this._endLineDragCleanup();
         this.deleteLine(0);
         return;
       }
 
       target.prop[target.name] = this.prop[this.name]; // Logically connect the input to the output
-      target.updateFunction(); // Update the input
+      // target.updateFunction(); // Update the input
 
       this.outgoingLines[0].setLineEnd(target.connectorX, target.connectorY);
     } else {
+      // By convention, the first line is the one that is being dragged
       this.deleteLine(0);
     }
     if (this.parent) {
       this.parent._renderOutgoingLines(this.outgoingLines, this.name);
     }
+
+    this._endLineDragCleanup();
+  }
+
+  _endLineDragCleanup() {
+    if (this.g == null) {
+      return;
+    }
+    this.deleteCursorUpCallback();
+    this._state = ConnectorState.IDLE;
+    this.endLineDrag(
+      this.g.hoverDOM as HTMLElement,
+      this.outgoingLines.length > 0 ? this.outgoingLines[0] : null,
+      this.g.mousedown_x + this.g.dx,
+      this.g.mousedown_y + this.g.dy,
+    );
   }
 
   /**
@@ -342,6 +433,7 @@ class ConnectorComponent extends ComponentBase {
     this.disconnectFromConnector(line.start);
     this.deleteLine(this.incomingLines.indexOf(line));
     line.start.startDragOutLine();
+    this._state = ConnectorState.DRAGGING;
   }
 
   /**
@@ -381,6 +473,8 @@ class ConnectorComponent extends ComponentBase {
     this._updateDomProperties();
     line.target = connector;
     connector.incomingLines.push(line);
+
+    console.log("Connected to connector", connector, line);
 
     return true;
   }

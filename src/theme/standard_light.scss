@@ -34,6 +34,10 @@ input:focus {
   padding: 10px 16px;
   cursor: move;
 
+  * {
+    user-select: none;
+  }
+
   &[data-snapline-state="focus"] {
     border: 1px solid rgb(0, 122, 255);
   }
@@ -67,7 +71,6 @@ input:focus {
     border-radius: 8px;
     position: absolute;
     cursor: pointer;
-
     &:hover {
       border-width: 3px;
       border-color: rgb(255, 223, 230);
