@@ -1,23 +1,25 @@
-import { Base } from "./base";
-import {
-  GlobalStats,
-  ObjectTypes,
-  customCursorDownProp,
-  NodeConfig,
-} from "../types";
+import { BaseObject } from "./object";
+import { NodeConfig } from "../types";
 import { ConnectorComponent } from "./connector";
 import { InputForm } from "./input";
-import { ComponentBase } from "./base";
-import { returnUpdatedDict, iterateDict, setDomStyle } from "../helper";
+import { ElementObject } from "./object";
 import { LineComponent } from "./line";
-class NodeComponent extends Base {
-  _type: ObjectTypes = ObjectTypes.node;
+import {
+  cursorUpProp,
+  cursorDownProp,
+  cursorState,
+  cursorMoveProp,
+} from "../input";
+import { RectCollider } from "../collision";
+import { GlobalManager } from "../global";
+
+class NodeComponent extends ElementObject {
   _config: NodeConfig;
   _dom: HTMLElement | null;
   _connectors: { [key: string]: ConnectorComponent }; // Dictionary of all connectors in the node, using the name as the key
-  _components: { [key: string]: ComponentBase }; // Dictionary of all components in the node except connectors
-  _allOutgoingLines: { [key: string]: LineComponent[] }; // Dictionary of all lines going out of the node
-  _allIncomingLines: { [key: string]: LineComponent[] }; // Dictionary of all lines coming into the node
+  _components: { [key: string]: ElementObject }; // Dictionary of all components in the node except connectors
+  // _allOutgoingLines: { [key: string]: LineComponent[] }; // Dictionary of all lines going out of the node
+  // _allIncomingLines: { [key: string]: LineComponent[] }; // Dictionary of all lines coming into the node
   _nodeWidth = 0;
   _nodeHeight = 0;
   _dragStartX = 0;
@@ -25,47 +27,117 @@ class NodeComponent extends Base {
   _prop: { [key: string]: any }; // Properties of the node
   _propSetCallback: { [key: string]: (value: any) => void }; // Callbacks called when a property is set
   _nodeStyle: any;
+  _lineListCallback: ((lines: LineComponent[]) => void) | null;
+  _hitBox: RectCollider;
+  _selected: boolean;
+  _mouseDownX: number;
+  _mouseDownY: number;
+  // _selected: boolean;
 
-  nodeDragStart: () => void;
-  nodeDragEnd: () => void;
   // ================= Private functions =================
 
+  constructor(
+    global: GlobalManager,
+    parent: BaseObject | null,
+    dom: HTMLElement | null = null,
+    config: NodeConfig = {},
+  ) {
+    super(global, parent);
+    this._config = config;
+
+    this._dom = dom;
+    this._connectors = {};
+    this._components = {};
+    // this._allOutgoingLines = {};
+    // this._allIncomingLines = {};
+
+    this._dragStartX = this.worldX;
+    this._dragStartY = this.worldY;
+    this._mouseDownX = 0;
+    this._mouseDownY = 0;
+
+    this._prop = {};
+    this._propSetCallback = {};
+
+    this.position.worldX = 0;
+    this.position.worldY = 0;
+
+    // this.style = {
+    //   willChange: "transform",
+    //   position: "absolute",
+    //   transformOrigin: "top left",
+    //   transform: `translate3d(${this.worldX}px, ${this.worldY}px, 0)`,
+    // };
+    this._lineListCallback = null;
+
+    this.event.dom.onCursorDown = this.onCursorDown;
+    this._hitBox = new RectCollider(this.global, this, 0, 0, 0, 0);
+    // this._hitBox.event.rigid.onCollide = this.onCollideNode;
+    // this._hitBox.assignDom(this._dom);
+    this.addCollider(this._hitBox);
+    // this.event.dom.onCursorMove = this._onCursorMove;
+    // this.event.dom.onCursorUp = this._onCursorUp;
+    // this.event.dom.onCursorScroll = this._onCursorScroll;
+    this._selected = false;
+  }
+
+  // set position(position: [number, number]) {
+  //   super.worldPosition = position;
+  //   this.style = {
+  //     transform: `translate3d(${position[0]}px, ${position[1]}px, 0)`,
+  //   };
+  // }
+
+  addDom(dom: HTMLElement) {
+    let domElement = super.addDom(dom);
+    domElement.style = {
+      willChange: "transform",
+      position: "absolute",
+      transformOrigin: "top left",
+      // transform: `translate3d(${this.worldX}px, ${this.worldY}px, 1px)`,
+    };
+    this._hitBox.assignDom(dom);
+    return domElement;
+  }
+
   /**
-   * Updates the DOM properties of the node, such as height, width, etc.
-   * Also updates the DOM properties of all connectors.
-   * Called when the node is first created, and when the node is resized.
-   * @returns
+   *  Focuses on the object.
    */
-  #updateDomProperties() {
-    if (!this._dom) return;
-    this._nodeHeight = this._dom.offsetHeight;
-    this._nodeWidth = this._dom.offsetWidth;
-    for (const connector of Object.values(this._connectors)) {
-      connector._updateDomProperties();
-    }
-    // this._setNodeStyle({
-    //   width: this.nodeWidth + "px",
-    //   height: this.nodeHeight + "px",
-    // });
+  onFocus(): void {
+    this._selected = true;
+    // this.submitRender();
+  }
+
+  /**
+   *  Removes focus from the object.
+   */
+  offFocus(): void {
+    this._selected = false;
+    // this.submitRender();
   }
 
   /**
    * Sets the starting position of the node when it is dragged.
    */
   #setStartPositions() {
-    this._dragStartX = this.positionX;
-    this._dragStartY = this.positionY;
+    this._dragStartX = this.worldX;
+    this._dragStartY = this.worldY;
   }
 
   // ================= Hidden functions =================
 
-  /**
-   * Sets the CSS style of the node.
-   * Some styles are not CSS properties but internal properties, which are prefixed with an underscore.
-   * @param style CSS style object
-   */
-  _setNodeStyle(style: any) {
-    this._nodeStyle = returnUpdatedDict(this._nodeStyle, style);
+  setSelected(selected: boolean) {
+    this._selected = selected;
+    if (selected) {
+      this._dom?.classList.add("selected");
+      this.global.data.select.push(this);
+    } else {
+      this._dom?.classList.remove("selected");
+      this.global.data.select = this.global.data.select.filter(
+        (node: NodeComponent) => node.gid !== this.gid,
+      );
+    }
+    this.submitRenderQueue();
   }
 
   /**
@@ -86,130 +158,210 @@ class NodeComponent extends Base {
    * This function can be called by the node or a connector.on the node.
    * @param outgoingLines Array of all lines outgoing from the node or connector
    */
-  _renderOutgoingLines(outgoingLines: LineComponent[], key?: string) {
-    for (const line of outgoingLines) {
-      const connector = line.start;
-      if (!line.requestDelete && !line.initialRender) {
-        line.createLine();
-      } else if (line.requestDelete && !line.completedDelete) {
-        line.delete();
-        line.completedDelete = true;
-        continue;
-      }
-
-      if (!line.dom) {
-        continue;
-      }
-      line.x_start = connector.connectorX;
-      line.y_start = connector.connectorY;
-      if (line.target) {
-        line.x_end = line.target.connectorX;
-        line.y_end = line.target.connectorY;
-      }
-      line.renderLine();
-    }
-
-    this._filterDeletedLines(outgoingLines);
-  }
-
-  /**
-   * Renders all lines connected to the node.
-   */
-  _renderNodeLines(): void {
-    iterateDict(this._allOutgoingLines, this._renderOutgoingLines, this);
-    iterateDict(
-      this._allIncomingLines,
-      (lines: LineComponent[]) => {
-        for (const line of lines) {
-          const peerNode = line.start.parent;
-          if (!peerNode) continue;
-          iterateDict(
-            peerNode._allOutgoingLines,
-            peerNode._renderOutgoingLines,
-            peerNode,
-          );
-        }
-      },
-      this,
-    );
-  }
+  // _renderOutgoingLines(outgoingLines: LineComponent[], key?: string) {
+  // for (const line of outgoingLines) {
+  //   const connector = line.start;
+  //   if (!line.requestDelete && !line.initialRender) {
+  //     // line.createLine();
+  //   } else if (line.requestDelete && !line.completedDelete) {
+  //     line.delete();
+  //     line.render();
+  //     line.completedDelete = true;
+  //     continue;
+  //   }
+  //   if (!line._dom) {
+  //     continue;
+  //   }
+  //   line.positionX = connector.positionX;
+  //   line.positionY = connector.positionY;
+  //   if (line.target) {
+  //     line.endPositionX = line.target.positionX;
+  //     line.endPositionY = line.target.positionY;
+  //   }
+  //   line.render();
+  // }
+  // this._filterDeletedLines(outgoingLines);
+  // }
 
   /**
-   * Renders the node with the specified style.
-   * @param style CSS style object
+   * Update the position of all lines connected to the node.
    */
-  _renderNode(style: any) {
-    if (!this._dom) return;
-    setDomStyle(this._dom, style);
-
-    if (style._focus) {
-      this._dom.setAttribute("data-snapline-state", "focus");
-    } else {
-      this._dom.setAttribute("data-snapline-state", "idle");
+  updateNodeLines(): void {
+    for (const connector of Object.values(this._connectors)) {
+      connector.updateAllLines();
     }
-
-    this._renderNodeLines();
   }
 
-  _componentCursorDown(_: customCursorDownProp): void {
-    if (this.g == null) {
+  updateNodeLineList(): void {
+    if (this._lineListCallback) {
+      this._lineListCallback(this.getAllOutgoingLines());
+    }
+
+    // for (const key in this._allIncomingLines) {
+    //   for (const incomingLine of this._allIncomingLines[key]) {
+    //     const peerNode: NodeComponent | null = incomingLine.start
+    //       .parent as NodeComponent;
+    //     if (!peerNode) continue;
+    //     for (const key in peerNode._allOutgoingLines) {
+    //       this._renderOutgoingLines(peerNode._allOutgoingLines[key], key);
+    //     }
+    //   }
+    // }
+  }
+
+  // render(): void {
+  //   super.render();
+  //   this._renderNodeLines();
+  // }
+
+  /**
+   * Sets the callback function that is called when lines owned by the node (i.e. outgoing lines) are rendered.
+   * @param
+   */
+  setLineListCallback(callback: (lines: LineComponent[]) => void) {
+    this._lineListCallback = callback;
+  }
+
+  // getRenderLinesCallback(): (lines: LineComponent[], name: string) => void {
+  //   return this._renderOutgoingLines;
+  // }
+
+  onCursorDown(e: cursorDownProp): void {
+    // super.onCursorDown(e);
+
+    console.debug("onCursorDown", this.gid, e.button);
+
+    if (e.button != cursorState.mouseLeft) {
       return;
     }
-    let isInFocusNodes = false;
-    for (let i = 0; i < this.g.focusNodes.length; i++) {
-      if (this.g.focusNodes[i].gid == this.gid) {
-        isInFocusNodes = true;
-        break;
-      }
+
+    if (this.global.data.select.includes(this) == false) {
+      this.setSelected(true);
     }
-    if (!isInFocusNodes) {
-      /* If this node is not in focusNodes, then it is a regular click
-       * Unselect other nodes in focusNodes */
-      for (let i = 0; i < this.g.focusNodes.length; i++) {
-        this.g.focusNodes[i].offFocus();
-      }
-      this.g.focusNodes = [this];
-      this.onFocus();
-    } else {
-      /* Otherwise, we are dragging multiple nodes.
-       * Call the setStartPositions function for all nodes in focusNodes */
-      for (let i = 0; i < this.g.focusNodes.length; i++) {
-        this.g.focusNodes[i].#setStartPositions();
-      }
+
+    // let isInFocusNodes = false;
+    // for (let i = 0; i < this.global.focusNodes.length; i++) {
+    //   if (this.global.focusNodes[i].gid == this.gid) {
+    //     isInFocusNodes = true;
+    //     break;
+    //   }
+    // }
+    // if (!isInFocusNodes) {
+    //   /* If this node is not in focusNodes, then it is a regular click
+    //    * Unselect other nodes in focusNodes */
+    //   for (let i = 0; i < this.g.focusNodes.length; i++) {
+    //     this.g.focusNodes[i].offFocus();
+    //   }
+    //   this.g.focusNodes = [this];
+    //   this.onFocus();
+    // } else {
+    //   /* Otherwise, we are dragging multiple nodes.
+    //    * Call the setStartPositions function for all nodes in focusNodes */
+    //   for (let i = 0; i < this.g.focusNodes.length; i++) {
+    //     this.g.focusNodes[i].#setStartPositions();
+    //   }
+    // }
+    // this.#setStartPositions();
+    // this._mouseDownX = e.worldX;
+    // this._mouseDownY = e.worldY;
+
+    // Repeat it for all nodes in select
+    for (const node of this.global.data.select) {
+      node.#setStartPositions();
+      node._mouseDownX = e.worldX;
+      node._mouseDownY = e.worldY;
     }
-    this.nodeDragStart();
-    this.#setStartPositions();
+
+    this.event.global.onCursorMove = this.onDrag;
+    this.event.global.onCursorUp = this.onUp;
   }
 
-  _componentCursorUp() {
-    if (this.g == null) {
+  onDrag(prop: cursorMoveProp): void {
+    // console.debug("onDrag", this.global.data.select);
+    // console.trace();
+    if (this.global == null) {
+      console.error("Global stats is null");
       return;
     }
     if (this._config.lockPosition) return;
-    const [dx, dy] = this.g.camera.getWorldDeltaFromCameraDelta(
-      this.g.dx,
-      this.g.dy,
-    );
-    this.positionX = this._dragStartX + dx;
-    this.positionY = this._dragStartY + dy;
+
+    // this.setDragPosition(prop);
+
+    // console.debug("onDrag", this.gid, this.global.data.select);
+
+    // Repeat it for all nodes in select
+    for (const node of this.global.data.select) {
+      node.setDragPosition(prop);
+    }
+  }
+
+  setDragPosition(prop: cursorMoveProp) {
+    const dx = prop.worldX - this._mouseDownX;
+    const dy = prop.worldY - this._mouseDownY;
+    // this.global.camera?.getWorldDeltaFromCameraDelta(dx, dy) ?? [0, 0];
+
+    this.worldPosition = [this._dragStartX + dx, this._dragStartY + dy];
+    console.debug("setDragPosition", this.worldPosition);
+    // this.dom.worldPosition = this.worldPosition;
+    // this.style = {
+    //   transform: `translate3d(${this.worldX}px, ${this.worldY}px, 0)`,
+    // };
+    this.updateProperty();
+    this.updateNodeLines();
+    this.submitRenderQueue();
+  }
+
+  onUp(prop: cursorUpProp) {
+    console.debug("onCursorUp on Node", this.gid);
+    this.event.global.onCursorMove = null;
+    this.event.global.onCursorUp = null;
+    // console.assert(this.global != null, "Global stats is null");
+    // if (this._config.lockPosition) return;
+
+    // Repeat it for all nodes in select
+    for (const node of this.global.data.select) {
+      node.setUpPosition(prop);
+    }
+  }
+  setUpPosition(prop: cursorUpProp) {
+    const [dx, dy] = [
+      prop.worldX - this._mouseDownX,
+      prop.worldY - this._mouseDownY,
+    ];
+    // const [dx, dy] = this.global.camera?.getWorldDeltaFromCameraDelta(
+    //   prop.worldX - this._mouseDownX,
+    //   prop.worldY - this._mouseDownY,
+    // ) ?? [0, 0];
+    this.worldPosition = [this._dragStartX + dx, this._dragStartY + dy];
+    console.debug("onCursorUp", this.gid, this.worldX, this.worldY);
+    // this.dom.worldPosition = this.worldPosition;
+    console.debug("onCursorUp", this.gid, this.worldX, this.worldY);
+    // this.style = {
+    //   transform: `translate3d(${this.worldX}px, ${this.worldY}px, 0)`,
+    // };
+
+    this.updateProperty();
+    this.updateNodeLines();
+    // this.submitRender();
 
     /* If the mouse has not moved since being pressed, then it is a regular click
             unselect other nodes in focusNodes */
-    if (
-      !this.g.mouseHasMoved &&
-      this.g.targetObject &&
-      this.g.targetObject.gid == this.gid
-    ) {
-      for (let i = 0; i < this.g.focusNodes.length; i++) {
-        this.g.focusNodes[i].offFocus();
-      }
-      this.g.focusNodes = [this];
-      this.onFocus();
-      return;
-    }
+    // if (
+    //   !this.g.mouseHasMoved &&
+    //   this.g.targetObject &&
+    //   this.g.targetObject.gid == this.gid
+    // ) {
+    //   for (let i = 0; i < this.g.focusNodes.length; i++) {
+    //     this.g.focusNodes[i].offFocus();
+    //   }
+    //   this.g.focusNodes = [this];
+    //   this.onFocus();
+    //   return;
+    // }
 
-    this._renderNode(this._nodeStyle);
-    this.nodeDragEnd();
+    // this.render();
+    // this.requestRender = true;
+
     // if (this.overlapping == null) {
     //   return;
     // }
@@ -227,166 +379,23 @@ class NodeComponent extends Base {
     // }
   }
 
-  /**
-   * Fired every time requestAnimationFrame is called if this object is being dragged.
-   * It reads the internal states like current mouse position,
-   * and updates the DOM element accordingly.
-   */
-  _onDrag(): void {
-    if (this.g == null) {
-      return;
-    }
-    if (this._config.lockPosition) return;
-
-    const [adjustedDeltaX, adjustedDeltaY] =
-      this.g.camera.getWorldDeltaFromCameraDelta(this.g.dx, this.g.dy);
-
-    this.positionX = this._dragStartX + adjustedDeltaX;
-    this.positionY = this._dragStartY + adjustedDeltaY;
-    this._setNodeStyle({
-      transform: `translate3d(${this.positionX}px, ${this.positionY}px, 0)`,
-    });
-
-    for (const connector of Object.values(this._connectors)) {
-      connector._setAllLinePositions();
-    }
-
-    if (Object.keys(this._connectors).length == 0) return;
-  }
+  // nodeDragEnd() {}
 
   // ================= Public functions =================
 
-  constructor(
-    x: number,
-    y: number,
-    dom: HTMLElement | null = null,
-    globals: GlobalStats | null = null,
-    config: NodeConfig = {},
-  ) {
-    super();
-    this._config = config;
-
-    this._dom = dom;
-    this._connectors = {};
-    this._components = {};
-    this._allOutgoingLines = {};
-    this._allIncomingLines = {};
-
-    this.positionX = x;
-    this.positionY = y;
-    this._dragStartX = this.positionX;
-    this._dragStartY = this.positionY;
-
-    this._prop = {};
-
-    this._propSetCallback = {};
-
-    this._setNodeStyle({
-      willChange: "transform",
-      position: "absolute",
-      transformOrigin: "top left",
-    });
-
-    /* Public functions */
-    this.init = this.init.bind(this);
-    this.addConnector = this.addConnector.bind(this);
-    this.addInputForm = this.addInputForm.bind(this);
-    this.addSetPropCallback = this.addSetPropCallback.bind(this);
-    this.delete = this.delete.bind(this);
-    this.onFocus = this.onFocus.bind(this);
-    this.offFocus = this.offFocus.bind(this);
-    this.getConnector = this.getConnector.bind(this);
-    this.getLines = this.getLines.bind(this);
-    this.getNodeStyle = this.getNodeStyle.bind(this);
-    this.getProp = this.getProp.bind(this);
-    this.setProp = this.setProp.bind(this);
-
-    this.setRenderNodeCallback = this.setRenderNodeCallback.bind(this);
-    this.setRenderLinesCallback = this.setRenderLinesCallback.bind(this);
-
-    this._type = ObjectTypes.node;
-
-    this._setNodeStyle({
-      transform: `translate3d(${this.positionX}px, ${this.positionY}px, 0)`,
-    });
-
-    if (this._dom) {
-      this.init(this._dom);
-    }
-    if (globals) {
-      this.updateGlobals(globals);
-    }
-
-    // this._callbackIndex = {
-    //   nodeDragStart: (gid: string) => {},
-    //   nodeDragEnd: (gid: string) => {},
-    //   nodeSelect: (gid: string) => {},
-    //   nodeDeselect: (gid: string) => {},
-    //   nodeFocus: (gid: string) => {},
-    //   nodeBlur: (gid: string) => {},
-    // };
-    this.nodeDragStart = () => {};
-    this.nodeDragEnd = () => {};
-  }
-
-  /**
-   * Assigns the DOM element to the node.
-   * @param dom
-   */
-  init(dom: HTMLElement) {
-    console.log(`Initializing node ${this.gid}`);
-
-    this._dom = dom;
-    dom.setAttribute("data-snapline-type", "node");
-    dom.setAttribute("data-snapline-state", "idle");
-    if (this._config?.nodeClass) {
-      dom.setAttribute("data-snapline-class", this._config.nodeClass);
-    }
-
-    this._renderNode(this._nodeStyle);
-    this.bindFunction(this._dom);
-    new ResizeObserver(() => {
-      this.#updateDomProperties();
-      this._renderNode(this._nodeStyle);
-    }).observe(this._dom);
-  }
-
-  updateGlobals(globals: GlobalStats) {
-    super.updateGlobals(globals);
-    if (this._dom) {
-      this._dom.id = this.gid;
-    }
-    this.g!.globalNodeList.push(this);
-
-    for (const connector of Object.values(this._connectors)) {
-      connector.updateGlobals(globals);
-    }
-  }
-
-  /**
-   * Sets the callback function that is called when the node is rendered.
-   * @param callback
-   */
-  setRenderNodeCallback(callback: (style: any) => void): void {
-    this._renderNode = (style: any) => {
-      callback(style);
-      this._renderNodeLines();
-    };
-  }
-
-  /**
-   * Sets the callback function that is called when lines owned by the node (i.e. outgoing lines) are rendered.
-   * @param
-   */
-  setRenderLinesCallback(
-    callback: (lines: LineComponent[], name: string) => void,
-  ) {
-    this._renderOutgoingLines = (lines: LineComponent[], name: string) => {
-      this._filterDeletedLines(lines);
-
-      callback(lines, name);
-    };
-  }
+  // /**
+  //  * Assigns the DOM element to the node.
+  //  * @param dom
+  //  */
+  // assignDom(dom: HTMLElement) {
+  //   super.assignDom(dom);
+  //   this._hitBox.assignDom(dom);
+  //   dom.setAttribute("data-snapline-type", "node");
+  //   dom.setAttribute("data-snapline-state", "idle");
+  //   if (this._config?.nodeClass) {
+  //     dom.setAttribute("data-snapline-class", this._config.nodeClass);
+  //   }
+  // }
 
   /**
    * Returns the connector with the specified name.
@@ -400,46 +409,30 @@ class NodeComponent extends Base {
     return this._connectors[name];
   }
 
-  onFocus() {
-    this._setNodeStyle({ _focus: true });
-    this._renderNode(this._nodeStyle);
-  }
+  // addConnector(
+  //   name: string,
+  //   config: ConnectorConfig,
+  //   connectorClass: typeof ConnectorComponent | null = null,
+  // ) {
+  //   this._allOutgoingLines[name] = [];
+  //   this._allIncomingLines[name] = [];
+  //   if (!connectorClass) {
+  //     connectorClass = ConnectorComponent;
+  //   }
+  //   const connector = new connectorClass(this.g, this, config);
+  //   this._connectors[name] = connector;
+  //   this._prop[name] = null;
+  //   this.children.push(connector);
 
-  offFocus() {
-    this._setNodeStyle({ _focus: false });
-    this._renderNode(this._nodeStyle);
-  }
-
-  addConnector(
-    dom: HTMLElement,
-    name: string,
-    maxConnectors = 1,
-    allowDragOut = true,
-    connectorClass: typeof ConnectorComponent | null = null,
-  ) {
-    console.debug(`Adding connector ${name} to node ${this.gid}`);
-    this._allOutgoingLines[name] = [];
-    this._allIncomingLines[name] = [];
-    if (!connectorClass) {
-      connectorClass = ConnectorComponent;
-    }
-    const connector = new connectorClass(dom, this.g, {
-      name: name,
-      maxConnectors: maxConnectors,
-      allowDragOut: allowDragOut,
-    });
-    this._connectors[name] = connector;
-    this._prop[name] = null;
-
-    return connector;
-  }
+  //   return connector;
+  // }
 
   addConnectorObject(connector: ConnectorComponent) {
     connector.assignToNode(this);
   }
 
   addInputForm(dom: HTMLElement, name: string) {
-    const input = new InputForm(dom, this, this.g, { name: name });
+    const input = new InputForm(this.global, this, { name: name });
     this._prop[name] = null;
 
     return input;
@@ -449,26 +442,14 @@ class NodeComponent extends Base {
     this._propSetCallback[name] = callback;
   }
 
-  delete() {
-    if (this._dom && this.g) {
-      this.g.canvas?.removeChild(this._dom);
-    }
-    // Todo: disconnect all connectors
-    for (const connector of Object.values(this._connectors)) {
-      connector.delete();
-    }
-  }
+  // getLines(): { [key: string]: LineComponent[] } {
+  //   return this._allOutgoingLines;
+  // }
 
-  getLines(): { [key: string]: LineComponent[] } {
-    return this._allOutgoingLines;
-  }
-
-  getAllLines(): LineComponent[] {
-    return Object.values(this._allOutgoingLines).flat();
-  }
-
-  getNodeStyle(): { [key: string]: any } {
-    return this._nodeStyle;
+  getAllOutgoingLines(): LineComponent[] {
+    return Object.values(this._connectors).flatMap(
+      (connector) => connector.outgoingLines,
+    );
   }
 
   getProp(name: string) {
@@ -493,9 +474,10 @@ class NodeComponent extends Base {
     for (const peer of peers) {
       if (!peer) continue;
       if (!peer.parent) continue;
-      peer.parent._prop[peer.name] = value;
-      if (peer.parent._propSetCallback[peer.name]) {
-        peer.parent._propSetCallback[peer.name](value);
+      let parent = peer.parent as NodeComponent;
+      parent._prop[peer.name] = value;
+      if (parent._propSetCallback[peer.name]) {
+        parent._propSetCallback[peer.name](value);
       }
     }
   }

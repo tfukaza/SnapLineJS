@@ -1,34 +1,34 @@
-import { FormConfig, GlobalStats } from "../types";
+import { FormConfig, GlobalStats, ObjectTypes } from "../types";
 import { NodeComponent } from "./node";
-import { ComponentBase } from "./base";
+import { ElementObject } from "./object";
+import { GlobalManager } from "../global";
 
 /**
  * InputForms are any components that take input from the user, such as text fields, sliders, etc.
  */
-class InputForm extends ComponentBase {
+class InputForm extends ElementObject {
   name: string; // Name of the component
-  dom: HTMLElement; // The DOM element of the component
+  dom: HTMLElement | null; // The DOM element of the component
   prop: { [key: string]: any }; // Properties of the component
 
   constructor(
-    dom: HTMLElement,
+    globals: GlobalManager,
     parent: NodeComponent,
-    globals: GlobalStats | null = null,
     config: FormConfig = {},
   ) {
-    super(parent, globals);
+    super(globals, parent);
     this.name = config.name || "";
     this.prop = parent._prop;
-    this.dom = dom;
+    this.dom = null;
   }
 
-  bindFunction(_: HTMLElement): void {
-    // Abstract function
-  }
+  // bindFunction(_: HTMLElement): void {
+  //   // Abstract function
+  // }
 
-  addInputUpdateListener(event: string, func: (value: any) => void) {
-    this.dom.addEventListener(event, func.bind(this));
-  }
+  // addInputUpdateListener(event: string, func: (value: any) => void) {
+  //   this.dom.addEventListener(event, func.bind(this));
+  // }
 }
 
 export { InputForm };

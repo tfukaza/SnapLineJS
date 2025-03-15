@@ -18,7 +18,7 @@
   
 <StateNode nodeObject={nodeObject} className="state" radius={radius}>
   <div class="handle" style="--var-handle-radius: {radius}px;"></div>
-  <StateConnector name="border" nodeObject={nodeObject} maxConnectors={256} allowDragOut={true} radius={radius} />
+  <!-- <StateConnector name="border" nodeObject={nodeObject} maxConnectors={256} allowDragOut={true} radius={radius} /> -->
 </StateNode>
 
 <style lang="scss">

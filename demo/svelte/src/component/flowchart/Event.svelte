@@ -1,12 +1,14 @@
 <script lang="ts">
   import FlowNode from "./FlowNode.svelte";
+  import { FlowLineObject } from "./def";
   import { NodeComponent } from "../../lib/snapline.mjs";
+  import { onMount } from "svelte";
   import Connector from "../lib/Connector.svelte";
   let { nodeObject }: { nodeObject: NodeComponent } = $props();
 
-  let inputValue = $state("Hello World");
+//   let inputValue = $state("Hello World");
 
-  let dragging = $state(false);
+//   let dragging = $state(false);
 
   // nodeObject._callbackIndex.nodeDragStart = (gid: string) => {
   //   dragging = true;
@@ -14,26 +16,46 @@
   // nodeObject._callbackIndex.nodeDragEnd = (gid: string) => {
   //   dragging = false;
   // };
+
+  let hitBox: HTMLDivElement | null = null;
+
+  onMount(() => {
+    // nodeObject.addRigidBody(hitBox, {
+    //   onCursorDown: true,
+    //   onCursorMove: true,
+    //   onCursorUp: true,
+    //   onCursorScroll: true,
+    //   rigidBody: { onIntersect: true },
+    // });
+  });
+
 </script>
 
 <FlowNode nodeObject={nodeObject} className="flow-event">
     <div class="flow-event-container">
-        <Connector name="input" nodeObject={nodeObject} maxConnectors={1} allowDragOut={false} />
-        <input type="text" bind:value={inputValue} style={dragging ? "user-select: none;" : "user-select: none;"} on:mousedown={(e) => {
+        <!-- <Connector name="input" nodeObject={nodeObject} maxConnectors={1} allowDragOut={false} /> -->
+        <!-- <input type="text" bind:value={inputValue} style={dragging ? "user-select: none;" : "user-select: none;"} on:mousedown={(e) => {
             console.log("clicked");
             e.stopPropagation();
-        }} />
-        <Connector name="output" nodeObject={nodeObject} maxConnectors={0} allowDragOut={true} />
+        }} /> -->
+         <!-- <h1>Hello World</h1> -->
+          <div class="hitbox" bind:this={hitBox}></div>
+        <!-- <Connector name="output" nodeObject={nodeObject} maxConnectors={0} allowDragOut={true} lineClass={FlowLineObject} /> -->
     </div>
 </FlowNode>
 
 <style lang="scss">
-    :global(.flow-event) {
-       
-        padding: 10px;
-        background-color: #fff;
-        border: 1px solid #ccc;
-        border-radius: 5px;
+    :global(.flow-node) {
+
+        &.selected {
+            border: 1px solid rgb(8, 110, 129);
+        }
+
+        .hitbox {
+           width: 50px;
+           height: 50px;
+           background-color: red;
+        }
 
         .flow-event-container {
             display: flex;

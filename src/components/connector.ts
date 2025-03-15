@@ -1,70 +1,139 @@
-import {
-  GlobalStats,
-  ObjectTypes,
-  customCursorDownProp,
-  ConnectorConfig,
-} from "../types";
-import { ComponentBase } from "./base";
+import { ObjectTypes } from "../types";
+import { ElementObject } from "./object";
 import { NodeComponent } from "./node";
 import { LineComponent } from "./line";
-import { cursorState } from "../input";
-
+import {
+  cursorDownProp,
+  cursorState,
+  cursorMoveProp,
+  cursorUpProp,
+} from "../input";
+import { Collider } from "../collision";
+// import { RectRigidBody } from "../collision";
+import { CircleCollider, PointCollider } from "../collision";
+import { GlobalManager } from "../global";
 enum ConnectorState {
   IDLE,
   DRAGGING,
 }
 
+export interface ConnectorConfig {
+  name?: string;
+  maxConnectors?: number;
+  allowDragOut?: boolean;
+  lineClass?: typeof LineComponent;
+}
+
 /**
  * Connector components connect together nodes using lines.
  */
-class ConnectorComponent extends ComponentBase {
+class ConnectorComponent extends ElementObject {
+  declare parent: NodeComponent;
   config: ConnectorConfig;
   name: string; // Name of the connector. This should describe the data associated with the connector
-  connectorX: number; // Location of the connector on canvas
-  connectorY: number;
-  _connectorTotalOffsetX: number; // Location of the connector relative to the location of parent Node
-  _connectorTotalOffsetY: number;
   prop: { [key: string]: any }; // Properties of the connector
   outgoingLines: LineComponent[];
   incomingLines: LineComponent[];
-  _type: ObjectTypes = ObjectTypes.connector;
-  dom: HTMLElement | null;
   _state: ConnectorState = ConnectorState.IDLE;
 
-  connectorCursorDown: (currentIncomingLines: LineComponent[]) => void;
-  hoverWhileDragging: (
-    hover: HTMLElement,
-    line: LineComponent,
-    cursorX: number,
-    cursorY: number,
-  ) => [number, number] | void;
-  endLineDrag: (
-    target: HTMLElement | null,
-    line: LineComponent | null,
-    cursorX: number,
-    cursorY: number,
-  ) => void;
+  _hitCircle: CircleCollider;
+  _mouseHitBox: PointCollider;
+
+  _targetConnector: ConnectorComponent | null = null;
+
+  _mousedownX: number = 0;
+  _mousedownY: number = 0;
+
+  constructor(
+    global: GlobalManager,
+    parent: NodeComponent,
+    config: ConnectorConfig = {},
+  ) {
+    super(global, parent);
+
+    this.prop = {};
+    this.outgoingLines = [];
+    this.incomingLines = [];
+    this.config = config;
+
+    this.updateProperty();
+
+    // this.connectToConnector = this.connectToConnector.bind(this);
+    // this.disconnectFromConnector = this.disconnectFromConnector.bind(this);
+
+    this.name = config.name || this.gid || "";
+
+    this.event.dom.onCursorDown = this.onCursorDown;
+
+    // this.connectorCursorDown = this._onConnectorCursorDown.bind(this);
+    // this.hoverWhileDragging = this._hoverWhileDragging.bind(this);
+    // this.endLineDrag = this._endLineDrag.bind(this);
+
+    // this.g.snapline.subscribeOnCursorDown(this.gid, () => {
+    //   this._dom?.classList.add("snap");
+    // });
+    // this.g.snapline.subscribeOnCursorUp(this.gid, () => {
+    //   this._dom?.classList.remove("snap");
+    // });
+
+    this._hitCircle = new CircleCollider(global, this, 0, 0, 30);
+    this.addCollider(this._hitCircle);
+
+    this._mouseHitBox = new PointCollider(global, this, 0, 0);
+    this.addCollider(this._mouseHitBox);
+
+    this._targetConnector = null;
+
+    this._mousedownX = 0;
+    this._mousedownY = 0;
+  }
+
+  // onGlobalCursorDown(e: cursorDownProp): void {
+  //   this._dom?.classList.add("snap");
+  // }
+
+  // onGlobalCursorUp(e: cursorUpProp): void {
+  //   this._dom?.classList.remove("snap");
+  // }
+  addDom(dom: HTMLElement) {
+    const domElement = super.addDom(dom);
+    domElement.style = {
+      position: "absolute",
+      top: "0",
+      left: "0",
+    };
+    // console.assert(this._dom != null, "ConnectorComponent dom is null");
+    // this._dom!.setAttribute("data-snapline-type", "connector");
+    // this._hitCircle.assignDom(this._dom!);
+    this._hitCircle.position.worldX = this.worldX;
+    this._hitCircle.position.worldY = this.worldY;
+    // this._hitCircle.event.rigid.onCollide = this.onCollide;
+    return domElement;
+  }
+
+  assignRigidBodyDom(dom: HTMLElement) {
+    // const rigidBody = new RectRigidBody(this.g, this, 0, 0, 0, 0);
+    // rigidBody.assignDom(dom);
+    // // rigidBody.event.dom.onCursorMove = this.onCursorMove;
+    // this.addRigidBody(rigidBody);
+  }
 
   // ==================== Private methods ====================
 
   // ==================== Hidden methods ====================
 
-  _componentCursorDown(e: customCursorDownProp): void {
+  onCursorDown(prop: cursorDownProp): void {
+    // super.onCursorDown(e);
     console.debug(
-      `ConnectorComponent _componentCursorDown event triggered on ${this.gid}, button: ${e.button}`,
+      `ConnectorComponent _componentCursorDown event triggered on ${this.gid}, button: ${prop.button}`,
     );
     const currentIncomingLines = this.incomingLines.filter(
       (i) => !i.requestDelete,
     );
     // Skip if it's not a left click
-    if (e.button != 0) {
+    if (prop.button != cursorState.mouseLeft) {
       return;
     }
-
-    this.connectorCursorDown(currentIncomingLines);
-  }
-
-  _onConnectorCursorDown(currentIncomingLines: LineComponent[]): void {
     if (currentIncomingLines.length > 0) {
       this.startPickUpLine(currentIncomingLines[0]);
       return;
@@ -72,171 +141,89 @@ class ConnectorComponent extends ComponentBase {
     if (this.config.allowDragOut) {
       this.startDragOutLine();
     }
-    // e.event.preventDefault();
-    // e.event.stopPropagation();
   }
 
-  _onDrag(): void {
-    this.runDragOutLine();
-  }
+  // onDrag(): void {
+  //   super.onDrag();
+  //   this.runDragOutLine();
+  // }
 
-  _componentCursorUp(): void {
+  componentCursorUp(): void {
     if (this.parent == null) {
       return;
     }
     this.endDragOutLine();
-    this.parent._renderNodeLines();
+    // (this.parent as NodeComponent)._renderNodeLines();
   }
 
-  _updateDomProperties() {
-    if (this.g == null || this.dom == null || this.parent == null) {
-      return;
-    }
-    const this_rect = this.dom.getBoundingClientRect();
-    if (!this.parent._dom) {
-      console.error(`Parent DOM is null`);
-      return;
-    }
-    const parent_rect = this.parent._dom.getBoundingClientRect();
-
-    // getBoundingClientRect returns size shown on screen, so we need to convert it to world coordinates
-    const [adjLeft, adjTop] = this.g.camera.getWorldDeltaFromCameraDelta(
-      this_rect.left - parent_rect.left,
-      this_rect.top - parent_rect.top,
-    );
-    const [adjWidth, adjHeight] = this.g.camera.getWorldDeltaFromCameraDelta(
-      this_rect.width / 2, // Get the center of the connector
-      this_rect.height / 2,
-    );
-
-    this._connectorTotalOffsetX = adjLeft + adjWidth;
-    this._connectorTotalOffsetY = adjTop + adjHeight;
-
-    this.connectorX = this.parent.positionX + this._connectorTotalOffsetX;
-    this.connectorY = this.parent.positionY + this._connectorTotalOffsetY;
-  }
-
-  deleteLine(i: number): LineComponent | undefined {
+  deleteLine(i: number): LineComponent | null {
     if (this.outgoingLines.length == 0) {
-      // console.warn(`Error: Outgoing lines is empty`);
-      return undefined;
+      return null;
     }
 
     const line = this.outgoingLines[i];
-    line.requestDelete = true;
-
+    line.delete();
+    this.outgoingLines.splice(i, 1);
     return line;
   }
 
   deleteAllLines() {
     for (const line of this.outgoingLines) {
-      line.requestDelete = true;
+      line.delete();
     }
   }
 
   _renderLinePosition(entry: LineComponent) {
-    entry.renderLine();
+    // entry.renderLine();
   }
 
   /**
    * Updates the start and end positions of the line.
    * @param entry The line to update.
    */
-  _setLinePosition(entry: LineComponent) {
-    if (this.g == null) {
-      return;
-    }
+  updateLine(entry: LineComponent) {
+    // if (this.global == null) {
+    //   console.error("Global stats is null");
+    //   return;
+    // }
     entry.setLineStartAtConnector();
     if (!entry.target) {
-      const [adjustedX, adjustedY] = this.g.camera.getWorldFromCamera(
-        this.g.mousedown_x + this.g.dx,
-        this.g.mousedown_y + this.g.dy,
-      );
+      // const [adjustedX, adjustedY] = this.global.camera!.getWorldFromCamera(
+      //   this.global.cursor.screenX + this.global.dx,
+      //   this.global.cursor.screenY + this.global.dy,
+      // );
       /* If entry.to is not set, then this line is currently being dragged */
-      entry.setLineEnd(adjustedX, adjustedY);
+      entry.setLineEnd(this.global.cursor.worldX, this.global.cursor.worldY);
     } else {
       entry.setLineEndAtConnector();
     }
+    entry.submitRender();
   }
 
   /* Updates the position of all lines connected to this connector */
-  _setAllLinePositions() {
-    this._updateDomProperties();
+  updateAllLines() {
+    // this.updateProperty();
     for (const line of this.outgoingLines) {
-      this._setLinePosition(line);
+      this.updateLine(line);
     }
     for (const line of this.incomingLines) {
-      line.start._setLinePosition(line);
+      line.start.updateLine(line);
     }
   }
 
   /** ==================== Public methods ==================== */
-  constructor(
-    // parent: NodeComponent,
-    // outgoingLines: LineComponent[],
-    // incomingLines: LineComponent[],
-    dom: HTMLElement | null = null,
-    globals: GlobalStats | null = null,
-    config: ConnectorConfig = {},
-  ) {
-    super(null, globals);
-
-    this.dom = dom;
-    this.prop = {};
-    this.outgoingLines = [];
-    this.incomingLines = [];
-    this.config = config;
-
-    this.connectorX = 0;
-    this.connectorY = 0;
-    this._connectorTotalOffsetX = 0;
-    this._connectorTotalOffsetY = 0;
-    this._updateDomProperties();
-
-    this.connectToConnector = this.connectToConnector.bind(this);
-    this.disconnectFromConnector = this.disconnectFromConnector.bind(this);
-
-    if (this.dom) {
-      this.init(this.dom);
-    }
-    if (this.g) {
-      this.updateGlobals(this.g);
-    }
-
-    this.name = config.name || this.gid || "";
-
-    this.connectorCursorDown = this._onConnectorCursorDown.bind(this);
-    this.hoverWhileDragging = this._hoverWhileDragging.bind(this);
-    this.endLineDrag = this._endLineDrag.bind(this);
-    console.log("Connector created", this, this.gid, this.name);
-  }
-
-  init(dom: HTMLElement) {
-    this.dom = dom;
-    this.bindFunction(this.dom);
-    this.dom.setAttribute("data-snapline-gid", this.gid.toString());
-    this.dom.setAttribute("data-snapline-type", "connector");
-  }
 
   assignToNode(parent: NodeComponent) {
     this.parent = parent;
-    this.parent._prop[this.name] = null;
-    this.prop = parent._prop;
-    this.parent._connectors[this.name] = this;
-    this.parent._allOutgoingLines[this.name] = [];
-    this.parent._allIncomingLines[this.name] = [];
-    this.outgoingLines = parent._allOutgoingLines[this.name];
-    this.incomingLines = parent._allIncomingLines[this.name];
-    if (parent.g && this.g == null) {
-      this.updateGlobals(parent.g);
-    }
-  }
-
-  updateGlobals(globals: GlobalStats) {
-    super.updateGlobals(globals);
-    this.g!.globalNodeTable[this.gid] = this;
-    if (this.dom) {
-      this.init(this.dom);
+    parent.children.push(this);
+    let parent_ref = this.parent as NodeComponent;
+    parent_ref._prop[this.name] = null;
+    this.prop = parent_ref._prop;
+    parent_ref._connectors[this.name] = this;
+    this.outgoingLines = [];
+    this.incomingLines = [];
+    if (parent_ref.global && this.global == null) {
+      this.global = parent_ref.global;
     }
   }
 
@@ -245,18 +232,14 @@ class ConnectorComponent extends ComponentBase {
    * @param dom The DOM element to create the line in.
    * @returns The line object that was created.
    */
-  createLine(dom: HTMLElement | null): LineComponent {
-    console.debug(`Creating line from connector ${this.gid}`);
-    const line = new LineComponent(
-      this.connectorX,
-      this.connectorY,
-      0,
-      0,
-      dom,
-      this,
-      this.g,
-    );
-
+  createLine(): LineComponent {
+    let line: LineComponent;
+    if (this.config.lineClass) {
+      line = new this.config.lineClass(this.global, this);
+    } else {
+      line = new LineComponent(this.global, this);
+    }
+    this.children.push(line);
     return line;
   }
 
@@ -265,96 +248,164 @@ class ConnectorComponent extends ComponentBase {
    * extending from the connector to the mouse cursor.
    */
   startDragOutLine(): void {
-    console.debug(
-      `Created line from connector ${this.gid} and started dragging`,
-    );
-    this.outgoingLines.unshift(this.createLine(null));
-    this._setAllLinePositions();
-    this.addCursorUpCallback(this.endDragOutLine);
+    console.debug("Starting drag out line", this.worldX, this.worldY);
+    let newLine = this.createLine();
+
+    // const [adjustedX, adjustedY] = this.g.camera.getWorldFromCamera(
+    //   this.g.mousedown_x + this.g.dx,
+    //   this.g.mousedown_y + this.g.dy,
+    // );
+    // newLine.setLineStartAtConnector();
+    // newLine.setLineEnd(adjustedX, adjustedY);
+    this.outgoingLines.unshift(newLine);
+    // this.updateAllLines();
+
+    // Invoke the render callback to update the line positions
+    this.parent.updateNodeLines();
+    this.parent.updateNodeLineList();
+
+    // this.addCursorUpCallback(this.endDragOutLine);
     this._state = ConnectorState.DRAGGING;
+    this._targetConnector = null;
+
+    // this.g.snapline.subscribeOnCursorMove(
+    //   this.gid,
+    //   this.runDragOutLine.bind(this),
+    // );
+    // this.g.snapline.subscribeOnCursorUp(
+    //   this.gid,
+    //   this.endDragOutLine.bind(this),
+    // );
+    this.event.global.onCursorMove = this.runDragOutLine;
+    this.event.global.onCursorUp = this.endDragOutLine;
+
+    // this._mouseHitBox.event.rigid.onCollide = (
+    //   thisObject: RigidBody,
+    //   otherObject: RigidBody,
+    // ) => {
+    //   // console.debug("Collided with", otherObject.type);
+    //   if (otherObject.parent instanceof ConnectorComponent) {
+    //     this._targetConnector = otherObject.parent as ConnectorComponent;
+    //   }
+    // };
+    this._mouseHitBox.event.collider.onBeginContact = (
+      thisObject: Collider,
+      otherObject: Collider,
+    ) => {
+      if (otherObject.parent instanceof ConnectorComponent) {
+        this._targetConnector = otherObject.parent as ConnectorComponent;
+      }
+    };
+    this._mouseHitBox.event.collider.onEndContact = (
+      thisObject: Collider,
+      otherObject: Collider,
+    ) => {
+      if (otherObject.parent instanceof ConnectorComponent) {
+        this._targetConnector = null;
+      }
+    };
   }
 
   /**
    * Called when the user drags the line extending from the connector.
    */
-  runDragOutLine() {
-    if (this.g == null) {
-      return;
-    }
+  runDragOutLine(prop: cursorMoveProp) {
+    // if (this.g == null) {
+    //   return;
+    // }
+
+    // console.debug("Running drag out line", prop);
+
     // Skip if there is no drag operation
     if (this._state != ConnectorState.DRAGGING) {
       return;
     }
-    const hover: HTMLElement | null = this.g.hoverDOM as HTMLElement;
 
     if (this.outgoingLines.length == 0) {
       console.error(`Error: Outgoing lines is empty`);
       return;
     }
-
-    const [adjustedX, adjustedY] = this.g.camera.getWorldFromCamera(
-      this.g.mousedown_x + this.g.dx,
-      this.g.mousedown_y + this.g.dy,
+    this._mouseHitBox.worldX = prop.worldX;
+    this._mouseHitBox.worldY = prop.worldY;
+    console.debug(
+      "Mouse hit box",
+      this.gid,
+      this._mouseHitBox.worldX,
+      this._mouseHitBox.worldY,
     );
+    // const [adjustedX, adjustedY] = this.g.camera.getWorldFromCamera(
+    //   this.g.mousedown_x + this.g.dx,
+    //   this.g.mousedown_y + this.g.dy,
+    // );
 
     let line = this.outgoingLines[0];
+    // console.debug(prop);
+    // console.debug(prop.clientX, prop.clientY);
 
-    if (hover) {
-      const result = this._hoverWhileDragging(
-        hover,
-        line,
-        adjustedX,
-        adjustedY,
-      );
+    if (this._targetConnector) {
+      // console.debug("Hovering over target connector", this._targetConnector);
+      const result = this.hoverWhileDragging(this._targetConnector);
       if (result) {
         line.setLineEnd(result[0], result[1]);
+        line.setLineStartAtConnector();
+        line.submitRender();
+        // this.parent.updateNodeLines();
         return;
       }
     }
+
+    // console.debug(
+    //   "Running drag out line",
+    //   line.gid,
+    //   line.endPositionX,
+    //   line.endPositionY,
+    // );
+
     // Update the line position to the current mouse cursor position
-    line.setLineEnd(adjustedX, adjustedY);
+    line.setLineEnd(this.global.cursor.worldX, this.global.cursor.worldY);
+    line.setLineStartAtConnector();
+    // line.submitRender();
+
+    // Invoke the render callback to update the line positions
+    this.parent.updateNodeLines();
+
+    // console.debug(
+    //   `Line end set to ${adjustedX}, ${adjustedY}, line start is ${line.positionX}, ${line.positionY}`,
+    // );
   }
 
-  _hoverWhileDragging(
-    hover: HTMLElement,
-    line: LineComponent,
-    cursorX: number,
-    cursorY: number,
+  hoverWhileDragging(
+    targetConnector: ConnectorComponent,
   ): [number, number] | void {
-    if (hover.getAttribute("data-snapline-type") != "connector") {
+    // if (hoverDOM.getAttribute("data-snapline-type") != "connector") {
+    //   return;
+    // }
+    if (!(targetConnector instanceof ConnectorComponent)) {
+      // console.log(targetConnector);
       return;
     }
-    const targetConnector = this.getClassFromDOM(
-      hover,
-    ) as unknown as ConnectorComponent;
     if (targetConnector == null) {
-      console.error(`Error: targetConnector is null`);
+      console.debug(`Error: targetConnector is null`);
       return;
     }
-    targetConnector._updateDomProperties();
-    const connectorX = targetConnector.connectorX;
-    const connectorY = targetConnector.connectorY;
-    const distance = Math.sqrt(
-      Math.pow(cursorX - connectorX, 2) + Math.pow(cursorY - connectorY, 2),
-    );
-
-    // Handle snapping to the input connector
-    if (distance < 40) {
-      return [connectorX, connectorY];
-    } else {
-      return [cursorX, cursorY];
+    if (targetConnector.gid == this.gid) {
+      return;
     }
-  }
+    targetConnector.updateProperty();
+    const connectorX = targetConnector.worldX;
+    const connectorY = targetConnector.worldY;
+    // const distance = Math.sqrt(
+    //   Math.pow(cursorX - connectorX, 2) + Math.pow(cursorY - connectorY, 2),
+    // );
 
-  _endLineDrag(
-    target: HTMLElement | null,
-    line: LineComponent | null,
-    cursorX: number,
-    cursorY: number,
-  ) {
-    console.debug(
-      `ConnectorComponent _endLineDrag event triggered on ${this.gid}, target: ${target}, cursorX: ${cursorX}, cursorY: ${cursorY}`,
-    );
+    // // Handle snapping to the input connector
+    // if (distance < 40) {
+    //   // console.debug("Snapping to connector", connectorX, connectorY);
+    return [connectorX, connectorY];
+    // } else {
+    //   // console.debug("Not snapping to connector", connectorX, connectorY);
+    //   return [cursorX, cursorY];
+    // }
   }
 
   /**
@@ -364,14 +415,15 @@ class ConnectorComponent extends ComponentBase {
    */
   endDragOutLine() {
     console.debug("Ending line drag operation");
-    if (this.g == null) {
-      return;
-    }
-    const hover: HTMLElement | null = this.g.hoverDOM as HTMLElement;
-    if (hover && hover.getAttribute("data-snapline-type") == "connector") {
-      const target = this.getClassFromDOM(
-        hover,
-      ) as unknown as ConnectorComponent;
+    // if (this.g == null) {
+    //   return;
+    // }
+
+    if (
+      this._targetConnector &&
+      this._targetConnector instanceof ConnectorComponent
+    ) {
+      const target = this._targetConnector;
       if (target == null) {
         console.error(`Error: target is null`);
         this._endLineDragCleanup();
@@ -386,30 +438,35 @@ class ConnectorComponent extends ComponentBase {
       target.prop[target.name] = this.prop[this.name]; // Logically connect the input to the output
       // target.updateFunction(); // Update the input
 
-      this.outgoingLines[0].setLineEnd(target.connectorX, target.connectorY);
+      this.outgoingLines[0].setLineEnd(target.worldX, target.worldY);
     } else {
       // By convention, the first line is the one that is being dragged
       this.deleteLine(0);
     }
     if (this.parent) {
-      this.parent._renderOutgoingLines(this.outgoingLines, this.name);
+      this.parent.updateNodeLines();
     }
 
     this._endLineDragCleanup();
   }
 
   _endLineDragCleanup() {
-    if (this.g == null) {
-      return;
-    }
-    this.deleteCursorUpCallback();
+    // if (this.g == null) {
+    //   return;
+    // }
+    // this.deleteCursorUpCallback();
     this._state = ConnectorState.IDLE;
-    this.endLineDrag(
-      this.g.hoverDOM as HTMLElement,
-      this.outgoingLines.length > 0 ? this.outgoingLines[0] : null,
-      this.g.mousedown_x + this.g.dx,
-      this.g.mousedown_y + this.g.dy,
-    );
+    // this.g.snapline.unsubscribeOnCursorMove(this.gid);
+    // this.g.snapline.unsubscribeOnCursorUp(this.gid);
+    this.event.global.onCursorMove = null;
+    this.event.global.onCursorUp = null;
+    this.parent.updateNodeLineList();
+    // this._dom?.classList.remove("snap");
+    this._targetConnector = null;
+    this._mouseHitBox.event.collider.onBeginContact = null;
+    this._mouseHitBox.event.collider.onEndContact = null;
+    this._mouseHitBox.position.worldX = 0;
+    this._mouseHitBox.position.worldY = 0;
   }
 
   /**
@@ -417,11 +474,11 @@ class ConnectorComponent extends ComponentBase {
    * @param line The line that is being dragged.
    */
   startPickUpLine(line: LineComponent) {
-    if (this.g == null) {
-      return;
-    }
+    // if (this.g == null) {
+    //   return;
+    // }
     // Hand over control to the peer output
-    this.g.targetObject = line.start;
+    // this.global.targetObject = line.start;
 
     // let [dx_offset, dy_offset] = this.g.camera.getCameraDeltaFromWorldDelta(
     //   this.connectorX - line.start.connectorX,
@@ -431,7 +488,12 @@ class ConnectorComponent extends ComponentBase {
 
     line.start.disconnectFromConnector(this);
     this.disconnectFromConnector(line.start);
-    this.deleteLine(this.incomingLines.indexOf(line));
+    line.start.deleteLine(line.start.outgoingLines.indexOf(line));
+    console.debug(
+      "Starting pick out line",
+      line.start.worldX,
+      line.start.worldY,
+    );
     line.start.startDragOutLine();
     this._state = ConnectorState.DRAGGING;
   }
@@ -466,15 +528,18 @@ class ConnectorComponent extends ComponentBase {
     }
 
     if (line == null) {
-      line = this.createLine(null);
+      line = this.createLine();
       this.outgoingLines.unshift(line);
     }
 
-    this._updateDomProperties();
+    this.updateProperty();
     line.target = connector;
     connector.incomingLines.push(line);
 
     console.log("Connected to connector", connector, line);
+
+    // this._mouseHitBox.localX = 0;
+    // this._mouseHitBox.localY = 0;
 
     return true;
   }

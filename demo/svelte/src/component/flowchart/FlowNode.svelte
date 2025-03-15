@@ -4,45 +4,60 @@
     import { onMount } from "svelte";
     let { nodeObject, className, children}: { nodeObject: NodeComponent, className: string, children: any} = $props();
     let nodeDOM: HTMLDivElement | null = null;
-    let lineList: LineComponent[] = $state(nodeObject.getAllLines());
+    let lineList: LineComponent[] = $state([]);
 
     let formattedLines = $derived(lineList.map(line => ({
         line: line,
-        x_start: line.x_start,
-        y_start: line.y_start,
-        x_end: line.x_end,
-        y_end: line.y_end
+        gid: line.gid,
+        positionX: line.parent.positionX,
+        positionY: line.parent.positionY,
+        endPositionX: line.endWorldX,
+        endPositionY: line.endWorldY
     })));
 
-    let nodeStyle = $state(nodeObject.getNodeStyle());
+    // let nodeStyle = $state(nodeObject.getNodeStyle());
 
-    function updateNodeStyle(style: any) {
-        nodeStyle = style;
-        if (nodeDOM) {
-            nodeDOM.style.transform = style.transform;
-            nodeDOM.style.position = "absolute";
-            nodeDOM.style.transformOrigin = "top left";
-        }
-    }
+    // function updateNodeStyle(style: any) {
+    //     nodeStyle = style;
+    //     if (nodeDOM) {
+    //         nodeDOM.style.transform = style.transform;
+    //         nodeDOM.style.position = "absolute";
+    //         nodeDOM.style.transformOrigin = "top left";
+    //     }
+    // }
 
     onMount(() => {
-        nodeObject.setRenderNodeCallback(updateNodeStyle);
-        nodeObject.setRenderLinesCallback(() => {
-            lineList = nodeObject.getAllLines();
+        // nodeObject.setRenderNodeCallback(updateNodeStyle);
+        // nodeObject.setRenderLinesCallback(() => {
+        //     lineList = nodeObject.getAllLines();
+        // });
+        nodeObject.addDom(nodeDOM);
+        // nodeObject.submitRender();
+        nodeObject.setLineListCallback((lines: LineComponent[]) => {
+            // console.debug("Updating line list in Svelte", lines);
+            lineList = lines;
         });
-        nodeObject.init(nodeDOM);
     });
     
 </script>
 
-{#each formattedLines as line}
-    <FlowLine {line} />
+{#each formattedLines as line (line.gid)}
+    <FlowLine line={line} />
 {/each}
-<div bind:this={nodeDOM} data-snapline-state={nodeStyle._focus ? "focus" : "idle"} class={className}>
+<div bind:this={nodeDOM}  class="flow-node">
     {@render children()}
 </div>
 
 
 <style>
-
+    .flow-node {
+        width: 150px;
+        user-select: none;
+        padding: 10px;
+        background-color: #fff;
+        border: 1px solid #ccc;
+        border-radius: 5px;
+        box-sizing: border-box;
+        position: absolute;
+    }
 </style>

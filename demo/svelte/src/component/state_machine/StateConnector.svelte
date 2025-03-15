@@ -24,7 +24,7 @@
 
             this.connectedToSelf = false;
 
-            let hover = this.getClassFromDOM(this.g.hoverDOM);
+            let hover = this.g.hoverObject;
             let targetConnector = null;
             // Check if hover is a CustomConnector class
             if (this.target != null) {

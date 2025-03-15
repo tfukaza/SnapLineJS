@@ -14,7 +14,7 @@ class Camera {
   containerDom: HTMLElement; // The DOM that represents the camera view
   containerOffsetX: number; // The x coordinate of the container DOM on the device screen
   containerOffsetY: number; // The y coordinate of the container DOM on the device screen
-  canvasDom: HTMLElement; // The dom that the camera is rendering
+  // canvasDom: HTMLElement; // The dom that the camera is rendering
   cameraWidth: number; // The width of the camera view. This should be the same as the container width.
   cameraHeight: number; // The height of the camera view. This should be the same as the container height.
   cameraPositionX: number; // Position of the center of the camera
@@ -27,20 +27,28 @@ class Camera {
 
   canvasStyle: string; // The CSS transform style that should be applied to the DOM element
 
+  cameraCenterMode: "center" | "topLeft";
+
+  resizeObserver: ResizeObserver;
+
   constructor(
     container: HTMLElement,
-    canvas: HTMLElement,
+    // canvas: HTMLElement,
     config: CameraConfig = {},
   ) {
     let containerRect = container.getBoundingClientRect();
     this.containerDom = container;
     this.containerOffsetX = containerRect.left;
     this.containerOffsetY = containerRect.top;
-    this.canvasDom = canvas;
     this.cameraWidth = containerRect.width;
     this.cameraHeight = containerRect.height;
     this.cameraPositionX = 0;
     this.cameraPositionY = 0;
+    this.cameraCenterMode = "topLeft";
+    if (this.cameraCenterMode == "topLeft") {
+      this.cameraPositionX = this.cameraWidth / 2;
+      this.cameraPositionY = this.cameraHeight / 2;
+    }
     this.cameraPanStartX = 0;
     this.cameraPanStartY = 0;
     this.zoom = 1;
@@ -55,6 +63,26 @@ class Camera {
 
     this.canvasStyle = "";
     this.updateCamera();
+
+    const resizeObserver = new ResizeObserver(() => {
+      console.debug("Camera resize", this);
+      this.updateCameraProperty();
+    });
+    resizeObserver.observe(this.containerDom);
+    this.resizeObserver = resizeObserver;
+
+    window.addEventListener("scroll", () => {
+      console.debug("Camera scroll", this);
+      this.updateCameraProperty();
+    });
+  }
+
+  updateCameraProperty() {
+    let containerRect = this.containerDom.getBoundingClientRect();
+    this.containerOffsetX = containerRect.left;
+    this.containerOffsetY = containerRect.top;
+    this.cameraWidth = containerRect.width;
+    this.cameraHeight = containerRect.height;
   }
 
   /**

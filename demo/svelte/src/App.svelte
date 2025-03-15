@@ -1,22 +1,26 @@
 <script lang="ts">
-  import SnapLineSvelte  from "./component/lib/SnapLineSvelte.svelte";
-  // import addNode from "./component/flowchart/add";
-  import addNode from "./component/state_machine/add";
-  import { onMount } from "svelte";
-  let nodes = $state([]);
+  import FlowChartDemo from "./component/flowchart/FlowChartDemo.svelte";
+  // import StateMachineDemo from "./component/state_machine/StateMachineDemo.svelte";
+  import DragDropDemo from "./component/drag/DragDropDemo.svelte";
 
-  onMount(() => {
-    nodes.push(...addNode());
-  });
+  let selected = $state("flowchart");
 </script>
 
+<select bind:value={selected}>
+  <option value="flowchart">Flowchart</option>
+  <option value="state_machine">State Machine</option>
+  <option value="drag_and_drop">Drag and Drop</option>
+</select>
+  
 <div class="app-container">
-  <SnapLineSvelte nodes={nodes} config={{
-    cameraConfig: {
-      // enablePan: false,
-      // enableZoom: false,
-    },
-  }} />
+
+  {#if (selected === "flowchart")}
+    <FlowChartDemo />
+  {:else if (selected === "state_machine")}
+    <!-- <StateMachineDemo /> -->
+  {:else if (selected === "drag_and_drop")}
+    <DragDropDemo />
+  {/if}
 </div>
 
 <style lang="scss">
