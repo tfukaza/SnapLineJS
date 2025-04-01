@@ -1,15 +1,13 @@
-import { LineComponent, NodeComponent } from "../../lib/snapline.mjs";
+import {
+  LineComponent,
+  ConnectorComponent,
+  GlobalManager,
+} from "../../../../../src/index";
 
 export class FlowLineObject extends LineComponent {
   renderLine: (() => void) | null;
-  constructor(g: any, parent: NodeComponent) {
+  constructor(g: GlobalManager, parent: ConnectorComponent) {
     super(g, parent);
     this.renderLine = null;
-  }
-  render() {
-    super.render();
-    if (this.renderLine) {
-      this.renderLine();
-    }
   }
 }

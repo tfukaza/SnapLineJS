@@ -342,6 +342,8 @@ class InputControl {
       delta: e.deltaY,
       gid: null,
     });
+    e.preventDefault();
+    e.stopPropagation();
   }
 
   /**

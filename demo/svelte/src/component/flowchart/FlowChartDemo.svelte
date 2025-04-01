@@ -2,26 +2,20 @@
     import SnapLineSvelte  from "../lib/SnapLineSvelte.svelte";
     import { addNode } from "./add";
     import { onMount } from "svelte";
-    let nodes = $state([]);
+    
+    let objects = $state([]);
   
     onMount(() => {
-      nodes.push(...addNode());
+      objects.push(...addNode());
     });
 
   </script>
   
   <div class="app-container">
-    <SnapLineSvelte nodes={nodes} config={{
-      cameraConfig: {
-        // enablePan: false,
-        // enableZoom: false,
-      },
-    }} />
+    <SnapLineSvelte id="flowchart" objects={objects}/>
   </div>
   
   <style lang="scss">
-  
-  
       .app-container {
           width: 100%;
           height: 100%;

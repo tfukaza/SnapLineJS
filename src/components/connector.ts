@@ -1,17 +1,11 @@
-import { ObjectTypes } from "../types";
-import { ElementObject } from "./object";
+import { ElementObject, frameStats } from "./object";
 import { NodeComponent } from "./node";
 import { LineComponent } from "./line";
-import {
-  cursorDownProp,
-  cursorState,
-  cursorMoveProp,
-  cursorUpProp,
-} from "../input";
+import { cursorDownProp, cursorState, cursorMoveProp } from "../input";
 import { Collider } from "../collision";
-// import { RectRigidBody } from "../collision";
 import { CircleCollider, PointCollider } from "../collision";
 import { GlobalManager } from "../global";
+
 enum ConnectorState {
   IDLE,
   DRAGGING,
@@ -24,14 +18,11 @@ export interface ConnectorConfig {
   lineClass?: typeof LineComponent;
 }
 
-/**
- * Connector components connect together nodes using lines.
- */
 class ConnectorComponent extends ElementObject {
   declare parent: NodeComponent;
   config: ConnectorConfig;
-  name: string; // Name of the connector. This should describe the data associated with the connector
-  prop: { [key: string]: any }; // Properties of the connector
+  name: string;
+  prop: { [key: string]: any };
   outgoingLines: LineComponent[];
   incomingLines: LineComponent[];
   _state: ConnectorState = ConnectorState.IDLE;
@@ -55,26 +46,8 @@ class ConnectorComponent extends ElementObject {
     this.outgoingLines = [];
     this.incomingLines = [];
     this.config = config;
-
-    this.updateProperty();
-
-    // this.connectToConnector = this.connectToConnector.bind(this);
-    // this.disconnectFromConnector = this.disconnectFromConnector.bind(this);
-
     this.name = config.name || this.gid || "";
-
     this.event.dom.onCursorDown = this.onCursorDown;
-
-    // this.connectorCursorDown = this._onConnectorCursorDown.bind(this);
-    // this.hoverWhileDragging = this._hoverWhileDragging.bind(this);
-    // this.endLineDrag = this._endLineDrag.bind(this);
-
-    // this.g.snapline.subscribeOnCursorDown(this.gid, () => {
-    //   this._dom?.classList.add("snap");
-    // });
-    // this.g.snapline.subscribeOnCursorUp(this.gid, () => {
-    //   this._dom?.classList.remove("snap");
-    // });
 
     this._hitCircle = new CircleCollider(global, this, 0, 0, 30);
     this.addCollider(this._hitCircle);
@@ -83,52 +56,14 @@ class ConnectorComponent extends ElementObject {
     this.addCollider(this._mouseHitBox);
 
     this._targetConnector = null;
-
     this._mousedownX = 0;
     this._mousedownY = 0;
+    this.elementPositionMode = "relative";
   }
-
-  // onGlobalCursorDown(e: cursorDownProp): void {
-  //   this._dom?.classList.add("snap");
-  // }
-
-  // onGlobalCursorUp(e: cursorUpProp): void {
-  //   this._dom?.classList.remove("snap");
-  // }
-  addDom(dom: HTMLElement) {
-    const domElement = super.addDom(dom);
-    domElement.style = {
-      position: "absolute",
-      top: "0",
-      left: "0",
-    };
-    // console.assert(this._dom != null, "ConnectorComponent dom is null");
-    // this._dom!.setAttribute("data-snapline-type", "connector");
-    // this._hitCircle.assignDom(this._dom!);
-    this._hitCircle.position.worldX = this.worldX;
-    this._hitCircle.position.worldY = this.worldY;
-    // this._hitCircle.event.rigid.onCollide = this.onCollide;
-    return domElement;
-  }
-
-  assignRigidBodyDom(dom: HTMLElement) {
-    // const rigidBody = new RectRigidBody(this.g, this, 0, 0, 0, 0);
-    // rigidBody.assignDom(dom);
-    // // rigidBody.event.dom.onCursorMove = this.onCursorMove;
-    // this.addRigidBody(rigidBody);
-  }
-
-  // ==================== Private methods ====================
-
-  // ==================== Hidden methods ====================
 
   onCursorDown(prop: cursorDownProp): void {
-    // super.onCursorDown(e);
-    console.debug(
-      `ConnectorComponent _componentCursorDown event triggered on ${this.gid}, button: ${prop.button}`,
-    );
     const currentIncomingLines = this.incomingLines.filter(
-      (i) => !i.requestDelete,
+      (i) => !i._requestDelete,
     );
     // Skip if it's not a left click
     if (prop.button != cursorState.mouseLeft) {
@@ -139,21 +74,16 @@ class ConnectorComponent extends ElementObject {
       return;
     }
     if (this.config.allowDragOut) {
+      console.debug("Starting drag out line");
       this.startDragOutLine();
     }
   }
-
-  // onDrag(): void {
-  //   super.onDrag();
-  //   this.runDragOutLine();
-  // }
 
   componentCursorUp(): void {
     if (this.parent == null) {
       return;
     }
     this.endDragOutLine();
-    // (this.parent as NodeComponent)._renderNodeLines();
   }
 
   deleteLine(i: number): LineComponent | null {
@@ -162,56 +92,28 @@ class ConnectorComponent extends ElementObject {
     }
 
     const line = this.outgoingLines[i];
-    line.delete();
+    line.delete(this.getCurrentStats());
     this.outgoingLines.splice(i, 1);
     return line;
   }
 
   deleteAllLines() {
+    let stats: frameStats = this.getCurrentStats();
     for (const line of this.outgoingLines) {
-      line.delete();
+      line.delete(stats);
     }
   }
 
-  _renderLinePosition(entry: LineComponent) {
-    // entry.renderLine();
-  }
-
-  /**
-   * Updates the start and end positions of the line.
-   * @param entry The line to update.
-   */
-  updateLine(entry: LineComponent) {
-    // if (this.global == null) {
-    //   console.error("Global stats is null");
-    //   return;
-    // }
-    entry.setLineStartAtConnector();
-    if (!entry.target) {
-      // const [adjustedX, adjustedY] = this.global.camera!.getWorldFromCamera(
-      //   this.global.cursor.screenX + this.global.dx,
-      //   this.global.cursor.screenY + this.global.dy,
-      // );
-      /* If entry.to is not set, then this line is currently being dragged */
-      entry.setLineEnd(this.global.cursor.worldX, this.global.cursor.worldY);
-    } else {
-      entry.setLineEndAtConnector();
-    }
-    entry.submitRender();
-  }
-
-  /* Updates the position of all lines connected to this connector */
   updateAllLines() {
-    // this.updateProperty();
-    for (const line of this.outgoingLines) {
-      this.updateLine(line);
-    }
-    for (const line of this.incomingLines) {
-      line.start.updateLine(line);
+    this.calculateCache();
+
+    for (const line of [...this.outgoingLines, ...this.incomingLines]) {
+      line.target?.calculateCache();
+      line.calculateCache();
+      line.applyCache();
+      line.requestPostWrite();
     }
   }
-
-  /** ==================== Public methods ==================== */
 
   assignToNode(parent: NodeComponent) {
     this.parent = parent;
@@ -227,11 +129,6 @@ class ConnectorComponent extends ElementObject {
     }
   }
 
-  /**
-   * Creates a new line extending from this connector.
-   * @param dom The DOM element to create the line in.
-   * @returns The line object that was created.
-   */
   createLine(): LineComponent {
     let line: LineComponent;
     if (this.config.lineClass) {
@@ -243,80 +140,61 @@ class ConnectorComponent extends ElementObject {
     return line;
   }
 
-  /**
-   * Begins the line drag operation, which will create a temporary line
-   * extending from the connector to the mouse cursor.
-   */
   startDragOutLine(): void {
-    console.debug("Starting drag out line", this.worldX, this.worldY);
     let newLine = this.createLine();
 
-    // const [adjustedX, adjustedY] = this.g.camera.getWorldFromCamera(
-    //   this.g.mousedown_x + this.g.dx,
-    //   this.g.mousedown_y + this.g.dy,
-    // );
-    // newLine.setLineStartAtConnector();
-    // newLine.setLineEnd(adjustedX, adjustedY);
     this.outgoingLines.unshift(newLine);
-    // this.updateAllLines();
 
-    // Invoke the render callback to update the line positions
     this.parent.updateNodeLines();
     this.parent.updateNodeLineList();
 
-    // this.addCursorUpCallback(this.endDragOutLine);
     this._state = ConnectorState.DRAGGING;
     this._targetConnector = null;
 
-    // this.g.snapline.subscribeOnCursorMove(
-    //   this.gid,
-    //   this.runDragOutLine.bind(this),
-    // );
-    // this.g.snapline.subscribeOnCursorUp(
-    //   this.gid,
-    //   this.endDragOutLine.bind(this),
-    // );
     this.event.global.onCursorMove = this.runDragOutLine;
     this.event.global.onCursorUp = this.endDragOutLine;
 
-    // this._mouseHitBox.event.rigid.onCollide = (
-    //   thisObject: RigidBody,
-    //   otherObject: RigidBody,
-    // ) => {
-    //   // console.debug("Collided with", otherObject.type);
-    //   if (otherObject.parent instanceof ConnectorComponent) {
-    //     this._targetConnector = otherObject.parent as ConnectorComponent;
-    //   }
-    // };
-    this._mouseHitBox.event.collider.onBeginContact = (
-      thisObject: Collider,
-      otherObject: Collider,
+    this._mouseHitBox.event.collider.onCollide = (
+      _: Collider,
+      __: Collider,
     ) => {
-      if (otherObject.parent instanceof ConnectorComponent) {
-        this._targetConnector = otherObject.parent as ConnectorComponent;
-      }
+      this.findClosestConnector();
     };
     this._mouseHitBox.event.collider.onEndContact = (
-      thisObject: Collider,
+      _: Collider,
       otherObject: Collider,
     ) => {
-      if (otherObject.parent instanceof ConnectorComponent) {
+      if (this._targetConnector?.gid == otherObject.parent.gid) {
         this._targetConnector = null;
       }
     };
   }
 
-  /**
-   * Called when the user drags the line extending from the connector.
-   */
+  findClosestConnector() {
+    let connectorCollider: Array<Collider> = Array.from(
+      this._mouseHitBox._currentCollisions,
+    ).filter((c) => c.parent.constructor.name == "ConnectorComponent");
+    let connectors: Array<ConnectorComponent> = connectorCollider
+      .map((c) => c.parent as ConnectorComponent)
+      .sort((a, b) => {
+        let da = Math.sqrt(
+          Math.pow(a.worldX - this._mouseHitBox.worldX, 2) +
+            Math.pow(a.worldY - this._mouseHitBox.worldY, 2),
+        );
+        let db = Math.sqrt(
+          Math.pow(b.worldX - this._mouseHitBox.worldX, 2) +
+            Math.pow(b.worldY - this._mouseHitBox.worldY, 2),
+        );
+        return da - db;
+      });
+    if (connectors.length > 0) {
+      this._targetConnector = connectors[0];
+    } else {
+      this._targetConnector = null;
+    }
+  }
+
   runDragOutLine(prop: cursorMoveProp) {
-    // if (this.g == null) {
-    //   return;
-    // }
-
-    // console.debug("Running drag out line", prop);
-
-    // Skip if there is no drag operation
     if (this._state != ConnectorState.DRAGGING) {
       return;
     }
@@ -327,61 +205,28 @@ class ConnectorComponent extends ElementObject {
     }
     this._mouseHitBox.worldX = prop.worldX;
     this._mouseHitBox.worldY = prop.worldY;
-    console.debug(
-      "Mouse hit box",
-      this.gid,
-      this._mouseHitBox.worldX,
-      this._mouseHitBox.worldY,
-    );
-    // const [adjustedX, adjustedY] = this.g.camera.getWorldFromCamera(
-    //   this.g.mousedown_x + this.g.dx,
-    //   this.g.mousedown_y + this.g.dy,
-    // );
 
     let line = this.outgoingLines[0];
-    // console.debug(prop);
-    // console.debug(prop.clientX, prop.clientY);
 
     if (this._targetConnector) {
-      // console.debug("Hovering over target connector", this._targetConnector);
       const result = this.hoverWhileDragging(this._targetConnector);
       if (result) {
         line.setLineEnd(result[0], result[1]);
         line.setLineStartAtConnector();
-        line.submitRender();
-        // this.parent.updateNodeLines();
+        line.requestPostWrite();
         return;
       }
     }
 
-    // console.debug(
-    //   "Running drag out line",
-    //   line.gid,
-    //   line.endPositionX,
-    //   line.endPositionY,
-    // );
-
-    // Update the line position to the current mouse cursor position
     line.setLineEnd(this.global.cursor.worldX, this.global.cursor.worldY);
     line.setLineStartAtConnector();
-    // line.submitRender();
-
-    // Invoke the render callback to update the line positions
     this.parent.updateNodeLines();
-
-    // console.debug(
-    //   `Line end set to ${adjustedX}, ${adjustedY}, line start is ${line.positionX}, ${line.positionY}`,
-    // );
   }
 
   hoverWhileDragging(
     targetConnector: ConnectorComponent,
   ): [number, number] | void {
-    // if (hoverDOM.getAttribute("data-snapline-type") != "connector") {
-    //   return;
-    // }
     if (!(targetConnector instanceof ConnectorComponent)) {
-      // console.log(targetConnector);
       return;
     }
     if (targetConnector == null) {
@@ -391,34 +236,14 @@ class ConnectorComponent extends ElementObject {
     if (targetConnector.gid == this.gid) {
       return;
     }
-    targetConnector.updateProperty();
+    targetConnector.calculateCache();
     const connectorX = targetConnector.worldX;
     const connectorY = targetConnector.worldY;
-    // const distance = Math.sqrt(
-    //   Math.pow(cursorX - connectorX, 2) + Math.pow(cursorY - connectorY, 2),
-    // );
 
-    // // Handle snapping to the input connector
-    // if (distance < 40) {
-    //   // console.debug("Snapping to connector", connectorX, connectorY);
     return [connectorX, connectorY];
-    // } else {
-    //   // console.debug("Not snapping to connector", connectorX, connectorY);
-    //   return [cursorX, cursorY];
-    // }
   }
 
-  /**
-   * Ends the line drag operation.
-   * This will delete the temporary line created by startDragOutLine.
-   * If the user is hovering over an input connector, then the line will be connected to the input connector.
-   */
   endDragOutLine() {
-    console.debug("Ending line drag operation");
-    // if (this.g == null) {
-    //   return;
-    // }
-
     if (
       this._targetConnector &&
       this._targetConnector instanceof ConnectorComponent
@@ -435,12 +260,10 @@ class ConnectorComponent extends ElementObject {
         return;
       }
 
-      target.prop[target.name] = this.prop[this.name]; // Logically connect the input to the output
-      // target.updateFunction(); // Update the input
+      target.prop[target.name] = this.prop[this.name];
 
       this.outgoingLines[0].setLineEnd(target.worldX, target.worldY);
     } else {
-      // By convention, the first line is the one that is being dragged
       this.deleteLine(0);
     }
     if (this.parent) {
@@ -451,66 +274,31 @@ class ConnectorComponent extends ElementObject {
   }
 
   _endLineDragCleanup() {
-    // if (this.g == null) {
-    //   return;
-    // }
-    // this.deleteCursorUpCallback();
     this._state = ConnectorState.IDLE;
-    // this.g.snapline.unsubscribeOnCursorMove(this.gid);
-    // this.g.snapline.unsubscribeOnCursorUp(this.gid);
     this.event.global.onCursorMove = null;
     this.event.global.onCursorUp = null;
     this.parent.updateNodeLineList();
-    // this._dom?.classList.remove("snap");
     this._targetConnector = null;
     this._mouseHitBox.event.collider.onBeginContact = null;
     this._mouseHitBox.event.collider.onEndContact = null;
-    this._mouseHitBox.position.worldX = 0;
-    this._mouseHitBox.position.worldY = 0;
+    this._mouseHitBox.localX = 0;
+    this._mouseHitBox.localY = 0;
   }
 
-  /**
-   * Begins the process of dragging a line that is already connected to another connector.
-   * @param line The line that is being dragged.
-   */
   startPickUpLine(line: LineComponent) {
-    // if (this.g == null) {
-    //   return;
-    // }
-    // Hand over control to the peer output
-    // this.global.targetObject = line.start;
-
-    // let [dx_offset, dy_offset] = this.g.camera.getCameraDeltaFromWorldDelta(
-    //   this.connectorX - line.start.connectorX,
-    //   this.connectorY - line.start.connectorY,
-    // );
-    // line.x1
-
     line.start.disconnectFromConnector(this);
     this.disconnectFromConnector(line.start);
     line.start.deleteLine(line.start.outgoingLines.indexOf(line));
-    console.debug(
-      "Starting pick out line",
-      line.start.worldX,
-      line.start.worldY,
-    );
     line.start.startDragOutLine();
     this._state = ConnectorState.DRAGGING;
   }
 
-  /**
-   * Logically connects this connector to another connector.
-   *
-   * @param connector The connector to connect to.
-   * @param line The line to connect to the connector. If null, a new line will be created.
-   * @returns True if the connection was successful, false otherwise.
-   */
   connectToConnector(
     connector: ConnectorComponent,
     line: LineComponent | null,
   ): boolean {
     const currentIncomingLines = connector.incomingLines.filter(
-      (i) => !i.requestDelete,
+      (i) => !i._requestDelete,
     );
 
     if (currentIncomingLines.some((i) => i.start == this)) {
@@ -532,26 +320,17 @@ class ConnectorComponent extends ElementObject {
       this.outgoingLines.unshift(line);
     }
 
-    this.updateProperty();
+    this.calculateCache();
     line.target = connector;
     connector.incomingLines.push(line);
-
-    console.log("Connected to connector", connector, line);
-
-    // this._mouseHitBox.localX = 0;
-    // this._mouseHitBox.localY = 0;
 
     return true;
   }
 
-  /**
-   * Logically disconnects this connector from another connector.
-   * @param connector The connector to disconnect from.
-   */
   disconnectFromConnector(connector: ConnectorComponent) {
     for (const line of this.outgoingLines) {
       if (line.target == connector) {
-        line.requestDelete = true;
+        line._requestDelete = true;
         break;
       }
     }

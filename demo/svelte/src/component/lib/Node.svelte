@@ -1,43 +1,47 @@
 <script lang="ts">
-    import { NodeComponent, LineComponent } from "../../lib/snapline.mjs";
+    import { NodeComponent, LineComponent, SnapLine } from "../../../../../src/index";
     import Line from "./Line.svelte";
-    import { onMount } from "svelte";
-    let { nodeObject, className, children}: { nodeObject: NodeComponent, className: string, children: any} = $props();
+    import { onMount, setContext, getContext } from "svelte";
+
+    let { className, children}: { className: string, children: any} = $props();
     let nodeDOM: HTMLDivElement | null = null;
-    let lineList: LineComponent[] = $state(nodeObject.getAllLines());
+    let lineList: LineComponent[] = $state([]);
+    let sl:SnapLine = getContext("sl");
+    let nodeObject = new NodeComponent(sl.global, null);
+
+    setContext("nodeObject", nodeObject);
 
     let formattedLines = $derived(lineList.map(line => ({
-        x_start: line.x_start,
-        y_start: line.y_start,
-        x_end: line.x_end,
-        y_end: line.y_end
+        line: line,
+        gid: line.gid,
+        positionX: line.parent.worldX,
+        positionY: line.parent.worldY,
+        endPositionX: line.endWorldX,
+        endPositionY: line.endWorldY
     })));
 
-    let nodeStyle = $state(nodeObject.getNodeStyle());
+    onMount(() => {
+        nodeObject.addDom(nodeDOM);
+        nodeObject.setLineListCallback((lines: LineComponent[]) => {
+            lineList = lines;
+        });
+    });
 
-    function updateNodeStyle(style: any) {
-        nodeStyle = style;
-        if (nodeDOM) {
-            nodeDOM.style.transform = style.transform;
-            nodeDOM.style.position = "absolute";
-            nodeDOM.style.transformOrigin = "top left";
-        }
+    export function addSetPropCallback(name: string, callback: (prop: any) => void) {
+        nodeObject.addSetPropCallback(callback, name);
     }
 
-    onMount(() => {
-        nodeObject.setRenderNodeCallback(updateNodeStyle);
-        nodeObject.setRenderLinesCallback(() => {
-            lineList = nodeObject.getAllLines();
-        });
-        nodeObject.init(nodeDOM);
-    });
-    
+    export function getNodeObject() {
+        return nodeObject;
+    }
+
 </script>
 
-{#each formattedLines as line}
+
+{#each formattedLines as line (line.gid)}
     <Line {line} />
 {/each}
-<div bind:this={nodeDOM} data-snapline-state={nodeStyle._focus ? "focus" : "idle"} class={className}>
+<div bind:this={nodeDOM} class={className}>
     {@render children()}
 </div>
 

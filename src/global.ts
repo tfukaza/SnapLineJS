@@ -1,5 +1,12 @@
 import Camera from "./camera";
-import { BaseObject, DomElement } from "./components/object";
+import {
+  BaseObject,
+  preReadEntry,
+  writeEntry,
+  readEntry,
+  postWriteEntry,
+} from "./components/object";
+import { AnimationObject } from "./animation";
 import { cursorState } from "./input";
 import { InputControl } from "./input";
 import { CollisionEngine } from "./collision";
@@ -21,11 +28,15 @@ class GlobalManager {
   inputEngine: InputControl | null;
   collisionEngine: CollisionEngine | null;
   objectTable: Record<string, BaseObject>;
-  domRenderQueue: Array<DomElement | BaseObject>;
-  domDeleteQueue: Array<DomElement | BaseObject>;
-  domFetchQueue: Array<DomElement | BaseObject>;
-  domPaintQueue: Array<DomElement | BaseObject>;
-  fetchQueue: Array<BaseObject>;
+
+  currentStage: "preRead" | "write" | "read" | "adjust" | "idle";
+  preReadQueue: Record<string, preReadEntry>;
+  writeQueue: Record<string, writeEntry>;
+  readQueue: Record<string, readEntry>;
+  postWriteQueue: Record<string, postWriteEntry>;
+
+  animationList: AnimationObject[] = [];
+
   data: any;
   snapline: SnapLine | null;
 
@@ -46,11 +57,14 @@ class GlobalManager {
     this.inputEngine = null;
     this.collisionEngine = null;
     this.objectTable = {};
-    this.domRenderQueue = [];
-    this.domDeleteQueue = [];
-    this.domFetchQueue = [];
-    this.domPaintQueue = [];
-    this.fetchQueue = [];
+
+    this.currentStage = "idle";
+    this.preReadQueue = {};
+    this.writeQueue = {};
+    this.readQueue = {};
+    this.postWriteQueue = {};
+    this.animationList = [];
+
     this.data = {};
     this.snapline = null;
     this.gid = 0;

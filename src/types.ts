@@ -1,5 +1,3 @@
-import { ConnectorComponent } from "./components/connector";
-
 export enum ObjectTypes {
   node = 0,
   connector = 1,
@@ -8,23 +6,6 @@ export enum ObjectTypes {
   inputConnector = 4,
   outputConnector = 5,
   invalid = 6,
-}
-
-export enum userState {
-  idle = "idle",
-  dragging = "dragging",
-  panning = "panning",
-  connecting = "connecting",
-  selecting = "selecting",
-  invalid = "invalid",
-}
-
-export enum SnapLineDomType {
-  container = 0,
-  canvas = 1,
-  background = 2,
-  selectionBox = 3,
-  invalid = 4,
 }
 
 export interface CameraConfig {
@@ -40,14 +21,6 @@ export interface CameraConfig {
     right: number | null;
     bottom: number | null;
   };
-}
-
-export enum currentAction {
-  IDLE = 0,
-  DRAGGING = 1,
-  PANNING = 2,
-  CONNECTING = 3,
-  SELECTING = 4,
 }
 
 export interface SnapLineConfig {

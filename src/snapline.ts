@@ -9,13 +9,10 @@ import Camera from "./camera";
 import { InputControl } from "./input";
 import { CollisionEngine } from "./collision";
 import { GlobalManager } from "./global";
-import { BaseObject, DomEvent } from "./components/object";
-// import "./theme/standard_light.scss";
+import { BaseObject, DomEvent, frameStats } from "./components/object";
 import { CameraControl } from "./components/cameraControl";
+import { AnimationObject } from "./animation";
 
-/**
- * SnapLine class manages all the global states for the library.
- */
 class SnapLine {
   snaplineConfig: SnapLineConfig;
   cameraConfig: CameraConfig;
@@ -33,9 +30,6 @@ class SnapLine {
 
   event: DomEvent;
 
-  /**
-   * Constructor for SnapLine class.
-   */
   constructor(config: SnapLineConfig = {}) {
     this.global = new GlobalManager();
     this.global.snapline = this;
@@ -59,11 +53,13 @@ class SnapLine {
       position: "relative",
       overflow: "hidden",
     };
+
     this.event = {
       onCursorDown: this._onCursorDownGlobal.bind(this),
       onCursorMove: this._onCursorMoveGlobal.bind(this),
       onCursorUp: this._onCursorUpGlobal.bind(this),
       onCursorScroll: this._onZoomGlobal.bind(this),
+      onResize: null,
     };
 
     this._cursorDownCallbacks = {};
@@ -101,13 +97,12 @@ class SnapLine {
     this._cameraControl = new CameraControl(this.global);
     this._cameraControl.assignCanvas(canvasElement);
   }
-  // ============== Private functions ==============
 
   /**
    * Main loop for rendering the canvas.
    */
   #step(): void {
-    this._renderElements();
+    this._renderFrame();
     window.requestAnimationFrame(this.#step.bind(this));
   }
 
@@ -149,10 +144,6 @@ class SnapLine {
       screenY: prop.screenY,
     };
     for (const [id, callback] of Object.entries(this._cursorMoveCallbacks)) {
-      // Don't call the callback if the element invoked the event
-      // if (prop.gid == id) {
-      //   continue;
-      // }
       callback(prop);
     }
     prop.event.preventDefault();
@@ -180,9 +171,6 @@ class SnapLine {
       }
       callback(prop);
     }
-    // if (this.snaplineConfig?.cameraConfig?.enableZoom) {
-    //   prop.event.preventDefault();
-    // }
   }
 
   subscribeGlobalCursorEvent(
@@ -265,41 +253,52 @@ class SnapLine {
     delete this._cursorScrollCallbacks[id];
   }
 
-  /**
-   * Renders elements currently in the canvas.
-   * This function is used by Vanilla JS projects that do not have a reactive system to automatically update the DOM.
-   */
-  _renderElements(): void {
-    // Render the elements
-    for (const object of this.global.domRenderQueue) {
-      object.render();
-    }
-    this.global.domRenderQueue = [];
+  _renderFrame(): void {
+    let timestamp = Date.now();
 
-    // Delete the elements
-    for (const object of this.global.domDeleteQueue) {
-      object.delete();
-    }
-    this.global.domDeleteQueue = [];
+    let stats: frameStats = {
+      timestamp: timestamp,
+    };
 
-    // Get the results of the previous frame paint
-    for (const object of this.global.domFetchQueue) {
-      object.fetchProperty();
+    this.global.currentStage = "preRead";
+    for (const entry of Object.values(this.global.preReadQueue)) {
+      entry.object.preRead(stats, entry);
     }
-    this.global.domFetchQueue = [];
+    this.global.preReadQueue = {};
 
-    // Paint the elements
-    for (const object of this.global.domPaintQueue) {
-      object.paint();
+    this.global.currentStage = "write";
+    for (const entry of Object.values(this.global.writeQueue)) {
+      entry.object.write(stats, entry);
     }
-    this.global.domPaintQueue = [];
+    this.global.writeQueue = {};
 
-    // Detect collisions
+    this.global.currentStage = "read";
+    for (const entry of Object.values(this.global.readQueue)) {
+      entry.object.read(stats, entry);
+    }
+    this.global.readQueue = {};
+
+    this.global.currentStage = "adjust";
+    let newAnimationList: AnimationObject[] = [];
+    for (const animation of this.global.animationList) {
+      if (animation.calculateFrame(stats) == false) {
+        newAnimationList.push(animation);
+      }
+    }
+    this.global.animationList = newAnimationList;
+
+    for (const entry of Object.values(this.global.postWriteQueue)) {
+      entry.object.postWrite(stats, entry);
+    }
+    this.global.postWriteQueue = {};
+
+    this.global.currentStage = "idle";
+
     this.global.collisionEngine?.detectCollisions();
   }
 
   addObject(object: BaseObject) {
-    object.submitRenderQueue();
+    object.requestWrite();
   }
 }
 

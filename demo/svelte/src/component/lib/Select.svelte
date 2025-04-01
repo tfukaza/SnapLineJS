@@ -1,10 +1,12 @@
 
 <script lang="ts">
-    import { RectSelectComponent } from "../../lib/snapline.mjs";
-    import { onMount } from "svelte";
-    let { global }: { global: any } = $props();
+    import { RectSelectComponent, SnapLine } from "../../../../../src/index";
+    import { onMount, getContext } from "svelte";
+
     let selectDOM: HTMLDivElement | null = null;
-    let select = new RectSelectComponent(global, null);
+    let sl:SnapLine = getContext("sl");
+    let select = new RectSelectComponent(sl.global, null);
+
     onMount(() => {
         select.addDom(selectDOM);
     });
@@ -12,7 +14,6 @@
 </script>
 
 <div id="select-container" bind:this={selectDOM}></div>
-
 
 <style>
     #select-container {

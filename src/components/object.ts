@@ -5,10 +5,11 @@ import {
   cursorScrollProp,
   InputControl,
 } from "../input";
-import { setDomStyle } from "../helper";
+import { setDomStyle, EventProxyFactory } from "../helper";
 import { Collider } from "../collision";
 import { getDomProperty } from "./util";
 import { GlobalManager } from "../global";
+import { AnimationObject } from "../animation";
 
 export interface GlobalEvent {
   onCursorDown: null | ((prop: cursorDownProp) => void);
@@ -22,30 +23,7 @@ export interface DomEvent {
   onCursorMove: null | ((prop: cursorMoveProp) => void);
   onCursorUp: null | ((prop: cursorUpProp) => void);
   onCursorScroll: null | ((prop: cursorScrollProp) => void);
-}
-
-export function EventProxyFactory<Interface extends Record<string, any | null>>(
-  object: BaseObject,
-  dict: Interface,
-  dict2: Interface | null = null,
-) {
-  return new Proxy(dict, {
-    set: (target, prop: string, value: CallableFunction | null) => {
-      if (value == null) {
-        target[prop as keyof Interface] = null as any;
-      } else {
-        target[prop as keyof Interface] = value.bind(object) as any;
-      }
-      return true;
-    },
-    get: (target, prop: string) => {
-      return (...args: any[]) => {
-        args[0].gid = object.gid;
-        dict2?.[prop as keyof Interface]?.(...args);
-        target[prop as keyof Interface]?.(...args);
-      };
-    },
-  });
+  onResize: null | (() => void);
 }
 
 class EventCallback {
@@ -64,7 +42,7 @@ class EventCallback {
       onCursorScroll: null,
     };
     this.global = new Proxy(this._global, {
-      set: (target, prop: string, value: CallableFunction | null) => {
+      set: (_, prop: string, value: CallableFunction | null) => {
         if (value == null) {
           this._object.global.snapline?.unsubscribeGlobalCursorEvent(
             prop as
@@ -93,8 +71,9 @@ class EventCallback {
       onCursorMove: null,
       onCursorUp: null,
       onCursorScroll: null,
+      onResize: null,
     };
-    this.dom = EventProxyFactory(
+    this.dom = EventProxyFactory<BaseObject, DomEvent>(
       this._object,
       this._dom,
       this._object.global.snapline!.event,
@@ -109,21 +88,99 @@ export interface ObjectCoordinate {
   localY: number;
 }
 
-/**
- * Base class for all classes.
- * It contains attributes and methods that are common to all classes,
- * such as position, id, etc.
- */
+class queueEntry {
+  object: BaseObject;
+  beforeCallback: null | (() => void);
+  afterCallback: null | (() => void);
+  constructor(object: BaseObject) {
+    this.object = object;
+    this.beforeCallback = null;
+    this.afterCallback = null;
+  }
+
+  before(callback: () => void): this {
+    this.beforeCallback = callback;
+    return this;
+  }
+
+  then(callback: () => void): this {
+    this.afterCallback = callback;
+    return this;
+  }
+
+  submit() {}
+}
+
+export class preReadEntry extends queueEntry {
+  saveDomProperty?: boolean;
+  noTransform?: boolean;
+  constructor(
+    object: BaseObject,
+    saveDomProperty?: boolean,
+    noTransform?: boolean,
+  ) {
+    super(object);
+    this.saveDomProperty = saveDomProperty;
+    this.noTransform = noTransform;
+  }
+}
+
+export class writeEntry extends queueEntry {
+  operation: null | (() => void);
+  isDelete?: boolean;
+  constructor(
+    object: BaseObject,
+    operation: null | (() => void),
+    isDelete?: boolean,
+  ) {
+    super(object);
+    this.operation = operation;
+    this.isDelete = isDelete;
+  }
+}
+
+export class readEntry extends queueEntry {
+  saveDomProperty?: boolean;
+  noTransform?: boolean;
+  constructor(
+    object: BaseObject,
+    saveDomProperty?: boolean,
+    noTransform?: boolean,
+  ) {
+    super(object);
+    this.saveDomProperty = saveDomProperty;
+    this.noTransform = noTransform;
+  }
+}
+
+export class postWriteEntry extends queueEntry {
+  constructor(object: BaseObject) {
+    super(object);
+  }
+}
+
+export interface frameStats {
+  timestamp: number;
+}
+
 export class BaseObject {
-  global: GlobalManager; /* Reference to the global stats object */
-  gid: string; /* Unique identifier for the object */
-  parent: BaseObject | null; /* Parent of the object */
-  children: BaseObject[] = []; /* Children of the object */
+  global: GlobalManager;
+  gid: string;
+  parent: BaseObject | null;
+  children: BaseObject[] = [];
   position: ObjectCoordinate;
+  previousPosition: ObjectCoordinate;
   positionMode: "absolute" | "relative" | "fixed";
   event: EventCallback;
 
-  _colliderList: Collider[] = []; /* Colliders of the object */
+  _requestPreRead: boolean = false;
+  _requestWrite: boolean = false;
+  _requestRead: boolean = false;
+  _requestDelete: boolean = false;
+  _requestPostWrite: boolean = false;
+
+  _colliderList: Collider[] = [];
+  _animationList: AnimationObject[] = [];
 
   constructor(global: GlobalManager, parent: BaseObject | null) {
     this.global = global;
@@ -138,8 +195,20 @@ export class BaseObject {
       localX: 0,
       localY: 0,
     };
+    this.previousPosition = {
+      worldX: 0,
+      worldY: 0,
+      localX: 0,
+      localY: 0,
+    };
     this.positionMode = "absolute";
     this.event = new EventCallback(this);
+
+    this._requestPreRead = false;
+    this._requestWrite = false;
+    this._requestRead = false;
+    this._requestDelete = false;
+    this._requestPostWrite = false;
   }
 
   get worldX(): number {
@@ -186,13 +255,6 @@ export class BaseObject {
       this.localX = this.worldX - this.parent.worldX;
       this.localY = this.worldY - this.parent.worldY;
     }
-    if (this.global.camera) {
-    }
-    if (this.children.length > 0) {
-      for (const child of this.children) {
-        child.updateProperty();
-      }
-    }
   }
 
   get worldPosition(): [number, number] {
@@ -206,14 +268,10 @@ export class BaseObject {
       this.worldX = this.parent.worldX + this.localX;
       this.worldY = this.parent.worldY + this.localY;
     }
-    if (this.global.camera) {
-    }
+  }
 
-    if (this.children.length > 0) {
-      for (const child of this.children) {
-        child.updateProperty();
-      }
-    }
+  get localPosition(): [number, number] {
+    return [this.localX, this.localY];
   }
 
   addCollider(collider: Collider) {
@@ -221,94 +279,146 @@ export class BaseObject {
     this.global.collisionEngine?.addObject(collider);
   }
 
-  submitRenderQueue() {
-    this.global.domRenderQueue.push(this);
+  requestPreRead(
+    saveDomProperty: boolean = false,
+    noTransform: boolean = false,
+  ) {
+    let request = new preReadEntry(this, saveDomProperty, noTransform);
+    this.global.preReadQueue[this.gid] = request;
+    return request;
   }
 
-  render() {}
+  _preRead(_: frameStats, __: preReadEntry) {}
 
-  delete(): void {}
+  preRead(stats: frameStats, options: preReadEntry) {
+    options.beforeCallback?.();
+    this._preRead(stats, options);
+    options.afterCallback?.();
+  }
 
-  fetchProperty() {
-    for (const rigidBody of this._colliderList) {
-      rigidBody.fetchProperty();
-    }
+  requestWrite(
+    operation: null | (() => void) = null,
+    isDelete: boolean = false,
+  ) {
+    let request = new writeEntry(this, operation, isDelete);
+    this.global.writeQueue[this.gid] = request;
+    return request;
+  }
 
-    for (const child of this.children) {
-      child.fetchProperty();
+  _write(_: frameStats, options: writeEntry | null = null) {
+    if (options?.isDelete) {
+      if (this.parent) {
+        this.parent.children = this.parent.children.filter(
+          (child) => child !== this,
+        );
+      }
+      delete this.global.objectTable[this.gid];
+    } else {
+      options?.operation?.bind(this)();
     }
   }
 
-  paint() {}
+  write(stats: frameStats, options: writeEntry | null = null) {
+    options?.beforeCallback?.();
+    this._write(stats, options);
+    options?.afterCallback?.();
+  }
 
-  /**
-   * Recalculates the property of the object, such as the position, size, etc.
-   * based on current properties of the game object.
-   * This function assumes the relative position (localX and Y) and sizes of
-   * all parent and children objects are up to date.
-   * If it is not, fetchProperty() should be called first.
-   */
-  updateProperty() {
+  requestDelete() {
+    if (this.gid in this.global.writeQueue) {
+      let request = this.global.writeQueue[this.gid];
+      request.isDelete = true;
+      return request;
+    }
+
+    let request = new writeEntry(this, null, true);
+    this.global.writeQueue[this.gid] = request;
+    return request;
+  }
+
+  requestRead(
+    saveDomProperty: boolean = false,
+    noTransform: boolean = false,
+  ): readEntry {
+    let request = new readEntry(this, saveDomProperty, noTransform);
+    this.global.readQueue[this.gid] = request;
+    return request;
+  }
+
+  _read(stats: frameStats, options: readEntry | null = null) {
+    for (const collider of this._colliderList) {
+      collider.read();
+    }
+  }
+
+  read(stats: frameStats, options: readEntry | null = null) {
+    options?.beforeCallback?.();
+    this._read(stats, options);
+    options?.afterCallback?.();
+  }
+
+  requestPostWrite() {
+    let request = new postWriteEntry(this);
+    this.global.postWriteQueue[this.gid] = request;
+    return request;
+  }
+
+  _postWrite(stats: frameStats, options: postWriteEntry | null = null) {}
+
+  postWrite(stats: frameStats, options: postWriteEntry | null = null) {
+    options?.beforeCallback?.();
+    this._postWrite(stats, options);
+    options?.afterCallback?.();
+  }
+
+  generateCache(setWorldPosition: boolean = false) {
+    this.calculateCache();
+  }
+
+  calculateCache() {
     if (this.parent) {
       this.worldX = this.parent.worldX + this.localX;
       this.worldY = this.parent.worldY + this.localY;
     }
-
-    if (this.global.camera) {
-    }
-
-    for (const rigidBody of this._colliderList) {
-      rigidBody.updateProperty();
-    }
-
-    for (const child of this.children) {
-      child.updateProperty();
+    for (const collider of this._colliderList) {
+      collider.recalculate();
     }
   }
 
-  getClassFromGid(gid: string): BaseObject | null {
-    if (this.global == null) {
-      // console.error("Global stats is null");
-      return null;
-    }
-    return this.global.objectTable[gid] as BaseObject;
+  requestFLIP(
+    callback: null | (() => void) = null,
+  ): [preReadEntry, writeEntry, readEntry, postWriteEntry] {
+    return [
+      this.requestPreRead(false, true),
+      this.requestWrite(callback?.bind(this)),
+      this.requestRead(true, false),
+      this.requestPostWrite(),
+    ];
   }
 
-  getClassFromDOM(dom: HTMLElement): BaseObject | null {
-    if (this.global == null) {
-      // console.error("Global stats is null");
-      return null;
-    }
-    const gid = dom.getAttribute("data-snapline-gid");
-    if (!gid) {
-      // console.error("GID is null");
-      return null;
-    }
-    return this.getClassFromGid(gid);
-  }
-}
-
-class ElementCallback {
-  _object: ElementObject;
-  _renderCallback: (() => void) | null = null;
-
-  constructor(object: ElementObject) {
-    this._object = object;
+  animate(
+    duration: number,
+    from: number,
+    to: number,
+    callback: (progress: number) => void,
+  ) {
+    let animation = new AnimationObject(this, duration, from, to, callback);
+    // For now we only support one animation at a time
+    this._animationList = [];
+    this._animationList.push(animation);
+    this.global.animationList.push(animation);
   }
 
-  set renderCallback(callback: () => void) {
-    this._renderCallback = callback.bind(this._object);
-  }
-
-  get renderCallback(): () => void {
-    if (this._renderCallback) {
-      this._renderCallback();
-    }
-    return () => {};
+  getCurrentStats(): frameStats {
+    return {
+      timestamp: Date.now(),
+    };
   }
 }
 
 type DomProperty = {
+  worldX: number;
+  worldY: number;
   height: number;
   width: number;
 };
@@ -322,27 +432,25 @@ export interface DomInsertMode {
 export class DomElement {
   _uuid: string;
   _global: GlobalManager;
-  _parent: ElementObject;
-  _domElement: HTMLElement;
-  _domProperty: DomProperty;
+  _owner: ElementObject;
+  element: HTMLElement;
   _pendingInsert: boolean;
 
-  _requestRender: boolean = false;
-  _requestFetch: boolean = false;
+  _requestWrite: boolean = false;
+  _requestRead: boolean = false;
   _requestDelete: boolean = false;
+  _requestPostWrite: boolean = false;
   _style: Record<string, any>;
   _classList: string[];
-
+  _dataAttribute: Record<string, any>;
   _inputEngine: InputControl;
   _event: DomEvent;
   event: DomEvent;
-  callback: ElementCallback;
 
   localX: number;
   localY: number;
-
-  positionMode: "absolute" | "relative" | "fixed";
-  _domPosition: ObjectCoordinate;
+  property: DomProperty;
+  prevProperty: ObjectCoordinate;
   _transformApplied: ObjectCoordinate;
   insertMode: DomInsertMode;
 
@@ -351,18 +459,20 @@ export class DomElement {
 
   constructor(
     global: GlobalManager,
-    parent: ElementObject,
+    owner: ElementObject,
     dom: HTMLElement,
     insertMode: DomInsertMode = {},
     isFragment: boolean = false,
   ) {
     this._global = global;
-    this._domElement = dom;
-    this._domProperty = {
+    this.element = dom;
+    this.property = {
+      worldX: 0,
+      worldY: 0,
       height: 0,
       width: 0,
     };
-    this._domPosition = {
+    this.prevProperty = {
       worldX: 0,
       worldY: 0,
       localX: 0,
@@ -375,14 +485,14 @@ export class DomElement {
       localY: 0,
     };
     this._pendingInsert = isFragment;
-    this._parent = parent;
-    // this._style = {};
+    this._owner = owner;
     this._uuid = (++global.gid).toString();
-    this._requestRender = false;
-    this._requestFetch = false;
+    this._requestWrite = false;
+    this._requestRead = false;
     this._requestDelete = false;
+    this._requestPostWrite = false;
     this._style = {};
-    this.positionMode = "absolute";
+    this._dataAttribute = {};
 
     this._classList = [];
     this._event = {
@@ -390,19 +500,19 @@ export class DomElement {
       onCursorMove: null,
       onCursorUp: null,
       onCursorScroll: null,
+      onResize: null,
     };
-    this.event = EventProxyFactory(parent, this._event);
-    this.callback = new ElementCallback(parent);
+    this.event = EventProxyFactory(owner, this._event);
     this._inputEngine = new InputControl(this._global);
-    this._inputEngine?.addCursorEventListener(this._domElement);
+    this._inputEngine?.addCursorEventListener(this.element);
     this._inputEngine!.event.mouseDownCallback = this._onCursorDown.bind(this);
     this._inputEngine!.event.mouseMoveCallback = this._onCursorMove.bind(this);
     this._inputEngine!.event.mouseUpCallback = this._onCursorUp.bind(this);
     this._inputEngine!.event.mouseWheelCallback =
       this._onCursorScroll.bind(this);
 
-    this.submitRenderQueue();
-    this.submitFetchQueue();
+    this._owner.requestWrite();
+    this._owner.requestRead();
 
     this.localX = 0;
     this.localY = 0;
@@ -410,39 +520,33 @@ export class DomElement {
     this.insertMode = insertMode;
 
     this.resizeObserver = new ResizeObserver(() => {
-      this.submitFetchQueue();
+      this._event.onResize?.();
     });
-    this.resizeObserver.observe(this._domElement);
+    this.resizeObserver.observe(this.element);
 
     this.mutationObserver = new MutationObserver(() => {
-      this.submitFetchQueue();
-    });
-    this.mutationObserver.observe(this._domElement, {
-      childList: true,
-      subtree: true,
+      this._event.onResize?.();
     });
   }
 
   set localPosition(position: [number, number]) {
     this.localX = position[0];
     this.localY = position[1];
-    this.submitRenderQueue();
+    this._owner.requestPostWrite();
   }
 
   get localPosition(): [number, number] {
     return [this.localX, this.localY];
   }
 
-  get cameraPosition(): [number, number] {
-    return (
-      this._global.camera?.getCameraFromWorld(this.localX, this.localY) ?? [
-        0, 0,
-      ]
-    );
+  get worldPosition(): [number, number] {
+    return [this._owner.worldX + this.localX, this._owner.worldY + this.localY];
   }
 
-  set cameraPosition(position: [number, number]) {
-    throw new Error("cameraPosition is read only");
+  get cameraPosition(): [number, number] {
+    return (
+      this._global.camera?.getCameraFromWorld(...this.worldPosition) ?? [0, 0]
+    );
   }
 
   get screenPosition(): [number, number] {
@@ -451,22 +555,24 @@ export class DomElement {
     );
   }
 
-  set screenPosition(position: [number, number]) {
-    throw new Error("screenPosition is read only");
-  }
-
   set style(style: Record<string, any>) {
-    this._style = style;
-    this.submitRenderQueue();
+    this._style = { ...this._style, ...style };
   }
 
   get style(): Record<string, any> {
     return this._style;
   }
 
+  set dataAttribute(dataAttribute: Record<string, any>) {
+    this._dataAttribute = { ...this._dataAttribute, ...dataAttribute };
+  }
+
+  get dataAttribute(): Record<string, any> {
+    return this._dataAttribute;
+  }
+
   set classList(classList: string[]) {
     this._classList = classList;
-    this.submitRenderQueue();
   }
 
   get classList(): string[] {
@@ -492,229 +598,260 @@ export class DomElement {
   moveTo(mode: DomInsertMode) {
     this.insertMode = mode;
     this._pendingInsert = true;
-    this.submitRenderQueue();
+    this._owner.requestWrite();
   }
 
-  submitRenderQueue() {
-    if (this._requestRender == false) {
-      this._requestRender = true;
-      this._global.domRenderQueue.push(this);
+  readDomProperty(noTransform: boolean = false) {
+    const property = getDomProperty(this._global, this.element);
+
+    // Need to commit the styles to obtain current values of an animation
+    let animation = this.element.getAnimations()[0];
+    if (animation) {
+      animation.commitStyles();
     }
+
+    const transform = this.element.style.transform;
+    let transformApplied = {
+      worldX: 0,
+      worldY: 0,
+    };
+
+    if (transform && !noTransform) {
+      const transformValues = transform.split("(")[1].split(")")[0].split(",");
+      transformApplied.worldX = parseFloat(transformValues[0]);
+      transformApplied.worldY = parseFloat(transformValues[1]);
+    } else {
+      transformApplied.worldX = 0;
+      transformApplied.worldY = 0;
+    }
+
+    this.property.height = property.height;
+    this.property.width = property.width;
+    this.property.worldX = property.worldX - transformApplied.worldX;
+    this.property.worldY = property.worldY - transformApplied.worldY;
   }
 
-  render() {
-    setDomStyle(this._domElement, this._style);
+  preRead(noTransform: boolean = false) {
+    this.readDomProperty(noTransform);
+    Object.assign(this.prevProperty, this.property);
+  }
 
-    this._domElement.classList.forEach((className) => {
-      this._domElement.classList.add(className);
+  write() {
+    setDomStyle(this.element, this._style);
+    // TODO: See if we can batch the class list updates
+    this.element.classList.forEach((className) => {
+      this.element.classList.add(className);
     });
+    // TODO: See if we can batch the data attribute updates
+    for (const [key, value] of Object.entries(this._dataAttribute)) {
+      this.element.setAttribute(`data-${key}`, value);
+    }
+    this.element.setAttribute("data-snapline-gid", this._owner.gid);
+
     if (this._pendingInsert) {
+      this._pendingInsert = false;
       if (this.insertMode.appendChild) {
-        this.insertMode.appendChild.appendChild(this._domElement);
+        this.insertMode.appendChild.appendChild(this.element);
       } else if (this.insertMode.insertBefore) {
         this.insertMode.insertBefore[0].insertBefore(
-          this._domElement,
+          this.element,
           this.insertMode.insertBefore[1],
         );
       } else if (this.insertMode.replaceChild) {
         this.insertMode.replaceChild.replaceChild(
-          this._domElement,
+          this.element,
           this.insertMode.replaceChild,
         );
       } else {
-        this._global.containerElement?.appendChild(this._domElement);
+        this._global.containerElement?.appendChild(this.element);
       }
-      this._pendingInsert = false;
-    }
-    this._requestRender = false;
-    this.submitFetchQueue();
-  }
-
-  submitDeleteQueue() {
-    if (this._requestDelete == false) {
-      this._requestDelete = true;
-      this._global.domDeleteQueue.push(this);
-      this._global.domPaintQueue.push(this);
     }
   }
 
   delete(): void {
     this.resizeObserver.disconnect();
     this.mutationObserver.disconnect();
-    this._global.containerElement?.removeChild(this._domElement);
-  }
-
-  submitFetchQueue() {
-    if (this._requestFetch == false) {
-      this._requestFetch = true;
-      this._global.domFetchQueue.push(this);
+    if (this.element) {
+      this.element.remove();
     }
   }
 
-  fetchProperty() {
-    if (this._pendingInsert) {
-      return;
-    }
-    const property = getDomProperty(this._global, this._domElement);
-    this._domProperty.height = property.height;
-    this._domProperty.width = property.width;
-    this._domPosition.worldX = property.worldX - this._transformApplied.worldX;
-    this._domPosition.worldY = property.worldY - this._transformApplied.worldY;
-    this._requestFetch = false;
+  read(noTransform: boolean = false) {
+    this.readDomProperty(noTransform);
   }
 
-  paint() {
+  postWrite() {
     let transformStyle = {};
-    if (this.positionMode == "relative") {
+    if (this._owner.elementPositionMode == "relative") {
       transformStyle = {
-        transform: `none`,
+        transform: `translate3d(${0}px, ${0}px, 0px)`,
       };
-      [this._transformApplied.worldX, this._transformApplied.worldY] = [0, 0];
-    } else if (this.positionMode == "fixed") {
-      transformStyle = {
-        transform: `translate3d(${this._parent.worldX + this.localX}px, ${this._parent.worldY + this.localY}px, 0px)`,
-      };
-      [this._transformApplied.worldX, this._transformApplied.worldY] = [
-        this._parent.worldX + this.localX,
-        this._parent.worldY + this.localY,
-      ];
     } else {
-      // Calculate the new position of the dom element
       let [newX, newY] = [
-        this._parent.worldX + this.localX - this._domPosition.worldX,
-        this._parent.worldY + this.localY - this._domPosition.worldY,
+        this._owner.worldX + this.localX - this.property.worldX,
+        this._owner.worldY + this.localY - this.property.worldY,
       ];
       transformStyle = {
         transform: `translate3d(${newX}px, ${newY}px, 0px)`,
       };
-      [this._transformApplied.worldX, this._transformApplied.worldY] = [
-        newX,
-        newY,
-      ];
     }
-    setDomStyle(this._domElement, {
-      ...this._style,
-      ...transformStyle,
-    });
+    setDomStyle(this.element, Object.assign(this._style, transformStyle));
   }
 }
 
-/**
- * Components refer to any element that is part of a node.
- */
+interface RenderCallback {
+  beforePreRead: null | (() => void);
+  afterPreRead: null | (() => void);
+  beforeRead: null | (() => void);
+  afterRead: null | (() => void);
+  beforeWrite: null | (() => void);
+  afterWrite: null | (() => void);
+  beforePostWrite: null | (() => void);
+  afterPostWrite: null | (() => void);
+}
+
 export class ElementObject extends BaseObject {
-  _domElementList: DomElement[] = [];
-  _requestRender: boolean;
-  _requestFetch: boolean;
+  elementList: DomElement[] = [];
+  _requestWrite: boolean;
+  _requestRead: boolean;
   _requestDelete: boolean;
-  _requestPaint: boolean;
+  _requestPostWrite: boolean;
   _state: any = {};
   state: Record<string, any>;
+  _positionMode: "absolute" | "relative" | "fixed";
 
-  _parentElement: HTMLElement | null; /* Parent element of the object */
-  _elementIndex: number; /* Index of the element in the parent */
+  _parentElement: HTMLElement | null;
+  _elementIndex: number;
 
-  inScene: boolean = false; /* Whether the object is in the scene */
-  callback: ElementCallback;
+  inScene: boolean = false;
+  _callback: RenderCallback;
+  callback: RenderCallback;
 
   constructor(global: GlobalManager, parent: BaseObject | null) {
     super(global, parent);
     this.inScene = false;
-    this.callback = new ElementCallback(this);
     this._parentElement = null;
     this._elementIndex = -1;
-    this._requestRender = false;
-    this._requestFetch = false;
+    this._requestWrite = false;
+    this._requestRead = false;
     this._requestDelete = false;
-    this._requestPaint = false;
-    let _this = this;
+    this._requestPostWrite = false;
+    this._positionMode = "absolute";
+    this._callback = {
+      beforePreRead: null,
+      afterPreRead: null,
+      beforeRead: null,
+      afterRead: null,
+      beforeWrite: null,
+      afterWrite: null,
+      beforePostWrite: null,
+      afterPostWrite: null,
+    };
+    this.callback = EventProxyFactory(this, this._callback);
     this.state = new Proxy(this._state, {
       set: (target, prop, value) => {
         target[prop] = value;
-        _this.submitRenderQueue();
-        _this.submitFetchQueue();
-
         return true;
       },
     });
   }
 
   set worldPosition(position: [number, number]) {
-    this.position.worldX = position[0];
-    this.position.worldY = position[1];
-    this.submitRenderQueue();
+    if (this.positionMode == "relative") {
+      throw new Error("Cannot set world position in relative mode");
+    }
+    this.worldX = position[0];
+    this.worldY = position[1];
+  }
+
+  get worldPosition(): [number, number] {
+    return [this.worldX, this.worldY];
+  }
+
+  generateCache(setWorldPosition: boolean = false) {
+    if (setWorldPosition == true) {
+      this.worldX = this.dom.property.worldX;
+      this.worldY = this.dom.property.worldY;
+    }
+    if (this.parent) {
+      this.localX = this.dom.property.worldX - this.parent.worldX;
+      this.localY = this.dom.property.worldY - this.parent.worldY;
+    }
   }
 
   addDom(dom: HTMLElement): DomElement {
-    let domElement = new DomElement(this.global, this, dom);
-    domElement.event.onCursorDown = this.event.dom.onCursorDown;
-    domElement.event.onCursorMove = this.event.dom.onCursorMove;
-    domElement.event.onCursorUp = this.event.dom.onCursorUp;
-    domElement.event.onCursorScroll = this.event.dom.onCursorScroll;
-    this._domElementList.push(domElement);
+    this.elementList.push(new DomElement(this.global, this, dom));
+    this.dom.event.onCursorDown = this.event.dom.onCursorDown;
+    this.dom.event.onCursorMove = this.event.dom.onCursorMove;
+    this.dom.event.onCursorUp = this.event.dom.onCursorUp;
+    this.dom.event.onCursorScroll = this.event.dom.onCursorScroll;
+    this.dom.event.onResize = this.event.dom.onResize;
 
-    return domElement;
+    return this.dom;
   }
 
   get dom(): DomElement {
-    return this._domElementList[0];
+    return this.elementList[0];
   }
 
-  submitRenderQueue() {
-    if (this._requestRender == false) {
-      this._requestRender = true;
-      this.global.domRenderQueue.push(this);
-      this.global.domPaintQueue.push(this);
-    }
+  set elementPositionMode(mode: "absolute" | "relative" | "fixed") {
+    this._positionMode = mode;
+    this.requestPostWrite();
   }
 
-  render(): void {
-    for (const domElement of this._domElementList) {
-      domElement.render();
-    }
-    this.callback.renderCallback();
-    this._requestRender = false;
+  get elementPositionMode(): "absolute" | "relative" | "fixed" {
+    return this._positionMode;
   }
 
-  submitDeleteQueue() {
-    if (this._requestDelete == false) {
-      this._requestDelete = true;
-      this.global.domDeleteQueue.push(this);
+  preRead(stats: frameStats, options: preReadEntry): void {
+    this.callback.beforePreRead?.();
+    options.beforeCallback?.();
+    this._preRead(stats, options);
+    this.dom?.preRead(options.noTransform);
+    if (options.saveDomProperty) {
+      this.generateCache(true);
+      Object.assign(this.previousPosition, this.position);
     }
+    this.callback.afterPreRead?.();
+    options.afterCallback?.();
   }
 
-  delete(): void {
-    for (const child of this.children) {
-      child.delete();
+  write(stats: frameStats, options: writeEntry | null = null): void {
+    this.callback.beforeWrite?.();
+    options?.beforeCallback?.();
+    this._write(stats, options);
+    if (options?.isDelete) {
+      this.dom?.delete();
+    } else {
+      this.dom?.write();
     }
-    for (const domElement of this._domElementList) {
-      domElement.submitDeleteQueue();
-    }
+    this.callback.afterWrite?.();
+    options?.afterCallback?.();
   }
 
-  submitFetchQueue() {
-    if (this._requestFetch == false) {
-      this._requestFetch = true;
-      this.global.domFetchQueue.push(this);
-    }
+  delete(stats: frameStats): void {
+    this._write(stats, new writeEntry(this, null, true));
+    this.dom?.delete();
   }
 
-  fetchProperty() {
-    for (const domElement of this._domElementList) {
-      domElement.fetchProperty();
+  read(stats: frameStats, options: readEntry | null = null) {
+    this.callback.beforeRead?.();
+    options?.beforeCallback?.();
+    this.dom?.read(options?.noTransform);
+    this._read(stats, options);
+    if (options?.saveDomProperty) {
+      this.generateCache(true);
     }
+    this.callback.afterRead?.();
+    options?.afterCallback?.();
   }
 
-  submitPaintQueue() {
-    if (this._requestPaint == false) {
-      this._requestPaint = true;
-      this.global.domPaintQueue.push(this);
-    }
-  }
-
-  paint(): void {
-    for (const domElement of this._domElementList) {
-      domElement.paint();
-    }
+  postWrite(stats: frameStats, options: postWriteEntry | null = null): void {
+    this.callback.beforePostWrite?.();
+    options?.beforeCallback?.();
+    this._postWrite(stats, options);
+    this.dom?.postWrite();
+    options?.afterCallback?.();
+    this.callback.afterPostWrite?.();
   }
 }

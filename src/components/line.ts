@@ -2,19 +2,12 @@ import { GlobalManager } from "../global";
 import { ElementObject } from "./object";
 import { ConnectorComponent } from "./connector";
 
-/**
- * Connector components connect together nodes using lines.
- */
 class LineComponent extends ElementObject {
   endWorldX: number;
   endWorldY: number;
 
   start: ConnectorComponent;
   target: ConnectorComponent | null;
-
-  initialRender: boolean;
-
-  requestDelete: boolean;
 
   constructor(globals: GlobalManager, parent: ConnectorComponent) {
     super(globals, parent);
@@ -24,39 +17,25 @@ class LineComponent extends ElementObject {
 
     this.start = parent;
     this.target = null;
-
-    this.initialRender = false;
-    this.requestDelete = false;
-
-    // console.debug(`Created line ${this.gid}`);
   }
 
   setLineStartAtConnector() {
-    // console.debug(
-    //   "Setting line start at connector",
-    //   this.start.worldX,
-    //   this.start.worldY,
-    // );
-    this.setLineStart(this.start.worldX, this.start.worldY);
+    this.setLineStart(this.start.worldPosition[0], this.start.worldPosition[1]);
   }
 
   setLineEndAtConnector() {
-    // console.debug("Setting line end at connector", this.target?.positionX);
     if (this.target) {
-      this.setLineEnd(this.target.worldX, this.target.worldY);
+      this.setLineEnd(...this.target.worldPosition);
     }
   }
 
   setLineStart(startPositionX: number, startPositionY: number) {
-    // console.debug("Setting line start", startPositionX, startPositionY);
-    this.worldX = startPositionX;
-    this.worldY = startPositionY;
+    this.worldPosition = [startPositionX, startPositionY];
   }
 
   setLineEnd(endWorldX: number, endWorldY: number) {
     this.endWorldX = endWorldX;
     this.endWorldY = endWorldY;
-    // this.submitRender();
   }
 
   setLinePosition(
@@ -69,16 +48,14 @@ class LineComponent extends ElementObject {
     this.setLineEnd(endWorldX, endWorldY);
   }
 
-  // createDefaultLine(): SVGSVGElement {
-  //   // const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-  //   // const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
-  //   // svg.appendChild(line);
-  //   // svg.setAttribute("data-snapline-type", "connector-svg");
-  //   // line.setAttribute("data-snapline-type", "connector-line");
-  //   // line.setAttribute("stroke-width", "4");
-  //   // console.debug(`Created line from connector ${this.gid}`);
-  //   // return svg;
-  // }
+  applyCache() {
+    this.setLineStartAtConnector();
+    if (!this.target) {
+      this.setLineEnd(this.global.cursor.worldX, this.global.cursor.worldY);
+    } else {
+      this.setLineEndAtConnector();
+    }
+  }
 }
 
 export { LineComponent };

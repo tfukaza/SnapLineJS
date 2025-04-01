@@ -1,6 +1,5 @@
 import { GlobalManager } from "../global";
 import { BaseObject, DomElement, ElementObject } from "./object";
-import { ObjectTypes } from "../types";
 import {
   cursorDownProp,
   cursorMoveProp,
@@ -10,9 +9,6 @@ import {
 import { RectCollider, Collider } from "../collision";
 import { NodeComponent } from "./node";
 
-/**
- * Connector components connect together nodes using lines.
- */
 class RectSelectComponent extends ElementObject {
   _state: string;
   _mouseDownX: number;
@@ -21,19 +17,7 @@ class RectSelectComponent extends ElementObject {
   constructor(globals: GlobalManager, parent: BaseObject) {
     super(globals, parent);
 
-    // this.style = {
-    //   width: "0px",
-    //   height: "0px",
-    //   transformOrigin: "top left",
-    //   position: "absolute",
-    //   // left: "0px",
-    //   // top: "0px",
-    //   pointerEvents: "none",
-    //   // opacity: "0",
-    // };
-
     this._state = "none";
-
     this._mouseDownX = 0;
     this._mouseDownY = 0;
 
@@ -61,8 +45,8 @@ class RectSelectComponent extends ElementObject {
       left: "0px",
       top: "0px",
       pointerEvents: "none",
-      // opacity: "0",
     };
+    this.requestWrite();
     return domElement;
   }
 
@@ -73,19 +57,16 @@ class RectSelectComponent extends ElementObject {
     ) {
       return;
     }
-    console.debug(`onRectSelectDown at ${prop.worldX}, ${prop.worldY}`);
-    // let [cameraX, cameraY] = this.g.camera.getCameraFromScreen(
-    //   prop.clientX,
-    //   prop.clientY,
-    // );
-    // let [worldX, worldY] = this.g.camera.getWorldFromCamera(cameraX, cameraY);
+    for (let node of this.global.data.select) {
+      node.setSelected(false);
+    }
+
+    this.global.data.select = [];
     this.worldPosition = [prop.worldX, prop.worldY];
-    // this.dom.worldPosition = [prop.worldX, prop.worldY];
-    this._selectHitBox.updateProperty();
+    this._selectHitBox.recalculate();
     this._state = "dragging";
     this.dom.style = {
       display: "block",
-      // transform: `translate3d(${prop.worldX}px, ${prop.worldY}px, 0)`,
       width: "0px",
       height: "0px",
     };
@@ -93,35 +74,28 @@ class RectSelectComponent extends ElementObject {
     this._mouseDownY = prop.worldY;
 
     this._selectHitBox.event.collider.onBeginContact = (
-      thisObject: Collider,
+      _: Collider,
       otherObject: Collider,
     ) => {
-      if (otherObject.parent instanceof NodeComponent) {
-        otherObject.parent.setSelected(true);
+      if (otherObject.parent.constructor.name === "NodeComponent") {
+        let node = otherObject.parent as NodeComponent;
+        node.setSelected(true);
       }
     };
     this._selectHitBox.event.collider.onEndContact = (
       thisObject: Collider,
       otherObject: Collider,
     ) => {
-      console.debug(`onEndContact between ${thisObject} and ${otherObject}`);
-      if (otherObject.parent instanceof NodeComponent) {
-        otherObject.parent.setSelected(false);
+      console.debug("onEndContact", thisObject, otherObject);
+      if (otherObject.parent.constructor.name === "NodeComponent") {
+        let node = otherObject.parent as NodeComponent;
+        node.setSelected(false);
       }
     };
   }
 
   onGlobalCursorMove(prop: cursorMoveProp): void {
     if (this._state === "dragging") {
-      // console.debug(
-      //   `onRectSelectMove, dx: ${prop.clientX - this._mouseDownX}, dy: ${prop.clientY - this._mouseDownY}`,
-      // );
-      // let [cameraX, cameraY] = this.g.camera.getCameraFromScreen(
-      //   prop.clientX,
-      //   prop.clientY,
-      // );
-      // let [worldX, worldY] = this.g.camera.getWorldFromCamera(cameraX, cameraY);
-      // this.worldPosition = [worldX, worldY];
       let [boxOriginX, boxOriginY] = [
         Math.min(this._mouseDownX, prop.worldX),
         Math.min(this._mouseDownY, prop.worldY),
@@ -131,7 +105,6 @@ class RectSelectComponent extends ElementObject {
         Math.abs(prop.worldY - this._mouseDownY),
       ];
       this.dom.style = {
-        // transform: `translate3d(${boxOriginX}px, ${boxOriginY}px, 0)`,
         width: `${boxWidth}px`,
         height: `${boxHeight}px`,
       };
@@ -140,17 +113,11 @@ class RectSelectComponent extends ElementObject {
       this._selectHitBox.localY = this.position.worldY - boxOriginY;
       this._selectHitBox.width = boxWidth;
       this._selectHitBox.height = boxHeight;
-      // this._selectHitBox.updateProperty();
-      // console.debug(
-      //   `hithbox, localX: ${this._selectHitBox.localX}, localY: ${this._selectHitBox.localY}, width: ${this._selectHitBox.width}, height: ${this._selectHitBox.height}`,
-      // );
-
-      // this.submitRender();
+      this.requestPostWrite();
     }
   }
 
   onGlobalCursorUp(prop: cursorUpProp): void {
-    console.debug(`onRectSelectUp at ${prop.worldX}, ${prop.worldY}`);
     this.dom.style = {
       display: "none",
     };
@@ -158,14 +125,10 @@ class RectSelectComponent extends ElementObject {
 
     this._selectHitBox.event.collider.onBeginContact = null;
     this._selectHitBox.event.collider.onEndContact = null;
-    // this.submitRender();
+    this.requestPostWrite();
   }
 
-  onCollideNode(hitBox: Collider, node: Collider): void {
-    // console.debug(
-    //   `onCollideNode between ${hitBox.parent.gid} and ${node.parent.gid}`,
-    // );
-  }
+  onCollideNode(hitBox: Collider, node: Collider): void {}
 }
 
 export { RectSelectComponent };

@@ -2,10 +2,10 @@
 // https://leanrada.com/
 
 import { GlobalManager } from "./global";
-import { BaseObject, DomEvent, EventProxyFactory } from "./components/object";
+import { BaseObject, DomEvent } from "./components/object";
 import { getDomProperty } from "./components/util";
 import { InputControl } from "./input";
-
+import { EventProxyFactory } from "./helper";
 interface CollisionEvent {
   onCollide: null | ((thisObject: Collider, otherObject: Collider) => void);
   onBeginContact:
@@ -34,6 +34,7 @@ class EventCallback {
       onCursorMove: null,
       onCursorUp: null,
       onCursorScroll: null,
+      onResize: null,
     };
     this.dom = EventProxyFactory(object, this._dom);
   }
@@ -74,16 +75,24 @@ class Collider {
     this.event = new EventCallback(this.parent);
     this._iterationCollisions = new Set();
     this._currentCollisions = new Set();
-    this.updateProperty();
+    this.recalculate();
     this.inputEngine = new InputControl(this.global);
   }
 
   get worldX(): number {
-    return this.parent.position.worldX + this.localX;
+    return this.parent.worldX + this.localX;
+  }
+
+  set worldX(x: number) {
+    this.localX = x - this.parent.worldX;
   }
 
   get worldY(): number {
-    return this.parent.position.worldY + this.localY;
+    return this.parent.worldY + this.localY;
+  }
+
+  set worldY(y: number) {
+    this.localY = y - this.parent.worldY;
   }
 
   set localPosition([x, y]: [number, number]) {
@@ -94,10 +103,15 @@ class Collider {
   assignDom(domElement: HTMLElement) {
     this.domElement = domElement;
     this.inputEngine?.addCursorEventListener(this.domElement);
-    this.updateProperty();
+    // if parent has the "dom" property, then submit fetch queue
+    if (this.parent.hasOwnProperty("_domElementList")) {
+      this.parent.requestRead();
+    } else {
+      this.recalculate();
+    }
   }
 
-  fetchProperty() {
+  read() {
     if (!this.domElement) {
       return;
     }
@@ -108,7 +122,7 @@ class Collider {
     this.height = property.height;
   }
 
-  updateProperty() {}
+  recalculate() {}
 }
 
 class RectCollider extends Collider {
@@ -180,19 +194,6 @@ class CollisionEngine {
       x: object.worldX + (object.width ?? 0),
       left: false,
     });
-    if (object.type === "rect") {
-      console.debug(
-        `Added rect ${object.parent.gid} to collision engine. Position: ${object.worldX}, ${object.worldY}, height: ${object.height}, width: ${object.width}`,
-      );
-    } else if (object.type === "circle") {
-      console.debug(
-        `Added circle ${object.parent.gid} to collision engine. Position: ${object.worldX}, ${object.worldY}, radius: ${(object as CircleCollider).radius}`,
-      );
-    } else if (object.type === "point") {
-      console.debug(
-        `Added point ${object.parent.gid} to collision engine. Position: ${object.worldX}, ${object.worldY}`,
-      );
-    }
   }
 
   removeObject(uuid: symbol) {
@@ -325,7 +326,7 @@ class CollisionEngine {
     }
     if (thisObject._currentCollisions.has(otherObject)) {
     } else {
-      console.debug(`onColliderCollide, ${thisObject} and ${otherObject}`);
+      // console.debug(`onColliderCollide, ${thisObject} and ${otherObject}`);
       thisObject.event.collider.onBeginContact?.(thisObject, otherObject);
       thisObject._currentCollisions.add(otherObject);
     }

@@ -1,31 +1,24 @@
-import { NodeComponent, SnapLine } from "../../lib/snapline.mjs";
+import type { ObjectData } from "../lib/snapline.svelte";
 import Event from "./Event.svelte";
-
-interface ObjectData {
-  class: typeof NodeComponent;
-  component: typeof Event;
-  positionX: number;
-  positionY: number;
-  prop: any;
-  added: boolean;
-}
+import Math from "./Math.svelte";
 
 function addNode() {
   let nodeList: ObjectData[] = [];
 
-  // Add 8 nodes in a grid pattern
-  for (let i = 0; i < 16; i++) {
+  for (let i = 0; i < 1; i++) {
     nodeList.push({
-      class: NodeComponent,
-      component: Event,
-      positionX: (i % 2) * 300,
-      positionY: Math.floor(i / 2) * 100,
-      prop: null,
-      added: false,
+      svelteComponent: Event,
+      prop: {
+        worldX: 100 + i * 100,
+        worldY: 100 + i * 100,
+      },
     });
   }
-
+  nodeList.push({
+    svelteComponent: Math,
+    prop: {},
+  });
   return nodeList;
 }
 
-export { ObjectData, addNode };
+export { addNode };

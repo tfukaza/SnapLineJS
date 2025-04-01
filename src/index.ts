@@ -6,10 +6,12 @@ import { RectSelectComponent } from "./components/select";
 import { Background } from "./components/background";
 import { ElementObject, BaseObject } from "./components/object";
 import { GlobalManager } from "./global";
-import { cursorDownProp } from "./input";
-import { cursorMoveProp } from "./input";
-import { cursorUpProp } from "./input";
-import { cursorScrollProp } from "./input";
+import {
+  cursorDownProp,
+  cursorMoveProp,
+  cursorUpProp,
+  cursorScrollProp,
+} from "./input";
 
 export {
   SnapLine,

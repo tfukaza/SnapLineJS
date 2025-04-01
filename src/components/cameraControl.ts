@@ -1,4 +1,3 @@
-import Camera from "../camera";
 import { GlobalManager } from "../global";
 import {
   cursorDownProp,
@@ -7,9 +6,9 @@ import {
   cursorState,
   cursorUpProp,
 } from "../input";
-import { SnapLine } from "../snapline";
 import { setDomStyle } from "../helper";
 import { ElementObject } from "./object";
+
 class CameraControl extends ElementObject {
   _state: "idle" | "panning" = "idle";
   _mouseDownX: number;
@@ -26,9 +25,6 @@ class CameraControl extends ElementObject {
     this.event.global.onCursorMove = this.onCursorMove;
     this.event.global.onCursorUp = this.onCursorUp;
     this.event.global.onCursorScroll = this.onZoom;
-    console.debug("CameraControl constructor");
-
-    this.callback.renderCallback = this.renderCanvas;
   }
 
   assignCanvas(canvas: HTMLElement) {
@@ -44,11 +40,9 @@ class CameraControl extends ElementObject {
   }
 
   onCursorDown(prop: cursorDownProp) {
-    // Ignore if not middle mouse button
     if (prop.button != cursorState.mouseMiddle) {
       return;
     }
-    console.log("Begin camera pan");
     this._state = "panning";
     this._mouseDownX = prop.screenX;
     this._mouseDownY = prop.screenY;
@@ -64,36 +58,45 @@ class CameraControl extends ElementObject {
     }
     const dx = prop.screenX - this._mouseDownX;
     const dy = prop.screenY - this._mouseDownY;
-    // console.log("Camera panning", dx, dy);
     this.global.camera?.handlePanDrag(dx, dy);
-    this.submitRenderQueue();
+    this.requestPostWrite().then(() => {
+      this.renderCanvas();
+    });
   }
 
   onCursorUp(prop: cursorUpProp) {
     if (this._state != "panning") {
       return;
     }
-    console.log("Camera panning end");
     this._state = "idle";
     this.global.camera?.handlePanEnd();
-    this.submitRenderQueue();
+    this.requestPostWrite().then(() => {
+      this.renderCanvas();
+    });
   }
 
   onZoom(prop: cursorScrollProp) {
-    // console.log("Camera zooming", prop.delta);
+    let camera = this.global.camera!;
+    if (
+      prop.screenX < camera.containerOffsetX ||
+      prop.screenX > camera.containerOffsetX + camera.cameraWidth ||
+      prop.screenY < camera.containerOffsetY ||
+      prop.screenY > camera.containerOffsetY + camera.cameraHeight
+    ) {
+      return;
+    }
     this.global.camera?.handleScroll(
       prop.delta / 2000,
       prop.cameraX,
       prop.cameraY,
     );
-    this.submitRenderQueue();
+    this.requestPostWrite().then(() => {
+      this.renderCanvas();
+    });
   }
 
   renderCanvas() {
-    // console.log("CameraControl render");
     if (this._canvasElement) {
-      //   this._canvasElement.style.transform = this.global.camera
-      //     ?.canvasStyle as string;
       setDomStyle(this._canvasElement, {
         transform: this.global.camera?.canvasStyle as string,
       });

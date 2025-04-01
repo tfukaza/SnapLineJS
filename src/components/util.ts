@@ -1,15 +1,6 @@
 import { GlobalManager } from "../global";
 
 function getDomProperty(global: GlobalManager, dom: HTMLElement) {
-  // if (global.camera == null) {
-  //   console.error("camera is null");
-  //   return {
-  //     height: dom.offsetHeight,
-  //     width: dom.offsetWidth,
-  //     positionX: dom.offsetLeft,
-  //     positionY: dom.offsetTop,
-  //   };
-  // }
   const rect = dom.getBoundingClientRect();
   if (global.camera == null) {
     return {
@@ -23,7 +14,6 @@ function getDomProperty(global: GlobalManager, dom: HTMLElement) {
       screenY: rect.top,
     };
   }
-  // console.debug("rect", rect, dom);
   const [cameraX, cameraY] = global.camera.getCameraFromScreen(
     rect.left,
     rect.top,
@@ -35,10 +25,7 @@ function getDomProperty(global: GlobalManager, dom: HTMLElement) {
     cameraWidth,
     cameraHeight,
   );
-  // console.log(
-  //   dom,
-  //   `x: ${worldX}, y: ${worldY}, width: ${worldWidth}, height: ${worldHeight}`,
-  // );
+
   return {
     height: worldHeight,
     width: worldWidth,
