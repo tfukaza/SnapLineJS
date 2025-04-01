@@ -1,5 +1,4 @@
-// import interact from "interactjs";
-
+import { GlobalManager } from "./global";
 export enum cursorState {
   none = 0,
   mouseLeft = 1,
@@ -10,146 +9,214 @@ export enum cursorState {
   invalid = 4,
 }
 
-export type callbackFunction = (
-  event: Event,
-  element: Element | null,
-  cursorState: cursorState,
-  x: number,
-  y: number,
-) => void;
+export interface cursorDownProp {
+  event: MouseEvent | TouchEvent;
+  element: HTMLElement | null;
+  button: cursorState;
+  clientX: number;
+  clientY: number;
+  worldX: number;
+  worldY: number;
+  cameraX: number;
+  cameraY: number;
+  screenX: number;
+  screenY: number;
+  gid: string | null;
+}
+export interface cursorMoveProp {
+  event: MouseEvent | TouchEvent;
+  element: HTMLElement | null;
+  button: cursorState;
+  clientX: number;
+  clientY: number;
+  worldX: number;
+  worldY: number;
+  cameraX: number;
+  cameraY: number;
+  screenX: number;
+  screenY: number;
+  gid: string | null;
+}
+export interface cursorUpProp {
+  event: MouseEvent | TouchEvent;
+  element: HTMLElement | null;
+  button: cursorState;
+  clientX: number;
+  clientY: number;
+  worldX: number;
+  worldY: number;
+  cameraX: number;
+  cameraY: number;
+  screenX: number;
+  screenY: number;
+  gid: string | null;
+}
 
-export type scrollCallbackFunction = (
-  event: Event,
-  element: Element | null,
-  cursorState: cursorState,
-  x: number,
-  y: number,
-  delta: number,
-) => void;
+export interface cursorScrollProp {
+  event: WheelEvent;
+  element: HTMLElement | null;
+  button: cursorState;
+  clientX: number;
+  clientY: number;
+  worldX: number;
+  worldY: number;
+  cameraX: number;
+  cameraY: number;
+  screenX: number;
+  screenY: number;
+  delta: number;
+  gid: string | null;
+}
 
-export type keyCallbackFunction = (event: KeyboardEvent) => void;
+class InputEventCallback {
+  _mouseDownCallback: null | ((prop: cursorDownProp) => void);
+  _mouseMoveCallback: null | ((prop: cursorMoveProp) => void);
+  _mouseUpCallback: null | ((prop: cursorUpProp) => void);
+  _mouseWheelCallback: null | ((prop: cursorScrollProp) => void);
+  _touchStartCallback: null | ((prop: cursorDownProp) => void);
+  _touchMoveCallback: null | ((prop: cursorMoveProp) => void);
+  _touchEndCallback: null | ((prop: cursorUpProp) => void);
+  _touchPinchCallback: null | ((prop: cursorScrollProp) => void);
+
+  constructor() {
+    this._mouseDownCallback = null;
+    this._mouseMoveCallback = null;
+    this._mouseUpCallback = null;
+    this._mouseWheelCallback = null;
+    this._touchStartCallback = null;
+    this._touchMoveCallback = null;
+    this._touchEndCallback = null;
+    this._touchPinchCallback = null;
+  }
+
+  set mouseDownCallback(callback: (prop: cursorDownProp) => void) {
+    this._mouseDownCallback = callback;
+  }
+
+  get mouseDownCallback() {
+    if (!this._mouseDownCallback) {
+      return () => {};
+    }
+    return this._mouseDownCallback;
+  }
+
+  set mouseMoveCallback(callback: (prop: cursorMoveProp) => void) {
+    this._mouseMoveCallback = callback;
+  }
+
+  get mouseMoveCallback() {
+    if (!this._mouseMoveCallback) {
+      return () => {};
+    }
+    return this._mouseMoveCallback;
+  }
+
+  set mouseUpCallback(callback: (prop: cursorUpProp) => void) {
+    this._mouseUpCallback = callback;
+  }
+
+  get mouseUpCallback() {
+    if (!this._mouseUpCallback) {
+      return () => {};
+    }
+    return this._mouseUpCallback;
+  }
+
+  set mouseWheelCallback(callback: (prop: cursorScrollProp) => void) {
+    this._mouseWheelCallback = callback;
+  }
+
+  get mouseWheelCallback() {
+    if (!this._mouseWheelCallback) {
+      return () => {};
+    }
+    return this._mouseWheelCallback;
+  }
+
+  set touchStartCallback(callback: (prop: cursorDownProp) => void) {
+    this._touchStartCallback = callback;
+  }
+
+  get touchStartCallback() {
+    if (!this._touchStartCallback) {
+      return () => {};
+    }
+    return this._touchStartCallback;
+  }
+
+  set touchMoveCallback(callback: (prop: cursorMoveProp) => void) {
+    this._touchMoveCallback = callback;
+  }
+
+  get touchMoveCallback() {
+    if (!this._touchMoveCallback) {
+      return () => {};
+    }
+    return this._touchMoveCallback;
+  }
+
+  set touchEndCallback(callback: (prop: cursorUpProp) => void) {
+    this._touchEndCallback = callback;
+  }
+
+  get touchEndCallback() {
+    if (!this._touchEndCallback) {
+      return () => {};
+    }
+    return this._touchEndCallback;
+  }
+
+  set touchPinchCallback(callback: (prop: cursorScrollProp) => void) {
+    this._touchPinchCallback = callback;
+  }
+
+  get touchPinchCallback() {
+    if (!this._touchPinchCallback) {
+      return () => {};
+    }
+    return this._touchPinchCallback;
+  }
+}
 
 export type touchData = {
   x: number;
   y: number;
   target: Element | null;
   identifier: number;
-}
+};
 
 class InputControl {
   /**
    * Functions as a middleware that converts mouse and touch events into a unified event format.
    */
-  _dom: HTMLElement;
-  _document: Document;
-
-  _onCursorDown: null | callbackFunction;
-  _onCursorMove: null | callbackFunction;
-  _onCursorUp: null | callbackFunction;
-  _onScroll: null | scrollCallbackFunction;
-  _onRotate: null | scrollCallbackFunction;
-  _onKeyDown: null | keyCallbackFunction;
-
+  _domElement: HTMLElement | null;
+  global: GlobalManager;
   _pointerMode: "pointer" | "gesture" | "none";
 
-  _currentCursorState: cursorState;
   _sortedTouchArray: touchData[]; // List of touches for touch events, sorted by the times they are pressed
   _sortedTouchDict: { [key: number]: touchData }; // Dictionary of touches for touch events, indexed by the touch identifier
 
+  event: InputEventCallback;
 
-  constructor(dom: HTMLElement, document: Document) {
-
-    dom.addEventListener("wheel", this.onWheel.bind(this));
-    dom.addEventListener("keydown", this.onKeyDown.bind(this));
-
-    document.addEventListener("mousedown", this.onMouseDown.bind(this));
-    document.addEventListener("mousemove", this.onMouseMove.bind(this));
-    document.addEventListener("mouseup", this.onMouseUp.bind(this));
-
-    document.addEventListener("touchstart", this.onTouchStart.bind(this));
-    document.addEventListener("touchmove", this.onTouchMove.bind(this));
-    document.addEventListener("touchend", this.onTouchEnd.bind(this));
-
-    this._onCursorDown = null;
-    this._onCursorMove = null;
-    this._onCursorUp = null;
-    this._onScroll = null;
-    this._onRotate = null;
-    this._onKeyDown = null;
-
-    this._currentCursorState = cursorState.none;
-
+  constructor(global: GlobalManager) {
+    this.global = global;
     this._pointerMode = "none";
-
-    this._dom = dom;
-    this._document = document;
+    this._domElement = null;
 
     this._sortedTouchArray = [];
     this._sortedTouchDict = {};
 
-
+    this.event = new InputEventCallback();
   }
 
-  private _callFuncWithCallbackParam(
-    func: callbackFunction | null,
-    e: PointerEvent,
-  ) {
-    func?.(
-      e,
-      e.target as Element | null,
-      this.convertMouseToCursorState(e.button),
-      e.clientX,
-      e.clientY,
-    );
-  }
-
-  private _callFuncWithScrollCallbackParam(
-    func: scrollCallbackFunction | null,
-    e: PointerEvent,
-    delta: number,
-  ) {
-    func?.(
-      e,
-      e.target as Element | null, 
-      this.convertMouseToCursorState(e.button),
-      e.clientX,
-      e.clientY,
-      delta,
-    );
-  }
-
-  setCursorDownCallback(callback: callbackFunction) {
-    this._onCursorDown = callback;
-  }
-
-  setCursorMoveCallback(callback: callbackFunction) {
-    this._onCursorMove = callback;
-  }
-
-  setCursorUpCallback(callback: callbackFunction) {
-    this._onCursorUp = callback;
-  }
-
-  setScrollCallback(callback: scrollCallbackFunction) {
-    this._onScroll = callback;
-  }
-
-  setRotateCallback(callback: scrollCallbackFunction) {
-    this._onRotate = callback;
-  }
-
-  setKeyDownCallback(callback: keyCallbackFunction) {
-    this._onKeyDown = callback;
-  }
-
-  convertMouseToCursorState(button: number): cursorState {
-    switch (button) {
-      case 0:
-        return cursorState.mouseLeft;
+  convertMouseToCursorState(buttons: number): cursorState {
+    switch (buttons) {
       case 1:
-        return cursorState.mouseMiddle;
+        return cursorState.mouseLeft;
       case 2:
         return cursorState.mouseRight;
+      case 4:
+        return cursorState.mouseMiddle;
       default:
         return cursorState.none;
     }
@@ -161,13 +228,29 @@ class InputControl {
    * @returns
    */
   onMouseDown(e: MouseEvent) {
-    this._onCursorDown?.(
-      e,
-      e.target as Element | null,   
-      this.convertMouseToCursorState(e.button),
+    const [cameraX, cameraY] = this.global.camera!.getCameraFromScreen(
       e.clientX,
       e.clientY,
     );
+    const [worldX, worldY] = this.global.camera!.getWorldFromCamera(
+      cameraX,
+      cameraY,
+    );
+    this.event.mouseDownCallback({
+      event: e,
+      element: e.target as HTMLElement | null,
+      button: this.convertMouseToCursorState(e.buttons),
+      clientX: e.clientX,
+      clientY: e.clientY,
+      worldX: worldX,
+      worldY: worldY,
+      cameraX: cameraX,
+      cameraY: cameraY,
+      screenX: e.clientX,
+      screenY: e.clientY,
+      gid: null,
+    });
+    e.stopPropagation();
   }
 
   /**
@@ -175,15 +258,30 @@ class InputControl {
    * @param e
    */
   onMouseMove(e: MouseEvent) {
-    const element = this._document.elementFromPoint(e.clientX, e.clientY);
-
-    this._onCursorMove?.(
-      e,
-      element,
-      this.convertMouseToCursorState(e.button),
+    const element = document?.elementFromPoint(e.clientX, e.clientY);
+    const [cameraX, cameraY] = this.global.camera!.getCameraFromScreen(
       e.clientX,
       e.clientY,
     );
+    const [worldX, worldY] = this.global.camera!.getWorldFromCamera(
+      cameraX,
+      cameraY,
+    );
+    this.event.mouseMoveCallback({
+      event: e,
+      element: element as HTMLElement | null,
+      button: this.convertMouseToCursorState(e.buttons),
+      clientX: e.clientX,
+      clientY: e.clientY,
+      worldX: worldX,
+      worldY: worldY,
+      cameraX: cameraX,
+      cameraY: cameraY,
+      screenX: e.clientX,
+      screenY: e.clientY,
+      gid: null,
+    });
+    e.stopPropagation();
   }
 
   /**
@@ -191,13 +289,29 @@ class InputControl {
    * @param e
    */
   onMouseUp(e: MouseEvent) {
-    this._onCursorUp?.(
-      e,
-      e.target as Element | null,
-      this.convertMouseToCursorState(e.button),
+    const [cameraX, cameraY] = this.global.camera!.getCameraFromScreen(
       e.clientX,
       e.clientY,
     );
+    const [worldX, worldY] = this.global.camera!.getWorldFromCamera(
+      cameraX,
+      cameraY,
+    );
+    this.event.mouseUpCallback({
+      event: e,
+      element: e.target as HTMLElement | null,
+      button: this.convertMouseToCursorState(e.buttons),
+      clientX: e.clientX,
+      clientY: e.clientY,
+      worldX: worldX,
+      worldY: worldY,
+      cameraX: cameraX,
+      cameraY: cameraY,
+      screenX: e.clientX,
+      screenY: e.clientY,
+      gid: null,
+    });
+    e.stopPropagation();
   }
 
   /**
@@ -205,14 +319,31 @@ class InputControl {
    * @param e
    */
   onWheel(e: WheelEvent) {
-    this._onScroll?.(
-      e,
-      e.target as Element | null,
-      cursorState.mouseMiddle,
+    const [cameraX, cameraY] = this.global.camera!.getCameraFromScreen(
       e.clientX,
       e.clientY,
-      e.deltaY,
     );
+    const [worldX, worldY] = this.global.camera!.getWorldFromCamera(
+      cameraX,
+      cameraY,
+    );
+    this.event.mouseWheelCallback({
+      event: e,
+      element: e.target as HTMLElement | null,
+      button: cursorState.mouseMiddle,
+      clientX: e.clientX,
+      clientY: e.clientY,
+      worldX: worldX,
+      worldY: worldY,
+      cameraX: cameraX,
+      cameraY: cameraY,
+      screenX: e.clientX,
+      screenY: e.clientY,
+      delta: e.deltaY,
+      gid: null,
+    });
+    e.preventDefault();
+    e.stopPropagation();
   }
 
   /**
@@ -220,11 +351,9 @@ class InputControl {
    * @param e
    * @returns
    */
-  onKeyDown(e: KeyboardEvent) {
-    this._onKeyDown?.(e);
-  }
-
-
+  // onKeyDown(e: KeyboardEvent) {
+  //   this._onKeyDown?.(e);
+  // }
 
   onTouchStart(e: TouchEvent) {
     const newTouchList = e.changedTouches;
@@ -246,43 +375,104 @@ class InputControl {
     }
 
     if (this._sortedTouchArray.length === 1) {
-      this._onCursorDown?.(
-        e,
-        this._sortedTouchArray[0].target as Element | null,
-        cursorState.mouseLeft,
+      let [clientX, clientY] = [
         this._sortedTouchArray[0].x,
         this._sortedTouchArray[0].y,
+      ];
+      const [cameraX, cameraY] = this.global.camera!.getCameraFromScreen(
+        clientX,
+        clientY,
       );
+      const [worldX, worldY] = this.global.camera!.getWorldFromCamera(
+        cameraX,
+        cameraY,
+      );
+      this.event.touchStartCallback({
+        event: e,
+        element: this._sortedTouchArray[0].target as HTMLElement | null,
+        button: cursorState.mouseLeft,
+        clientX: clientX,
+        clientY: clientY,
+        worldX: worldX,
+        worldY: worldY,
+        cameraX: cameraX,
+        cameraY: cameraY,
+        screenX: clientX,
+        screenY: clientY,
+        gid: null,
+      });
       return;
     }
 
     if (this._sortedTouchArray.length === 2) {
       if (prevSortedTouchArrayLength === 1) {
-        this._onCursorUp?.(
-          e,
-          this._sortedTouchArray[1].target as Element | null,
-          cursorState.mouseLeft,
+        let [clientX, clientY] = [
           this._sortedTouchArray[1].x,
           this._sortedTouchArray[1].y,
+        ];
+        const [cameraX, cameraY] = this.global.camera!.getCameraFromScreen(
+          clientX,
+          clientY,
         );
+        const [worldX, worldY] = this.global.camera!.getWorldFromCamera(
+          cameraX,
+          cameraY,
+        );
+        this.event.touchStartCallback({
+          event: e,
+          element: this._sortedTouchArray[1].target as HTMLElement | null,
+          button: cursorState.mouseLeft,
+          clientX: clientX,
+          clientY: clientY,
+          worldX: worldX,
+          worldY: worldY,
+          cameraX: cameraX,
+          cameraY: cameraY,
+          screenX: clientX,
+          screenY: clientY,
+          gid: null,
+        });
       }
-      const middleX = (this._sortedTouchArray[0].x + this._sortedTouchArray[1].x) / 2;
-      const middleY = (this._sortedTouchArray[0].y + this._sortedTouchArray[1].y) / 2;
-      this._onCursorDown?.(
-        e,
-        this._sortedTouchArray[0].target as Element | null,
-        cursorState.mouseMiddle,
+      const middleX =
+        (this._sortedTouchArray[0].x + this._sortedTouchArray[1].x) / 2;
+      const middleY =
+        (this._sortedTouchArray[0].y + this._sortedTouchArray[1].y) / 2;
+      const [cameraX, cameraY] = this.global.camera!.getCameraFromScreen(
         middleX,
         middleY,
       );
+      const [worldX, worldY] = this.global.camera!.getWorldFromCamera(
+        cameraX,
+        cameraY,
+      );
+      this.event.touchStartCallback({
+        event: e,
+        element: this._sortedTouchArray[0].target as HTMLElement | null,
+        button: cursorState.mouseMiddle,
+        clientX: middleX,
+        clientY: middleY,
+        worldX: worldX,
+        worldY: worldY,
+        cameraX: cameraX,
+        cameraY: cameraY,
+        screenX: middleX,
+        screenY: middleY,
+        gid: null,
+      });
       return;
     }
   }
 
   onTouchMove(e: TouchEvent) {
     const updatedTouchArray = e.touches;
-    const prevTouch_0 = this._sortedTouchArray.length > 0 ? { ...this._sortedTouchArray[0] } : null;
-    const prevTouch_1 = this._sortedTouchArray.length > 1 ? { ...this._sortedTouchArray[1] } : null;
+    const prevTouch_0 =
+      this._sortedTouchArray.length > 0
+        ? { ...this._sortedTouchArray[0] }
+        : null;
+    const prevTouch_1 =
+      this._sortedTouchArray.length > 1
+        ? { ...this._sortedTouchArray[1] }
+        : null;
 
     for (let i = 0; i < updatedTouchArray.length; i++) {
       const touch = updatedTouchArray[i];
@@ -296,13 +486,32 @@ class InputControl {
 
     // If there is only one touch point, treat it as a mouse event
     if (this._sortedTouchArray.length === 1) {
-      this._onCursorMove?.(
-        e,
-        this._sortedTouchArray[0].target,
-        cursorState.mouseLeft,
+      let [clientX, clientY] = [
         this._sortedTouchArray[0].x,
         this._sortedTouchArray[0].y,
+      ];
+      const [cameraX, cameraY] = this.global.camera!.getCameraFromScreen(
+        clientX,
+        clientY,
       );
+      const [worldX, worldY] = this.global.camera!.getWorldFromCamera(
+        cameraX,
+        cameraY,
+      );
+      this.event.touchMoveCallback({
+        event: e,
+        element: this._sortedTouchArray[0].target as HTMLElement | null,
+        button: cursorState.mouseLeft,
+        clientX: clientX,
+        clientY: clientY,
+        worldX: worldX,
+        worldY: worldY,
+        cameraX: cameraX,
+        cameraY: cameraY,
+        screenX: clientX,
+        screenY: clientY,
+        gid: null,
+      });
       return;
     }
 
@@ -310,37 +519,66 @@ class InputControl {
       return;
     }
 
-    const middleX = (this._sortedTouchArray[0].x + this._sortedTouchArray[1].x) / 2;
-    const middleY = (this._sortedTouchArray[0].y + this._sortedTouchArray[1].y) / 2;
-    const span = Math.sqrt(Math.pow(this._sortedTouchArray[0].x - this._sortedTouchArray[1].x, 2) + Math.pow(this._sortedTouchArray[0].y - this._sortedTouchArray[1].y, 2));
+    const middleX =
+      (this._sortedTouchArray[0].x + this._sortedTouchArray[1].x) / 2;
+    const middleY =
+      (this._sortedTouchArray[0].y + this._sortedTouchArray[1].y) / 2;
+    const span = Math.sqrt(
+      Math.pow(this._sortedTouchArray[0].x - this._sortedTouchArray[1].x, 2) +
+        Math.pow(this._sortedTouchArray[0].y - this._sortedTouchArray[1].y, 2),
+    );
 
     let deltaSpan = 0;
-    
-    if (prevTouch_0 && prevTouch_1) {    
-      const prevSpan = Math.sqrt(Math.pow(prevTouch_0.x - prevTouch_1.x, 2) + Math.pow(prevTouch_0.y - prevTouch_1.y, 2));
+
+    if (prevTouch_0 && prevTouch_1) {
+      const prevSpan = Math.sqrt(
+        Math.pow(prevTouch_0.x - prevTouch_1.x, 2) +
+          Math.pow(prevTouch_0.y - prevTouch_1.y, 2),
+      );
       deltaSpan = span - prevSpan;
     }
 
-    this._onCursorMove?.(
-      e,
-      this._sortedTouchArray[0].target, // TODO: find element at middle of two touch points
-      cursorState.mouseMiddle,
+    const [cameraX, cameraY] = this.global.camera!.getCameraFromScreen(
       middleX,
       middleY,
     );
-    this._onScroll?.(
-      e,
-      this._sortedTouchArray[0].target,
-      cursorState.mouseMiddle,
-      middleX,
-      middleY,
-      deltaSpan,
+    const [worldX, worldY] = this.global.camera!.getWorldFromCamera(
+      cameraX,
+      cameraY,
     );
-    
+
+    this.event.touchMoveCallback({
+      event: e,
+      element: this._sortedTouchArray[0].target as HTMLElement | null, // TODO: find element at middle of two touch points
+      button: cursorState.mouseMiddle,
+      clientX: middleX,
+      clientY: middleY,
+      worldX: worldX,
+      worldY: worldY,
+      cameraX: cameraX,
+      cameraY: cameraY,
+      screenX: middleX,
+      screenY: middleY,
+      gid: null,
+    });
+    this.event.touchPinchCallback({
+      event: e as unknown as WheelEvent,
+      element: this._sortedTouchArray[0].target as HTMLElement | null,
+      button: cursorState.mouseMiddle,
+      clientX: middleX,
+      clientY: middleY,
+      worldX: worldX,
+      worldY: worldY,
+      cameraX: cameraX,
+      cameraY: cameraY,
+      screenX: middleX,
+      screenY: middleY,
+      delta: deltaSpan,
+      gid: null,
+    });
   }
 
   onTouchEnd(e: TouchEvent) {
-
     const endTouchIDs: number[] = [];
     for (let i = 0; i < e.changedTouches.length; i++) {
       const touch = e.changedTouches[i];
@@ -348,38 +586,104 @@ class InputControl {
         endTouchIDs.push(touch.identifier);
       }
     }
-    const deletedTouchArray = this._sortedTouchArray.filter(touch => endTouchIDs.includes(touch.identifier));
+    const deletedTouchArray = this._sortedTouchArray.filter((touch) =>
+      endTouchIDs.includes(touch.identifier),
+    );
     const prevSortedTouchArrayLength = this._sortedTouchArray.length;
-    this._sortedTouchArray = this._sortedTouchArray.filter(touch => !endTouchIDs.includes(touch.identifier));
+    this._sortedTouchArray = this._sortedTouchArray.filter(
+      (touch) => !endTouchIDs.includes(touch.identifier),
+    );
     for (let id of endTouchIDs) {
       delete this._sortedTouchDict[id];
     }
 
     if (deletedTouchArray.length > 0) {
       if (prevSortedTouchArrayLength === 1) {
-        this._onCursorUp?.(
-          e,
-          deletedTouchArray[0].target,
-          cursorState.mouseLeft,
+        let [clientX, clientY] = [
           deletedTouchArray[0].x,
           deletedTouchArray[0].y,
+        ];
+        const [cameraX, cameraY] = this.global.camera!.getCameraFromScreen(
+          clientX,
+          clientY,
         );
+        const [worldX, worldY] = this.global.camera!.getWorldFromCamera(
+          cameraX,
+          cameraY,
+        );
+        this.event.touchEndCallback({
+          event: e,
+          element: deletedTouchArray[0].target as HTMLElement | null,
+          button: cursorState.mouseLeft,
+          clientX: clientX,
+          clientY: clientY,
+          worldX: worldX,
+          worldY: worldY,
+          cameraX: cameraX,
+          cameraY: cameraY,
+          screenX: clientX,
+          screenY: clientY,
+          gid: null,
+        });
         return;
       }
 
       if (prevSortedTouchArrayLength === 2) {
-        this._onCursorUp?.(
-          e,
-          deletedTouchArray[0].target,
-          cursorState.mouseMiddle,
+        let [clientX, clientY] = [
           deletedTouchArray[0].x,
           deletedTouchArray[0].y,
+        ];
+        const [cameraX, cameraY] = this.global.camera!.getCameraFromScreen(
+          clientX,
+          clientY,
         );
+        const [worldX, worldY] = this.global.camera!.getWorldFromCamera(
+          cameraX,
+          cameraY,
+        );
+        this.event.touchEndCallback({
+          event: e,
+          element: deletedTouchArray[0].target as HTMLElement | null,
+          button: cursorState.mouseLeft,
+          clientX: clientX,
+          clientY: clientY,
+          worldX: worldX,
+          worldY: worldY,
+          cameraX: cameraX,
+          cameraY: cameraY,
+          screenX: clientX,
+          screenY: clientY,
+          gid: null,
+        });
       }
-    }  
-  
+    }
   }
-  
+
+  addCursorEventListener(dom: HTMLElement) {
+    dom.addEventListener("mousedown", (e: MouseEvent) => {
+      this.onMouseDown(e);
+    });
+    dom.addEventListener("mousemove", (e: MouseEvent) => {
+      this.onMouseMove(e);
+    });
+    dom.addEventListener("mouseup", (e: MouseEvent) => {
+      this.onMouseUp(e);
+    });
+    dom.addEventListener("wheel", (e: WheelEvent) => {
+      this.onWheel(e);
+    });
+    dom.addEventListener("touchstart", (e: TouchEvent) => {
+      this.onTouchStart(e);
+      e.stopPropagation();
+    });
+    dom.addEventListener("touchmove", (e: TouchEvent) => {
+      this.onTouchMove(e);
+      e.stopPropagation();
+    });
+    dom.addEventListener("touchend", (e: TouchEvent) => {
+      this.onTouchEnd(e);
+    });
+  }
 }
 
 export { InputControl };
