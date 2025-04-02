@@ -1,4 +1,17 @@
-import { CameraConfig } from "./types";
+export interface CameraConfig {
+  enableZoom?: boolean;
+  zoomBounds?: {
+    min: number;
+    max: number;
+  };
+  enablePan?: boolean;
+  panBounds?: {
+    top: number | null;
+    left: number | null;
+    right: number | null;
+    bottom: number | null;
+  };
+}
 
 class Camera {
   /**
@@ -31,11 +44,7 @@ class Camera {
 
   resizeObserver: ResizeObserver;
 
-  constructor(
-    container: HTMLElement,
-    // canvas: HTMLElement,
-    config: CameraConfig = {},
-  ) {
+  constructor(container: HTMLElement, config: CameraConfig = {}) {
     let containerRect = container.getBoundingClientRect();
     this.containerDom = container;
     this.containerOffsetX = containerRect.left;
@@ -59,20 +68,17 @@ class Camera {
       panBounds: { top: null, left: null, right: null, bottom: null },
     };
     this.config = { ...defaultConfig, ...config };
-    console.debug("Camera initialized", this);
 
     this.canvasStyle = "";
     this.updateCamera();
 
     const resizeObserver = new ResizeObserver(() => {
-      console.debug("Camera resize", this);
       this.updateCameraProperty();
     });
     resizeObserver.observe(this.containerDom);
     this.resizeObserver = resizeObserver;
 
     window.addEventListener("scroll", () => {
-      console.debug("Camera scroll", this);
       this.updateCameraProperty();
     });
   }

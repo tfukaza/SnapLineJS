@@ -16,6 +16,9 @@
     "skipLibCheck": true,
     "rootDir": "src",
     "outDir": "out-tsc",
+    "paths": {
+      "@/*": ["./src/*"]
+    }
   },
   "include": ["src"]
 }

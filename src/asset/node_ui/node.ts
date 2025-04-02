@@ -1,16 +1,19 @@
-import { BaseObject, frameStats } from "./object";
-import { NodeConfig } from "../types";
+import { BaseObject, frameStats } from "@/object";
 import { ConnectorComponent } from "./connector";
-import { ElementObject } from "./object";
+import { ElementObject } from "@/object";
 import { LineComponent } from "./line";
 import {
   cursorUpProp,
   cursorDownProp,
   cursorState,
   cursorMoveProp,
-} from "../input";
-import { RectCollider } from "../collision";
-import { GlobalManager } from "../global";
+} from "@/input";
+import { RectCollider } from "@/collision";
+import { GlobalManager } from "@/global";
+
+export interface NodeConfig {
+  lockPosition?: boolean;
+}
 
 class NodeComponent extends ElementObject {
   _config: NodeConfig;

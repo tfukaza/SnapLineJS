@@ -4,12 +4,12 @@ import {
   cursorUpProp,
   cursorScrollProp,
   InputControl,
-} from "../input";
-import { setDomStyle, EventProxyFactory } from "../helper";
-import { Collider } from "../collision";
-import { getDomProperty } from "./util";
-import { GlobalManager } from "../global";
-import { AnimationObject } from "../animation";
+} from "@/input";
+import { setDomStyle, EventProxyFactory } from "@/util";
+import { Collider } from "@/collision";
+import { getDomProperty } from "@/util";
+import { GlobalManager } from "@/global";
+import { AnimationObject } from "@/animation";
 
 export interface GlobalEvent {
   onCursorDown: null | ((prop: cursorDownProp) => void);

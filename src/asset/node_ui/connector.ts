@@ -1,10 +1,10 @@
-import { ElementObject, frameStats } from "./object";
+import { ElementObject, frameStats, BaseObject } from "@/object";
 import { NodeComponent } from "./node";
-import { LineComponent } from "./line";
-import { cursorDownProp, cursorState, cursorMoveProp } from "../input";
-import { Collider } from "../collision";
-import { CircleCollider, PointCollider } from "../collision";
-import { GlobalManager } from "../global";
+import { LineComponent } from "@/asset/node_ui/line";
+import { cursorDownProp, cursorState, cursorMoveProp } from "@/input";
+import { Collider } from "@/collision";
+import { CircleCollider, PointCollider } from "@/collision";
+import { GlobalManager } from "@/global";
 
 enum ConnectorState {
   IDLE,
@@ -40,7 +40,7 @@ class ConnectorComponent extends ElementObject {
     parent: NodeComponent,
     config: ConnectorConfig = {},
   ) {
-    super(global, parent);
+    super(global, parent as unknown as BaseObject);
 
     this.prop = {};
     this.outgoingLines = [];

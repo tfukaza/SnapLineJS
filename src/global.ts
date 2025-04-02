@@ -1,16 +1,16 @@
-import Camera from "./camera";
+import Camera from "@/camera";
 import {
   BaseObject,
   preReadEntry,
   writeEntry,
   readEntry,
   postWriteEntry,
-} from "./components/object";
-import { AnimationObject } from "./animation";
-import { cursorState } from "./input";
-import { InputControl } from "./input";
-import { CollisionEngine } from "./collision";
-import { SnapLine } from "./snapline";
+} from "@/object";
+import { AnimationObject } from "@/animation";
+import { cursorState } from "@/input";
+import { InputControl } from "@/input";
+import { CollisionEngine } from "@/collision";
+import { SnapLine } from "@/snapline";
 interface coordinates {
   worldX: number;
   worldY: number;

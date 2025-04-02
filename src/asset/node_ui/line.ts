@@ -1,6 +1,6 @@
-import { GlobalManager } from "../global";
-import { ElementObject } from "./object";
-import { ConnectorComponent } from "./connector";
+import { GlobalManager } from "@/global";
+import { ElementObject, BaseObject } from "@/object";
+import { ConnectorComponent } from "@/asset/node_ui/connector";
 
 class LineComponent extends ElementObject {
   endWorldX: number;
@@ -9,13 +9,13 @@ class LineComponent extends ElementObject {
   start: ConnectorComponent;
   target: ConnectorComponent | null;
 
-  constructor(globals: GlobalManager, parent: ConnectorComponent) {
+  constructor(globals: GlobalManager, parent: BaseObject) {
     super(globals, parent);
 
     this.endWorldX = 0;
     this.endWorldY = 0;
 
-    this.start = parent;
+    this.start = parent as unknown as ConnectorComponent;
     this.target = null;
   }
 

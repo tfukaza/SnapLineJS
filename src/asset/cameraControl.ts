@@ -1,13 +1,13 @@
-import { GlobalManager } from "../global";
+import { GlobalManager } from "@/global";
 import {
   cursorDownProp,
   cursorMoveProp,
   cursorScrollProp,
   cursorState,
   cursorUpProp,
-} from "../input";
-import { setDomStyle } from "../helper";
-import { ElementObject } from "./object";
+} from "@/input";
+import { setDomStyle } from "@/util";
+import { ElementObject } from "@/object";
 
 class CameraControl extends ElementObject {
   _state: "idle" | "panning" = "idle";

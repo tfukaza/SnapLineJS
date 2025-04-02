@@ -1,17 +1,17 @@
-import { SnapLine } from "./snapline";
-import { LineComponent } from "./components/line";
-import { ConnectorComponent } from "./components/connector";
-import { NodeComponent } from "./components/node";
-import { RectSelectComponent } from "./components/select";
-import { Background } from "./components/background";
-import { ElementObject, BaseObject } from "./components/object";
-import { GlobalManager } from "./global";
+import { SnapLine } from "@/snapline";
+import { LineComponent } from "@/asset/node_ui/line";
+import { ConnectorComponent } from "@/asset/node_ui/connector";
+import { NodeComponent } from "@/asset/node_ui/node";
+import { RectSelectComponent } from "@/asset/node_ui/select";
+import { Background } from "@/asset/node_ui/background";
+import { ElementObject, BaseObject } from "@/object";
+import { GlobalManager } from "@/global";
 import {
   cursorDownProp,
   cursorMoveProp,
   cursorUpProp,
   cursorScrollProp,
-} from "./input";
+} from "@/input";
 
 export {
   SnapLine,
