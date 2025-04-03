@@ -1,10 +1,10 @@
-import { ElementObject, frameStats, BaseObject } from "@/object";
+import { ElementObject, frameStats, BaseObject } from "../../object";
 import { NodeComponent } from "./node";
-import { LineComponent } from "@/asset/node_ui/line";
-import { cursorDownProp, cursorState, cursorMoveProp } from "@/input";
-import { Collider } from "@/collision";
-import { CircleCollider, PointCollider } from "@/collision";
-import { GlobalManager } from "@/global";
+import { LineComponent } from "./line";
+import { cursorDownProp, cursorState, cursorMoveProp } from "../../input";
+import { Collider } from "../../collision";
+import { CircleCollider, PointCollider } from "../../collision";
+import { GlobalManager } from "../../global";
 
 enum ConnectorState {
   IDLE,

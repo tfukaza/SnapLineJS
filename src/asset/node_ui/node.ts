@@ -1,15 +1,15 @@
-import { BaseObject, frameStats } from "@/object";
+import { BaseObject, frameStats } from "../../object";
 import { ConnectorComponent } from "./connector";
-import { ElementObject } from "@/object";
+import { ElementObject } from "../../object";
 import { LineComponent } from "./line";
 import {
   cursorUpProp,
   cursorDownProp,
   cursorState,
   cursorMoveProp,
-} from "@/input";
-import { RectCollider } from "@/collision";
-import { GlobalManager } from "@/global";
+} from "../../input";
+import { RectCollider } from "../../collision";
+import { GlobalManager } from "../../global";
 
 export interface NodeConfig {
   lockPosition?: boolean;
@@ -148,7 +148,7 @@ class NodeComponent extends ElementObject {
     }
     this.calculateCache();
 
-    if (this.global.data.select.includes(this) == false) {
+    if (this.global.data.select?.includes(this) == false) {
       for (const node of this.global.data.select) {
         node.setSelected(false);
       }
@@ -157,7 +157,7 @@ class NodeComponent extends ElementObject {
 
     this._hasMoved = false;
 
-    for (const node of this.global.data.select) {
+    for (const node of this.global.data.select ?? []) {
       node.#setStartPositions();
       node._mouseDownX = e.worldX;
       node._mouseDownY = e.worldY;
@@ -176,7 +176,7 @@ class NodeComponent extends ElementObject {
 
     this._hasMoved = true;
 
-    for (const node of this.global.data.select) {
+    for (const node of this.global.data.select ?? []) {
       node.setDragPosition(prop);
     }
   }
@@ -196,14 +196,14 @@ class NodeComponent extends ElementObject {
     this.event.global.onCursorUp = null;
 
     if (this._hasMoved == false) {
-      for (const node of this.global.data.select) {
+      for (const node of this.global.data.select ?? []) {
         node.setSelected(false);
       }
       this.setSelected(true);
       return;
     }
 
-    for (const node of this.global.data.select) {
+    for (const node of this.global.data.select ?? []) {
       node.setUpPosition(prop);
     }
   }

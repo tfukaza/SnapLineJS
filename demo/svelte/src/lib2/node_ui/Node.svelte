@@ -6,8 +6,8 @@
     let { className, children}: { className: string, children: any} = $props();
     let nodeDOM: HTMLDivElement | null = null;
     let lineList: LineComponent[] = $state([]);
-    let sl:SnapLine = getContext("sl");
-    let nodeObject = new NodeComponent(sl.global, null);
+    let engine:SnapLine = getContext("engine");
+    let nodeObject = new NodeComponent(engine.global, null);
 
     setContext("nodeObject", nodeObject);
 

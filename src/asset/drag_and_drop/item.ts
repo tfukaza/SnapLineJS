@@ -3,9 +3,9 @@ import {
   cursorDownProp,
   cursorState,
   cursorUpProp,
-} from "@/input";
-import { BaseObject, ElementObject } from "@/object";
-import { GlobalManager } from "@/global";
+} from "../../input";
+import { BaseObject, ElementObject } from "../../object";
+import { GlobalManager } from "../../global";
 import { ItemContainer } from "./container";
 
 export class ItemObject extends ElementObject {

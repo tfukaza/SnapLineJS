@@ -1,11 +1,11 @@
 // Credits to Lean Rada for the collision detection algorithm article
 // https://leanrada.com/
 
-import { GlobalManager } from "@/global";
-import { BaseObject, DomEvent } from "@/object";
-import { getDomProperty } from "@/util";
-import { InputControl } from "@/input";
-import { EventProxyFactory } from "@/util";
+import { GlobalManager } from "./global";
+import { BaseObject, DomEvent } from "./object";
+import { getDomProperty } from "./util";
+import { InputControl } from "./input";
+import { EventProxyFactory } from "./util";
 interface CollisionEvent {
   onCollide: null | ((thisObject: Collider, otherObject: Collider) => void);
   onBeginContact:

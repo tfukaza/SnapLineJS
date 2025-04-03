@@ -1,6 +1,6 @@
-import { GlobalManager } from "../../global";
-import { BaseObject, DomElement, ElementObject } from "../../object";
-import { cursorMoveProp } from "../../input";
+import { GlobalManager } from "../global";
+import { BaseObject, DomElement, ElementObject } from "../object";
+import { cursorMoveProp } from "../input";
 
 class Background extends ElementObject {
   _tileSize: number = 40;

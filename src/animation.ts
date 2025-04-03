@@ -1,4 +1,4 @@
-import { BaseObject, frameStats } from "@/object";
+import { BaseObject, frameStats } from "./object";
 
 const PRECISION = 0.0001;
 

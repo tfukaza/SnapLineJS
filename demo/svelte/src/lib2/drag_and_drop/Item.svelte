@@ -1,21 +1,20 @@
 <script lang="ts">
     import { onMount, getContext } from "svelte";
-    import { getSnapline } from "../lib/snapline.svelte";
-    import { ItemContainer, ItemObject } from "./def";
+    import { ItemContainer} from "../../../../../src/asset/drag_and_drop/container"
+    import { ItemObject } from "../../../../../src/asset/drag_and_drop/item"
     import type { SnapLine } from "../../../../../src/index";
 
     let {  children }: { children: any } = $props();
-    const sl:SnapLine = getContext("sl");
+    const engine:SnapLine = getContext("engine");
     const itemContainer:ItemContainer = getContext("itemContainer");
     
     let item: HTMLDivElement | null = null;
-    let itemObject: ItemObject | null = null;
+    let itemObject: ItemObject = new ItemObject(engine.global, null);
 
     onMount(() => {
-        itemObject = new ItemObject(sl.global, null);
-        itemObject.addDom(item);
-        sl.addObject(itemObject);
-        itemContainer.addItem(itemObject as ItemObject);
+        itemObject.addDom(item as HTMLElement);
+        engine.addObject(itemObject);
+        itemContainer.addItem(itemObject);
     });
 
 </script>

@@ -3,14 +3,14 @@ import {
   cursorMoveProp,
   cursorScrollProp,
   cursorUpProp,
-} from "@/input";
-import Camera from "@/camera";
-import { InputControl } from "@/input";
-import { CollisionEngine } from "@/collision";
-import { GlobalManager } from "@/global";
-import { BaseObject, DomEvent, frameStats } from "@/object";
+} from "./input";
+import Camera from "./camera";
+import { InputControl } from "./input";
+import { CollisionEngine } from "./collision";
+import { GlobalManager } from "./global";
+import { BaseObject, DomEvent, frameStats } from "./object";
 // import { CameraControl } from "@/asset/node_ui/cameraControl";
-import { AnimationObject } from "@/animation";
+import { AnimationObject } from "./animation";
 
 export interface SnapLineConfig {}
 

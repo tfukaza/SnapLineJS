@@ -1,6 +1,6 @@
-import { GlobalManager } from "@/global";
-import { ElementObject, BaseObject } from "@/object";
-import { ConnectorComponent } from "@/asset/node_ui/connector";
+import { GlobalManager } from "../../global";
+import { ElementObject, BaseObject } from "../../object";
+import { ConnectorComponent } from "./connector";
 
 class LineComponent extends ElementObject {
   endWorldX: number;

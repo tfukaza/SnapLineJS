@@ -1,13 +1,13 @@
 <script lang="ts">
-    import { ItemContainer} from "./def";
-    import Item from "./Item.svelte";
+    import { ItemContainer} from "../../../../../src/asset/drag_and_drop/container";
     import { onMount, getContext, setContext } from "svelte";
     import type { SnapLine } from "../../../../../src/index";
 
-    let { itemList }: { itemList: { id: number, text: string }[] } = $props();
-    const sl:SnapLine = getContext("sl");
+    // let { itemList }: { itemList: { id: number, text: string }[] } = $props();
+    let { children }: { children: any } = $props();
+    const engine:SnapLine = getContext("engine");
     let container: HTMLDivElement | null = null;
-    let itemContainer: ItemContainer = new ItemContainer(sl.global, null);
+    let itemContainer: ItemContainer = new ItemContainer(engine.global, null);
 
     setContext("itemContainer", itemContainer);
 
@@ -18,11 +18,7 @@
 </script>
 
 <div class="container" bind:this={container}>
-    {#each itemList as item}
-        <Item>
-            <div class="drag-drop-demo">{item.text}</div>
-        </Item>
-    {/each}
+    {@render children()}
 </div>
 
 <style>

@@ -1,13 +1,13 @@
-import { GlobalManager } from "@/global";
-import { BaseObject, DomElement, ElementObject } from "@/object";
+import { GlobalManager } from "../../global";
+import { BaseObject, DomElement, ElementObject } from "../../object";
 import {
   cursorDownProp,
   cursorMoveProp,
   cursorState,
   cursorUpProp,
-} from "@/input";
-import { RectCollider, Collider } from "@/collision";
-import { NodeComponent } from "@/asset/node_ui/node";
+} from "../../input";
+import { RectCollider, Collider } from "../../collision";
+import { NodeComponent } from "./node";
 
 class RectSelectComponent extends ElementObject {
   _state: "none" | "dragging";

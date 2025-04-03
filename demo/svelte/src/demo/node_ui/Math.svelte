@@ -1,14 +1,13 @@
 <script lang="ts">
 
     import { FlowLineObject } from "./def";
-    import Connector from "../lib/Connector.svelte";
-    import Node from "../lib/Node.svelte";
+    import Connector from "../../lib2/node_ui/Connector.svelte";
+    import Node from "../../lib2/node_ui/Node.svelte";
 
     let numInput = $state(2);
     let inputValues = $state([0, 0]);
     let operation = $state("+");
     let node = $state(null);
-
 
     function calculate(index: number, value: number) {
         inputValues[index] = value;
@@ -73,12 +72,6 @@
             display: flex;
             align-items: center;
             justify-content: left;
-        }
-
-        .hitbox {
-           width: 50px;
-           height: 50px;
-           background-color: red;
         }
 
         .flow-math-input, .flow-math-output {

@@ -1,5 +1,5 @@
-import { BaseObject } from "@/object";
-import { GlobalManager } from "@/global";
+import { BaseObject } from "../../object";
+import { GlobalManager } from "../../global";
 import { ItemObject } from "./item";
 
 export class ItemContainer extends BaseObject {

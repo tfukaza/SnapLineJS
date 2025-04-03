@@ -26,7 +26,6 @@ dist-ssr
 
 demo/vanilla/lib/*
 demo/react/src/lib/*
-demo/svelte/src/lib/*
 
 /test-results/
 /playwright-report/

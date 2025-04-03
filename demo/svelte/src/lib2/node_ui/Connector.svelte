@@ -14,10 +14,10 @@
         lineClass?: typeof LineComponent,
     } = $props();
 
-    let sl:SnapLine = getContext("sl");
+    let engine:SnapLine = getContext("engine");
     let nodeObject: NodeComponent = getContext("nodeObject");
     let connectorDOM: HTMLSpanElement | null = null;
-    let connector = new ConnectorComponent(sl.global, nodeObject, {
+    let connector = new ConnectorComponent(engine.global, nodeObject, {
         name: name,
         maxConnectors: maxConnectors,
         allowDragOut: allowDragOut,
@@ -27,7 +27,7 @@
     nodeObject.addConnectorObject(connector);
 
     onMount(() => { 
-        connector.addDom(connectorDOM);
+        connector.addDom(connectorDOM as HTMLElement);
     });
 
     onDestroy(() => {       

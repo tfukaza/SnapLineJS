@@ -4,11 +4,11 @@
     import { onMount, getContext } from "svelte";
 
     let selectDOM: HTMLDivElement | null = null;
-    let sl:SnapLine = getContext("sl");
-    let select = new RectSelectComponent(sl.global, null);
+    let engine:SnapLine = getContext("engine");
+    let select = new RectSelectComponent(engine.global, null);
 
     onMount(() => {
-        select.addDom(selectDOM);
+        select.addDom(selectDOM as HTMLElement);
     });
     
 </script>
