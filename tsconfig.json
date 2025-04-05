@@ -14,8 +14,11 @@
     "noUnusedParameters": true,
     "noImplicitReturns": true,
     "skipLibCheck": true,
-    "rootDir": "src",
+    "rootDirs": ["src", "demo"],
     "outDir": "out-tsc",
+    "paths": {
+      "@/*": ["./src/*"]
+    }
   },
-  "include": ["src"]
+  "include": ["src", "demo"]
 }

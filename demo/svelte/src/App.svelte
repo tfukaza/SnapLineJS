@@ -1,7 +1,7 @@
 <script lang="ts">
-  import FlowChartDemo from "./component/flowchart/FlowChartDemo.svelte";
+  import NodeUIDemo from "./demo/node_ui/NodeUIDemo.svelte";
   // import StateMachineDemo from "./component/state_machine/StateMachineDemo.svelte";
-  import DragDropDemo from "./component/drag/DragDropDemo.svelte";
+  import DragDropDemo from "./demo/drag_and_drop/DragDropDemo.svelte";
 
   let selected = $state("drag_and_drop");
 </script>
@@ -15,7 +15,7 @@
 <div class="app-container">
 
   {#if (selected === "flowchart")}
-    <FlowChartDemo />
+    <NodeUIDemo />
   {:else if (selected === "state_machine")}
     <!-- <StateMachineDemo /> -->
   {:else if (selected === "drag_and_drop")}

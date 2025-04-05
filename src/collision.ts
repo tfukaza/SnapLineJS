@@ -2,10 +2,10 @@
 // https://leanrada.com/
 
 import { GlobalManager } from "./global";
-import { BaseObject, DomEvent } from "./components/object";
-import { getDomProperty } from "./components/util";
+import { BaseObject, DomEvent } from "./object";
+import { getDomProperty } from "./util";
 import { InputControl } from "./input";
-import { EventProxyFactory } from "./helper";
+import { EventProxyFactory } from "./util";
 interface CollisionEvent {
   onCollide: null | ((thisObject: Collider, otherObject: Collider) => void);
   onBeginContact:

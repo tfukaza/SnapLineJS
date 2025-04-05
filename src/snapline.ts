@@ -1,4 +1,3 @@
-import { CameraConfig, SnapLineConfig } from "./types";
 import {
   cursorDownProp,
   cursorMoveProp,
@@ -9,15 +8,16 @@ import Camera from "./camera";
 import { InputControl } from "./input";
 import { CollisionEngine } from "./collision";
 import { GlobalManager } from "./global";
-import { BaseObject, DomEvent, frameStats } from "./components/object";
-import { CameraControl } from "./components/cameraControl";
+import { BaseObject, DomEvent, frameStats } from "./object";
+// import { CameraControl } from "@/asset/node_ui/cameraControl";
 import { AnimationObject } from "./animation";
+
+export interface SnapLineConfig {}
 
 class SnapLine {
   snaplineConfig: SnapLineConfig;
-  cameraConfig: CameraConfig;
   _containerStyle: { [key: string]: string } = {};
-  _cameraControl: CameraControl | null = null;
+  // _cameraControl: CameraControl | null = null;
 
   global: GlobalManager;
 
@@ -43,10 +43,6 @@ class SnapLine {
     this.snaplineConfig = {
       ...defaultConfig,
       ...config,
-    };
-    this.cameraConfig = {
-      ...defaultConfig.cameraConfig,
-      ...config.cameraConfig,
     };
 
     this._containerStyle = {
@@ -76,7 +72,7 @@ class SnapLine {
    */
   assignDom(containerDom: HTMLElement) {
     this.global.containerElement = containerDom;
-    this.global.camera = new Camera(containerDom, this.cameraConfig);
+    this.global.camera = new Camera(containerDom);
 
     this.global.inputEngine = new InputControl(this.global);
     this.global.inputEngine.addCursorEventListener(
@@ -93,10 +89,10 @@ class SnapLine {
 
     window.requestAnimationFrame(this.#step.bind(this));
   }
-  assignCameraControl(canvasElement: HTMLElement) {
-    this._cameraControl = new CameraControl(this.global);
-    this._cameraControl.assignCanvas(canvasElement);
-  }
+  // assignCameraControl(canvasElement: HTMLElement) {
+  //   this._cameraControl = new CameraControl(this.global);
+  //   this._cameraControl.assignCanvas(canvasElement);
+  // }
 
   /**
    * Main loop for rendering the canvas.

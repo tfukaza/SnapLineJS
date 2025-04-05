@@ -14,7 +14,7 @@ export default defineConfig(({ command, mode }) => {
         outputDir = "demo/react/src/lib";
         break;
       case "svelte":
-        outputDir = "demo/svelte/src/lib";
+        outputDir = "demo/vanilla/lib";
         break;
       case "test":
         break;
@@ -23,6 +23,12 @@ export default defineConfig(({ command, mode }) => {
     }
   }
   return {
+    logLevel: "info",
+    resolve: {
+      alias: {
+        "@": resolve(__dirname, "src"),
+      },
+    },
     build: {
       lib: {
         entry: resolve(__dirname, "src/index.ts"),

@@ -5,7 +5,7 @@ import {
   writeEntry,
   readEntry,
   postWriteEntry,
-} from "./components/object";
+} from "./object";
 import { AnimationObject } from "./animation";
 import { cursorState } from "./input";
 import { InputControl } from "./input";
