@@ -9,35 +9,58 @@ export class ItemContainer extends BaseObject {
   _dropIndex: number = 0;
   _expandAnimations: HTMLElement[] = [];
   _spacerDomElement: HTMLElement | null = null;
-
+  spacerIndex: number = 0;
+  direction: "column" | "row";
   constructor(global: GlobalManager, parent: BaseObject | null) {
     super(global, parent);
     this.itemList = [];
+    this.direction = "column";
+    this.spacerIndex = 0;
   }
 
   addItem(item: ItemObject) {
     this.itemList.push(item);
     item._containerObject = this;
+    item.direction = this.direction;
   }
 
   removeItem(item: ItemObject) {
     this.itemList = this.itemList.filter((i) => i !== item);
   }
 
-  addExpandAnimationBeforeItem(caller: ItemObject, item: ItemObject) {
+  reorderItemList() {
+    this.itemList = this.itemList.sort((a, b) => {
+      return a.dom.element.compareDocumentPosition(b.dom.element) &
+        Node.DOCUMENT_POSITION_PRECEDING
+        ? 1
+        : -1;
+    });
+  }
+
+  addExpandAnimationBeforeItem(caller: ItemObject, itemIndex: number) {
     this.requestWrite(() => {
-      let tmpDomElement = document.createElement("div");
-      tmpDomElement.style.width = "64px";
-      tmpDomElement.style.height = "64px";
       if (this._spacerDomElement) {
         this._spacerDomElement.remove();
         this._spacerDomElement = null;
       }
-      this._spacerDomElement = tmpDomElement;
-      if (item == undefined) {
+      if (itemIndex == -1) {
         return;
       }
-      this._containerDomElement?.insertBefore(tmpDomElement, item.dom.element);
+      let tmpDomElement = document.createElement("div");
+      tmpDomElement.id = "spacer";
+      tmpDomElement.style.width = `${caller.dom.property.width}px`;
+      tmpDomElement.style.height = `${caller.dom.property.height}px`;
+      tmpDomElement.style.margin = caller.dom.element.style.margin;
+      this._spacerDomElement = tmpDomElement;
+      this.spacerIndex = itemIndex;
+      let item =
+        itemIndex > this.itemList.length - 1 ? null : this.itemList[itemIndex];
+      this._containerDomElement?.insertBefore(
+        tmpDomElement,
+        item ? item.dom.element : null,
+      );
+      // caller.dom.element.innerHTML = `Spacer index: ${item?.gid}, GID: ${caller.gid}`;
+      this.reorderItemList();
     });
 
     for (const item of this.itemList) {
@@ -59,6 +82,7 @@ export class ItemContainer extends BaseObject {
         this._spacerDomElement = null;
       }
     });
+    this.spacerIndex = -1;
   }
 
   pickUpItem(item: ItemObject) {

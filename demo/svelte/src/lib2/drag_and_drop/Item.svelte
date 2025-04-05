@@ -25,16 +25,16 @@
 
 <style>
     .item {
-        font-size: 24px;
+        font-size: 12px;
         font-family: 'Inter', sans-serif;
         font-weight: 600;
-        color: rgb(100, 100, 100);
-        width: 200px;
-        height: 40px;
+        color: rgb(255, 255, 255);
+        width: 64px;
+        height: 64px;
         margin: 5px;
         padding: 10px;
         user-select: none;
-        background-color: rgb(236, 236, 236);
+        background-color: rgb(52, 52, 52);
         border: 2px solid black;
     }
 </style>
