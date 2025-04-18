@@ -1,11 +1,11 @@
 import { GlobalManager } from "./global";
-
+import { ObjectCoordinate } from "./object";
 function getDomProperty(global: GlobalManager, dom: HTMLElement) {
   const rect = dom.getBoundingClientRect();
   if (global.camera == null) {
     return {
-      height: rect.height,
-      width: rect.width,
+      worldHeight: rect.height,
+      worldWidth: rect.width,
       worldX: rect.left,
       worldY: rect.top,
       cameraX: rect.left,
@@ -27,14 +27,29 @@ function getDomProperty(global: GlobalManager, dom: HTMLElement) {
   );
 
   return {
-    height: worldHeight,
-    width: worldWidth,
+    worldHeight: worldHeight,
+    worldWidth: worldWidth,
     worldX: worldX,
     worldY: worldY,
     cameraX: cameraX,
     cameraY: cameraY,
     screenX: rect.left,
     screenY: rect.top,
+  };
+}
+
+function generateTransformString(transform: ObjectCoordinate) {
+  const string = `translate3d(${transform.worldX}px, ${transform.worldY}px, 0px) scale(${transform.scaleX}, ${transform.scaleY}) `;
+  return string;
+}
+
+function parseTransformString(transform: string) {
+  const transformValues = transform.split("(")[1].split(")")[0].split(",");
+  return {
+    worldX: parseFloat(transformValues[2]),
+    worldY: parseFloat(transformValues[3]),
+    scaleX: parseFloat(transformValues[0]),
+    scaleY: parseFloat(transformValues[1]),
   };
 }
 
@@ -47,6 +62,22 @@ function camelCaseToKebab(str: string) {
   return str.replace(/([A-Z])/g, "-$1").toLowerCase();
 }
 
+function getDomStyle(dom: HTMLElement | SVGElement) {
+  const existingStyleString = dom.style.cssText;
+  if (existingStyleString == "") {
+    return {};
+  }
+  return existingStyleString
+    .split(";")
+    .map((item) => {
+      const [key, value] = item.split(":");
+      return { [key]: value };
+    })
+    .reduce((acc, curr) => {
+      return { ...acc, ...curr };
+    }, {});
+}
+
 /**
  * Sets the style of a DOM element.
  * @param dom The DOM element to be styled.
@@ -56,29 +87,11 @@ function setDomStyle(
   dom: HTMLElement | SVGElement,
   style: { [key: string]: string },
 ) {
-  // if there is existing style, extract the existing style
-  let existingStyleDict = {};
-  const existingStyleString = dom.style.cssText;
-  if (existingStyleString) {
-    existingStyleDict = existingStyleString
-      .split(";")
-      .map((item) => {
-        const [key, value] = item.split(":");
-        return { [key]: value };
-      })
-      .reduce((acc, curr) => {
-        return { ...acc, ...curr };
-      }, {});
-    style = {
-      ...existingStyleDict,
-      ...style,
-    };
-  }
   // Convert the dict to a single string to reduce the number of DOM calls
-  const styleString = Object.entries(style)
-    .map(([key, value]) => `${camelCaseToKebab(key)}: ${value}`)
-    .join(";");
-  dom.style.cssText = styleString;
+  // const styleString = Object.entries(style)
+  //   .map(([key, value]) => `${camelCaseToKebab(key)}: ${value}`)
+  //   .join(";");
+  Object.assign(dom.style, style);
 }
 
 interface CallbackInterface extends Record<KeyType, Function | null> {}
@@ -113,4 +126,10 @@ function EventProxyFactory<BindObject, Callback extends object>(
   });
 }
 
-export { setDomStyle, EventProxyFactory, getDomProperty };
+export {
+  setDomStyle,
+  EventProxyFactory,
+  getDomProperty,
+  generateTransformString,
+  parseTransformString,
+};

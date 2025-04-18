@@ -9,7 +9,7 @@
     setContext("engine", engine);       
 
     onMount(() => {         
-        engine.assignDom(canvas);
+        engine.assignDom(canvas as HTMLElement);
     });
 </script>
 
@@ -21,9 +21,6 @@
     #snap-canvas {
 
         position: relative;
-        background-color: #fff;
-        border: 2px solid rgb(215, 215, 215);
-        border-radius: 10px;
         overflow: hidden;
         user-select: none;
     }

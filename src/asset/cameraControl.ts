@@ -6,37 +6,46 @@ import {
   cursorState,
   cursorUpProp,
 } from "../input";
-import { setDomStyle } from "../util";
 import { ElementObject } from "../object";
 
 class CameraControl extends ElementObject {
   _state: "idle" | "panning" = "idle";
   _mouseDownX: number;
   _mouseDownY: number;
-  _canvasElement: HTMLElement | null = null;
+  // _canvasElement: HTMLElement | null = null;
 
   constructor(globals: GlobalManager) {
     super(globals, null);
     this._mouseDownX = 0;
     this._mouseDownY = 0;
     this._state = "idle";
-    this._canvasElement = null;
+    // this._canvasElement = null;
     this.event.global.onCursorDown = this.onCursorDown;
     this.event.global.onCursorMove = this.onCursorMove;
     this.event.global.onCursorUp = this.onCursorUp;
     this.event.global.onCursorScroll = this.onZoom;
+    this.positionMode = "relative";
   }
 
   assignCanvas(canvas: HTMLElement) {
-    this._canvasElement = canvas;
-    setDomStyle(this._canvasElement, {
-      position: "relative",
+    // this._canvasElement = canvas;
+    // setDomStyle(this._canvasElement, {
+    //   position: "absolute",
+    //   left: "0px",
+    //   top: "0px",
+    //   width: "0px",
+    //   height: "0px",
+    //   transform: this.global.camera?.canvasStyle as string,
+    // });
+    this.element = canvas;
+    this.dom.style = {
+      position: "absolute",
       left: "0px",
       top: "0px",
       width: "0px",
       height: "0px",
-      transform: this.global.camera?.canvasStyle as string,
-    });
+    };
+    this.requestPostWrite();
   }
 
   onCursorDown(prop: cursorDownProp) {
@@ -59,9 +68,12 @@ class CameraControl extends ElementObject {
     const dx = prop.screenX - this._mouseDownX;
     const dy = prop.screenY - this._mouseDownY;
     this.global.camera?.handlePanDrag(dx, dy);
-    this.requestPostWrite().then(() => {
-      this.renderCanvas();
-    });
+    // console.log("pan", this.global.camera?.canvasStyle);
+    this.dom.style.transform = this.global.camera?.canvasStyle as string;
+    this.requestPostWrite();
+    // this.requestPostWrite().then(() => {
+    //   this.renderCanvas();
+    // });
   }
 
   onCursorUp(prop: cursorUpProp) {
@@ -70,9 +82,11 @@ class CameraControl extends ElementObject {
     }
     this._state = "idle";
     this.global.camera?.handlePanEnd();
-    this.requestPostWrite().then(() => {
-      this.renderCanvas();
-    });
+    this.dom.style.transform = this.global.camera?.canvasStyle as string;
+    this.requestPostWrite();
+    // this.requestPostWrite().then(() => {
+    //   this.renderCanvas();
+    // });
   }
 
   onZoom(prop: cursorScrollProp) {
@@ -90,18 +104,23 @@ class CameraControl extends ElementObject {
       prop.cameraX,
       prop.cameraY,
     );
-    this.requestPostWrite().then(() => {
-      this.renderCanvas();
-    });
+    // console.log("zoom", this.global.camera?.canvasStyle);
+    this.dom.style.transform = this.global.camera?.canvasStyle as string;
+    this.requestPostWrite();
+    // this.requestPostWrite().then(() => {
+    //   this.renderCanvas();
+    // });
   }
 
-  renderCanvas() {
-    if (this._canvasElement) {
-      setDomStyle(this._canvasElement, {
-        transform: this.global.camera?.canvasStyle as string,
-      });
-    }
-  }
+  // renderCanvas() {
+  //   // if (this._canvasElement) {
+  //   //   setDomStyle(this._canvasElement, {
+  //   //     transform: this.global.camera?.canvasStyle as string,
+  //   //   });
+  //   // }
+  //   this.dom.style.transform = this.global.camera?.canvasStyle as string;
+  //   this.requestPostWrite();
+  // }
 }
 
 export { CameraControl };

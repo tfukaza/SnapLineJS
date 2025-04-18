@@ -5,11 +5,20 @@ import {
   cursorScrollProp,
   InputControl,
 } from "./input";
-import { setDomStyle, EventProxyFactory } from "./util";
+import {
+  setDomStyle,
+  EventProxyFactory,
+  generateTransformString,
+  parseTransformString,
+} from "./util";
 import { Collider } from "./collision";
 import { getDomProperty } from "./util";
 import { GlobalManager } from "./global";
-import { AnimationObject } from "./animation";
+import {
+  AnimationObject,
+  AnimationProperty,
+  TimelineObject,
+} from "./animation";
 
 export interface GlobalEvent {
   onCursorDown: null | ((prop: cursorDownProp) => void);
@@ -86,6 +95,9 @@ export interface ObjectCoordinate {
   worldY: number;
   localX: number;
   localY: number;
+  scaleX: number;
+  scaleY: number;
+  // rotation: number;
 }
 
 class queueEntry {
@@ -180,7 +192,7 @@ export class BaseObject {
   _requestPostWrite: boolean = false;
 
   _colliderList: Collider[] = [];
-  _animationList: AnimationObject[] = [];
+  _animationList: (AnimationObject | TimelineObject)[] = [];
 
   constructor(global: GlobalManager, parent: BaseObject | null) {
     this.global = global;
@@ -194,12 +206,16 @@ export class BaseObject {
       worldY: 0,
       localX: 0,
       localY: 0,
+      scaleX: 1,
+      scaleY: 1,
     };
     this.previousPosition = {
       worldX: 0,
       worldY: 0,
       localX: 0,
       localY: 0,
+      scaleX: 1,
+      scaleY: 1,
     };
     this.positionMode = "absolute";
     this.event = new EventCallback(this);
@@ -396,17 +412,35 @@ export class BaseObject {
     ];
   }
 
-  animate(
-    duration: number,
-    from: number,
-    to: number,
-    callback: (progress: number) => void,
-  ) {
-    let animation = new AnimationObject(this, duration, from, to, callback);
+  animate(animationProperty: AnimationProperty) {
+    let animation = new AnimationObject(this, animationProperty);
+    animation.start();
+    // return animation;
     // For now we only support one animation at a time
+    if (this._animationList.length > 0) {
+      this._animationList[0].cancel();
+    }
     this._animationList = [];
     this._animationList.push(animation);
     this.global.animationList.push(animation);
+    return animation;
+  }
+
+  animateTimeline(animationProperty: AnimationProperty[]) {
+    let timeline = new TimelineObject();
+    for (const property of animationProperty) {
+      let animation = new AnimationObject(this, property);
+      timeline.add(animation);
+    }
+    timeline.start();
+    // for now we only support one timeline at a time
+    if (this._animationList.length > 0) {
+      this._animationList[0].cancel();
+    }
+    this._animationList = [];
+    this._animationList.push(timeline);
+    this.global.animationList.push(timeline);
+    return timeline;
   }
 
   getCurrentStats(): frameStats {
@@ -419,8 +453,8 @@ export class BaseObject {
 type DomProperty = {
   worldX: number;
   worldY: number;
-  height: number;
-  width: number;
+  worldHeight: number;
+  worldWidth: number;
 };
 
 export interface DomInsertMode {
@@ -469,20 +503,24 @@ export class DomElement {
     this.property = {
       worldX: 0,
       worldY: 0,
-      height: 0,
-      width: 0,
+      worldHeight: 0,
+      worldWidth: 0,
     };
     this.prevProperty = {
       worldX: 0,
       worldY: 0,
       localX: 0,
       localY: 0,
+      scaleX: 1,
+      scaleY: 1,
     };
     this._transformApplied = {
       worldX: 0,
       worldY: 0,
       localX: 0,
       localY: 0,
+      scaleX: 1,
+      scaleY: 1,
     };
     this._pendingInsert = isFragment;
     this._owner = owner;
@@ -556,7 +594,7 @@ export class DomElement {
   }
 
   set style(style: Record<string, any>) {
-    this._style = { ...this._style, ...style };
+    this._style = Object.assign(this._style, style);
   }
 
   get style(): Record<string, any> {
@@ -564,7 +602,7 @@ export class DomElement {
   }
 
   set dataAttribute(dataAttribute: Record<string, any>) {
-    this._dataAttribute = { ...this._dataAttribute, ...dataAttribute };
+    this._dataAttribute = Object.assign(this._dataAttribute, dataAttribute);
   }
 
   get dataAttribute(): Record<string, any> {
@@ -614,19 +652,21 @@ export class DomElement {
     let transformApplied = {
       worldX: 0,
       worldY: 0,
+      scaleX: 1,
+      scaleY: 1,
     };
 
     if (transform && !noTransform) {
-      const transformValues = transform.split("(")[1].split(")")[0].split(",");
-      transformApplied.worldX = parseFloat(transformValues[0]);
-      transformApplied.worldY = parseFloat(transformValues[1]);
+      transformApplied = parseTransformString(transform);
     } else {
       transformApplied.worldX = 0;
       transformApplied.worldY = 0;
+      transformApplied.scaleX = 1;
+      transformApplied.scaleY = 1;
     }
 
-    this.property.height = property.height;
-    this.property.width = property.width;
+    this.property.worldHeight = property.worldHeight;
+    this.property.worldWidth = property.worldWidth;
     this.property.worldX = property.worldX - transformApplied.worldX;
     this.property.worldY = property.worldY - transformApplied.worldY;
   }
@@ -681,10 +721,24 @@ export class DomElement {
   }
 
   postWrite() {
-    let transformStyle = {};
-    if (this._owner.elementPositionMode == "relative") {
+    // console.log("postWrite", this._transformApplied);
+    let transformStyle = {
+      transform: "",
+    };
+    if (this._owner.elementPositionMode == "fixed") {
       transformStyle = {
-        transform: `translate3d(${0}px, ${0}px, 0px)`,
+        transform: generateTransformString({
+          worldX: this.localX,
+          worldY: this.localY,
+          localX: 0,
+          localY: 0,
+          scaleX: this._owner.position.scaleX,
+          scaleY: this._owner.position.scaleY,
+        }),
+      };
+    } else if (this._owner.elementPositionMode == "relative") {
+      transformStyle = {
+        transform: generateTransformString(this._transformApplied),
       };
     } else {
       let [newX, newY] = [
@@ -692,10 +746,30 @@ export class DomElement {
         this._owner.worldY + this.localY - this.property.worldY,
       ];
       transformStyle = {
-        transform: `translate3d(${newX}px, ${newY}px, 0px)`,
+        transform: generateTransformString({
+          worldX: newX,
+          worldY: newY,
+          localX: 0,
+          localY: 0,
+          scaleX: this._owner.position.scaleX,
+          scaleY: this._owner.position.scaleY,
+        }),
       };
     }
-    setDomStyle(this.element, Object.assign(this._style, transformStyle));
+    if (
+      this._style["transform"] != undefined &&
+      this._style["transform"] != "" &&
+      transformStyle["transform"] != ""
+    ) {
+      transformStyle["transform"] = this._style["transform"];
+    }
+    // console.log(
+    //   "transformStyle",
+    //   transformStyle,
+    //   this._owner.elementPositionMode,
+    // );
+    // console.log("style", { ...this._style, ...transformStyle });
+    setDomStyle(this.element, { ...this._style, ...transformStyle });
   }
 }
 
@@ -787,6 +861,8 @@ export class ElementObject extends BaseObject {
     this.dom.event.onCursorScroll = this.event.dom.onCursorScroll;
     this.dom.event.onResize = this.event.dom.onResize;
 
+    this.requestPreRead(true, true);
+
     return this.dom;
   }
 
@@ -794,9 +870,17 @@ export class ElementObject extends BaseObject {
     return this.elementList[0];
   }
 
+  get element(): HTMLElement {
+    return this.dom?.element;
+  }
+
+  set element(element: HTMLElement) {
+    this.addDom(element);
+  }
+
   set elementPositionMode(mode: "absolute" | "relative" | "fixed") {
     this._positionMode = mode;
-    this.requestPostWrite();
+    // this.requestPostWrite();
   }
 
   get elementPositionMode(): "absolute" | "relative" | "fixed" {

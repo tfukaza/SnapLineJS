@@ -10,7 +10,7 @@ import { CollisionEngine } from "./collision";
 import { GlobalManager } from "./global";
 import { BaseObject, DomEvent, frameStats } from "./object";
 // import { CameraControl } from "@/asset/node_ui/cameraControl";
-import { AnimationObject } from "./animation";
+import { AnimationObject, TimelineObject } from "./animation";
 
 export interface SnapLineConfig {}
 
@@ -142,7 +142,7 @@ class SnapLine {
     for (const [id, callback] of Object.entries(this._cursorMoveCallbacks)) {
       callback(prop);
     }
-    prop.event.preventDefault();
+    // prop.event.preventDefault();
   }
 
   /**
@@ -275,9 +275,9 @@ class SnapLine {
     this.global.readQueue = {};
 
     this.global.currentStage = "adjust";
-    let newAnimationList: AnimationObject[] = [];
+    let newAnimationList: (AnimationObject | TimelineObject)[] = [];
     for (const animation of this.global.animationList) {
-      if (animation.calculateFrame(stats) == false) {
+      if (animation.calculateFrame(stats.timestamp) == false) {
         newAnimationList.push(animation);
       }
     }

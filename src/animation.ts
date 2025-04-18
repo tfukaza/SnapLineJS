@@ -1,92 +1,187 @@
+import { toNamespacedPath } from "node:path/win32";
 import { BaseObject, frameStats } from "./object";
 
-const PRECISION = 0.0001;
-
-function getPointOnCubicBezier(v0: number, v1: number, t: number) {
-  return 3 * t * (1 - t) * (1 - t) * v0 + 3 * t * t * (1 - t) * v1 + t * t * t;
-}
-
-function cubicBezier(
-  x0: number,
-  y0: number,
-  x1: number,
-  y1: number,
-  x: number,
-) {
-  // Assume t=x as a start point
-  let t = x;
-  while (true) {
-    // Get the actual value of x at t
-    let xReal = getPointOnCubicBezier(x0, x1, t);
-    // If the distance between xTmp and x is less than the precision, exit the loop
-    if (Math.abs(xReal - x) < PRECISION) {
-      break;
-    }
-    // Get the slope at t
-    let m =
-      3 * t ** 2 * (1 + 3 * x0 - 3 * x1) + 2 * t * (3 * x1 - 6 * x0) + 3 * x0;
-    // Get the linear equation x = mt + b
-    // First find b
-    let b = xReal - m * t;
-    // Get the point where the linear equation meets the value of x
-    t = (x - b) / m;
-  }
-
-  let y = getPointOnCubicBezier(y0, y1, t);
-
-  return y;
-}
-
-function easeInOut(progress: number) {
-  return cubicBezier(0.5, 0, 0.5, 1, progress);
-}
-
-function easeOut(progress: number) {
-  return cubicBezier(0, 0, 0.58, 1, progress);
-}
-
-class AnimationObject {
-  owner: BaseObject;
-  duration: number;
+interface AnimationProperty {
   from: number;
   to: number;
-  setValue: (value: number) => void;
+  duration: number;
+  delay?: number;
+  easing?: string;
+  setValue?: (value: number) => void;
+  onStart?: () => void;
+  onFinish?: () => void;
+}
+
+interface AnimationInterface {
+  start(startTime: number | null): void;
+  calculateFrame(currentTime: number): boolean;
+  cancel(): void;
+}
+
+class AnimationObject implements AnimationInterface {
+  owner: BaseObject;
+  property: AnimationProperty;
   startTime: number;
   endTime: number;
+  animation: Animation | null;
+  hasStarted: boolean;
+  expired: boolean;
 
-  constructor(
-    owner: BaseObject,
-    duration: number,
-    from: number,
-    to: number,
-    setValue: (value: number) => void,
-  ) {
+  constructor(owner: BaseObject, property: AnimationProperty) {
     this.owner = owner;
-    this.duration = duration;
-    this.from = from;
-    this.to = to;
-    this.setValue = setValue.bind(owner);
-
-    this.startTime = Date.now();
-    this.endTime = this.startTime + this.duration;
-
-    this.setValue(this.from);
+    this.property = property;
+    this.startTime = -1;
+    this.endTime = -1;
+    this.animation = null;
+    this.hasStarted = false;
+    this.expired = false;
   }
 
-  calculateFrame(stats: frameStats | null = null): boolean {
-    let currentTime = stats?.timestamp ?? Date.now();
-    let progress = (currentTime - this.startTime) / this.duration;
-    progress = Math.max(progress, 0);
-    progress = Math.min(progress, 1);
-    if (progress >= 1 - PRECISION) {
-      this.setValue(this.to);
+  start(startTime: number | null = null) {
+    this.startTime = startTime ?? Date.now();
+    this.endTime =
+      this.startTime + this.property.duration + (this.property.delay ?? 0);
+    if (this.property.setValue) {
+      this.property.setValue(this.property.from);
+    }
+
+    this.animation = new Animation(
+      new KeyframeEffect(
+        this.owner.global.animationFragment,
+        [{ nonExistentProperty: 0 }, { nonExistentProperty: 1 }],
+        {
+          duration: this.property.duration,
+          easing: this.property.easing,
+          delay: this.property.delay ?? 0,
+        },
+      ),
+    );
+    this.animation.onfinish = () => {
+      this.animation?.cancel();
+    };
+    this.animation.currentTime = 0;
+  }
+
+  calculateFrame(currentTime: number): boolean {
+    if (this.expired) {
       return true;
     }
-    let adjustedProgress = easeOut(progress);
-    const value = this.from + (this.to - this.from) * adjustedProgress;
-    this.setValue(value);
+    let elapsedTime = currentTime - this.startTime;
+    // console.log("Elapsed time", elapsedTime);
+    this.animation!.currentTime = elapsedTime;
+    const alpha = this.animation!.effect!.getComputedTiming().progress ?? 1;
+    const value =
+      this.property.from + (this.property.to - this.property.from) * alpha;
+    if (this.property.setValue) {
+      if (elapsedTime < (this.property.delay ?? 0)) {
+        this.property.setValue(this.property.from);
+      } else {
+        this.property.setValue(value);
+      }
+    }
+
+    if (!this.hasStarted && elapsedTime >= (this.property.delay ?? 0)) {
+      this.hasStarted = true;
+      this.property.onStart?.();
+    }
+
+    if (elapsedTime >= this.property.duration + (this.property.delay ?? 0)) {
+      // console.log(
+      //   "Animation finished",
+      //   elapsedTime,
+      //   this.property.duration,
+      //   this.property.delay,
+      //   this.property.onFinish,
+      // );
+      this.property.onFinish?.();
+      this.cancel();
+      return true;
+    }
     return false;
+  }
+
+  cancel() {
+    // console.log("Cancelling animation");
+    this.animation?.cancel();
+    this.expired = true;
   }
 }
 
-export { AnimationObject };
+// interface TimelineAnimation {
+//   offset: number;
+//   animation: AnimationObject;
+// }
+
+class TimelineObject implements AnimationInterface {
+  animations: AnimationObject[];
+  startTime: number;
+  endTime: number;
+  expired: boolean;
+
+  constructor() {
+    this.animations = [];
+    this.startTime = -1;
+    this.endTime = -1;
+    this.expired = false;
+  }
+
+  add(animation: AnimationObject) {
+    let prevEndTime = 0;
+    if (this.animations.length > 0) {
+      let prevAnimation = this.animations[this.animations.length - 1];
+      prevEndTime =
+        (prevAnimation.property.delay ?? 0) + prevAnimation.property.duration;
+      if (!animation.property.delay) {
+        animation.property.delay = prevEndTime;
+      }
+    }
+    this.animations.push(animation);
+    this.endTime = Math.max(
+      this.endTime,
+      prevEndTime +
+        animation.property.duration +
+        (animation.property.delay ?? 0),
+    );
+  }
+
+  start(startTime: number | null = null) {
+    this.startTime = startTime ?? Date.now();
+    for (let i = 0; i < this.animations.length; i++) {
+      this.animations[i].start(this.startTime);
+      // console.log(
+      //   "Starting animation with delay",
+      //   this.animations[i].property.delay,
+      // );
+    }
+  }
+
+  calculateFrame(currentTime: number): boolean {
+    if (this.expired) {
+      return true;
+    }
+    for (let i = 0; i < this.animations.length; i++) {
+      let animation = this.animations[i];
+      // if (currentTime >= animation.startTime) {
+      animation.calculateFrame(currentTime);
+      // }
+    }
+    let elapsedTime = currentTime - this.startTime;
+    // console.log("Comparing timeline", elapsedTime, this.endTime);
+    if (elapsedTime >= this.endTime) {
+      this.cancel();
+      return true;
+    }
+    return false;
+  }
+
+  cancel() {
+    // console.log("Cancelling timeline");
+    this.expired = true;
+    for (let i = 0; i < this.animations.length; i++) {
+      this.animations[i].animation?.cancel();
+    }
+  }
+}
+
+export { AnimationObject, TimelineObject };
+export type { AnimationProperty };

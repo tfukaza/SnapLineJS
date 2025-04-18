@@ -5,7 +5,7 @@ import { cursorMoveProp } from "../input";
 class Background extends ElementObject {
   _tileSize: number = 40;
 
-  constructor(globals: GlobalManager, parent: BaseObject) {
+  constructor(globals: GlobalManager, parent: BaseObject | null) {
     super(globals, parent);
     this.event.global.onCursorMove = this.moveBackground;
   }

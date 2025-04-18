@@ -6,7 +6,7 @@ import {
   readEntry,
   postWriteEntry,
 } from "./object";
-import { AnimationObject } from "./animation";
+import { AnimationObject, TimelineObject } from "./animation";
 import { cursorState } from "./input";
 import { InputControl } from "./input";
 import { CollisionEngine } from "./collision";
@@ -35,7 +35,8 @@ class GlobalManager {
   readQueue: Record<string, readEntry>;
   postWriteQueue: Record<string, postWriteEntry>;
 
-  animationList: AnimationObject[] = [];
+  animationList: (AnimationObject | TimelineObject)[] = [];
+  animationFragment: HTMLDivElement;
 
   data: any;
   snapline: SnapLine | null;
@@ -64,6 +65,8 @@ class GlobalManager {
     this.readQueue = {};
     this.postWriteQueue = {};
     this.animationList = [];
+    this.animationFragment = document.createElement("div");
+    document.body.appendChild(this.animationFragment);
 
     this.data = {};
     this.snapline = null;
