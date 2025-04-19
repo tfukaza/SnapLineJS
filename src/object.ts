@@ -90,15 +90,26 @@ class EventCallback {
   }
 }
 
-export interface ObjectCoordinate {
-  worldX: number;
-  worldY: number;
-  localX: number;
-  localY: number;
+// export interface ObjectCoordinate {
+//   worldX: number;
+//   worldY: number;
+//   localX: number;
+//   localY: number;
+//   scaleX: number;
+//   scaleY: number;
+// }
+
+export interface TransformProperty {
+  x: number;
+  y: number;
   scaleX: number;
   scaleY: number;
-  // rotation: number;
 }
+
+// export interface ObjectTransform {
+//   world: TransformProperty;
+//   local: TransformProperty;
+// }
 
 class queueEntry {
   object: BaseObject;
@@ -180,9 +191,12 @@ export class BaseObject {
   gid: string;
   parent: BaseObject | null;
   children: BaseObject[] = [];
-  position: ObjectCoordinate;
-  previousPosition: ObjectCoordinate;
-  positionMode: "absolute" | "relative" | "fixed";
+
+  transform: TransformProperty;
+  local: TransformProperty;
+  offset: TransformProperty;
+  previousTransform: TransformProperty;
+
   event: EventCallback;
 
   _requestPreRead: boolean = false;
@@ -201,23 +215,44 @@ export class BaseObject {
     this.parent = parent;
 
     this._colliderList = [];
-    this.position = {
-      worldX: 0,
-      worldY: 0,
-      localX: 0,
-      localY: 0,
+    this.transform = {
+      x: 0,
+      y: 0,
       scaleX: 1,
       scaleY: 1,
     };
-    this.previousPosition = {
-      worldX: 0,
-      worldY: 0,
-      localX: 0,
-      localY: 0,
+    this.local = new Proxy(this.transform, {
+      get: (target: TransformProperty, prop: keyof TransformProperty) => {
+        if (this.parent) {
+          return target[prop] - this.parent.transform[prop];
+        }
+        return target[prop];
+      },
+      set: (
+        target: TransformProperty,
+        prop: keyof TransformProperty,
+        value: number,
+      ) => {
+        if (this.parent) {
+          target[prop] = value + this.parent.transform[prop];
+        } else {
+          target[prop] = value;
+        }
+        return true;
+      },
+    });
+    this.offset = {
+      x: 0,
+      y: 0,
       scaleX: 1,
       scaleY: 1,
     };
-    this.positionMode = "absolute";
+    this.previousTransform = {
+      x: 0,
+      y: 0,
+      scaleX: 1,
+      scaleY: 1,
+    };
     this.event = new EventCallback(this);
 
     this._requestPreRead = false;
@@ -227,73 +262,101 @@ export class BaseObject {
     this._requestPostWrite = false;
   }
 
-  get worldX(): number {
-    return this.position.worldX;
-  }
-
-  set worldX(x: number) {
-    this.position.worldX = x;
-  }
-
-  get worldY(): number {
-    return this.position.worldY;
-  }
-
-  set worldY(y: number) {
-    this.position.worldY = y;
-  }
-
-  get localX(): number {
-    return this.position.localX;
-  }
-
-  set localX(x: number) {
-    this.position.localX = x;
-  }
-
-  get localY(): number {
-    return this.position.localY;
-  }
-
-  set localY(y: number) {
-    this.position.localY = y;
+  get worldPosition(): [number, number] {
+    return [this.transform.x, this.transform.y];
   }
 
   set worldPosition(position: [number, number]) {
-    if (this.parent) {
-      console.warn(
-        "Not recommended to directly set world position of a child object",
-      );
-    }
-    this.worldX = position[0];
-    this.worldY = position[1];
-    if (this.parent) {
-      this.localX = this.worldX - this.parent.worldX;
-      this.localY = this.worldY - this.parent.worldY;
-    }
+    this.transform.x = position[0];
+    this.transform.y = position[1];
   }
 
-  get worldPosition(): [number, number] {
-    return [this.worldX, this.worldY];
+  get cameraPosition(): [number, number] {
+    return (
+      this.global.camera?.getCameraFromWorld(...this.worldPosition) ?? [0, 0]
+    );
   }
 
-  set localPosition(position: [number, number]) {
-    this.localX = position[0];
-    this.localY = position[1];
-    if (this.parent) {
-      this.worldX = this.parent.worldX + this.localX;
-      this.worldY = this.parent.worldY + this.localY;
-    }
+  set cameraPosition(position: [number, number]) {
+    this.worldPosition = this.global.camera?.getWorldFromCamera(
+      ...position,
+    ) ?? [0, 0];
   }
 
-  get localPosition(): [number, number] {
-    return [this.localX, this.localY];
+  get screenPosition(): [number, number] {
+    return (
+      this.global.camera?.getScreenFromCamera(...this.cameraPosition) ?? [0, 0]
+    );
   }
 
-  addCollider(collider: Collider) {
-    this._colliderList.push(collider);
-    this.global.collisionEngine?.addObject(collider);
+  set screenPosition(position: [number, number]) {
+    this.cameraPosition = this.global.camera?.getCameraFromScreen(
+      ...position,
+    ) ?? [0, 0];
   }
+
+  // get worldX(): number {
+  //   return this.position.worldX;
+  // }
+
+  // set worldX(x: number) {
+  //   this.position.worldX = x;
+  // }
+
+  // get worldY(): number {
+  //   return this.position.worldY;
+  // }
+
+  // set worldY(y: number) {
+  //   this.position.worldY = y;
+  // }
+
+  // get localX(): number {
+  //   return this.position.localX;
+  // }
+
+  // set localX(x: number) {
+  //   this.position.localX = x;
+  // }
+
+  // get localY(): number {
+  //   return this.position.localY;
+  // }
+
+  // set localY(y: number) {
+  //   this.position.localY = y;
+  // }
+
+  // set worldPosition(position: [number, number]) {
+  //   if (this.parent) {
+  //     console.warn(
+  //       "Not recommended to directly set world position of a child object",
+  //     );
+  //   }
+  //   this.worldX = position[0];
+  //   this.worldY = position[1];
+  //   if (this.parent) {
+  //     this.localX = this.worldX - this.parent.worldX;
+  //     this.localY = this.worldY - this.parent.worldY;
+  //   }
+  // }
+
+  // get worldPosition(): [number, number] {
+  //   return [this.worldX, this.worldY];
+  // }
+
+  // set localPosition(position: [number, number]) {
+  //   this.localX = position[0];
+  //   this.localY = position[1];
+  //   if (this.parent) {
+  //     this.worldX = this.parent.worldX + this.localX;
+  //     this.worldY = this.parent.worldY + this.localY;
+  //   }
+  // }
+
+  // get localPosition(): [number, number] {
+  //   return [this.localX, this.localY];
+  // }
 
   requestPreRead(
     saveDomProperty: boolean = false,
@@ -393,8 +456,8 @@ export class BaseObject {
 
   calculateCache() {
     if (this.parent) {
-      this.worldX = this.parent.worldX + this.localX;
-      this.worldY = this.parent.worldY + this.localY;
+      this.transform.x = this.parent.transform.x + this.local.x;
+      this.transform.y = this.parent.transform.y + this.local.y;
     }
     for (const collider of this._colliderList) {
       collider.recalculate();
@@ -415,7 +478,6 @@ export class BaseObject {
   animate(animationProperty: AnimationProperty) {
     let animation = new AnimationObject(this, animationProperty);
     animation.start();
-    // return animation;
     // For now we only support one animation at a time
     if (this._animationList.length > 0) {
       this._animationList[0].cancel();
@@ -448,14 +510,17 @@ export class BaseObject {
       timestamp: Date.now(),
     };
   }
+
+  addCollider(collider: Collider) {
+    this._colliderList.push(collider);
+    this.global.collisionEngine?.addObject(collider);
+  }
 }
 
-type DomProperty = {
-  worldX: number;
-  worldY: number;
-  worldHeight: number;
-  worldWidth: number;
-};
+interface DomProperty extends TransformProperty {
+  height: number;
+  width: number;
+}
 
 export interface DomInsertMode {
   appendChild?: HTMLElement | null;
@@ -467,7 +532,7 @@ export class DomElement {
   _uuid: string;
   _global: GlobalManager;
   _owner: ElementObject;
-  element: HTMLElement;
+  element: HTMLElement | null;
   _pendingInsert: boolean;
 
   _requestWrite: boolean = false;
@@ -478,47 +543,45 @@ export class DomElement {
   _classList: string[];
   _dataAttribute: Record<string, any>;
   _inputEngine: InputControl;
-  _event: DomEvent;
-  event: DomEvent;
+  // _event: DomEvent;
+  // event: DomEvent;
 
-  localX: number;
-  localY: number;
   property: DomProperty;
-  prevProperty: ObjectCoordinate;
-  _transformApplied: ObjectCoordinate;
+  prevProperty: DomProperty;
+  _transformApplied: TransformProperty;
   insertMode: DomInsertMode;
 
-  resizeObserver: ResizeObserver;
-  mutationObserver: MutationObserver;
+  resizeObserver: ResizeObserver | null = null;
+  mutationObserver: MutationObserver | null = null;
 
   constructor(
     global: GlobalManager,
     owner: ElementObject,
-    dom: HTMLElement,
+    dom: HTMLElement | null = null,
     insertMode: DomInsertMode = {},
     isFragment: boolean = false,
   ) {
     this._global = global;
     this.element = dom;
     this.property = {
-      worldX: 0,
-      worldY: 0,
-      worldHeight: 0,
-      worldWidth: 0,
+      x: 0,
+      y: 0,
+      height: 0,
+      width: 0,
+      scaleX: 1,
+      scaleY: 1,
     };
     this.prevProperty = {
-      worldX: 0,
-      worldY: 0,
-      localX: 0,
-      localY: 0,
+      x: 0,
+      y: 0,
+      height: 0,
+      width: 0,
       scaleX: 1,
       scaleY: 1,
     };
     this._transformApplied = {
-      worldX: 0,
-      worldY: 0,
-      localX: 0,
-      localY: 0,
+      x: 0,
+      y: 0,
       scaleX: 1,
       scaleY: 1,
     };
@@ -533,65 +596,80 @@ export class DomElement {
     this._dataAttribute = {};
 
     this._classList = [];
-    this._event = {
-      onCursorDown: null,
-      onCursorMove: null,
-      onCursorUp: null,
-      onCursorScroll: null,
-      onResize: null,
-    };
-    this.event = EventProxyFactory(owner, this._event);
+    // this._event = {
+    //   onCursorDown: null,
+    //   onCursorMove: null,
+    //   onCursorUp: null,
+    //   onCursorScroll: null,
+    //   onResize: null,
+    // };
+    // this.event = EventProxyFactory(owner, this._event);
     this._inputEngine = new InputControl(this._global);
-    this._inputEngine?.addCursorEventListener(this.element);
-    this._inputEngine!.event.mouseDownCallback = this._onCursorDown.bind(this);
-    this._inputEngine!.event.mouseMoveCallback = this._onCursorMove.bind(this);
-    this._inputEngine!.event.mouseUpCallback = this._onCursorUp.bind(this);
-    this._inputEngine!.event.mouseWheelCallback =
-      this._onCursorScroll.bind(this);
+
+    // this.localX = 0;
+    // this.localY = 0;
+
+    this.insertMode = insertMode;
+  }
+
+  addElement(element: HTMLElement) {
+    this._inputEngine?.addCursorEventListener(element);
+    if (this._inputEngine) {
+      if (this._owner.event.dom.onCursorDown) {
+        this._inputEngine!.event.mouseDownCallback =
+          this._owner.event.dom.onCursorDown?.bind(this);
+      }
+      if (this._owner.event.dom.onCursorMove) {
+        this._inputEngine!.event.mouseMoveCallback =
+          this._owner.event.dom.onCursorMove?.bind(this);
+      }
+      if (this._owner.event.dom.onCursorUp) {
+        this._inputEngine!.event.mouseUpCallback =
+          this._owner.event.dom.onCursorUp?.bind(this);
+      }
+      if (this._owner.event.dom.onCursorScroll) {
+        this._inputEngine!.event.mouseWheelCallback =
+          this._owner.event.dom.onCursorScroll?.bind(this);
+      }
+    }
 
     this._owner.requestWrite();
     this._owner.requestRead();
 
-    this.localX = 0;
-    this.localY = 0;
-
-    this.insertMode = insertMode;
-
     this.resizeObserver = new ResizeObserver(() => {
-      this._event.onResize?.();
+      this._owner.event.dom.onResize?.();
     });
-    this.resizeObserver.observe(this.element);
+    this.resizeObserver.observe(element);
 
     this.mutationObserver = new MutationObserver(() => {
-      this._event.onResize?.();
+      this._owner.event.dom.onResize?.();
     });
   }
+  // set localPosition(position: [number, number]) {
+  //   this.localX = position[0];
+  //   this.localY = position[1];
+  //   this._owner.requestPostWrite();
+  // }
 
-  set localPosition(position: [number, number]) {
-    this.localX = position[0];
-    this.localY = position[1];
-    this._owner.requestPostWrite();
-  }
+  // get localPosition(): [number, number] {
+  //   return [this.localX, this.localY];
+  // }
 
-  get localPosition(): [number, number] {
-    return [this.localX, this.localY];
-  }
+  // get worldPosition(): [number, number] {
+  //   return [this._owner.transform.x, this._owner.transform.y];
+  // }
 
-  get worldPosition(): [number, number] {
-    return [this._owner.worldX + this.localX, this._owner.worldY + this.localY];
-  }
+  // get cameraPosition(): [number, number] {
+  //   return (
+  //     this._global.camera?.getCameraFromWorld(...this.worldPosition) ?? [0, 0]
+  //   );
+  // }
 
-  get cameraPosition(): [number, number] {
-    return (
-      this._global.camera?.getCameraFromWorld(...this.worldPosition) ?? [0, 0]
-    );
-  }
-
-  get screenPosition(): [number, number] {
-    return (
-      this._global.camera?.getScreenFromCamera(...this.cameraPosition) ?? [0, 0]
-    );
-  }
+  // get screenPosition(): [number, number] {
+  //   return (
+  //     this._global.camera?.getScreenFromCamera(...this.cameraPosition) ?? [0, 0]
+  //   );
+  // }
 
   set style(style: Record<string, any>) {
     this._style = Object.assign(this._style, style);
@@ -617,21 +695,21 @@ export class DomElement {
     return this._classList;
   }
 
-  _onCursorDown(prop: cursorDownProp): void {
-    this.event.onCursorDown?.(prop);
-  }
+  // _onCursorDown(prop: cursorDownProp): void {
+  //   this.event.onCursorDown?.(prop);
+  // }
 
-  _onCursorMove(prop: cursorMoveProp): void {
-    this.event.onCursorMove?.(prop);
-  }
+  // _onCursorMove(prop: cursorMoveProp): void {
+  //   this.event.onCursorMove?.(prop);
+  // }
 
-  _onCursorUp(prop: cursorUpProp): void {
-    this.event.onCursorUp?.(prop);
-  }
+  // _onCursorUp(prop: cursorUpProp): void {
+  //   this.event.onCursorUp?.(prop);
+  // }
 
-  _onCursorScroll(prop: cursorScrollProp): void {
-    this.event.onCursorScroll?.(prop);
-  }
+  // _onCursorScroll(prop: cursorScrollProp): void {
+  //   this.event.onCursorScroll?.(prop);
+  // }
 
   moveTo(mode: DomInsertMode) {
     this.insertMode = mode;
@@ -640,35 +718,31 @@ export class DomElement {
   }
 
   readDomProperty(noTransform: boolean = false) {
-    const property = getDomProperty(this._global, this.element);
-
-    // Need to commit the styles to obtain current values of an animation
-    let animation = this.element.getAnimations()[0];
-    if (animation) {
-      animation.commitStyles();
+    if (!this.element) {
+      throw new Error("Element is not set");
     }
+    const property = getDomProperty(this._global, this.element);
 
     const transform = this.element.style.transform;
     let transformApplied = {
-      worldX: 0,
-      worldY: 0,
+      x: 0,
+      y: 0,
       scaleX: 1,
       scaleY: 1,
     };
 
     if (transform && !noTransform) {
       transformApplied = parseTransformString(transform);
-    } else {
-      transformApplied.worldX = 0;
-      transformApplied.worldY = 0;
-      transformApplied.scaleX = 1;
-      transformApplied.scaleY = 1;
     }
 
-    this.property.worldHeight = property.worldHeight;
-    this.property.worldWidth = property.worldWidth;
-    this.property.worldX = property.worldX - transformApplied.worldX;
-    this.property.worldY = property.worldY - transformApplied.worldY;
+    /* getBoundingClientRect() returns the property after applying the transform,
+     * so we need to account for any current transform applied to the element.
+     * Note that this doesn't account for the transform applied to the parent.
+     */
+    this.property.height = property.height / transformApplied.scaleY;
+    this.property.width = property.width / transformApplied.scaleX;
+    this.property.x = property.x - transformApplied.x;
+    this.property.y = property.y - transformApplied.y;
   }
 
   preRead(noTransform: boolean = false) {
@@ -677,10 +751,13 @@ export class DomElement {
   }
 
   write() {
+    if (!this.element) {
+      throw new Error("Element is not set");
+    }
     setDomStyle(this.element, this._style);
     // TODO: See if we can batch the class list updates
     this.element.classList.forEach((className) => {
-      this.element.classList.add(className);
+      this.element!.classList.add(className);
     });
     // TODO: See if we can batch the data attribute updates
     for (const [key, value] of Object.entries(this._dataAttribute)) {
@@ -709,8 +786,8 @@ export class DomElement {
   }
 
   delete(): void {
-    this.resizeObserver.disconnect();
-    this.mutationObserver.disconnect();
+    this.resizeObserver?.disconnect();
+    this.mutationObserver?.disconnect();
     if (this.element) {
       this.element.remove();
     }
@@ -721,41 +798,36 @@ export class DomElement {
   }
 
   postWrite() {
-    // console.log("postWrite", this._transformApplied);
+    if (!this.element) {
+      throw new Error("Element is not set");
+    }
     let transformStyle = {
       transform: "",
     };
-    if (this._owner.elementPositionMode == "fixed") {
+    if (this._owner.transformMode == "direct") {
       transformStyle = {
         transform: generateTransformString({
-          worldX: this.localX,
-          worldY: this.localY,
-          localX: 0,
-          localY: 0,
-          scaleX: this._owner.position.scaleX,
-          scaleY: this._owner.position.scaleY,
+          x: this._owner.transform.x + this._owner.offset.x,
+          y: this._owner.transform.y + this._owner.offset.y,
+          scaleX: this._owner.transform.scaleX,
+          scaleY: this._owner.transform.scaleY,
         }),
       };
-    } else if (this._owner.elementPositionMode == "relative") {
-      transformStyle = {
-        transform: generateTransformString(this._transformApplied),
-      };
-    } else {
+    } else if (this._owner.transformMode == "relative") {
       let [newX, newY] = [
-        this._owner.worldX + this.localX - this.property.worldX,
-        this._owner.worldY + this.localY - this.property.worldY,
+        this._owner.transform.x - this.property.x,
+        this._owner.transform.y - this.property.y,
       ];
       transformStyle = {
         transform: generateTransformString({
-          worldX: newX,
-          worldY: newY,
-          localX: 0,
-          localY: 0,
-          scaleX: this._owner.position.scaleX,
-          scaleY: this._owner.position.scaleY,
+          x: newX + this._owner.offset.x,
+          y: newY + this._owner.offset.y,
+          scaleX: this._owner.transform.scaleX,
+          scaleY: this._owner.transform.scaleY,
         }),
       };
     }
+
     if (
       this._style["transform"] != undefined &&
       this._style["transform"] != "" &&
@@ -763,12 +835,7 @@ export class DomElement {
     ) {
       transformStyle["transform"] = this._style["transform"];
     }
-    // console.log(
-    //   "transformStyle",
-    //   transformStyle,
-    //   this._owner.elementPositionMode,
-    // );
-    // console.log("style", { ...this._style, ...transformStyle });
+
     setDomStyle(this.element, { ...this._style, ...transformStyle });
   }
 }
@@ -785,17 +852,22 @@ interface RenderCallback {
 }
 
 export class ElementObject extends BaseObject {
-  elementList: DomElement[] = [];
+  _dom: DomElement;
   _requestWrite: boolean;
   _requestRead: boolean;
   _requestDelete: boolean;
   _requestPostWrite: boolean;
   _state: any = {};
   state: Record<string, any>;
-  _positionMode: "absolute" | "relative" | "fixed";
 
-  _parentElement: HTMLElement | null;
-  _elementIndex: number;
+  transformMode: "direct" | "relative";
+  /**
+   * direct: Applies the transform directly to the object.
+   * relative: Applies the transform relative to the DOM element. Only applicable if the object owns a DOM element..
+   */
+
+  // _parentElement: HTMLElement | null;
+  // _elementIndex: number;
 
   inScene: boolean = false;
   _callback: RenderCallback;
@@ -803,14 +875,15 @@ export class ElementObject extends BaseObject {
 
   constructor(global: GlobalManager, parent: BaseObject | null) {
     super(global, parent);
+    this._dom = new DomElement(global, this, null);
     this.inScene = false;
-    this._parentElement = null;
-    this._elementIndex = -1;
+    // this._parentElement = null;
+    // this._elementIndex = -1;
     this._requestWrite = false;
     this._requestRead = false;
     this._requestDelete = false;
     this._requestPostWrite = false;
-    this._positionMode = "absolute";
+    this.transformMode = "direct";
     this._callback = {
       beforePreRead: null,
       afterPreRead: null,
@@ -830,71 +903,67 @@ export class ElementObject extends BaseObject {
     });
   }
 
-  set worldPosition(position: [number, number]) {
-    if (this.positionMode == "relative") {
-      throw new Error("Cannot set world position in relative mode");
-    }
-    this.worldX = position[0];
-    this.worldY = position[1];
-  }
+  // set worldPosition(position: [number, number]) {
+  //   if (this.positionMode == "relative") {
+  //     throw new Error("Cannot set world position in relative mode");
+  //   }
+  //   this.worldX = position[0];
+  //   this.worldY = position[1];
+  // }
 
-  get worldPosition(): [number, number] {
-    return [this.worldX, this.worldY];
-  }
+  // get worldPosition(): [number, number] {
+  //   return [this.worldX, this.worldY];
+  // }
 
   generateCache(setWorldPosition: boolean = false) {
     if (setWorldPosition == true) {
-      this.worldX = this.dom.property.worldX;
-      this.worldY = this.dom.property.worldY;
+      this.transform.x = this._dom.property.x;
+      this.transform.y = this._dom.property.y;
     }
-    if (this.parent) {
-      this.localX = this.dom.property.worldX - this.parent.worldX;
-      this.localY = this.dom.property.worldY - this.parent.worldY;
-    }
+    // if (this.parent) {
+    //   this.local.x = this._dom.property.x - this.parent.transform.x;
+    //   this.local.y = this._dom.property.y - this.parent.transform.y;
+    // }
   }
 
-  addDom(dom: HTMLElement): DomElement {
-    this.elementList.push(new DomElement(this.global, this, dom));
-    this.dom.event.onCursorDown = this.event.dom.onCursorDown;
-    this.dom.event.onCursorMove = this.event.dom.onCursorMove;
-    this.dom.event.onCursorUp = this.event.dom.onCursorUp;
-    this.dom.event.onCursorScroll = this.event.dom.onCursorScroll;
-    this.dom.event.onResize = this.event.dom.onResize;
+  // addDom(dom: HTMLElement): DomElement {
+  //   this.elementList.push(new DomElement(this.global, this, dom));
+  //   this.dom.event.onCursorDown = this.event.dom.onCursorDown;
+  //   this.dom.event.onCursorMove = this.event.dom.onCursorMove;
+  //   this.dom.event.onCursorUp = this.event.dom.onCursorUp;
+  //   this.dom.event.onCursorScroll = this.event.dom.onCursorScroll;
+  //   this.dom.event.onResize = this.event.dom.onResize;
 
-    this.requestPreRead(true, true);
+  //   this.requestPreRead(true, true);
 
-    return this.dom;
-  }
+  //   return this._dom;
+  // }
 
-  get dom(): DomElement {
-    return this.elementList[0];
-  }
-
-  get element(): HTMLElement {
-    return this.dom?.element;
+  get element(): HTMLElement | null {
+    return this._dom.element;
   }
 
   set element(element: HTMLElement) {
-    this.addDom(element);
+    this._dom.addElement(element);
   }
 
-  set elementPositionMode(mode: "absolute" | "relative" | "fixed") {
-    this._positionMode = mode;
-    // this.requestPostWrite();
-  }
+  // set elementPositionMode(mode: "absolute" | "relative" | "fixed") {
+  //   this._positionMode = mode;
+  //   // this.requestPostWrite();
+  // }
 
-  get elementPositionMode(): "absolute" | "relative" | "fixed" {
-    return this._positionMode;
-  }
+  // get elementPositionMode(): "absolute" | "relative" | "fixed" {
+  //   return this._positionMode;
+  // }
 
   preRead(stats: frameStats, options: preReadEntry): void {
     this.callback.beforePreRead?.();
     options.beforeCallback?.();
     this._preRead(stats, options);
-    this.dom?.preRead(options.noTransform);
+    this._dom.preRead(options.noTransform);
     if (options.saveDomProperty) {
       this.generateCache(true);
-      Object.assign(this.previousPosition, this.position);
+      Object.assign(this.previousTransform, this.transform);
     }
     this.callback.afterPreRead?.();
     options.afterCallback?.();
@@ -905,9 +974,9 @@ export class ElementObject extends BaseObject {
     options?.beforeCallback?.();
     this._write(stats, options);
     if (options?.isDelete) {
-      this.dom?.delete();
+      this._dom.delete();
     } else {
-      this.dom?.write();
+      this._dom.write();
     }
     this.callback.afterWrite?.();
     options?.afterCallback?.();
@@ -915,13 +984,13 @@ export class ElementObject extends BaseObject {
 
   delete(stats: frameStats): void {
     this._write(stats, new writeEntry(this, null, true));
-    this.dom?.delete();
+    this._dom.delete();
   }
 
   read(stats: frameStats, options: readEntry | null = null) {
     this.callback.beforeRead?.();
     options?.beforeCallback?.();
-    this.dom?.read(options?.noTransform);
+    this._dom.read(options?.noTransform);
     this._read(stats, options);
     if (options?.saveDomProperty) {
       this.generateCache(true);
@@ -934,7 +1003,7 @@ export class ElementObject extends BaseObject {
     this.callback.beforePostWrite?.();
     options?.beforeCallback?.();
     this._postWrite(stats, options);
-    this.dom?.postWrite();
+    this._dom.postWrite();
     options?.afterCallback?.();
     this.callback.afterPostWrite?.();
   }

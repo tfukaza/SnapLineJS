@@ -1,13 +1,13 @@
 import { GlobalManager } from "./global";
-import { ObjectCoordinate } from "./object";
+import { TransformProperty } from "./object";
 function getDomProperty(global: GlobalManager, dom: HTMLElement) {
   const rect = dom.getBoundingClientRect();
   if (global.camera == null) {
     return {
-      worldHeight: rect.height,
-      worldWidth: rect.width,
-      worldX: rect.left,
-      worldY: rect.top,
+      height: rect.height,
+      width: rect.width,
+      x: rect.left,
+      y: rect.top,
       cameraX: rect.left,
       cameraY: rect.top,
       screenX: rect.left,
@@ -27,10 +27,10 @@ function getDomProperty(global: GlobalManager, dom: HTMLElement) {
   );
 
   return {
-    worldHeight: worldHeight,
-    worldWidth: worldWidth,
-    worldX: worldX,
-    worldY: worldY,
+    height: worldHeight,
+    width: worldWidth,
+    x: worldX,
+    y: worldY,
     cameraX: cameraX,
     cameraY: cameraY,
     screenX: rect.left,
@@ -38,18 +38,18 @@ function getDomProperty(global: GlobalManager, dom: HTMLElement) {
   };
 }
 
-function generateTransformString(transform: ObjectCoordinate) {
-  const string = `translate3d(${transform.worldX}px, ${transform.worldY}px, 0px) scale(${transform.scaleX}, ${transform.scaleY}) `;
+function generateTransformString(transform: TransformProperty) {
+  const string = `translate3d(${transform.x}px, ${transform.y}px, 0px) scale(${transform.scaleX}, ${transform.scaleY}) `;
   return string;
 }
 
 function parseTransformString(transform: string) {
   const transformValues = transform.split("(")[1].split(")")[0].split(",");
   return {
-    worldX: parseFloat(transformValues[2]),
-    worldY: parseFloat(transformValues[3]),
-    scaleX: parseFloat(transformValues[0]),
-    scaleY: parseFloat(transformValues[1]),
+    x: parseFloat(transformValues[0]),
+    y: parseFloat(transformValues[1]),
+    scaleX: parseFloat(transformValues[2]),
+    scaleY: parseFloat(transformValues[3]),
   };
 }
 
