@@ -1,10 +1,4 @@
-import {
-  cursorDownProp,
-  cursorMoveProp,
-  cursorUpProp,
-  cursorScrollProp,
-  InputControl,
-} from "./input";
+import { InputControl, InputEventCallback } from "./input";
 import {
   setDomStyle,
   EventProxyFactory,
@@ -20,54 +14,43 @@ import {
   TimelineObject,
 } from "./animation";
 
-export interface GlobalEvent {
-  onCursorDown: null | ((prop: cursorDownProp) => void);
-  onCursorMove: null | ((prop: cursorMoveProp) => void);
-  onCursorUp: null | ((prop: cursorUpProp) => void);
-  onCursorScroll: null | ((prop: cursorScrollProp) => void);
-}
-
 export interface DomEvent {
-  onCursorDown: null | ((prop: cursorDownProp) => void);
-  onCursorMove: null | ((prop: cursorMoveProp) => void);
-  onCursorUp: null | ((prop: cursorUpProp) => void);
-  onCursorScroll: null | ((prop: cursorScrollProp) => void);
   onResize: null | (() => void);
 }
 
 class EventCallback {
   _object: BaseObject;
-  _global: GlobalEvent;
-  global: GlobalEvent;
+  _global: InputEventCallback;
+  global: InputEventCallback;
+  _input: InputEventCallback;
+  input: InputEventCallback;
   _dom: DomEvent;
   dom: DomEvent;
 
   constructor(object: BaseObject) {
     this._object = object;
     this._global = {
-      onCursorDown: null,
-      onCursorMove: null,
-      onCursorUp: null,
-      onCursorScroll: null,
+      pointerDown: null,
+      pointerMove: null,
+      pointerUp: null,
+      mouseWheel: null,
+      drag: null,
+      pinch: null,
+      dragStart: null,
+      dragEnd: null,
+      pinchStart: null,
+      pinchEnd: null,
     };
     this.global = new Proxy(this._global, {
-      set: (_, prop: string, value: CallableFunction | null) => {
+      set: (_, prop: any, value: CallableFunction | null) => {
         if (value == null) {
-          this._object.global.snapline?.unsubscribeGlobalCursorEvent(
-            prop as
-              | "onCursorDown"
-              | "onCursorMove"
-              | "onCursorUp"
-              | "onCursorScroll",
+          this._object.global.inputEngine?.unsubscribeGlobalCursorEvent(
+            prop,
             this._object.gid,
           );
         } else {
-          this._object.global.snapline?.subscribeGlobalCursorEvent(
-            prop as
-              | "onCursorDown"
-              | "onCursorMove"
-              | "onCursorUp"
-              | "onCursorScroll",
+          this._object.global.inputEngine?.subscribeGlobalCursorEvent(
+            prop,
             this._object.gid,
             (value as any).bind(this._object),
           );
@@ -75,18 +58,31 @@ class EventCallback {
         return true;
       },
     });
+    this._input = {
+      pointerDown: null,
+      pointerMove: null,
+      pointerUp: null,
+      mouseWheel: null,
+      dragStart: null,
+      drag: null,
+      dragEnd: null,
+      pinchStart: null,
+      pinch: null,
+      pinchEnd: null,
+    };
+    this.input = EventProxyFactory<BaseObject, InputEventCallback>(
+      this._object,
+      this._input,
+    );
+    // console.warn("this._object", this._object);
+    // console.warn(
+    //   "this.global.inputEngine!.globalCallbacks",
+    //   this._object.global.inputEngine!.globalCallbacks,
+    // );
     this._dom = {
-      onCursorDown: null,
-      onCursorMove: null,
-      onCursorUp: null,
-      onCursorScroll: null,
       onResize: null,
     };
-    this.dom = EventProxyFactory<BaseObject, DomEvent>(
-      this._object,
-      this._dom,
-      this._object.global.snapline!.event,
-    );
+    this.dom = EventProxyFactory<BaseObject, DomEvent>(this._object, this._dom);
   }
 }
 
@@ -419,6 +415,8 @@ export class BaseObject {
     saveDomProperty: boolean = false,
     noTransform: boolean = false,
   ): readEntry {
+    // console.log("requestRead", this.gid);
+    // console.trace();
     let request = new readEntry(this, saveDomProperty, noTransform);
     this.global.readQueue[this.gid] = request;
     return request;
@@ -542,7 +540,7 @@ export class DomElement {
   _style: Record<string, any>;
   _classList: string[];
   _dataAttribute: Record<string, any>;
-  _inputEngine: InputControl;
+  // _inputEngine: InputControl;
   // _event: DomEvent;
   // event: DomEvent;
 
@@ -604,7 +602,7 @@ export class DomElement {
     //   onResize: null,
     // };
     // this.event = EventProxyFactory(owner, this._event);
-    this._inputEngine = new InputControl(this._global);
+    // this._inputEngine = new InputControl(this._global);
 
     // this.localX = 0;
     // this.localY = 0;
@@ -613,26 +611,7 @@ export class DomElement {
   }
 
   addElement(element: HTMLElement) {
-    this._inputEngine?.addCursorEventListener(element);
-    if (this._inputEngine) {
-      if (this._owner.event.dom.onCursorDown) {
-        this._inputEngine!.event.mouseDownCallback =
-          this._owner.event.dom.onCursorDown?.bind(this);
-      }
-      if (this._owner.event.dom.onCursorMove) {
-        this._inputEngine!.event.mouseMoveCallback =
-          this._owner.event.dom.onCursorMove?.bind(this);
-      }
-      if (this._owner.event.dom.onCursorUp) {
-        this._inputEngine!.event.mouseUpCallback =
-          this._owner.event.dom.onCursorUp?.bind(this);
-      }
-      if (this._owner.event.dom.onCursorScroll) {
-        this._inputEngine!.event.mouseWheelCallback =
-          this._owner.event.dom.onCursorScroll?.bind(this);
-      }
-    }
-
+    this.element = element;
     this._owner.requestWrite();
     this._owner.requestRead();
 
@@ -873,6 +852,8 @@ export class ElementObject extends BaseObject {
   _callback: RenderCallback;
   callback: RenderCallback;
 
+  inputEngine: InputControl;
+
   constructor(global: GlobalManager, parent: BaseObject | null) {
     super(global, parent);
     this._dom = new DomElement(global, this, null);
@@ -901,6 +882,8 @@ export class ElementObject extends BaseObject {
         return true;
       },
     });
+
+    this.inputEngine = new InputControl(this.global, false, this.gid);
   }
 
   // set worldPosition(position: [number, number]) {
@@ -939,12 +922,25 @@ export class ElementObject extends BaseObject {
   //   return this._dom;
   // }
 
+  get dom(): DomElement {
+    return this._dom;
+  }
+
   get element(): HTMLElement | null {
     return this._dom.element;
   }
 
   set element(element: HTMLElement) {
     this._dom.addElement(element);
+    this.inputEngine?.addCursorEventListener(element);
+
+    type Keys = keyof InputEventCallback;
+    const keys = Object.keys(this.inputEngine.event) as Keys[];
+    for (const event of keys) {
+      let callback: InputEventCallback[typeof event] =
+        this.event.input[event]?.bind(this) || null;
+      this.inputEngine.event[event] = callback as any;
+    }
   }
 
   // set elementPositionMode(mode: "absolute" | "relative" | "fixed") {

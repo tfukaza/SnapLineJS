@@ -8,7 +8,7 @@ import {
 } from "./object";
 import { AnimationObject, TimelineObject } from "./animation";
 import { cursorState } from "./input";
-import { InputControl } from "./input";
+import { GlobalInputControl } from "./input";
 import { CollisionEngine } from "./collision";
 import { SnapLine } from "./snapline";
 interface coordinates {
@@ -22,10 +22,9 @@ interface coordinates {
 
 class GlobalManager {
   containerElement: HTMLElement | null;
-  currentCursor: cursorState;
   cursor: coordinates;
   camera: Camera | null;
-  inputEngine: InputControl | null;
+  inputEngine: GlobalInputControl | null;
   collisionEngine: CollisionEngine | null;
   objectTable: Record<string, BaseObject>;
 
@@ -45,7 +44,6 @@ class GlobalManager {
 
   constructor() {
     this.containerElement = null;
-    this.currentCursor = cursorState.none;
     this.cursor = {
       worldX: 0,
       worldY: 0,
@@ -55,7 +53,7 @@ class GlobalManager {
       screenY: 0,
     };
     this.camera = null;
-    this.inputEngine = null;
+    this.inputEngine = new GlobalInputControl(this);
     this.collisionEngine = null;
     this.objectTable = {};
 

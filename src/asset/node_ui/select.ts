@@ -14,7 +14,7 @@ class RectSelectComponent extends ElementObject {
   _mouseDownX: number;
   _mouseDownY: number;
   _selectHitBox: Collider;
-  constructor(globals: GlobalManager, parent: BaseObject) {
+  constructor(globals: GlobalManager, parent: BaseObject | null) {
     super(globals, parent);
 
     this._state = "none";
@@ -33,11 +33,8 @@ class RectSelectComponent extends ElementObject {
     this.addCollider(this._selectHitBox);
 
     this.global.data.select = [];
-  }
 
-  addDom(dom: HTMLElement): DomElement {
-    let domElement = super.addDom(dom);
-    domElement.style = {
+    this.dom.style = {
       width: "0px",
       height: "0px",
       transformOrigin: "top left",
@@ -47,7 +44,6 @@ class RectSelectComponent extends ElementObject {
       pointerEvents: "none",
     };
     this.requestWrite();
-    return domElement;
   }
 
   onGlobalCursorDown(prop: cursorDownProp): void {
@@ -109,8 +105,8 @@ class RectSelectComponent extends ElementObject {
         height: `${boxHeight}px`,
       };
       this.worldPosition = [boxOriginX, boxOriginY];
-      this._selectHitBox.localX = this.position.worldX - boxOriginX;
-      this._selectHitBox.localY = this.position.worldY - boxOriginY;
+      this._selectHitBox.localX = this.transform.x - boxOriginX;
+      this._selectHitBox.localY = this.transform.y - boxOriginY;
       this._selectHitBox.width = boxWidth;
       this._selectHitBox.height = boxHeight;
       this.requestPostWrite();

@@ -24,20 +24,8 @@ class CameraControl extends ElementObject {
     this.event.global.onCursorMove = this.onCursorMove;
     this.event.global.onCursorUp = this.onCursorUp;
     this.event.global.onCursorScroll = this.onZoom;
-    this.positionMode = "relative";
-  }
+    this.transformMode = "direct";
 
-  assignCanvas(canvas: HTMLElement) {
-    // this._canvasElement = canvas;
-    // setDomStyle(this._canvasElement, {
-    //   position: "absolute",
-    //   left: "0px",
-    //   top: "0px",
-    //   width: "0px",
-    //   height: "0px",
-    //   transform: this.global.camera?.canvasStyle as string,
-    // });
-    this.element = canvas;
     this.dom.style = {
       position: "absolute",
       left: "0px",

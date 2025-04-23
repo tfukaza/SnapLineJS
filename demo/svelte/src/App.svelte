@@ -2,6 +2,7 @@
   import NodeUIDemo from "./demo/node_ui/NodeUIDemo.svelte";
   import DragDropDemo from "./demo/drag_and_drop/DragDropDemo.svelte";
   import Landing from "./welcome/Landing.svelte";
+  import Input from "./demo/input/Input.svelte";
   // let selected = $state("drag_and_drop");
 </script>
 
@@ -12,12 +13,13 @@
 </select> -->
   
 
-  <Landing />
+  <!-- <Landing /> -->
   <div class="app-container">
-    <NodeUIDemo />
+    <!-- <NodeUIDemo /> -->
+    <Input />
   </div>
   <div class="app-container">
-    <DragDropDemo />
+    <!-- <DragDropDemo /> -->
   </div>
 
   <!-- {#if (selected === "flowchart")}

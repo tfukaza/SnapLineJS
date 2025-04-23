@@ -118,7 +118,18 @@ function EventProxyFactory<BindObject, Callback extends object>(
       target: Callback & CallbackInterface,
       prop: keyof Callback & KeyType,
     ) => {
+      // console.log(
+      //   object,
+      //   "target[prop]",
+      //   target[prop],
+      //   "secondary[prop]",
+      //   secondary?.[prop],
+      // );
+      // console.trace();
       return (...args: any[]) => {
+        // console.log("target[prop]", target[prop]);
+        // console.log("secondary[prop]", secondary?.[prop]);
+        // console.trace();
         target[prop]?.(...args);
         (secondary as Callback & CallbackInterface)?.[prop]?.(...args);
       };

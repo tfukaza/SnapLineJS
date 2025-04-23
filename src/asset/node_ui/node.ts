@@ -17,7 +17,6 @@ export interface NodeConfig {
 
 class NodeComponent extends ElementObject {
   _config: NodeConfig;
-  _dom: HTMLElement | null;
   _connectors: { [key: string]: ConnectorComponent };
   _components: { [key: string]: ElementObject };
   _nodeWidth = 0;
@@ -37,23 +36,21 @@ class NodeComponent extends ElementObject {
   constructor(
     global: GlobalManager,
     parent: BaseObject | null,
-    dom: HTMLElement | null = null,
     config: NodeConfig = {},
   ) {
     super(global, parent);
     this._config = config;
 
-    this._dom = dom;
     this._connectors = {};
     this._components = {};
-    this._dragStartX = this.worldX;
-    this._dragStartY = this.worldY;
+    this._dragStartX = this.transform.x;
+    this._dragStartY = this.transform.y;
     this._mouseDownX = 0;
     this._mouseDownY = 0;
     this._prop = {};
     this._propSetCallback = {};
-    this.position.worldX = 0;
-    this.position.worldY = 0;
+    this.transform.x = 0;
+    this.transform.y = 0;
     this._lineListCallback = null;
 
     this.event.dom.onCursorDown = this.onCursorDown;
@@ -82,17 +79,13 @@ class NodeComponent extends ElementObject {
       }
       this.postWrite(stats);
     };
-  }
 
-  addDom(dom: HTMLElement) {
-    let domElement = super.addDom(dom);
-    domElement.style = {
+    this.dom.style = {
       willChange: "transform",
       position: "absolute",
       transformOrigin: "top left",
     };
     this._hitBox.assignDom(dom);
-    return domElement;
   }
 
   #setStartPositions() {

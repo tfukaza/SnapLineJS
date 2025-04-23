@@ -8,7 +8,7 @@
     let select = new RectSelectComponent(engine.global, null);
 
     onMount(() => {
-        select.addDom(selectDOM as HTMLElement);
+        select.element = selectDOM as HTMLElement;
     });
     
 </script>

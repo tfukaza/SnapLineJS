@@ -23,5 +23,6 @@
         position: relative;
         overflow: hidden;
         user-select: none;
+        touch-action: none;
     }
 </style>

@@ -10,7 +10,7 @@
     const cameraControl = new CameraControl(engine.global);
 
     onMount(() => {         
-        cameraControl.assignCanvas(cameraControlElement as HTMLElement);
+        cameraControl.element = cameraControlElement as HTMLElement;
     });
 </script>
 
