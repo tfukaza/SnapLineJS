@@ -4,8 +4,13 @@ import { GlobalManager } from "./global";
 import { BaseObject, frameStats } from "./object";
 // import { CameraControl } from "@/asset/node_ui/cameraControl";
 import { AnimationObject, TimelineObject } from "./animation";
+import { EventProxyFactory } from "./util";
 
 export interface SnapLineConfig {}
+
+export interface engineCallback {
+  containerElementAssigned: ((containerElement: HTMLElement) => void) | null;
+}
 
 class SnapLine {
   snaplineConfig: SnapLineConfig;
@@ -15,6 +20,9 @@ class SnapLine {
   global: GlobalManager;
 
   _collisionEngine: CollisionEngine | null = null;
+
+  _event: engineCallback;
+  event: engineCallback;
 
   constructor(config: SnapLineConfig = {}) {
     this.global = new GlobalManager();
@@ -37,6 +45,11 @@ class SnapLine {
     };
 
     this.global.collisionEngine = new CollisionEngine();
+
+    this._event = {
+      containerElementAssigned: null,
+    };
+    this.event = EventProxyFactory(this, this._event);
   }
 
   /**
@@ -46,6 +59,7 @@ class SnapLine {
   assignDom(containerDom: HTMLElement) {
     this.global.containerElement = containerDom;
     this.global.camera = new Camera(containerDom);
+    this.event.containerElementAssigned?.(containerDom);
 
     window.requestAnimationFrame(this.#step.bind(this));
   }

@@ -5,28 +5,28 @@
 
     let engine:SnapLine = getContext("engine");
 
-    let pointerPosition: any = $state({x: 0, y: 0, screenX: 0, screenY: 0, cameraX: 0, cameraY: 0});
-    let style = $derived(`top: ${pointerPosition.screenY}px; left: ${pointerPosition.screenX}px;`);
+    // let pointerPosition: any = $state({x: 0, y: 0, screenX: 0, screenY: 0, cameraX: 0, cameraY: 0});
+    // let style = $derived(`top: ${pointerPosition.screenY}px; left: ${pointerPosition.screenX}px;`);
 
-    function updateMousePosition(prop: pointerMoveProp) {
-        pointerPosition = prop.position;
-        for (const [key, value] of Object.entries(prop.position)) {
-            // Round to the nearest 1/100th of a pixel
-            pointerPosition[key] = Math.round(value * 100) / 100;
-        }
-    }
-    onMount(() => {
-        if (engine.global.inputEngine) {
-            // engine.global.inputEngine._inputControl.event.pointerMove = updateMousePosition;
-            engine.global.inputEngine.subscribeGlobalCursorEvent("pointerMove", "100", updateMousePosition);
-        }
-    });
+    // function updateMousePosition(prop: pointerMoveProp) {
+    //     pointerPosition = prop.position;
+    //     for (const [key, value] of Object.entries(prop.position)) {
+    //         // Round to the nearest 1/100th of a pixel
+    //         pointerPosition[key] = Math.round(value * 100) / 100;
+    //     }
+    // }
+    // onMount(() => {
+    //     if (engine.global.inputEngine) {
+    //         // engine.global.inputEngine._inputControl.event.pointerMove = updateMousePosition;
+    //         engine.global.inputEngine.subscribeGlobalCursorEvent("pointerMove", "100", updateMousePosition);
+    //     }
+    // });
 
 
 
 </script>
 
-<div style={style} class="mouse-position-display">
+<!-- <div style={style} class="mouse-position-display">
    <ol>
     <li>
         <p>World Coordinates: {pointerPosition.x}, {pointerPosition.y}</p>
@@ -38,7 +38,7 @@
         <p>Screen Coordinates: {pointerPosition.screenX}, {pointerPosition.screenY}</p>
     </li>
    </ol>
-</div>
+</div> -->
 
 
 <style lang="scss">

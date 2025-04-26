@@ -46,7 +46,7 @@ export interface mouseWheelProp {
 }
 
 export interface dragStartProp {
-  gid: string | null;
+  gid: string | null; // Object that triggered the event
   pointerId: number;
   start: eventPosition;
 }
@@ -328,6 +328,7 @@ class InputControl {
         prevY: pointerData.y,
         x: e.clientX,
         y: e.clientY,
+        callerGID: this._isGlobal ? GLOBAL_GID : this._ownerGID,
       };
       Object.assign(pointerData, updatedPointerData);
       this.#handleMultiPointer();
@@ -424,8 +425,12 @@ class InputControl {
     const numKeys = Object.keys(this.globalPointerDict).length;
     // Handle drag gestures of each pointer
     if (numKeys >= 1) {
-      console.info("handleDragGesture");
+      // console.info("handleDragGesture");
       for (const pointer of Object.values(this.globalPointerDict)) {
+        const thisGID = this._isGlobal ? GLOBAL_GID : this._ownerGID;
+        if (thisGID != pointer.callerGID) {
+          continue;
+        }
         // console.info("handleMultiPointer", pointer);
         const startPosition = this.getCoordinates(
           pointer.startX,
@@ -448,21 +453,22 @@ class InputControl {
             start: startPosition,
           });
           console.debug("dragStart", startPosition);
-          if (this.globalGestureDict[pointer.id] == null) {
+          if (this.globalGestureDict[pointer.id]) {
+            this.globalGestureDict[pointer.id].memberList.push(this);
+          } else {
             this.globalGestureDict[pointer.id] = {
               type: "drag",
               state: "drag",
               memberList: [this],
+              initiatorID: this._isGlobal ? GLOBAL_GID : this._ownerGID ?? "",
             };
-          } else {
-            this.globalGestureDict[pointer.id].memberList.push(this);
           }
-          console.info(
-            "drag gesture initial",
-            this.globalGestureDict[pointer.id].memberList.map(
-              (m) => m._ownerGID,
-            ),
-          );
+          // console.info(
+          //   "drag gesture initial",
+          //   this.globalGestureDict[pointer.id].memberList.map(
+          //     (m) => m._ownerGID,
+          //   ),
+          // );
         }
         pointer.moveCount++;
         // Drag gestures are only handled by the global input engine
@@ -474,11 +480,12 @@ class InputControl {
         // It seems like that on touch devices, the pointerMove event continues working even after the cursor has
         // left the DOM element, which is not the case for mouse events.
         // if (this._isGlobal) {
-        console.info(
-          "drag gesture",
-          gesture.memberList.map((m) => m._ownerGID),
-        );
+        // console.info(
+        //   "drag gesture",
+        //   gesture.memberList.map((m) => m._ownerGID),
+        // );
         for (const member of gesture.memberList) {
+          // if (member._ownerGID == gesture.initiatorID) {
           member.event.drag?.({
             gid: member._isGlobal ? GLOBAL_GID : member._ownerGID,
             pointerId: pointer.id,
@@ -486,6 +493,7 @@ class InputControl {
             position: currentPosition,
             delta: deltaCoordinates,
           });
+          // }
         }
         // this.event.drag?.({
         //   gid: this._isGlobal ? GLOBAL_GID : this._ownerGID,
@@ -504,6 +512,7 @@ class InputControl {
       const pointerList = Object.values(this.globalPointerDict);
       // Sort the pointer list by the time they are pressed
       pointerList.sort((a, b) => a.timestamp - b.timestamp);
+      // TODO: Only update gesture entries that are adjacent to the pointer event that triggered the pinch gesture
 
       // Every 2 pointers that are adjacent chronologically are considered to be a pinch gesture
       for (let i = 0; i < pointerList.length - 1; i++) {
@@ -599,6 +608,7 @@ type gestureType = "drag" | "pinch";
 interface dragGesture {
   type: gestureType;
   state: "idle" | "drag" | "release";
+  initiatorID: string;
   memberList: InputControl[];
 }
 

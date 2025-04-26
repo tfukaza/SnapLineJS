@@ -11,19 +11,49 @@
         pinchStartProp,
         pinchEndProp, 
         pointerMoveProp} from "../../../../../src/input";
-    import { GLOBAL_GID } from "../../../../../src/input";
+    // import { GLOBAL_GID } from "../../../../../src/input";
     import { onMount, getContext } from "svelte";
 
     let engine:SnapLine = getContext("engine");
 
-    let startPosition: any = $state([]);
-    let endPosition: any = $state([]);
-    let dragCount: number = $state(0);
-    startPosition.push({id: dragCount, startX: 0, startY: 0});
-    dragCount++;
-    let style = $derived(`top: ${startPosition[startPosition.length - 1].startY - 10}px; left: ${startPosition[startPosition.length - 1].startX}px;`);
+    // let startPosition: any = $state([]);
+    // let endPosition: any = $state([]);
+    // let dragCount: number = $state(0);
+    // startPosition.push({id: dragCount, startX: 0, startY: 0});
+    // dragCount++;
+    // let style = $derived(`top: ${startPosition[startPosition.length - 1].startY - 10}px; left: ${startPosition[startPosition.length - 1].startX}px;`);
 
-    let dots: any = $state([]);
+    // let dots: any = $state([]);
+    interface pointerDot {
+        x: number;
+        y: number;
+        createdAt: number;
+        color: string;
+    }
+
+    interface memberProp {
+        name: string;
+        color: string;
+    }
+
+    interface pointerProp {
+        pointerId: string;
+        x: number;
+        y: number;
+        memberList: memberProp[];
+    }
+
+    interface dragGestureProp {
+        pointerId: string;
+        startX: number;
+        startY: number;
+        currentX: number;
+        currentY: number;
+        endX: number | null;
+        endY: number | null;
+        memberList: memberProp[];
+        needDelete: boolean;
+    }
 
     interface pinchGesture {
         id: string;
@@ -34,46 +64,103 @@
         object: ElementObject;
     }
 
+    let pointerDots: pointerDot[] = [];
+    
+    let pointerList: Record<string, pointerProp> = $state({});
+    let dragGesture: Record<string, dragGestureProp> = $state({});
     let pinchMarker: Record<string, pinchGesture> = $state({});
+    
 
     function round(value: number) {
         return Math.round(value * 100) / 100;
     }
 
-    function dragStart(prop: dragStartProp, color: string) {
-        // console.log("Global dragStart", prop);
-        // if (dragCount > 0) {
-        //     startPosition.pop();
-        //     endPosition.pop();
-        //     dragCount--;
+    function pointerDown(_: pointerDownProp, __: string, ___: string) {
+        // if (pointerList[prop.event.pointerId]) {
+        //     pointerList[prop.event.pointerId].memberList.push({name: caller, color: color});
+        // } else {
+        //     pointerList[prop.event.pointerId] = {
+        //         pointerId: prop.event.pointerId.toString(),
+        //         x: round(prop.position.x), 
+        //         y: round(prop.position.y),
+        //         memberList: [{name: caller, color: color}]
+        //     };
         // }
-        const startX = round(prop.start.x);
-        const startY = round(prop.start.y);
-        const data = {id: dragCount, pointerId: prop.pointerId, startX: startX, startY: startY, color: color};
-        startPosition.push(data);
-        dragCount++;
     }
 
-    function updateDragPosition(prop: dragProp) {
-        // console.log("Global updateDragPosition");
-        let pointer = startPosition[startPosition.length - 1];
-        pointer.x = round(prop.delta.x);
-        pointer.y = round(prop.delta.y);
-        // dots.push({x: round(prop.position.x), y: round(prop.position.y)});
-        drawCircle(round(prop.position.x), round(prop.position.y), 1);
+    function pointerMove(prop: pointerMoveProp, color: string, caller: string) {
+        console.log(prop.event!.pointerId);
+        if (pointerList[prop.event!.pointerId]) {
+            Object.assign(pointerList[prop.event!.pointerId], {
+                x: round(prop.position.x), 
+                y: round(prop.position.y),
+            });
+            if (!pointerList[prop.event!.pointerId].memberList.find(member => member.name === caller)) {
+                pointerList[prop.event!.pointerId].memberList.push({name: caller, color: color});
+            }
+            console.log(pointerList[prop.event!.pointerId].memberList);
+        } else {
+            pointerList[prop.event!.pointerId] = {
+                pointerId: prop.event!.pointerId.toString(),
+                x: round(prop.position.x), 
+                y: round(prop.position.y),
+                memberList: [{name: caller, color: color}]
+            };
+        }
+        
+    }
+
+    function pointerUp(prop: pointerUpProp) {
+        delete pointerList[prop.event!.pointerId];
+    }
+
+    function dragStart(prop: dragStartProp, color: string, caller: string) {
+        const startX = round(prop.start.x);
+        const startY = round(prop.start.y);
+        if (dragGesture[prop.pointerId] && dragGesture[prop.pointerId].needDelete) {
+            delete dragGesture[prop.pointerId];
+        } 
+
+        if (dragGesture[prop.pointerId]) {
+            dragGesture[prop.pointerId].memberList.push({name: caller, color: color});
+        } else {
+            dragGesture[prop.pointerId] = {
+                pointerId: prop.pointerId.toString(),
+                startX: startX,
+                startY: startY,
+                currentX: startX,
+                currentY: startY,
+                endX: null,
+                endY: null,
+                memberList: [{name: caller, color: color}],
+                needDelete: false
+            }
+        }
+    }
+
+    function drag(prop: dragProp) {
+        
+        let pointer = dragGesture[prop.pointerId];
+        pointer.currentX = prop.position.x;
+        pointer.currentY = prop.position.y;
+
+        pointerDots.push({
+            x: round(prop.position.x), 
+            y: round(prop.position.y),
+            createdAt: Date.now(),
+            color: "#000"
+        });
     }
 
     function dragEnd(prop: dragEndProp) {
-        // console.log("Global dragEnd");
-        const data = {id: dragCount, pointerId: prop.pointerId, x: round(prop.end.x), y: round(prop.end.y), color: "#555555"};
-        endPosition.push(data);
-        // dragCount++;
+        let pointer = dragGesture[prop.pointerId];
+        pointer.endX = round(prop.end.x);
+        pointer.endY = round(prop.end.y);
+        pointer.needDelete = true;
     }
 
 
     function pinchStart(prop: pinchStartProp) {
-        console.log("Global pinchStart", prop);
-        // startPosition.push({id: dragCount, startX: prop.dragPointList[0].start.x, startY: prop.dragPointList[0].start.y, color: "#000"});
         pinchMarker[prop.gestureID] = {
             id: prop.gestureID,
             x0: prop.start.pointerList[0].x,
@@ -84,8 +171,7 @@
         }
     }
 
-    function updatePinchMarker(prop: pinchProp) {
-        console.log("Global pinch", prop);
+    function pinch(prop: pinchProp) {
         Object.assign(pinchMarker[prop.gestureID], {
             x0: prop.pointerList[0].x, 
             y0: prop.pointerList[0].y, 
@@ -94,141 +180,210 @@
         });
     }
     function pinchEnd(prop: pinchEndProp) {
-        console.log("Global pinchEnd", prop);
         delete pinchMarker[prop.gestureID];
     }
 
-    // function pinch(prop: pinchProp) {
-    //     console.log("Global pinch", prop);
-    // }
 
     let testDrag: HTMLDivElement | null = $state(null);
     let testObject = new ElementObject(engine.global, null);
 
     let canvas: HTMLCanvasElement | null = null;
     let ctx: CanvasRenderingContext2D | null = null;
+    const dotRadius = 1;
+    const dotFadeTime = 500;
 
-    function drawCircle(x: number, y: number, radius: number) {
+    function drawCircle(
+        x: number, y: number, 
+        radius: number, 
+        fillColor: string | null = null, 
+        strokeColor: string | null = null) {
         ctx!.beginPath();
         ctx!.arc(x, y, radius, 0, Math.PI * 2);
-        ctx!.fillStyle = "#AAAAAA";
-        ctx!.fill();
+        if (fillColor) {
+            ctx!.fillStyle = fillColor;
+            ctx!.fill();
+        }
+        if (strokeColor) {
+            ctx!.strokeStyle = strokeColor;
+            ctx!.stroke();
+        }
     }
+
+    function drawLine(
+        x1: number, 
+        y1: number, 
+        x2: number, 
+        y2: number, 
+        width: number, 
+        offset: number, 
+        color: string) {
+
+        const rotation = Math.atan2(y2 - y1, x2 - x1);
+        const offsetY = Math.cos(rotation) * offset;
+        const offsetX = Math.sin(rotation) * offset;
+
+        ctx!.beginPath();
+        ctx!.moveTo(x1 + offsetX, y1 + offsetY);
+        ctx!.lineTo(x2 + offsetX, y2 + offsetY);
+        ctx!.strokeStyle = color;
+        ctx!.lineWidth = width;
+        ctx!.stroke();
+    }
+
+    const memberOffset = 4;
+
+    function renderFrame() {
+        ctx!.clearRect(0, 0, canvas!.width, canvas!.height);
+        for (const dot of pointerDots) {
+            drawCircle(dot.x, dot.y, dotRadius, dot.color);
+        }
+        for (const pointer of Object.values(pointerList)) {
+            for (const [index, member] of pointer.memberList.entries()) {
+                const offset = (index * memberOffset)
+                // console.log(member.color);
+                drawCircle(pointer.x, pointer.y, 4 + offset, null, member.color);
+            }
+        }
+        for (const gesture of Object.values(dragGesture)) {
+            const numMembers = gesture.memberList.length;
+            for (let i = 0; i < numMembers; i++) {
+                const member = gesture.memberList[i];
+                const offset = (i * memberOffset) - (numMembers * memberOffset / 2);
+                drawLine(
+                    gesture.startX, 
+                    gesture.startY, 
+                    gesture.currentX, 
+                    gesture.currentY, 
+                    2, 
+                    offset, 
+                    member.color);
+            }
+        }
+        for (const marker of Object.values(pinchMarker)) {
+            drawLine(marker.x0, marker.y0, marker.x1, marker.y1, 2, 0, "#AAAAAA");
+        }
+        window.requestAnimationFrame(renderFrame);
+        // Remove dots that are older than 1 second
+        const now = Date.now();
+        pointerDots = pointerDots.filter(dot => now - dot.createdAt < dotFadeTime);
+        // Adjust color to gradually fade out
+        for (const dot of pointerDots) {
+            dot.color = `rgba(0, 0, 0, ${1 - (now - dot.createdAt) / dotFadeTime})`;
+        }
+
+    }
+
+    window.requestAnimationFrame(renderFrame);
 
     onMount(() => {
         if (engine.global.inputEngine) {
-            // engine.global.inputEngine.inputControl.event.dragStart = dragStart;
-            // engine.global.inputEngine.inputControl.event.drag = updateDragPosition;
-            // engine.global.inputEngine.inputControl.event.dragEnd = dragEnd;
-            // engine.global.inputEngine.inputControl.event.pointerDown = (prop: pointerDownProp) => {
-            //     console.log("Global pointerDown", prop);
-            // }
-            engine.global.inputEngine.subscribeGlobalCursorEvent("dragStart", GLOBAL_GID, (prop: any) => {
-                console.log("Global dragStart", prop);
-                dragStart(prop, "#000")
-            });
-            engine.global.inputEngine.subscribeGlobalCursorEvent("drag", GLOBAL_GID, (prop: any) => {
-                console.log("Global drag", prop);
-                updateDragPosition(prop);
-            });
-            engine.global.inputEngine.subscribeGlobalCursorEvent("dragEnd", GLOBAL_GID, (prop: any) => {
-                console.log("Global dragEnd", prop);
+            engine.global.inputEngine.event.pointerDown = (prop: pointerDownProp) => {
+                pointerDown(prop, "#000", "Global");
+            };
+            engine.global.inputEngine.event.pointerUp = (prop: pointerUpProp) => {
+                pointerUp(prop);
+            };
+            engine.global.inputEngine.event.pointerMove = (prop: pointerMoveProp) => {
+                pointerMove(prop, "#000", "Global");
+            };
+            engine.global.inputEngine.event.dragStart = (prop: any) => {
+                dragStart(prop, "#000", "Global");
+            };
+            engine.global.inputEngine.event.drag = (prop: any) => {
+                drag(prop);
+            };
+            engine.global.inputEngine.event.dragEnd = (prop: any) => {
                 dragEnd(prop);
-            });
-            engine.global.inputEngine.subscribeGlobalCursorEvent("pinchStart", GLOBAL_GID, (prop: pinchStartProp) => {
-                console.log("Global pinchStart", prop);
+            };
+            engine.global.inputEngine.event.pinchStart = (prop: pinchStartProp) => {
                 pinchStart(prop);
-            });
-            engine.global.inputEngine.subscribeGlobalCursorEvent("pinch", GLOBAL_GID, (prop: pinchProp) => {
-                console.log("Global pinch", prop);
-                updatePinchMarker(prop);
-            });
-            engine.global.inputEngine.subscribeGlobalCursorEvent("pinchEnd", GLOBAL_GID, (prop: pinchEndProp) => {
-                console.log("Global pinchEnd", prop);
+            };
+            engine.global.inputEngine.event.pinch = (prop: pinchProp) => {
+                pinch(prop);
+            };
+            engine.global.inputEngine.event.pinchEnd = (prop: pinchEndProp) => {
                 pinchEnd(prop);
-            });
-            engine.global.inputEngine.subscribeGlobalCursorEvent("pointerDown", GLOBAL_GID, (prop: pointerDownProp) => {
-                console.log("Global pointerDown", prop);
-            });
-            engine.global.inputEngine.subscribeGlobalCursorEvent("pointerUp", GLOBAL_GID, (prop: pointerUpProp) => {
-                console.log("Global pointerUp", prop);
-            });
-            engine.global.inputEngine.subscribeGlobalCursorEvent("pointerMove", GLOBAL_GID, (prop: pointerMoveProp) => {
-                console.log("Global pointerMove", prop);
-            });
+            };
+        
         }
             
         testObject.element = testDrag!;
         testObject.event.input.dragStart = (prop: dragStartProp) => {
-            console.log("Test dragStart", prop);
-            dragStart(prop, "#FF0000");
+            dragStart(prop, "#FF0000", "Test");
         }
         testObject.event.input.drag = (prop: dragProp) => {
-            console.log("Test drag", prop);
-            updateDragPosition(prop);
+            drag(prop);
         }
         testObject.event.input.dragEnd = (prop: dragEndProp) => {
-            console.log("Test dragEnd", prop);
             dragEnd(prop);
         }
-
         testObject.event.input.pointerDown = (prop: pointerDownProp) => {
-            console.log("Test pointerDown", prop);
+            pointerDown(prop, "#FF0000", "Test");
         }
         testObject.event.input.pointerUp = (prop: pointerUpProp) => {
-            console.log("Test pointerUp", prop);
+            pointerUp(prop);
         }
         testObject.event.input.pointerMove = (prop: pointerMoveProp) => {
-            console.log("Test pointerMove", prop);
+            pointerMove(prop, "#FF0000", "Test");
         }
 
         ctx = canvas!.getContext("2d");
-        canvas!.width = 1000;
-        canvas!.height = 1000;
     });
 
-   
-
+    engine.event.containerElementAssigned = (containerElement: HTMLElement) => {
+        canvas!.width = containerElement.clientWidth;
+        canvas!.height = containerElement.clientHeight;
+    }
 </script>
 
 <canvas bind:this={canvas} class="canvas" ></canvas>
+
 <div bind:this={testDrag} class="test-drag" ></div>
 
-<div style={style} class="mouse-position-display">
+{#each Object.values(pointerList) as pointer (pointer.pointerId)}
+<div style={`top: ${pointer.y}px; left: ${pointer.x}px;`} class="mouse-position-display">
    <ol>
     <li>
-        <p>Delta: {startPosition[startPosition.length - 1].x}, {startPosition[startPosition.length - 1].y}</p>
+        <p>Pointer ID: {pointer.pointerId}</p>
+        <p>X: {pointer.x}</p>
+        <p>Y: {pointer.y}</p>
+        <p>Member List: {pointer.memberList.map(member => member.name).join(", ")}</p>
     </li>
    </ol>
 </div>
-
-{#each dots as dot}
+{/each}
+<!-- {#each dots as dot}
     <div style={`top: ${dot.y}px; left: ${dot.x}px;`} class="dot">
     </div>
-{/each}
+{/each} -->
 
-{#each startPosition as position}
-    <div style={`top: ${position.startY}px; left: ${position.startX}px;`} class="drag-pin">
-        <div class="drag-pin-header" style={`background-color: ${position.color};`}>
-            <h1>Drag Start: {position.pointerId}</h1>
-        </div>
+{#each Object.values(dragGesture) as gesture (gesture.pointerId)}
+    <div style={`top: ${gesture.startY}px; left: ${gesture.startX}px;`} class="drag-pin">
+        {#each gesture.memberList as member}
+            <div class="drag-pin-member" style={`background-color: ${member.color};`}>
+                <p>{gesture.pointerId} - {member.name}</p>
+            </div>
+        {/each}
         <div class="drag-pin-body">
-            <p>Start: {position.startX}, {position.startY}</p>
+            <p>Start: {gesture.startX}, {gesture.startY}</p>
+            <!-- <p>Member List: {gesture.memberList.join(", ")}</p> -->
         </div>
     </div>
-{/each}
-{#each endPosition as position}
-    <div style={`top: ${position.y}px; left: ${position.x}px;`} class="drag-pin">
-        <div class="drag-pin-header" style={`background-color: ${position.color};`}>
-            <h1>Drag End: {position.pointerId}</h1>
+    {#if gesture.endX && gesture.endY}
+        <div style={`top: ${gesture.endY}px; left: ${gesture.endX}px;`} class="drag-pin">
+            {#each gesture.memberList as member}
+                <div class="drag-pin-member" style={`background-color: ${member.color};`}>
+                    <p>{gesture.pointerId} - {member.name}</p>
+                </div>
+            {/each}
+            <div class="drag-pin-body">
+                <p>End: {gesture.endX}, {gesture.endY}</p>
+            </div>
         </div>
-        <div class="drag-pin-body">
-            <p>End: {position.x}, {position.y}</p>
-        </div>
-    </div>  
+    {/if}
 {/each}
 
-{#each Object.values(pinchMarker) as marker (marker.id)}
+<!-- {#each Object.values(pinchMarker) as marker (marker.id)}
     <svg   
         width="1"
         height="1"
@@ -236,7 +391,7 @@
         class="pinch-marker">
         <line x1={0} y1={0} x2={marker.x1 - marker.x0} y2={marker.y1 - marker.y0}/>
     </svg>
-{/each}
+{/each} -->
 
 
 
@@ -269,7 +424,7 @@
         left: 0;
         width: 100px;
         height: 100px;
-        background-color: #000;
+        background-color: #87878769;
         
     }
 
@@ -298,11 +453,11 @@
         border-radius: 4px;
         pointer-events: none;
 
-        .drag-pin-header {
+        .drag-pin-member {
             // background-color: #000;
             padding: 4px;
            
-            h1 {
+            p {
                 font-size: 12px;
                 font-family: 'IBM Plex Mono', monospace;
                 color: #fff; 
