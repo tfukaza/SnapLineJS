@@ -10,8 +10,9 @@ import { getDomProperty } from "./util";
 import { GlobalManager } from "./global";
 import {
   AnimationObject,
-  AnimationProperty,
-  TimelineObject,
+  keyframeList,
+  keyframeProperty,
+  SequenceObject,
 } from "./animation";
 
 export interface DomEvent {
@@ -202,7 +203,7 @@ export class BaseObject {
   _requestPostWrite: boolean = false;
 
   _colliderList: Collider[] = [];
-  _animationList: (AnimationObject | TimelineObject)[] = [];
+  _animationList: (AnimationObject | SequenceObject)[] = [];
 
   constructor(global: GlobalManager, parent: BaseObject | null) {
     this.global = global;
@@ -473,34 +474,29 @@ export class BaseObject {
     ];
   }
 
-  animate(animationProperty: AnimationProperty) {
-    let animation = new AnimationObject(this, animationProperty);
-    animation.start();
-    // For now we only support one animation at a time
-    if (this._animationList.length > 0) {
-      this._animationList[0].cancel();
-    }
+  animate(keyframe: keyframeList, property: keyframeProperty) {
+    let animation = new AnimationObject(this, keyframe, property);
+
     this._animationList = [];
     this._animationList.push(animation);
     this.global.animationList.push(animation);
     return animation;
   }
 
-  animateTimeline(animationProperty: AnimationProperty[]) {
-    let timeline = new TimelineObject();
-    for (const property of animationProperty) {
-      let animation = new AnimationObject(this, property);
-      timeline.add(animation);
+  get animation() {
+    return this._animationList[0];
+  }
+
+  animateSequence(animations: AnimationObject[]) {
+    let sequence = new SequenceObject();
+    for (const animation of animations) {
+      sequence.add(animation);
     }
-    timeline.start();
-    // for now we only support one timeline at a time
-    if (this._animationList.length > 0) {
-      this._animationList[0].cancel();
-    }
+
     this._animationList = [];
-    this._animationList.push(timeline);
-    this.global.animationList.push(timeline);
-    return timeline;
+    this._animationList.push(sequence);
+    this.global.animationList.push(sequence);
+    return sequence;
   }
 
   getCurrentStats(): frameStats {
