@@ -21,7 +21,7 @@
     })));
 
     onMount(() => {
-        nodeObject.addDom(nodeDOM);
+        nodeObject.element = nodeDOM as HTMLElement;
         nodeObject.setLineListCallback((lines: LineComponent[]) => {
             lineList = lines;
         });

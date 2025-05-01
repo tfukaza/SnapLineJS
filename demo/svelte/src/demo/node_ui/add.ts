@@ -10,7 +10,14 @@ function addNode() {
     svelteComponent: Math,
     prop: {},
   });
+  nodeList.push({
+    svelteComponent: Math,
+    prop: {},
+  });
+  nodeList.push({
+    svelteComponent: Math,
+    prop: {},
+  });
   return nodeList;
 }
-
 export { addNode };

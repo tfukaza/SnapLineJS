@@ -1,11 +1,11 @@
 import { GlobalManager } from "./global";
 import { EventProxyFactory } from "./util";
 
-export enum cursorState {
-  LEFT = 0,
-  MIDDLE = 1,
-  RIGHT = 2,
-}
+// export enum cursorState {
+//   LEFT = 0,
+//   MIDDLE = 1,
+//   RIGHT = 2,
+// }
 
 export interface eventPosition {
   x: number;
@@ -153,6 +153,12 @@ export type pointerData = {
 };
 
 const GLOBAL_GID = "global";
+
+export interface InputControlOption {
+  pinch: {
+    returnOnlyFirst: boolean;
+  };
+}
 
 class InputControl {
   /**

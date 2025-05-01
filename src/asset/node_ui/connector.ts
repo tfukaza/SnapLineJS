@@ -1,7 +1,7 @@
 import { ElementObject, frameStats, BaseObject } from "../../object";
 import { NodeComponent } from "./node";
 import { LineComponent } from "./line";
-import { cursorDownProp, cursorState, cursorMoveProp } from "../../input";
+import { pointerDownProp, dragProp } from "../../input";
 import { Collider } from "../../collision";
 import { CircleCollider, PointCollider } from "../../collision";
 import { GlobalManager } from "../../global";
@@ -47,7 +47,7 @@ class ConnectorComponent extends ElementObject {
     this.incomingLines = [];
     this.config = config;
     this.name = config.name || this.gid || "";
-    this.event.dom.onCursorDown = this.onCursorDown;
+    this.event.input.pointerDown = this.onCursorDown;
 
     this._hitCircle = new CircleCollider(global, this, 0, 0, 30);
     this.addCollider(this._hitCircle);
@@ -58,24 +58,24 @@ class ConnectorComponent extends ElementObject {
     this._targetConnector = null;
     this._mousedownX = 0;
     this._mousedownY = 0;
-    this.elementPositionMode = "relative";
+    this.transformMode = "relative";
   }
 
-  onCursorDown(prop: cursorDownProp): void {
+  onCursorDown(prop: pointerDownProp): void {
     const currentIncomingLines = this.incomingLines.filter(
       (i) => !i._requestDelete,
     );
     // Skip if it's not a left click
-    if (prop.button != cursorState.mouseLeft) {
+    if (prop.event.button != 0) {
       return;
     }
     if (currentIncomingLines.length > 0) {
-      this.startPickUpLine(currentIncomingLines[0]);
+      this.startPickUpLine(currentIncomingLines[0], prop);
       return;
     }
     if (this.config.allowDragOut) {
       console.debug("Starting drag out line");
-      this.startDragOutLine();
+      this.startDragOutLine(prop);
     }
   }
 
@@ -140,8 +140,9 @@ class ConnectorComponent extends ElementObject {
     return line;
   }
 
-  startDragOutLine(): void {
+  startDragOutLine(prop: pointerDownProp): void {
     let newLine = this.createLine();
+    newLine.setLineEnd(prop.position.x, prop.position.y);
 
     this.outgoingLines.unshift(newLine);
 
@@ -151,13 +152,14 @@ class ConnectorComponent extends ElementObject {
     this._state = ConnectorState.DRAGGING;
     this._targetConnector = null;
 
-    this.event.global.onCursorMove = this.runDragOutLine;
-    this.event.global.onCursorUp = this.endDragOutLine;
+    this.event.input.drag = this.runDragOutLine;
+    this.event.input.dragEnd = this.endDragOutLine;
 
     this._mouseHitBox.event.collider.onCollide = (
       _: Collider,
       __: Collider,
     ) => {
+      // console.log("onCollide", this.gid);
       this.findClosestConnector();
     };
     this._mouseHitBox.event.collider.onEndContact = (
@@ -178,12 +180,12 @@ class ConnectorComponent extends ElementObject {
       .map((c) => c.parent as ConnectorComponent)
       .sort((a, b) => {
         let da = Math.sqrt(
-          Math.pow(a.worldX - this._mouseHitBox.worldX, 2) +
-            Math.pow(a.worldY - this._mouseHitBox.worldY, 2),
+          Math.pow(a.transform.x - this._mouseHitBox.transform.x, 2) +
+            Math.pow(a.transform.y - this._mouseHitBox.transform.y, 2),
         );
         let db = Math.sqrt(
-          Math.pow(b.worldX - this._mouseHitBox.worldX, 2) +
-            Math.pow(b.worldY - this._mouseHitBox.worldY, 2),
+          Math.pow(b.transform.x - this._mouseHitBox.transform.x, 2) +
+            Math.pow(b.transform.y - this._mouseHitBox.transform.y, 2),
         );
         return da - db;
       });
@@ -194,7 +196,7 @@ class ConnectorComponent extends ElementObject {
     }
   }
 
-  runDragOutLine(prop: cursorMoveProp) {
+  runDragOutLine(prop: dragProp) {
     if (this._state != ConnectorState.DRAGGING) {
       return;
     }
@@ -203,8 +205,8 @@ class ConnectorComponent extends ElementObject {
       console.error(`Error: Outgoing lines is empty`);
       return;
     }
-    this._mouseHitBox.worldX = prop.worldX;
-    this._mouseHitBox.worldY = prop.worldY;
+    this._mouseHitBox.transform.x = prop.position.x - this.transform.x;
+    this._mouseHitBox.transform.y = prop.position.y - this.transform.y;
 
     let line = this.outgoingLines[0];
 
@@ -217,8 +219,8 @@ class ConnectorComponent extends ElementObject {
         return;
       }
     }
-
-    line.setLineEnd(this.global.cursor.worldX, this.global.cursor.worldY);
+    // console.log(prop.position.x, prop.position.y);
+    line.setLineEnd(prop.position.x, prop.position.y);
     line.setLineStartAtConnector();
     this.parent.updateNodeLines();
   }
@@ -237,8 +239,8 @@ class ConnectorComponent extends ElementObject {
       return;
     }
     targetConnector.calculateCache();
-    const connectorX = targetConnector.worldX;
-    const connectorY = targetConnector.worldY;
+    const connectorX = targetConnector.transform.x;
+    const connectorY = targetConnector.transform.y;
 
     return [connectorX, connectorY];
   }
@@ -262,7 +264,7 @@ class ConnectorComponent extends ElementObject {
 
       target.prop[target.name] = this.prop[this.name];
 
-      this.outgoingLines[0].setLineEnd(target.worldX, target.worldY);
+      this.outgoingLines[0].setLineEnd(target.transform.x, target.transform.y);
     } else {
       this.deleteLine(0);
     }
@@ -275,21 +277,21 @@ class ConnectorComponent extends ElementObject {
 
   _endLineDragCleanup() {
     this._state = ConnectorState.IDLE;
-    this.event.global.onCursorMove = null;
-    this.event.global.onCursorUp = null;
+    this.event.global.pointerMove = null;
+    this.event.global.pointerUp = null;
     this.parent.updateNodeLineList();
     this._targetConnector = null;
     this._mouseHitBox.event.collider.onBeginContact = null;
     this._mouseHitBox.event.collider.onEndContact = null;
-    this._mouseHitBox.localX = 0;
-    this._mouseHitBox.localY = 0;
+    this._mouseHitBox.transform.x = 0;
+    this._mouseHitBox.transform.y = 0;
   }
 
-  startPickUpLine(line: LineComponent) {
+  startPickUpLine(line: LineComponent, prop: pointerDownProp) {
     line.start.disconnectFromConnector(this);
     this.disconnectFromConnector(line.start);
     line.start.deleteLine(line.start.outgoingLines.indexOf(line));
-    line.start.startDragOutLine();
+    line.start.startDragOutLine(prop);
     this._state = ConnectorState.DRAGGING;
   }
 

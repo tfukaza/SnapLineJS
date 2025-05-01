@@ -3,10 +3,11 @@ import { ConnectorComponent } from "./connector";
 import { ElementObject } from "../../object";
 import { LineComponent } from "./line";
 import {
-  cursorUpProp,
-  cursorDownProp,
-  cursorState,
-  cursorMoveProp,
+  pointerUpProp,
+  pointerDownProp,
+  dragStartProp,
+  dragProp,
+  dragEndProp,
 } from "../../input";
 import { RectCollider } from "../../collision";
 import { GlobalManager } from "../../global";
@@ -53,7 +54,11 @@ class NodeComponent extends ElementObject {
     this.transform.y = 0;
     this._lineListCallback = null;
 
-    this.event.dom.onCursorDown = this.onCursorDown;
+    this.event.input.pointerDown = this.onCursorDown;
+    this.event.input.dragStart = this.onDragStart;
+    this.event.input.drag = this.onDrag;
+    this.event.input.dragEnd = this.onDragEnd;
+    this.event.input.pointerUp = this.onUp;
     this._hitBox = new RectCollider(this.global, this, 0, 0, 0, 0);
     this.addCollider(this._hitBox);
 
@@ -78,6 +83,7 @@ class NodeComponent extends ElementObject {
         line.postWrite(stats);
       }
       this.postWrite(stats);
+      // console.log("onResize", this.gid);
     };
 
     this.dom.style = {
@@ -85,12 +91,14 @@ class NodeComponent extends ElementObject {
       position: "absolute",
       transformOrigin: "top left",
     };
-    this._hitBox.assignDom(dom);
+    this.event.dom.onAssignDom = () => {
+      this._hitBox.element = this.element!;
+    };
   }
 
   #setStartPositions() {
-    this._dragStartX = this.worldX;
-    this._dragStartY = this.worldY;
+    this._dragStartX = this.transform.x;
+    this._dragStartY = this.transform.y;
   }
 
   setSelected(selected: boolean) {
@@ -99,10 +107,12 @@ class NodeComponent extends ElementObject {
       selected: selected,
     };
     if (selected) {
-      this._dom?.classList.add("selected");
+      this.dom.classList.push("selected");
       this.global.data.select.push(this);
     } else {
-      this._dom?.classList.remove("selected");
+      this.dom.classList = this.dom.classList.filter(
+        (className) => className !== "selected",
+      );
       this.global.data.select = this.global.data.select.filter(
         (node: NodeComponent) => node.gid !== this.gid,
       );
@@ -135,8 +145,8 @@ class NodeComponent extends ElementObject {
     this._lineListCallback = callback;
   }
 
-  onCursorDown(e: cursorDownProp): void {
-    if (e.button != cursorState.mouseLeft) {
+  onCursorDown(e: pointerDownProp): void {
+    if (e.event.button != 0) {
       return;
     }
     this.calculateCache();
@@ -147,36 +157,32 @@ class NodeComponent extends ElementObject {
       }
       this.setSelected(true);
     }
-
-    this._hasMoved = false;
-
-    for (const node of this.global.data.select ?? []) {
-      node.#setStartPositions();
-      node._mouseDownX = e.worldX;
-      node._mouseDownY = e.worldY;
-    }
-
-    this.event.global.onCursorMove = this.onDrag;
-    this.event.global.onCursorUp = this.onUp;
   }
 
-  onDrag(prop: cursorMoveProp): void {
+  onDragStart(prop: dragStartProp): void {
+    for (const node of this.global.data.select ?? []) {
+      node.#setStartPositions();
+      node._mouseDownX = prop.start.x;
+      node._mouseDownY = prop.start.y;
+    }
+    this._hasMoved = true;
+  }
+
+  onDrag(prop: dragProp): void {
     if (this.global == null) {
       console.error("Global stats is null");
       return;
     }
     if (this._config.lockPosition) return;
 
-    this._hasMoved = true;
-
     for (const node of this.global.data.select ?? []) {
       node.setDragPosition(prop);
     }
   }
 
-  setDragPosition(prop: cursorMoveProp) {
-    const dx = prop.worldX - this._mouseDownX;
-    const dy = prop.worldY - this._mouseDownY;
+  setDragPosition(prop: dragProp) {
+    const dx = prop.position.x - this._mouseDownX;
+    const dy = prop.position.y - this._mouseDownY;
 
     this.worldPosition = [this._dragStartX + dx, this._dragStartY + dy];
     this.calculateCache();
@@ -184,10 +190,23 @@ class NodeComponent extends ElementObject {
     this.requestPostWrite();
   }
 
-  onUp(prop: cursorUpProp) {
-    this.event.global.onCursorMove = null;
-    this.event.global.onCursorUp = null;
+  onDragEnd(prop: dragEndProp) {
+    for (const node of this.global.data.select ?? []) {
+      node.setUpPosition(prop);
+    }
+  }
 
+  setUpPosition(prop: dragEndProp) {
+    const [dx, dy] = [
+      prop.end.x - this._mouseDownX,
+      prop.end.y - this._mouseDownY,
+    ];
+    this.worldPosition = [this._dragStartX + dx, this._dragStartY + dy];
+    this.calculateCache();
+    this.updateNodeLines();
+  }
+
+  onUp(prop: pointerUpProp) {
     if (this._hasMoved == false) {
       for (const node of this.global.data.select ?? []) {
         node.setSelected(false);
@@ -195,20 +214,6 @@ class NodeComponent extends ElementObject {
       this.setSelected(true);
       return;
     }
-
-    for (const node of this.global.data.select ?? []) {
-      node.setUpPosition(prop);
-    }
-  }
-
-  setUpPosition(prop: cursorUpProp) {
-    const [dx, dy] = [
-      prop.worldX - this._mouseDownX,
-      prop.worldY - this._mouseDownY,
-    ];
-    this.worldPosition = [this._dragStartX + dx, this._dragStartY + dy];
-    this.calculateCache();
-    this.updateNodeLines();
   }
 
   getConnector(name: string): ConnectorComponent | null {

@@ -1,9 +1,4 @@
-import {
-  cursorMoveProp,
-  cursorDownProp,
-  cursorState,
-  cursorUpProp,
-} from "../../input";
+import { pointerDownProp, pointerMoveProp, pointerUpProp } from "../../input";
 import { BaseObject, ElementObject } from "../../object";
 import { GlobalManager } from "../../global";
 import { ItemContainer } from "./container";
@@ -21,9 +16,9 @@ export class ItemObject extends ElementObject {
 
   constructor(global: GlobalManager, parent: BaseObject | null) {
     super(global, parent);
-    this.event.dom.onCursorDown = this.cursorDown;
-    this.event.global.onCursorUp = this.cursorUp;
-    this.elementPositionMode = "relative";
+    this.event.input.pointerDown = this.cursorDown;
+    this.event.global.pointerUp = this.cursorUp;
+    this.transformMode = "direct";
     this._containerObject = null;
     this.direction = "column";
     this.spacerIndex = 0;

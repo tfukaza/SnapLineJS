@@ -26,8 +26,8 @@ class EventCallback {
   _object: BaseObject;
   _collider: CollisionEvent;
   collider: CollisionEvent;
-  _dom: DomEvent;
-  dom: DomEvent;
+  // _dom: DomEvent;
+  // dom: DomEvent;
 
   constructor(object: BaseObject) {
     this._object = object;
@@ -37,14 +37,14 @@ class EventCallback {
       onEndContact: null,
     };
     this.collider = EventProxyFactory(object, this._collider);
-    this._dom = {
-      onCursorDown: null,
-      onCursorMove: null,
-      onCursorUp: null,
-      onCursorScroll: null,
-      onResize: null,
-    };
-    this.dom = EventProxyFactory(object, this._dom);
+    // this._dom = {
+    //   onCursorDown: null,
+    //   onCursorMove: null,
+    //   onCursorUp: null,
+    //   onCursorScroll: null,
+    //   onResize: null,
+    // };
+    // this.dom = EventProxyFactory(object, this._dom);
   }
 }
 
@@ -57,6 +57,7 @@ class Collider {
   inputEngine: InputControl;
 
   transform: ColliderProperty;
+  // local: ColliderProperty;
 
   event: EventCallback;
 
@@ -80,6 +81,12 @@ class Collider {
       width: 0,
       height: 0,
     };
+    // this.local = {
+    //   x: localX,
+    //   y: localY,
+    //   width: 0,
+    //   height: 0,
+    // };
     this.event = new EventCallback(this.parent);
     this._iterationCollisions = new Set();
     this._currentCollisions = new Set();
@@ -99,18 +106,18 @@ class Collider {
     this.transform.y = y - this.parent.transform.y;
   }
 
-  get localPosition(): [number, number] {
-    return [this.transform.x, this.transform.y];
-  }
+  // get localPosition(): [number, number] {
+  //   return [this.local.x, this.local.y];
+  // }
 
-  set localPosition([x, y]: [number, number]) {
-    this.transform.x = x;
-    this.transform.y = y;
-  }
+  // set localPosition([x, y]: [number, number]) {
+  //   this.local.x = x;
+  //   this.local.y = y;
+  // }
 
   set element(element: HTMLElement) {
-    this.element = element;
-    this.inputEngine?.addCursorEventListener(this.element);
+    this._element = element;
+    // this.inputEngine?.addCursorEventListener(this._element);
     // if parent has the "dom" property, then submit fetch queue
     if (this.parent.hasOwnProperty("element")) {
       this.parent.requestRead();

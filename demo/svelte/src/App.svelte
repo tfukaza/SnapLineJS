@@ -16,9 +16,9 @@
 
   <!-- <Landing /> -->
   <div class="app-container">
-    <!-- <NodeUIDemo /> -->
+    <NodeUIDemo />
     <!-- <Input /> -->
-    <Gallery />
+    <!-- <Gallery /> -->
   </div>
   <div class="app-container">
     <!-- <DragDropDemo /> -->

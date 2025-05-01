@@ -16,6 +16,7 @@ import {
 } from "./animation";
 
 export interface DomEvent {
+  onAssignDom: null | (() => void);
   onResize: null | (() => void);
 }
 
@@ -81,6 +82,7 @@ class EventCallback {
     //   this._object.global.inputEngine!.globalCallbacks,
     // );
     this._dom = {
+      onAssignDom: null,
       onResize: null,
     };
     this.dom = EventProxyFactory<BaseObject, DomEvent>(this._object, this._dom);
@@ -218,26 +220,32 @@ export class BaseObject {
       scaleX: 1,
       scaleY: 1,
     };
-    this.local = new Proxy(this.transform, {
-      get: (target: TransformProperty, prop: keyof TransformProperty) => {
-        if (this.parent) {
-          return target[prop] - this.parent.transform[prop];
-        }
-        return target[prop];
-      },
-      set: (
-        target: TransformProperty,
-        prop: keyof TransformProperty,
-        value: number,
-      ) => {
-        if (this.parent) {
-          target[prop] = value + this.parent.transform[prop];
-        } else {
-          target[prop] = value;
-        }
-        return true;
-      },
-    });
+    this.local = {
+      x: 0,
+      y: 0,
+      scaleX: 1,
+      scaleY: 1,
+    };
+    // this.local = new Proxy(this.transform, {
+    //   get: (target: TransformProperty, prop: keyof TransformProperty) => {
+    //     if (this.parent) {
+    //       return target[prop] - this.parent.transform[prop];
+    //     }
+    //     return target[prop];
+    //   },
+    //   set: (
+    //     target: TransformProperty,
+    //     prop: keyof TransformProperty,
+    //     value: number,
+    //   ) => {
+    //     if (this.parent) {
+    //       target[prop] = value + this.parent.transform[prop];
+    //     } else {
+    //       target[prop] = value;
+    //     }
+    //     return true;
+    //   },
+    // });
     this.offset = {
       x: 0,
       y: 0,
@@ -454,9 +462,17 @@ export class BaseObject {
   }
 
   calculateCache() {
+    // console.log("calculateCache", this.gid);
     if (this.parent) {
+      // console.log(
+      //   "Has parent",
+      //   this.parent.transform,
+      //   this.local.x,
+      //   this.local.y,
+      // );
       this.transform.x = this.parent.transform.x + this.local.x;
       this.transform.y = this.parent.transform.y + this.local.y;
+      // console.log("Calculated", this.transform);
     }
     for (const collider of this._colliderList) {
       collider.recalculate();
@@ -899,10 +915,10 @@ export class ElementObject extends BaseObject {
       this.transform.x = this._dom.property.x;
       this.transform.y = this._dom.property.y;
     }
-    // if (this.parent) {
-    //   this.local.x = this._dom.property.x - this.parent.transform.x;
-    //   this.local.y = this._dom.property.y - this.parent.transform.y;
-    // }
+    if (this.parent) {
+      this.local.x = this._dom.property.x - this.parent.transform.x;
+      this.local.y = this._dom.property.y - this.parent.transform.y;
+    }
   }
 
   // addDom(dom: HTMLElement): DomElement {
@@ -937,6 +953,8 @@ export class ElementObject extends BaseObject {
         this.event.input[event]?.bind(this) || null;
       this.inputEngine.event[event] = callback as any;
     }
+
+    this.event.dom.onAssignDom?.();
   }
 
   // set elementPositionMode(mode: "absolute" | "relative" | "fixed") {

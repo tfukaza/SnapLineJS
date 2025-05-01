@@ -6,11 +6,11 @@ import {
   readEntry,
   postWriteEntry,
 } from "./object";
-import { AnimationObject, TimelineObject } from "./animation";
-import { cursorState } from "./input";
+import { AnimationObject, SequenceObject } from "./animation";
 import { GlobalInputControl } from "./input";
 import { CollisionEngine } from "./collision";
 import { SnapLine } from "./snapline";
+
 interface coordinates {
   worldX: number;
   worldY: number;
@@ -34,7 +34,7 @@ class GlobalManager {
   readQueue: Record<string, readEntry>;
   postWriteQueue: Record<string, postWriteEntry>;
 
-  animationList: (AnimationObject | TimelineObject)[] = [];
+  animationList: (AnimationObject | SequenceObject)[] = [];
   animationFragment: HTMLDivElement;
 
   data: any;

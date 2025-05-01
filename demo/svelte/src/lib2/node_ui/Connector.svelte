@@ -26,13 +26,13 @@
     
     nodeObject.addConnectorObject(connector);
 
-    onMount(() => { 
-        connector.addDom(connectorDOM as HTMLElement);
-    });
+  onMount(() => {
+    connector.element = connectorDOM as HTMLElement;
+  });
 
-    onDestroy(() => {       
-        connector.delete(connector.getCurrentStats());
-    });
+  onDestroy(() => {
+    connector.delete(connector.getCurrentStats());
+  });
     
 </script>
 
