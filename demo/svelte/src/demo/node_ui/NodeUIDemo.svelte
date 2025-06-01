@@ -12,7 +12,7 @@
       objects.push(...addNode());
     });
 
-  </script>``
+  </script>
   
     <Canvas id="flowchart">
       <CameraControl>

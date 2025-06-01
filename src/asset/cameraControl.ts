@@ -12,9 +12,17 @@ class CameraControl extends ElementObject {
   _mouseDownX: number;
   _mouseDownY: number;
   // _canvasElement: HTMLElement | null = null;
+  zoomLock: boolean;
+  panLock: boolean;
 
-  constructor(globals: GlobalManager) {
+  constructor(
+    globals: GlobalManager,
+    zoomLock: boolean = false,
+    panLock: boolean = false,
+  ) {
     super(globals, null);
+    this.zoomLock = zoomLock;
+    this.panLock = panLock;
     this._mouseDownX = 0;
     this._mouseDownY = 0;
     this._state = "idle";
@@ -39,17 +47,24 @@ class CameraControl extends ElementObject {
     if (prop.event.button != 1) {
       return;
     }
+    if (this.panLock) {
+      return;
+    }
     this._state = "panning";
     this._mouseDownX = prop.position.screenX;
     this._mouseDownY = prop.position.screenY;
     this.global.camera?.handlePanStart();
+    prop.event.preventDefault();
   }
 
   onCursorMove(prop: pointerMoveProp) {
-    if (prop.event!.button != 1) {
-      return;
-    }
+    // console.log("pan move", prop);
+    // if (prop.event!.button != 1) {
+    //   console.log("not panning", prop.event!.button);
+    //   return;
+    // }
     if (this._state != "panning") {
+      // console.log("not panning");
       return;
     }
     const dx = prop.position.screenX - this._mouseDownX;
@@ -57,6 +72,7 @@ class CameraControl extends ElementObject {
     this.global.camera?.handlePanDrag(dx, dy);
     // console.log("pan", this.global.camera?.canvasStyle);
     this.dom.style.transform = this.global.camera?.canvasStyle as string;
+    // console.log("pan move", this.dom.style.transform);
     this.requestPostWrite();
     // this.requestPostWrite().then(() => {
     //   this.renderCanvas();
@@ -77,6 +93,9 @@ class CameraControl extends ElementObject {
   }
 
   onZoom(prop: mouseWheelProp) {
+    if (this.zoomLock) {
+      return;
+    }
     let camera = this.global.camera!;
     if (
       prop.position.screenX < camera.containerOffsetX ||
@@ -97,6 +116,7 @@ class CameraControl extends ElementObject {
     // this.requestPostWrite().then(() => {
     //   this.renderCanvas();
     // });
+    prop.event.preventDefault();
   }
 
   // renderCanvas() {

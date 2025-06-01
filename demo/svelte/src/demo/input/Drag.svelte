@@ -76,20 +76,9 @@
     }
 
     function pointerDown(_: pointerDownProp, __: string, ___: string) {
-        // if (pointerList[prop.event.pointerId]) {
-        //     pointerList[prop.event.pointerId].memberList.push({name: caller, color: color});
-        // } else {
-        //     pointerList[prop.event.pointerId] = {
-        //         pointerId: prop.event.pointerId.toString(),
-        //         x: round(prop.position.x), 
-        //         y: round(prop.position.y),
-        //         memberList: [{name: caller, color: color}]
-        //     };
-        // }
     }
 
     function pointerMove(prop: pointerMoveProp, color: string, caller: string) {
-        console.log(prop.event!.pointerId);
         if (pointerList[prop.event!.pointerId]) {
             Object.assign(pointerList[prop.event!.pointerId], {
                 x: round(prop.position.x), 
@@ -97,8 +86,7 @@
             });
             if (!pointerList[prop.event!.pointerId].memberList.find(member => member.name === caller)) {
                 pointerList[prop.event!.pointerId].memberList.push({name: caller, color: color});
-            }
-            console.log(pointerList[prop.event!.pointerId].memberList);
+            };
         } else {
             pointerList[prop.event!.pointerId] = {
                 pointerId: prop.event!.pointerId.toString(),

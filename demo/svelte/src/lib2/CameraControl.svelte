@@ -3,11 +3,19 @@
     import { CameraControl } from "../../../../src/asset/cameraControl";
     import type { SnapLine } from "../../../../src/index";
     
-    let { children }: { children: any } = $props();
+    let { 
+        children,
+        zoomLock,
+        panLock
+    }: { 
+        children: any, 
+        zoomLock?: boolean, 
+        panLock?: boolean 
+    } = $props();
 
     let cameraControlElement: HTMLDivElement | null = null;
     const engine:SnapLine = getContext("engine");
-    const cameraControl = new CameraControl(engine.global);
+    const cameraControl = new CameraControl(engine.global, zoomLock, panLock);
 
     onMount(() => {         
         cameraControl.element = cameraControlElement as HTMLElement;

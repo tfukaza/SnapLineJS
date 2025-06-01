@@ -207,6 +207,9 @@ export class BaseObject {
   _colliderList: Collider[] = [];
   _animationList: (AnimationObject | SequenceObject)[] = [];
 
+  _globalInput: InputEventCallback;
+  globalInput: InputEventCallback;
+
   constructor(global: GlobalManager, parent: BaseObject | null) {
     this.global = global;
     this.gid = global.getGlobalId();
@@ -265,6 +268,38 @@ export class BaseObject {
     this._requestRead = false;
     this._requestDelete = false;
     this._requestPostWrite = false;
+
+    this._globalInput = {
+      pointerDown: null,
+      pointerMove: null,
+      pointerUp: null,
+      mouseWheel: null,
+      dragStart: null,
+      drag: null,
+      dragEnd: null,
+      pinchStart: null,
+      pinch: null,
+      pinchEnd: null,
+    };
+    this.globalInput = new Proxy(this._globalInput, {
+      set: (_, prop: any, value: CallableFunction | null) => {
+        if (value == null) {
+          this.global.inputEngine?.unsubscribeGlobalCursorEvent(prop, this.gid);
+        } else {
+          this.global.inputEngine?.subscribeGlobalCursorEvent(
+            prop,
+            this.gid,
+            value.bind(this) as (prop: any) => void,
+          );
+        }
+        return true;
+      },
+    });
+  }
+
+  destroy() {
+    // TODO: Remove colliders
+    delete this.global.objectTable[this.gid];
   }
 
   get worldPosition(): [number, number] {
@@ -272,6 +307,7 @@ export class BaseObject {
   }
 
   set worldPosition(position: [number, number]) {
+    // console.log("set worldPosition", position);
     this.transform.x = position[0];
     this.transform.y = position[1];
   }
@@ -420,6 +456,12 @@ export class BaseObject {
     return request;
   }
 
+  /**
+   * Request a read operation.
+   * @param saveDomProperty - Whether to save the DOM property to the object.
+   * @param noTransform - Whether to include the transform in the DOM property calculation.
+   * @returns The read entry.
+   */
   requestRead(
     saveDomProperty: boolean = false,
     noTransform: boolean = false,
@@ -492,7 +534,9 @@ export class BaseObject {
 
   animate(keyframe: keyframeList, property: keyframeProperty) {
     let animation = new AnimationObject(this, keyframe, property);
-
+    for (const animation of this._animationList) {
+      animation.cancel();
+    }
     this._animationList = [];
     this._animationList.push(animation);
     this.global.animationList.push(animation);
@@ -525,16 +569,110 @@ export class BaseObject {
     this._colliderList.push(collider);
     this.global.collisionEngine?.addObject(collider);
   }
+
+  addDebugPoint(
+    x: number,
+    y: number,
+    color: string = "red",
+    persistent: boolean = false,
+    id: string = "",
+  ) {
+    this.global.debugMarkerList[`${this.gid}-${id}`] = {
+      gid: this.gid,
+      type: "point",
+      color: color,
+      x,
+      y,
+      persistent,
+      id: `${this.gid}-${id}`,
+    };
+  }
+
+  addDebugRect(
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+    color: string = "red",
+    persistent: boolean = false,
+    id: string = "",
+  ) {
+    this.global.debugMarkerList[`${this.gid}-${id}`] = {
+      gid: this.gid,
+      type: "rect",
+      color: color,
+      x,
+      y,
+      width,
+      height,
+      persistent,
+      id: `${this.gid}-${id}`,
+    };
+  }
+
+  addDebugCircle(
+    x: number,
+    y: number,
+    radius: number,
+    color: string = "red",
+    persistent: boolean = false,
+    id: string = "",
+  ) {
+    this.global.debugMarkerList[`${this.gid}-${id}`] = {
+      gid: this.gid,
+      type: "circle",
+      color: color,
+      x,
+      y,
+      radius,
+      persistent,
+      id: `${this.gid}-${id}`,
+    };
+  }
+
+  addDebugText(
+    x: number,
+    y: number,
+    text: string,
+    color: string = "red",
+    persistent: boolean = false,
+    id: string = "",
+  ) {
+    this.global.debugMarkerList[`${this.gid}-${id}`] = {
+      gid: this.gid,
+      x,
+      y,
+      type: "text",
+      color: color,
+      text,
+      persistent,
+      id: `${this.gid}-${id}`,
+    };
+  }
+
+  clearDebugMarker(id: string) {
+    delete this.global.debugMarkerList[`${this.gid}-${id}`];
+  }
+
+  clearAllDebugMarkers() {
+    for (const marker of Object.values(this.global.debugMarkerList)) {
+      if (marker.gid == this.gid) {
+        delete this.global.debugMarkerList[marker.id];
+      }
+    }
+  }
 }
 
 interface DomProperty extends TransformProperty {
   height: number;
   width: number;
+  screenX: number;
+  screenY: number;
 }
 
 export interface DomInsertMode {
   appendChild?: HTMLElement | null;
-  insertBefore?: [HTMLElement, HTMLElement] | null;
+  insertBefore?: [HTMLElement, HTMLElement | null] | null;
   replaceChild?: HTMLElement | null;
 }
 
@@ -580,6 +718,8 @@ export class DomElement {
       width: 0,
       scaleX: 1,
       scaleY: 1,
+      screenX: 0,
+      screenY: 0,
     };
     this.prevProperty = {
       x: 0,
@@ -588,6 +728,8 @@ export class DomElement {
       width: 0,
       scaleX: 1,
       scaleY: 1,
+      screenX: 0,
+      screenY: 0,
     };
     this._transformApplied = {
       x: 0,
@@ -722,7 +864,7 @@ export class DomElement {
       scaleY: 1,
     };
 
-    if (transform && !noTransform) {
+    if (transform && transform != "none" && !noTransform) {
       transformApplied = parseTransformString(transform);
     }
 
@@ -730,10 +872,13 @@ export class DomElement {
      * so we need to account for any current transform applied to the element.
      * Note that this doesn't account for the transform applied to the parent.
      */
+    // console.log("readDomProperty", transformApplied);
     this.property.height = property.height / transformApplied.scaleY;
     this.property.width = property.width / transformApplied.scaleX;
     this.property.x = property.x - transformApplied.x;
     this.property.y = property.y - transformApplied.y;
+    this.property.screenX = property.screenX;
+    this.property.screenY = property.screenY;
   }
 
   preRead(noTransform: boolean = false) {
@@ -809,6 +954,7 @@ export class DomElement {
         this._owner.transform.x - this.property.x,
         this._owner.transform.y - this.property.y,
       ];
+      // console.log("postWrite", this._owner.transform, this.property);
       transformStyle = {
         transform: generateTransformString({
           x: newX + this._owner.offset.x,
@@ -816,6 +962,10 @@ export class DomElement {
           scaleX: this._owner.transform.scaleX,
           scaleY: this._owner.transform.scaleY,
         }),
+      };
+    } else if (this._owner.transformMode == "none") {
+      transformStyle = {
+        transform: "",
       };
     }
 
@@ -851,10 +1001,12 @@ export class ElementObject extends BaseObject {
   _state: any = {};
   state: Record<string, any>;
 
-  transformMode: "direct" | "relative";
+  transformMode: "direct" | "relative" | "none";
   /**
    * direct: Applies the transform directly to the object.
-   * relative: Applies the transform relative to the DOM element. Only applicable if the object owns a DOM element..
+   * relative: Perform calculations to apply the transform relative to the DOM element.
+   *      Only applicable if the object owns a DOM element.
+   * none: No transform is applied to the object.
    */
 
   // _parentElement: HTMLElement | null;
@@ -898,6 +1050,12 @@ export class ElementObject extends BaseObject {
     this.inputEngine = new InputControl(this.global, false, this.gid);
   }
 
+  destroy() {
+    // this.inputEngine.destroy();
+    this.dom.delete();
+    super.destroy();
+  }
+
   // set worldPosition(position: [number, number]) {
   //   if (this.positionMode == "relative") {
   //     throw new Error("Cannot set world position in relative mode");
@@ -912,6 +1070,7 @@ export class ElementObject extends BaseObject {
 
   generateCache(setWorldPosition: boolean = false) {
     if (setWorldPosition == true) {
+      // Note that dom property is saved in world coordinates
       this.transform.x = this._dom.property.x;
       this.transform.y = this._dom.property.y;
     }
@@ -943,6 +1102,10 @@ export class ElementObject extends BaseObject {
   }
 
   set element(element: HTMLElement) {
+    if (!element) {
+      console.error("Element is not set", this.gid);
+      return;
+    }
     this._dom.addElement(element);
     this.inputEngine?.addCursorEventListener(element);
 

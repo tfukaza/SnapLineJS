@@ -15,6 +15,7 @@ export interface keyframeProperty {
   duration?: number;
   delay?: number;
   tick?: (value: Record<string, number>) => void;
+  finish?: () => void;
 }
 
 interface AnimationInterface {
@@ -25,6 +26,8 @@ interface AnimationInterface {
   calculateFrame(currentTime: number): boolean;
   currentTime: number;
   progress: number;
+  deleteOnFinish?: boolean;
+  requestDelete: boolean;
 }
 
 class AnimationObject implements AnimationInterface {
@@ -40,6 +43,8 @@ class AnimationObject implements AnimationInterface {
   #duration: number[];
   #delay: number;
   #hasVariable: boolean;
+  #deleteOnFinish: boolean;
+  requestDelete: boolean;
 
   constructor(
     owner: BaseObject,
@@ -51,6 +56,7 @@ class AnimationObject implements AnimationInterface {
     this.property = property;
 
     this.#animation = null;
+    this.#deleteOnFinish = true;
     if (!this.property.duration) {
       this.property.duration = 1000;
     }
@@ -146,8 +152,13 @@ class AnimationObject implements AnimationInterface {
     this.#animation = new Animation(
       new KeyframeEffect(target, cssKeyframe, animationProperty),
     );
+    this.requestDelete = false;
     this.#animation.onfinish = () => {
+      this.property.finish?.();
       this.finish();
+      this.#animation!.cancel();
+      this.requestDelete = true;
+      console.log("Animation finished");
     };
 
     // As of April 2025, there seems to be a bug in Chrome where
@@ -213,7 +224,10 @@ class AnimationObject implements AnimationInterface {
   }
 
   calculateFrame(currentTime: number): boolean {
-    const alpha = this.#animation!.effect!.getComputedTiming().progress ?? 0;
+    const alpha = this.#animation!.effect!.getComputedTiming().progress;
+    if (alpha == null) {
+      return false;
+    }
     const alphaElapsedTime =
       this.property.duration! * alpha + this.property.delay!;
     if (this.#hasVariable) {
@@ -239,6 +253,8 @@ class AnimationObject implements AnimationInterface {
         varValues[key] = varValue;
       }
       this.property.tick?.(varValues);
+    } else {
+      this.property.tick?.({});
     }
     return false;
   }
@@ -265,12 +281,14 @@ class SequenceObject implements AnimationInterface {
   startTime: number;
   endTime: number;
   expired: boolean;
+  requestDelete: boolean;
 
   constructor() {
     this.animations = [];
     this.startTime = -1;
     this.endTime = -1;
     this.expired = false;
+    this.requestDelete = false;
   }
 
   add(animation: AnimationObject) {

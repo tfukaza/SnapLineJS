@@ -44,12 +44,13 @@ function generateTransformString(transform: TransformProperty) {
 }
 
 function parseTransformString(transform: string) {
+  console.log("parseTransformString", transform);
   const transformValues = transform.split("(")[1].split(")")[0].split(",");
   return {
     x: parseFloat(transformValues[0]),
     y: parseFloat(transformValues[1]),
-    scaleX: parseFloat(transformValues[2]),
-    scaleY: parseFloat(transformValues[3]),
+    scaleX: parseFloat(transformValues[3]) || 1,
+    scaleY: parseFloat(transformValues[4]) || 1,
   };
 }
 
@@ -127,6 +128,9 @@ function EventProxyFactory<BindObject, Callback extends object>(
       // );
       // console.trace();
       return (...args: any[]) => {
+        // if (target[prop] != null && typeof target[prop] === "function") {
+        //   console.log("target[prop]", target[prop]);
+        // }
         // console.log("target[prop]", target[prop]);
         // console.log("secondary[prop]", secondary?.[prop]);
         // console.trace();

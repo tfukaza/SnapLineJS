@@ -10,6 +10,8 @@
     const PANEL_MOVING_DURATION = 1000;
     const PANEL_MOVING_EASING = "cubic-bezier(.12,.86,.49,1.16)";
 
+    let { currentDemo = $bindable(0) }: { currentDemo: number } = $props();
+
     function slotShadowLerp(value: number) {
         let Xoffset = 5 * value;
         let Yoffset = 20 * value;
@@ -22,19 +24,22 @@
 
     class MenuCarousel extends ElementObject {
         prevIndex: number;
-        animation: Animation | null;
+        prevIndex1: number;
         animationState: MenuCarouselState;
         itemList: MenuItem[];
         movingToIndex: number;
+        initialX: number;
 
         constructor(engine: SnapLine, parent: ElementObject | null) {
             super(engine.global, parent);
             this.prevIndex = 0;
-            this.animation = null;
+            this.prevIndex1 = 0;
             this.animationState = "selectedIdle";
             this.itemList = [];
             this.movingToIndex = -1;
-            this.elementPositionMode = "fixed";
+            this.transformMode = "direct";
+            this.initialX = 0;
+
         }
 
         lowerAllPanels(targetIndex: number) {
@@ -50,112 +55,113 @@
             }
             if (index !== this.prevIndex) {
                 console.log("Different index", index, this.prevIndex, this.animationState);
-                let offset = index * -400; //this.dom.property.worldWidth;
+                this.prevIndex = index;
                 if (this.animationState == "moving") {
+                    let offset = index * -400; //this.dom.property.worldWidth;
+                    let startX = this.prevIndex1 * -400;
+                    this.prevIndex1 = index;
                     this.animate({
-                        from: this.dom.localX,
-                        to: offset,
+                        transform: [
+                            `translate(${startX}px, 0px)`,
+                            `translate(${offset}px, 0px)`,
+                        ],
+                    },
+                    {
                         duration: PANEL_MOVING_DURATION,
                         easing: PANEL_MOVING_EASING,
-                        setValue: (value) => {
-                            this.dom.localX = value;
-                            this.requestPostWrite();
-                        },
-                        onStart: () => {
-                           
-                            this.animationState = "moving";
-                        },
-                        onFinish: () => {
+                        finish: () => {
                             this.itemList[index].raisePanel();
+                        },
+                        tick: (_: Record<string, number>) => {
+                            for (const item of this.itemList) {
+                                item.requestRead(true);
+                            }
+                            this.requestRead(true);
                         }
                     });
+                    this.animationState = "moving";
+                    this.animation.play();
                 } else if (["ascending", "descending", "selectedIdle"].includes(this.animationState)) {
                     this.lowerAllPanels(index);
                 }
         
             } 
-            this.prevIndex = index;
         }
 
         moveToIndex(index: number) {
             let offset = index * -400; //this.dom.property.worldWidth;
-            console.log("Moving from", this.dom.localX, "to", offset);
-            this.animateTimeline([{
-                from: this.dom.localX,
-                to: offset,
-                duration: this.movingToIndex == index ? 100 : PANEL_MOVING_DURATION,
-                // delay: PANEL_ASCENDING_DURATION, // Wait for the item to finish descending before moving to the target location
+            const startX = this.prevIndex1 * -400;
+            this.prevIndex1 = index;
+            this.animate({
+                transform: [
+                    `translate(${startX}px, 0px)`,
+                    `translate(${offset}px, 0px)`,
+                ],
+            },
+            {
+                duration: PANEL_MOVING_DURATION,
                 easing: PANEL_MOVING_EASING,
-                setValue: (value) => {
-                    console.log("Setting localX", value);
-                    this.dom.localX = value;
-                    this.requestPostWrite();
-                },
-                onStart: () => {
-                    this.animationState = "moving";
-                    this.movingToIndex = index;
-                },
-                onFinish: () => {
+                finish: () => {
                     this.itemList[index].raisePanel();
+                },
+                tick: (_: Record<string, number>) => {
+                    for (const item of this.itemList) {
+                        item.requestRead(true,);
+                    }
+                    this.requestRead(true);
                 }
-            }]);
+            });
+            this.animation.play();
+            this.animationState = "moving";
+            this.movingToIndex = index;
         }
     }
 
     class MenuItem extends ElementObject {
         index: number;
         prevIndex: number;
-        animation: Animation | null;
-        // animationState: "ascending" | "descending" | "selectedIdle" | "unselectedIdle" | "moving";
         container: MenuCarousel | null;
         currentZ: number;
 
         constructor(engine: SnapLine, parent: ElementObject | null, index: number) {
             super(engine.global, parent);
             this.index = index;
-            this.prevIndex = -1;
-            this.animation = null;
-            // this.animationState = "unselectedIdle";
+            this.prevIndex = 0;
             this.container = null;
             this.currentZ = 0;
-            this.elementPositionMode = "fixed";
+            this.transformMode = "direct";
         }
 
         lowerPanel(targetIndex: number, delay: number = 0) {
-           
-            let finishCallback = () => {};
-            if (targetIndex != -1 && targetIndex == this.index) { 
-                // if (this.currentZ >= 0.999) {
-                //     this.container!.moveToIndex(targetIndex);
-                //     return;
-                // } else {
-                    finishCallback = () => {
-                        console.log("Moving to index", targetIndex);
-                        this.container!.moveToIndex(targetIndex);
-                    }
-                // }
-            }
-            // console.log("Lowering panel", targetIndex, this.index, finishCallback);
-            // console.trace();
-            this.animateTimeline([{
-                from: this.currentZ,
-                to: 1,
-                duration: PANEL_ASCENDING_DURATION,
-                delay: delay,
-                easing: PANEL_ASCENDING_EASING,
-                setValue: (value) => {
-                    this.currentZ = value;
-                    this.dom.style.boxShadow = slotShadowLerp(value);
-                    this.position.scaleX = 1 - value * 4/100;
-                    this.position.scaleY = 1 - value * 4/100;
-                    this.requestPostWrite();
+            this.animate({
+                    $alpha: [
+                    this.currentZ,
+                    1,
+                    ],
                 },
-                // onStart: () => {
-                //     this.container!.animationState = "descending";
-                // },
-                onFinish: finishCallback
-                
-            }]);
+                {
+                    duration: PANEL_ASCENDING_DURATION,
+                    delay: delay,
+                    easing: PANEL_ASCENDING_EASING,
+
+                    tick: (value: Record<string, number>) => {
+                        this.currentZ = value["$alpha"];
+                        this.dom.style.boxShadow = slotShadowLerp(this.currentZ);
+                        this.transform.scaleX = 1 - this.currentZ * 4/100;
+                        this.transform.scaleY = 1 - this.currentZ * 4/100;
+                        this.transform.x = 0; // preRead seems to be setting transform to non-zero values, so we need to set it to zero
+                        this.transform.y = 0;
+                        this.requestPostWrite();
+                    },
+                    finish: () => {
+                        if (targetIndex != -1 && targetIndex == this.index) { 
+                            this.container!.moveToIndex(targetIndex);
+                        }
+                    }
+                }
+            );
+            this.animation.play();
+            this.container!.animationState = "descending";
           
         }
 
@@ -164,63 +170,49 @@
                 this.container!.animationState = "selectedIdle";
                 return;
             }
-            this.animateTimeline([{
-                from: this.currentZ,
-                to: 0,
+            this.animate({
+                $alpha: [
+                    this.currentZ,
+                    0,
+                ],
+            },
+            {
                 duration: PANEL_ASCENDING_DURATION,
                 delay: delay,
                 easing: PANEL_ASCENDING_EASING,
-                setValue: (value) => {
-                    this.currentZ = value;
-                    this.dom.style.boxShadow = slotShadowLerp(value);
-                    this.position.scaleX = 1 - value * 4/100;
-                    this.position.scaleY = 1 - value * 4/100;
+                tick: (value: Record<string, number>) => {
+                    this.currentZ = value["$alpha"];
+                    this.dom.style.boxShadow = slotShadowLerp(this.currentZ);
+                    this.transform.scaleX = 1 - this.currentZ * 4/100;
+                    this.transform.scaleY = 1 - this.currentZ * 4/100;
+                    this.transform.x = 0;
+                    this.transform.y = 0;
                     this.requestPostWrite();
                 },
-                onStart: () => {
-                    this.container!.animationState = "ascending";
-                },
-                onFinish: () => {
+                finish: () => {
+                    currentDemo = this.index;
+                    this.currentZ = 0;
                     this.container!.animationState = "selectedIdle";
+                    this.dom.style.boxShadow = slotShadowLerp(this.currentZ);
+                    this.transform.scaleX = 1 - this.currentZ * 4/100;
+                    this.transform.scaleY = 1 - this.currentZ * 4/100;
+                    this.transform.x = 0;
+                    this.transform.y = 0;
+                    this.requestPostWrite();
                 }
-            }]);
-            // this.container!.animationState = "ascending";
+            });
+            this.animation.play();
+            this.container!.animationState = "ascending";
         }
-
-        // setPanelLow() {
-        //     this.currentZ = 1;
-        //     this.dom.style.boxShadow = slotShadowLerp(1);
-        //     this.position.scaleX = 1 - 1/100;
-        //     this.position.scaleY = 1 - 1/100;
-        //     this.requestPostWrite();
-        // }
-        
 
         setIndex(index: number) {
             if (index == this.prevIndex) {
                 return;
             }
-
             if (index !== this.index) {
-                // if (this.prevIndex == this.index) {
                 this.lowerPanel(-1);
-                // } else {
-                //     this.setPanelLow();
-                // }
             } else {
-                // If this item was selected...
-                // If the item is already in the process of ascending or descending, or if it is already at the target location,
-                // move the item up to its selected position
-                if (["ascending", "descending", "selectedIdle"].includes(this.container!.animationState)) {
-                    // this.animationState = "ascending";
-                    // this.setPanelLow();
-                    this.raisePanel(PANEL_ASCENDING_DURATION + PANEL_MOVING_DURATION);
-                } else {
-                    // If the item is not in target location, wait for the carousel to move to the target location,
-                    // then move the item up to its selected position
-                    // this.setPanelLow();
-                    this.raisePanel(PANEL_ASCENDING_DURATION + PANEL_MOVING_DURATION);
-                }
+                this.raisePanel(PANEL_ASCENDING_DURATION + PANEL_MOVING_DURATION);
             } 
             this.prevIndex = index;
         }
@@ -250,46 +242,16 @@
     let menuCarousel = new MenuCarousel(engine, null);
 
     onMount(() => {
-        menuCarousel.positionMode = 'relative';
         menuCarousel.setIndex(0);
+        menuCarousel.dom.read();
         menuItems.forEach(item => {
             item.object.container = menuCarousel;
-            // item.object.dom.classList = ["menu-plate"];
-            item.object.positionMode = 'relative';
-            // console.log(item.object);
-            // item.object.setIndex(0);
             menuCarousel.itemList.push(item.object);
+            item.object.requestRead(true);
         });
-        
-        // let testObject = new ElementObject(engine.global, null);
-        // testObject.element = testPlate;
-        // testObject.animateTimeline([{
-        //     from: 0,
-        //     to: 1,
-        //     duration: 5000,
-        //     easing: "linear",
-        //     setValue: (value) => {
-        //         console.log(value);
-        //         testObject.position.scaleX = value + 1;
-        //         testObject.position.scaleY = value + 1;
-        //         testObject.requestPostWrite();
-        //     }
-        // }, {
-        //     from: 0,
-        //     to: 1,
-        //     duration: 5000,
-        //     easing: "linear",
-        //     setValue: (value) => {
-        //         console.log(value);
-        //         testObject.position.worldX = value * 100;
-        //         testObject.position.worldY = value * 100;
-        //         testObject.requestPostWrite();
-        //     }
-        // }]);
+    
      
     });
-
-    // let menuState: HTMLHeadingElement | null = null;
 
     function handleSliderChange(event: Event) {
         const slider = event.target as HTMLInputElement;
@@ -299,25 +261,9 @@
         console.log(currentIndex);
 
         menuCarousel.setIndex(currentIndex);
-        // menuItems.forEach(item => {
-
-        //     // console.log(item.object.position);
-        //     // item.object.position.scaleX = 1 - value / 4000;
-        //     // item.object.position.scaleY = 1 - value / 4000;
-        //     // item.object.dom.style.boxShadow = slotShadowLerp(value/100);
-
-        //     item.object.setIndex(currentIndex);
-        //     // item.object.requestPostWrite();
-        // });
     }
 
-    // Every 100ms, print the current state of the menu carousel
-    // setInterval(() => {
-    //     menuState!.innerHTML = menuCarousel.animationState;
-    // }, 100);
 </script>
-
-<!-- <h2 bind:this={menuState}>UI Engine</h2> -->
 
 <div id="menu-container">
     <div class="slot" id="menu-slot">
@@ -329,6 +275,7 @@
             {/each}
         </div>
     </div>   
+    <h1>for the web</h1>
 
     <div id="menu-slider">
         <div id="menu-slider-container">
@@ -336,27 +283,26 @@
         </div>
     </div>
 </div>
-<!-- <datalist id="menu-slider-datalist">
-    {#each menuItems as item}
-        <option value={Math.floor(100/(menuItems.length-1) * item.index)}></option>
-    {/each}
-</datalist> -->
-
 
 <style lang="scss">
 
     #menu-container {
-        display: flex;
-        flex-direction: column;
+        display: grid;
+        grid-template-columns: auto auto;
         align-items: center;
-        justify-content: center;
+        justify-items: center;
+        gap: 10px;
+        width: max-content;
+
+        h1 {
+            font-weight: 800;
+        }
     }
     #menu-slot {
         overflow: hidden;
         position: relative;
         height: 100px;
         width: 400px;
-        margin: 0px 20px;
     }
     
     #menu-carousel {
@@ -370,13 +316,26 @@
      
     }
     .menu-plate {
-
        width:400px;
        height: 100px;
        background: #f6f6f6;
        box-sizing: border-box;
        text-align: center;
-       
+       display: flex;
+       align-items: center;
+       justify-content: center;
+
+       &:nth-child(1) h1 {
+        
+       }
+
+       &:nth-child(2) h1 {
+          
+       }
+
+       &:nth-child(3) h1 {
+           font-size: 50px;
+       }
     }
 
     .hide {
@@ -388,7 +347,6 @@
         transform: scale(0.98) translate(0px, -20px);
     }
     #menu-slider {
-        margin-top: 30px;
         #menu-slider-rail {
             height: 10px;
             width: 200px; 

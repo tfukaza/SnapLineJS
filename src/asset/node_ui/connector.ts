@@ -1,7 +1,12 @@
 import { ElementObject, frameStats, BaseObject } from "../../object";
 import { NodeComponent } from "./node";
 import { LineComponent } from "./line";
-import { pointerDownProp, dragProp } from "../../input";
+import {
+  pointerDownProp,
+  dragProp,
+  dragEndProp,
+  pointerUpProp,
+} from "../../input";
 import { Collider } from "../../collision";
 import { CircleCollider, PointCollider } from "../../collision";
 import { GlobalManager } from "../../global";
@@ -69,6 +74,7 @@ class ConnectorComponent extends ElementObject {
     if (prop.event.button != 0) {
       return;
     }
+    this.inputEngine.resetDragMembers();
     if (currentIncomingLines.length > 0) {
       this.startPickUpLine(currentIncomingLines[0], prop);
       return;
@@ -79,14 +85,15 @@ class ConnectorComponent extends ElementObject {
     }
   }
 
-  componentCursorUp(): void {
-    if (this.parent == null) {
-      return;
-    }
-    this.endDragOutLine();
-  }
+  // componentCursorUp(): void {
+  //   if (this.parent == null) {
+  //     return;
+  //   }
+  //   this.endDragOutLine();
+  // }
 
   deleteLine(i: number): LineComponent | null {
+    console.debug(`Deleting line ${this.gid} at index ${i}`);
     if (this.outgoingLines.length == 0) {
       return null;
     }
@@ -141,9 +148,10 @@ class ConnectorComponent extends ElementObject {
   }
 
   startDragOutLine(prop: pointerDownProp): void {
+    // console.debug(`Starting drag out line ${this.gid}`);
     let newLine = this.createLine();
     newLine.setLineEnd(prop.position.x, prop.position.y);
-
+    newLine.setLineStartAtConnector();
     this.outgoingLines.unshift(newLine);
 
     this.parent.updateNodeLines();
@@ -151,8 +159,9 @@ class ConnectorComponent extends ElementObject {
 
     this._state = ConnectorState.DRAGGING;
     this._targetConnector = null;
-
+    // this.event.input.drag = null;
     this.event.input.drag = this.runDragOutLine;
+    // this.globalInput.pointerUp = this.endDragOutLine;
     this.event.input.dragEnd = this.endDragOutLine;
 
     this._mouseHitBox.event.collider.onCollide = (
@@ -170,6 +179,18 @@ class ConnectorComponent extends ElementObject {
         this._targetConnector = null;
       }
     };
+
+    this.runDragOutLine({
+      position: prop.position,
+      start: {
+        x: this.transform.x,
+        y: this.transform.y,
+      },
+      delta: {
+        x: prop.position.x - this.transform.x,
+        y: prop.position.y - this.transform.y,
+      },
+    } as dragProp);
   }
 
   findClosestConnector() {
@@ -197,6 +218,7 @@ class ConnectorComponent extends ElementObject {
   }
 
   runDragOutLine(prop: dragProp) {
+    console.debug(`Running drag out line ${this.gid}`);
     if (this._state != ConnectorState.DRAGGING) {
       return;
     }
@@ -245,11 +267,14 @@ class ConnectorComponent extends ElementObject {
     return [connectorX, connectorY];
   }
 
-  endDragOutLine() {
+  endDragOutLine(_: dragEndProp) {
+    console.debug(`Ending drag out line ${this.gid}`);
+    this.inputEngine.resetDragMembers();
     if (
       this._targetConnector &&
       this._targetConnector instanceof ConnectorComponent
     ) {
+      console.debug(`Connecting ${this.gid} to ${this._targetConnector.gid}`);
       const target = this._targetConnector;
       if (target == null) {
         console.error(`Error: target is null`);
@@ -266,6 +291,7 @@ class ConnectorComponent extends ElementObject {
 
       this.outgoingLines[0].setLineEnd(target.transform.x, target.transform.y);
     } else {
+      console.debug(`Deleting line ${this.gid} at index 0`);
       this.deleteLine(0);
     }
     if (this.parent) {
@@ -291,6 +317,9 @@ class ConnectorComponent extends ElementObject {
     line.start.disconnectFromConnector(this);
     this.disconnectFromConnector(line.start);
     line.start.deleteLine(line.start.outgoingLines.indexOf(line));
+    this.inputEngine.resetDragMembers();
+    this.inputEngine.addDragMember(line.start.inputEngine);
+    line.start._targetConnector = this;
     line.start.startDragOutLine(prop);
     this._state = ConnectorState.DRAGGING;
   }
@@ -299,6 +328,7 @@ class ConnectorComponent extends ElementObject {
     connector: ConnectorComponent,
     line: LineComponent | null,
   ): boolean {
+    console.debug(`Connecting ${this.gid} to connector ${connector.gid}`);
     const currentIncomingLines = connector.incomingLines.filter(
       (i) => !i._requestDelete,
     );
@@ -330,6 +360,7 @@ class ConnectorComponent extends ElementObject {
   }
 
   disconnectFromConnector(connector: ConnectorComponent) {
+    console.debug(`Disconnecting ${this.gid} from connector ${connector.gid}`);
     for (const line of this.outgoingLines) {
       if (line.target == connector) {
         line._requestDelete = true;

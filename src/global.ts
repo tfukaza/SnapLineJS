@@ -20,6 +20,20 @@ interface coordinates {
   screenY: number;
 }
 
+interface debugMarker {
+  type: "point" | "rect" | "circle" | "text";
+  gid: string;
+  id: string;
+  persistent: boolean; // Persists on screen until cleared or replaced
+  color: string;
+  x: number;
+  y: number;
+  width?: number;
+  height?: number;
+  radius?: number;
+  text?: string;
+}
+
 class GlobalManager {
   containerElement: HTMLElement | null;
   cursor: coordinates;
@@ -36,6 +50,8 @@ class GlobalManager {
 
   animationList: (AnimationObject | SequenceObject)[] = [];
   animationFragment: HTMLDivElement;
+
+  debugMarkerList: Record<string, debugMarker> = {};
 
   data: any;
   snapline: SnapLine | null;

@@ -137,6 +137,7 @@ class NodeComponent extends ElementObject {
 
   updateNodeLineList(): void {
     if (this._lineListCallback) {
+      // console.log("updateNodeLineList", this.gid);
       this._lineListCallback(this.getAllOutgoingLines());
     }
   }
@@ -150,6 +151,8 @@ class NodeComponent extends ElementObject {
       return;
     }
     this.calculateCache();
+
+    // console.log("Node onCursorDown", this.gid);
 
     if (this.global.data.select?.includes(this) == false) {
       for (const node of this.global.data.select) {
@@ -267,10 +270,12 @@ class NodeComponent extends ElementObject {
       if (!peer) continue;
       if (!peer.parent) continue;
       let parent = peer.parent as NodeComponent;
-      parent._prop[peer.name] = value;
-      if (parent._propSetCallback[peer.name]) {
-        parent._propSetCallback[peer.name](value);
-      }
+      // parent._prop[peer.name] = value;
+      // if (parent._propSetCallback[peer.name]) {
+      //   parent._propSetCallback[peer.name](value);
+      // }
+      // console.log("setProp", peer.name, value);
+      parent.setProp(peer.name, value);
     }
   }
 }
