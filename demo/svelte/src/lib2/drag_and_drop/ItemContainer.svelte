@@ -3,7 +3,6 @@
     import { onMount, getContext, setContext } from "svelte";
     import type { SnapLine } from "../../../../../src/index";
 
-    // let { itemList }: { itemList: { id: number, text: string }[] } = $props();
     let { direction, children }: { direction: "column" | "row", children: any } = $props();
     const engine:SnapLine = getContext("engine");
     let container: HTMLDivElement | null = null;
@@ -14,6 +13,7 @@
 
     onMount(() => {
         itemContainer._containerDomElement = container;
+        itemContainer.requestRead(true, true);
     });
     
 </script>

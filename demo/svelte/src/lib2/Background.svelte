@@ -10,7 +10,7 @@
     setContext("bg", bg);
 
     onMount(() => {         
-        bg.addDom(background as HTMLElement);
+        bg.element = background as HTMLElement;
     });
 </script>
 

@@ -1,182 +1,150 @@
 import { GlobalManager } from "./global";
-export enum cursorState {
-  none = 0,
-  mouseLeft = 1,
-  mouseMiddle = 2,
-  mouseRight = 3,
-  touchSingle = 4,
-  touchDouble = 5,
-  invalid = 4,
+import { EventProxyFactory } from "./util";
+
+export enum mouseButton {
+  LEFT = 0,
+  MIDDLE = 1,
+  RIGHT = 2,
+  BACK = 3,
+  FORWARD = 4,
 }
 
-export interface cursorDownProp {
-  event: MouseEvent | TouchEvent;
-  element: HTMLElement | null;
-  button: cursorState;
-  clientX: number;
-  clientY: number;
-  worldX: number;
-  worldY: number;
-  cameraX: number;
-  cameraY: number;
-  screenX: number;
-  screenY: number;
-  gid: string | null;
-}
-export interface cursorMoveProp {
-  event: MouseEvent | TouchEvent;
-  element: HTMLElement | null;
-  button: cursorState;
-  clientX: number;
-  clientY: number;
-  worldX: number;
-  worldY: number;
-  cameraX: number;
-  cameraY: number;
-  screenX: number;
-  screenY: number;
-  gid: string | null;
-}
-export interface cursorUpProp {
-  event: MouseEvent | TouchEvent;
-  element: HTMLElement | null;
-  button: cursorState;
-  clientX: number;
-  clientY: number;
-  worldX: number;
-  worldY: number;
-  cameraX: number;
-  cameraY: number;
-  screenX: number;
-  screenY: number;
-  gid: string | null;
+export enum mouseButtonBitmap {
+  LEFT = 1,
+  MIDDLE = 2,
+  RIGHT = 4,
+  BACK = 8,
+  FORWARD = 16,
 }
 
-export interface cursorScrollProp {
+export interface eventPosition {
+  x: number;
+  y: number;
+  cameraX: number;
+  cameraY: number;
+  screenX: number;
+  screenY: number;
+}
+
+/**
+ * Events common to mouse and touch
+ */
+export interface pointerDownProp {
+  event: PointerEvent;
+  gid: string | null;
+  position: eventPosition;
+  button: number;
+}
+
+export interface pointerMoveProp {
+  event: PointerEvent | null;
+  gid: string | null;
+  position: eventPosition;
+  button: number;
+}
+
+export interface pointerUpProp {
+  event: PointerEvent;
+  gid: string | null;
+  position: eventPosition;
+  button: number;
+}
+
+/** Mouse events */
+export interface mouseWheelProp {
   event: WheelEvent;
-  element: HTMLElement | null;
-  button: cursorState;
-  clientX: number;
-  clientY: number;
-  worldX: number;
-  worldY: number;
-  cameraX: number;
-  cameraY: number;
-  screenX: number;
-  screenY: number;
-  delta: number;
   gid: string | null;
+  position: eventPosition;
+  delta: number;
 }
 
-class InputEventCallback {
-  _mouseDownCallback: null | ((prop: cursorDownProp) => void);
-  _mouseMoveCallback: null | ((prop: cursorMoveProp) => void);
-  _mouseUpCallback: null | ((prop: cursorUpProp) => void);
-  _mouseWheelCallback: null | ((prop: cursorScrollProp) => void);
-  _touchStartCallback: null | ((prop: cursorDownProp) => void);
-  _touchMoveCallback: null | ((prop: cursorMoveProp) => void);
-  _touchEndCallback: null | ((prop: cursorUpProp) => void);
-  _touchPinchCallback: null | ((prop: cursorScrollProp) => void);
-
-  constructor() {
-    this._mouseDownCallback = null;
-    this._mouseMoveCallback = null;
-    this._mouseUpCallback = null;
-    this._mouseWheelCallback = null;
-    this._touchStartCallback = null;
-    this._touchMoveCallback = null;
-    this._touchEndCallback = null;
-    this._touchPinchCallback = null;
-  }
-
-  set mouseDownCallback(callback: (prop: cursorDownProp) => void) {
-    this._mouseDownCallback = callback;
-  }
-
-  get mouseDownCallback() {
-    if (!this._mouseDownCallback) {
-      return () => {};
-    }
-    return this._mouseDownCallback;
-  }
-
-  set mouseMoveCallback(callback: (prop: cursorMoveProp) => void) {
-    this._mouseMoveCallback = callback;
-  }
-
-  get mouseMoveCallback() {
-    if (!this._mouseMoveCallback) {
-      return () => {};
-    }
-    return this._mouseMoveCallback;
-  }
-
-  set mouseUpCallback(callback: (prop: cursorUpProp) => void) {
-    this._mouseUpCallback = callback;
-  }
-
-  get mouseUpCallback() {
-    if (!this._mouseUpCallback) {
-      return () => {};
-    }
-    return this._mouseUpCallback;
-  }
-
-  set mouseWheelCallback(callback: (prop: cursorScrollProp) => void) {
-    this._mouseWheelCallback = callback;
-  }
-
-  get mouseWheelCallback() {
-    if (!this._mouseWheelCallback) {
-      return () => {};
-    }
-    return this._mouseWheelCallback;
-  }
-
-  set touchStartCallback(callback: (prop: cursorDownProp) => void) {
-    this._touchStartCallback = callback;
-  }
-
-  get touchStartCallback() {
-    if (!this._touchStartCallback) {
-      return () => {};
-    }
-    return this._touchStartCallback;
-  }
-
-  set touchMoveCallback(callback: (prop: cursorMoveProp) => void) {
-    this._touchMoveCallback = callback;
-  }
-
-  get touchMoveCallback() {
-    if (!this._touchMoveCallback) {
-      return () => {};
-    }
-    return this._touchMoveCallback;
-  }
-
-  set touchEndCallback(callback: (prop: cursorUpProp) => void) {
-    this._touchEndCallback = callback;
-  }
-
-  get touchEndCallback() {
-    if (!this._touchEndCallback) {
-      return () => {};
-    }
-    return this._touchEndCallback;
-  }
-
-  set touchPinchCallback(callback: (prop: cursorScrollProp) => void) {
-    this._touchPinchCallback = callback;
-  }
-
-  get touchPinchCallback() {
-    if (!this._touchPinchCallback) {
-      return () => {};
-    }
-    return this._touchPinchCallback;
-  }
+export interface dragStartProp {
+  gid: string | null; // Object that triggered the event
+  pointerId: number;
+  start: eventPosition;
+  button: number;
 }
+
+export interface dragProp {
+  gid: string | null;
+  pointerId: number;
+  start: eventPosition;
+  position: eventPosition;
+  delta: eventPosition;
+  button: number;
+}
+
+export interface dragEndProp {
+  gid: string | null;
+  pointerId: number;
+  start: eventPosition;
+  end: eventPosition;
+  button: number;
+}
+
+export interface pinchStartProp {
+  gid: string | null;
+  gestureID: string;
+  start: {
+    pointerList: eventPosition[];
+    distance: number;
+  };
+}
+
+/** Touch Event */
+export interface pinchProp {
+  gid: string | null;
+  gestureID: string;
+  start: {
+    pointerList: eventPosition[];
+    distance: number;
+  };
+  pointerList: eventPosition[];
+  distance: number;
+}
+
+export interface pinchEndProp {
+  gid: string | null;
+  gestureID: string;
+  start: {
+    pointerList: eventPosition[];
+    distance: number;
+  };
+  pointerList: eventPosition[];
+  distance: number;
+  end: {
+    pointerList: eventPosition[];
+    distance: number;
+  };
+}
+
+export interface touchMultiMoveProp {
+  gid: string | null;
+  position: eventPosition;
+  positionCount: number;
+  positionList: eventPosition[];
+}
+
+export interface InputEventCallback {
+  pointerDown: null | ((prop: pointerDownProp) => void);
+  pointerMove: null | ((prop: pointerMoveProp) => void);
+  pointerUp: null | ((prop: pointerUpProp) => void);
+  mouseWheel: null | ((prop: mouseWheelProp) => void);
+
+  dragStart: null | ((prop: dragStartProp) => void);
+  drag: null | ((prop: dragProp) => void);
+  dragEnd: null | ((prop: dragEndProp) => void);
+
+  pinchStart: null | ((prop: pinchStartProp) => void);
+  pinch: null | ((prop: pinchProp) => void);
+  pinchEnd: null | ((prop: pinchEndProp) => void);
+}
+
+type InputEventRecord<T> = {
+  [P in keyof T]: Record<string, (prop: T[P]) => void>;
+};
+
+type InputEventCallbackRecord = InputEventRecord<InputEventCallback>;
 
 export type touchData = {
   x: number;
@@ -185,102 +153,220 @@ export type touchData = {
   identifier: number;
 };
 
+export type pointerData = {
+  id: number; // pointer id
+  callerGID: string | null; // GID of the element that triggered the pointer event
+  timestamp: number; // Timestamp of the pointer event
+  x: number;
+  y: number;
+  startX: number;
+  startY: number;
+  prevX: number;
+  prevY: number;
+  endX: number | null;
+  endY: number | null;
+  moveCount: number; // Number of times the pointer has moved since the last pointer down event
+};
+
+const GLOBAL_GID = "global";
+
+export interface InputControlOption {
+  pinch: {
+    returnOnlyFirst: boolean;
+  };
+}
+
 class InputControl {
   /**
    * Functions as a middleware that converts mouse and touch events into a unified event format.
    */
-  _domElement: HTMLElement | null;
-  global: GlobalManager;
-  _pointerMode: "pointer" | "gesture" | "none";
+  _element: HTMLElement | null;
+  global: GlobalManager | null;
 
   _sortedTouchArray: touchData[]; // List of touches for touch events, sorted by the times they are pressed
   _sortedTouchDict: { [key: number]: touchData }; // Dictionary of touches for touch events, indexed by the touch identifier
-
+  _localPointerDict: { [key: number]: pointerData };
+  _event: InputEventCallback;
   event: InputEventCallback;
+  _isGlobal: boolean;
+  _uuid: Symbol;
+  _ownerGID: string | null;
 
-  constructor(global: GlobalManager) {
+  #dragMemberList: InputControl[];
+
+  constructor(
+    global: GlobalManager | null,
+    isGlobal: boolean = true,
+    ownerGID: string | null = null,
+  ) {
     this.global = global;
-    this._pointerMode = "none";
-    this._domElement = null;
-
+    this._element = null;
+    this._isGlobal = isGlobal;
     this._sortedTouchArray = [];
     this._sortedTouchDict = {};
-
-    this.event = new InputEventCallback();
+    this._ownerGID = ownerGID;
+    this._localPointerDict = {};
+    this.#dragMemberList = [];
+    this._event = {
+      pointerDown: null,
+      pointerMove: null,
+      pointerUp: null,
+      mouseWheel: null,
+      dragStart: null,
+      drag: null,
+      dragEnd: null,
+      pinchStart: null,
+      pinch: null,
+      pinchEnd: null,
+    };
+    this.event = EventProxyFactory<InputControl, InputEventCallback>(
+      this,
+      this._event,
+      this._isGlobal ? null : this.globalInputEngine?._inputControl.event,
+    );
+    this._uuid = Symbol();
   }
 
-  convertMouseToCursorState(buttons: number): cursorState {
-    switch (buttons) {
-      case 1:
-        return cursorState.mouseLeft;
-      case 2:
-        return cursorState.mouseRight;
-      case 4:
-        return cursorState.mouseMiddle;
-      default:
-        return cursorState.none;
+  destroy() {
+    // TODO Use abort signal for a more controlled way to destroy the input engine
+  }
+
+  get globalInputEngine() {
+    return this.global?.inputEngine;
+  }
+
+  get globalPointerDict(): { [key: number]: pointerData } {
+    if (this.globalInputEngine == null) {
+      return {};
     }
+    return this.globalInputEngine._pointerDict;
   }
 
-  /**
-   * Called when the user pressed the mouse button
-   * @param e
-   * @returns
-   */
-  onMouseDown(e: MouseEvent) {
+  get globalGestureDict(): { [key: string]: dragGesture | pinchGesture } {
+    if (this.globalInputEngine == null) {
+      return {};
+    }
+    return this.globalInputEngine._gestureDict;
+  }
+  // convertMouseToCursorState(buttons: number): cursorState {
+  //   switch (buttons) {
+  //     case 1:
+  //       return cursorState.mouseLeft;
+  //     case 2:
+  //       return cursorState.mouseRight;
+  //     case 4:
+  //       return cursorState.mouseMiddle;
+  //     default:
+  //       return cursorState.none;
+  //   }
+  // }
+
+  getCoordinates(screenX: number, screenY: number) {
+    if (this.global == null) {
+      return {
+        x: screenX,
+        y: screenY,
+        cameraX: screenX,
+        cameraY: screenY,
+        screenX,
+        screenY,
+      };
+    }
     const [cameraX, cameraY] = this.global.camera!.getCameraFromScreen(
-      e.clientX,
-      e.clientY,
+      screenX,
+      screenY,
     );
     const [worldX, worldY] = this.global.camera!.getWorldFromCamera(
       cameraX,
       cameraY,
     );
-    this.event.mouseDownCallback({
-      event: e,
-      element: e.target as HTMLElement | null,
-      button: this.convertMouseToCursorState(e.buttons),
-      clientX: e.clientX,
-      clientY: e.clientY,
-      worldX: worldX,
-      worldY: worldY,
-      cameraX: cameraX,
-      cameraY: cameraY,
-      screenX: e.clientX,
-      screenY: e.clientY,
-      gid: null,
-    });
+    return {
+      x: worldX,
+      y: worldY,
+      cameraX,
+      cameraY,
+      screenX,
+      screenY,
+    };
+  }
+
+  /**
+   * Called when the user pressed the mouse button.
+   * This and all other pointer/gesture events automatically propagate to global input engine as well.
+   * @param e
+   * @returns
+   */
+  onPointerDown(e: PointerEvent) {
     e.stopPropagation();
+    const coordinates = this.getCoordinates(e.clientX, e.clientY);
+    this.event.pointerDown?.({
+      event: e,
+      position: coordinates,
+      gid: this._isGlobal ? GLOBAL_GID : this._ownerGID,
+      button: e.buttons,
+    });
+    const pointerData = {
+      id: e.pointerId,
+      callerGID: this._isGlobal ? GLOBAL_GID : this._ownerGID,
+      timestamp: e.timeStamp,
+      x: e.clientX,
+      y: e.clientY,
+      startX: e.clientX,
+      startY: e.clientY,
+      prevX: e.clientX,
+      prevY: e.clientY,
+      endX: null,
+      endY: null,
+      moveCount: 0,
+    };
+    this.globalPointerDict[e.pointerId] = pointerData;
+
+    this.event.dragStart?.({
+      gid: this._isGlobal ? GLOBAL_GID : this._ownerGID,
+      pointerId: e.pointerId,
+      start: coordinates,
+      button: e.buttons,
+    });
+    console.debug("dragStart", coordinates);
+    if (this.globalGestureDict[e.pointerId]) {
+      this.globalGestureDict[e.pointerId].memberList.push(this);
+    } else {
+      this.globalGestureDict[e.pointerId] = {
+        type: "drag",
+        state: "drag",
+        memberList: [this, ...this.#dragMemberList],
+        initiatorID: this._isGlobal ? GLOBAL_GID : this._ownerGID ?? "",
+      };
+    }
   }
 
   /**
    * Called when the user moves the mouse
    * @param e
    */
-  onMouseMove(e: MouseEvent) {
-    const element = document?.elementFromPoint(e.clientX, e.clientY);
-    const [cameraX, cameraY] = this.global.camera!.getCameraFromScreen(
-      e.clientX,
-      e.clientY,
-    );
-    const [worldX, worldY] = this.global.camera!.getWorldFromCamera(
-      cameraX,
-      cameraY,
-    );
-    this.event.mouseMoveCallback({
+  onPointerMove(e: PointerEvent) {
+    e.preventDefault();
+    const coordinates = this.getCoordinates(e.clientX, e.clientY);
+    // console.debug("onPointerMove", e.pointerId, coordinates);
+    this.event.pointerMove?.({
       event: e,
-      element: element as HTMLElement | null,
-      button: this.convertMouseToCursorState(e.buttons),
-      clientX: e.clientX,
-      clientY: e.clientY,
-      worldX: worldX,
-      worldY: worldY,
-      cameraX: cameraX,
-      cameraY: cameraY,
-      screenX: e.clientX,
-      screenY: e.clientY,
-      gid: null,
+      position: coordinates,
+      gid: this._isGlobal ? GLOBAL_GID : this._ownerGID,
+      button: e.buttons,
     });
+    const id = e.pointerId;
+    let pointerData = this.globalPointerDict[id]; // || this._localPointerDict[id];
+    if (pointerData != null) {
+      const updatedPointerData = {
+        prevX: pointerData.x,
+        prevY: pointerData.y,
+        x: e.clientX,
+        y: e.clientY,
+        callerGID: this._isGlobal ? GLOBAL_GID : this._ownerGID,
+      };
+      Object.assign(pointerData, updatedPointerData);
+      this.#handleMultiPointer(e);
+    }
     e.stopPropagation();
   }
 
@@ -288,29 +374,72 @@ class InputControl {
    * Called when the user releases the mouse button
    * @param e
    */
-  onMouseUp(e: MouseEvent) {
-    const [cameraX, cameraY] = this.global.camera!.getCameraFromScreen(
-      e.clientX,
-      e.clientY,
-    );
-    const [worldX, worldY] = this.global.camera!.getWorldFromCamera(
-      cameraX,
-      cameraY,
-    );
-    this.event.mouseUpCallback({
+  onPointerUp(e: PointerEvent) {
+    e.preventDefault();
+    const coordinates = this.getCoordinates(e.clientX, e.clientY);
+    console.debug("onPointerUp", e.pointerId, coordinates);
+    this.event.pointerUp?.({
       event: e,
-      element: e.target as HTMLElement | null,
-      button: this.convertMouseToCursorState(e.buttons),
-      clientX: e.clientX,
-      clientY: e.clientY,
-      worldX: worldX,
-      worldY: worldY,
-      cameraX: cameraX,
-      cameraY: cameraY,
-      screenX: e.clientX,
-      screenY: e.clientY,
-      gid: null,
+      position: coordinates,
+      gid: this._isGlobal ? GLOBAL_GID : this._ownerGID,
+      button: e.buttons,
     });
+    let pointerData = this.globalPointerDict[e.pointerId];
+    console.debug("onPointerUp", e.pointerId, pointerData);
+    // this._localPointerDict[e.pointerId];
+    if (pointerData != null) {
+      const gesture = this.globalGestureDict[e.pointerId];
+      console.debug("onPointerUp gesture", e.pointerId, gesture);
+      if (gesture != null) {
+        gesture.state = "release";
+
+        const start = this.getCoordinates(
+          pointerData.startX,
+          pointerData.startY,
+        );
+        console.debug(
+          "dragEnd",
+          gesture.memberList.map((m) => m._ownerGID),
+        );
+        for (const member of gesture.memberList) {
+          console.debug("dragEnd", e.pointerId, member._ownerGID);
+          member.event.dragEnd?.({
+            gid: this._isGlobal ? GLOBAL_GID : this._ownerGID,
+            pointerId: e.pointerId,
+            start: start,
+            end: coordinates,
+            button: e.buttons,
+          });
+        }
+        delete this.globalGestureDict[e.pointerId];
+      }
+      // delete this._localPointerDict[e.pointerId];
+      delete this.globalPointerDict[e.pointerId];
+
+      // Check if any pinch gesture uses this pointer
+      for (const gestureKey of Object.keys(this.globalGestureDict)) {
+        if (!gestureKey.includes("-")) {
+          continue;
+        }
+        const [pointerId_0, pointerId_1] = gestureKey.split("-").map(Number);
+        if (pointerId_0 == e.pointerId || pointerId_1 == e.pointerId) {
+          const gesture = this.globalGestureDict[gestureKey] as pinchGesture;
+          this.event.pinchEnd?.({
+            gid: this._isGlobal ? GLOBAL_GID : this._ownerGID,
+            gestureID: gestureKey,
+            start: gesture.start,
+            pointerList: gesture.pointerList,
+            distance: gesture.distance,
+            end: {
+              pointerList: gesture.pointerList,
+              distance: gesture.distance,
+            },
+          });
+          console.warn("pinchEnd", gestureKey, this._ownerGID);
+          delete this.globalGestureDict[gestureKey];
+        }
+      }
+    }
     e.stopPropagation();
   }
 
@@ -319,371 +448,282 @@ class InputControl {
    * @param e
    */
   onWheel(e: WheelEvent) {
-    const [cameraX, cameraY] = this.global.camera!.getCameraFromScreen(
-      e.clientX,
-      e.clientY,
-    );
-    const [worldX, worldY] = this.global.camera!.getWorldFromCamera(
-      cameraX,
-      cameraY,
-    );
-    this.event.mouseWheelCallback({
+    const coordinates = this.getCoordinates(e.clientX, e.clientY);
+    this.event.mouseWheel?.({
       event: e,
-      element: e.target as HTMLElement | null,
-      button: cursorState.mouseMiddle,
-      clientX: e.clientX,
-      clientY: e.clientY,
-      worldX: worldX,
-      worldY: worldY,
-      cameraX: cameraX,
-      cameraY: cameraY,
-      screenX: e.clientX,
-      screenY: e.clientY,
+      position: coordinates,
       delta: e.deltaY,
-      gid: null,
+      gid: this._isGlobal ? GLOBAL_GID : this._ownerGID,
     });
-    e.preventDefault();
+    console.debug("onWheel", coordinates);
     e.stopPropagation();
   }
 
-  /**
-   * Called when the user presses a key
-   * @param e
-   * @returns
-   */
-  // onKeyDown(e: KeyboardEvent) {
-  //   this._onKeyDown?.(e);
-  // }
-
-  onTouchStart(e: TouchEvent) {
-    const newTouchList = e.changedTouches;
-    const prevSortedTouchArrayLength = this._sortedTouchArray.length;
-    // Add the touch to the touch list
-    for (let i = 0; i < newTouchList.length; i++) {
-      const touch = newTouchList[i];
-      if (touch) {
-        const data = {
-          x: touch.clientX,
-          y: touch.clientY,
-          target: touch.target as Element | null,
-          identifier: touch.identifier,
+  #handleMultiPointer(e: PointerEvent) {
+    // Only handle global pointer dict
+    const numKeys = Object.keys(this.globalPointerDict).length;
+    // Handle drag gestures of each pointer
+    if (numKeys >= 1) {
+      // console.info("handleDragGesture");
+      for (const pointer of Object.values(this.globalPointerDict)) {
+        const thisGID = this._isGlobal ? GLOBAL_GID : this._ownerGID;
+        if (thisGID != pointer.callerGID) {
+          continue;
+        }
+        // console.info("handleMultiPointer", pointer);
+        const startPosition = this.getCoordinates(
+          pointer.startX,
+          pointer.startY,
+        );
+        const currentPosition = this.getCoordinates(pointer.x, pointer.y);
+        const deltaCoordinates = {
+          x: currentPosition.x - startPosition.x,
+          y: currentPosition.y - startPosition.y,
+          cameraX: currentPosition.cameraX - startPosition.cameraX,
+          cameraY: currentPosition.cameraY - startPosition.cameraY,
+          screenX: currentPosition.screenX - startPosition.screenX,
+          screenY: currentPosition.screenY - startPosition.screenY,
         };
-
-        this._sortedTouchArray.unshift(data);
-        this._sortedTouchDict[touch.identifier] = data;
+        if (pointer.moveCount == 0) {
+        }
+        pointer.moveCount++;
+        // Drag gestures are only handled by the global input engine
+        // to avoid edge cases where the pointer leaves the DOM element while dragging,
+        // which can happen if the user is dragging very quickly
+        const gesture = this.globalGestureDict[pointer.id];
+        // console.info("drag gesture", gesture.memberList, this._isGlobal);
+        // NOTE: The for loop is needed for non-touch devices.
+        // It seems like that on touch devices, the pointerMove event continues working even after the cursor has
+        // left the DOM element, which is not the case for mouse events.
+        // if (this._isGlobal) {
+        // console.info(
+        //   "drag gesture",
+        //   gesture.memberList.map((m) => m._ownerGID),
+        // );
+        for (const member of gesture.memberList) {
+          // if (member._ownerGID == gesture.initiatorID) {
+          member.event.drag?.({
+            gid: member._isGlobal ? GLOBAL_GID : member._ownerGID,
+            pointerId: pointer.id,
+            start: startPosition,
+            position: currentPosition,
+            delta: deltaCoordinates,
+            button: e.buttons,
+          });
+          // console.log("drag", member._ownerGID, member._event.drag);
+          // }
+        }
       }
     }
+    // Handle pinch gestures.
+    // Pinch gestures can only be handled by the global input engine
+    if (numKeys >= 2 && this._isGlobal) {
+      const pointerList = Object.values(this.globalPointerDict);
+      // Sort the pointer list by the time they are pressed
+      pointerList.sort((a, b) => a.timestamp - b.timestamp);
+      // TODO: Only update gesture entries that are adjacent to the pointer event that triggered the pinch gesture
 
-    if (this._sortedTouchArray.length === 1) {
-      let [clientX, clientY] = [
-        this._sortedTouchArray[0].x,
-        this._sortedTouchArray[0].y,
-      ];
-      const [cameraX, cameraY] = this.global.camera!.getCameraFromScreen(
-        clientX,
-        clientY,
-      );
-      const [worldX, worldY] = this.global.camera!.getWorldFromCamera(
-        cameraX,
-        cameraY,
-      );
-      this.event.touchStartCallback({
-        event: e,
-        element: this._sortedTouchArray[0].target as HTMLElement | null,
-        button: cursorState.mouseLeft,
-        clientX: clientX,
-        clientY: clientY,
-        worldX: worldX,
-        worldY: worldY,
-        cameraX: cameraX,
-        cameraY: cameraY,
-        screenX: clientX,
-        screenY: clientY,
-        gid: null,
-      });
-      return;
-    }
+      // Every 2 pointers that are adjacent chronologically are considered to be a pinch gesture
+      for (let i = 0; i < pointerList.length - 1; i++) {
+        const pointer_0 = pointerList[i];
+        const pointer_1 = pointerList[i + 1];
 
-    if (this._sortedTouchArray.length === 2) {
-      if (prevSortedTouchArrayLength === 1) {
-        let [clientX, clientY] = [
-          this._sortedTouchArray[1].x,
-          this._sortedTouchArray[1].y,
-        ];
-        const [cameraX, cameraY] = this.global.camera!.getCameraFromScreen(
-          clientX,
-          clientY,
+        const gestureKey = `${pointer_0.id}-${pointer_1.id}`;
+
+        const startMiddleX = (pointer_0.startX + pointer_1.startX) / 2;
+        const startMiddleY = (pointer_0.startY + pointer_1.startY) / 2;
+        const startMiddle = this.getCoordinates(startMiddleX, startMiddleY);
+        const startDistance = Math.sqrt(
+          Math.pow(pointer_0.startX - pointer_1.startX, 2) +
+            Math.pow(pointer_0.startY - pointer_1.startY, 2),
         );
-        const [worldX, worldY] = this.global.camera!.getWorldFromCamera(
-          cameraX,
-          cameraY,
+        const currentPointer0 = this.getCoordinates(pointer_0.x, pointer_0.y);
+        const currentPointer1 = this.getCoordinates(pointer_1.x, pointer_1.y);
+        const currentDistance = Math.sqrt(
+          Math.pow(pointer_0.x - pointer_1.x, 2) +
+            Math.pow(pointer_0.y - pointer_1.y, 2),
         );
-        this.event.touchStartCallback({
-          event: e,
-          element: this._sortedTouchArray[1].target as HTMLElement | null,
-          button: cursorState.mouseLeft,
-          clientX: clientX,
-          clientY: clientY,
-          worldX: worldX,
-          worldY: worldY,
-          cameraX: cameraX,
-          cameraY: cameraY,
-          screenX: clientX,
-          screenY: clientY,
-          gid: null,
+
+        if (this.globalGestureDict[gestureKey] == null) {
+          this.globalGestureDict[gestureKey] = {
+            type: "pinch",
+            state: "pinch",
+            memberList: [this],
+            start: {
+              pointerList: [currentPointer0, currentPointer1],
+              distance: startDistance,
+            },
+            pointerList: [currentPointer0, currentPointer1],
+            distance: startDistance,
+          };
+          this.event.pinchStart?.({
+            gid: this._isGlobal ? GLOBAL_GID : this._ownerGID,
+            gestureID: gestureKey,
+            start: {
+              pointerList: [currentPointer0, currentPointer1],
+              distance: startDistance,
+            },
+          });
+          console.warn("pinchStart", startMiddle, this._ownerGID);
+        } else {
+          // this.globalGestureDict[gestureKey].memberList.push(this);
+        }
+
+        const pinchGesture = this.globalGestureDict[gestureKey] as pinchGesture;
+        pinchGesture.pointerList = [currentPointer0, currentPointer1];
+        pinchGesture.distance = currentDistance;
+        this.event.pinch?.({
+          gid: this._isGlobal ? GLOBAL_GID : this._ownerGID,
+          gestureID: gestureKey,
+          start: pinchGesture.start,
+          pointerList: pinchGesture.pointerList,
+          distance: pinchGesture.distance,
         });
+        console.warn("pinch", currentPointer0, currentPointer1, this._ownerGID);
       }
-      const middleX =
-        (this._sortedTouchArray[0].x + this._sortedTouchArray[1].x) / 2;
-      const middleY =
-        (this._sortedTouchArray[0].y + this._sortedTouchArray[1].y) / 2;
-      const [cameraX, cameraY] = this.global.camera!.getCameraFromScreen(
-        middleX,
-        middleY,
-      );
-      const [worldX, worldY] = this.global.camera!.getWorldFromCamera(
-        cameraX,
-        cameraY,
-      );
-      this.event.touchStartCallback({
-        event: e,
-        element: this._sortedTouchArray[0].target as HTMLElement | null,
-        button: cursorState.mouseMiddle,
-        clientX: middleX,
-        clientY: middleY,
-        worldX: worldX,
-        worldY: worldY,
-        cameraX: cameraX,
-        cameraY: cameraY,
-        screenX: middleX,
-        screenY: middleY,
-        gid: null,
-      });
-      return;
     }
   }
 
-  onTouchMove(e: TouchEvent) {
-    const updatedTouchArray = e.touches;
-    const prevTouch_0 =
-      this._sortedTouchArray.length > 0
-        ? { ...this._sortedTouchArray[0] }
-        : null;
-    const prevTouch_1 =
-      this._sortedTouchArray.length > 1
-        ? { ...this._sortedTouchArray[1] }
-        : null;
-
-    for (let i = 0; i < updatedTouchArray.length; i++) {
-      const touch = updatedTouchArray[i];
-      if (touch) {
-        const data = this._sortedTouchDict[touch.identifier];
-        data.x = touch.clientX;
-        data.y = touch.clientY;
-        data.target = touch.target as Element | null;
-      }
-    }
-
-    // If there is only one touch point, treat it as a mouse event
-    if (this._sortedTouchArray.length === 1) {
-      let [clientX, clientY] = [
-        this._sortedTouchArray[0].x,
-        this._sortedTouchArray[0].y,
-      ];
-      const [cameraX, cameraY] = this.global.camera!.getCameraFromScreen(
-        clientX,
-        clientY,
-      );
-      const [worldX, worldY] = this.global.camera!.getWorldFromCamera(
-        cameraX,
-        cameraY,
-      );
-      this.event.touchMoveCallback({
-        event: e,
-        element: this._sortedTouchArray[0].target as HTMLElement | null,
-        button: cursorState.mouseLeft,
-        clientX: clientX,
-        clientY: clientY,
-        worldX: worldX,
-        worldY: worldY,
-        cameraX: cameraX,
-        cameraY: cameraY,
-        screenX: clientX,
-        screenY: clientY,
-        gid: null,
-      });
-      return;
-    }
-
-    if (this._sortedTouchArray.length < 2) {
-      return;
-    }
-
-    const middleX =
-      (this._sortedTouchArray[0].x + this._sortedTouchArray[1].x) / 2;
-    const middleY =
-      (this._sortedTouchArray[0].y + this._sortedTouchArray[1].y) / 2;
-    const span = Math.sqrt(
-      Math.pow(this._sortedTouchArray[0].x - this._sortedTouchArray[1].x, 2) +
-        Math.pow(this._sortedTouchArray[0].y - this._sortedTouchArray[1].y, 2),
-    );
-
-    let deltaSpan = 0;
-
-    if (prevTouch_0 && prevTouch_1) {
-      const prevSpan = Math.sqrt(
-        Math.pow(prevTouch_0.x - prevTouch_1.x, 2) +
-          Math.pow(prevTouch_0.y - prevTouch_1.y, 2),
-      );
-      deltaSpan = span - prevSpan;
-    }
-
-    const [cameraX, cameraY] = this.global.camera!.getCameraFromScreen(
-      middleX,
-      middleY,
-    );
-    const [worldX, worldY] = this.global.camera!.getWorldFromCamera(
-      cameraX,
-      cameraY,
-    );
-
-    this.event.touchMoveCallback({
-      event: e,
-      element: this._sortedTouchArray[0].target as HTMLElement | null, // TODO: find element at middle of two touch points
-      button: cursorState.mouseMiddle,
-      clientX: middleX,
-      clientY: middleY,
-      worldX: worldX,
-      worldY: worldY,
-      cameraX: cameraX,
-      cameraY: cameraY,
-      screenX: middleX,
-      screenY: middleY,
-      gid: null,
-    });
-    this.event.touchPinchCallback({
-      event: e as unknown as WheelEvent,
-      element: this._sortedTouchArray[0].target as HTMLElement | null,
-      button: cursorState.mouseMiddle,
-      clientX: middleX,
-      clientY: middleY,
-      worldX: worldX,
-      worldY: worldY,
-      cameraX: cameraX,
-      cameraY: cameraY,
-      screenX: middleX,
-      screenY: middleY,
-      delta: deltaSpan,
-      gid: null,
-    });
-  }
-
-  onTouchEnd(e: TouchEvent) {
-    const endTouchIDs: number[] = [];
-    for (let i = 0; i < e.changedTouches.length; i++) {
-      const touch = e.changedTouches[i];
-      if (touch) {
-        endTouchIDs.push(touch.identifier);
-      }
-    }
-    const deletedTouchArray = this._sortedTouchArray.filter((touch) =>
-      endTouchIDs.includes(touch.identifier),
-    );
-    const prevSortedTouchArrayLength = this._sortedTouchArray.length;
-    this._sortedTouchArray = this._sortedTouchArray.filter(
-      (touch) => !endTouchIDs.includes(touch.identifier),
-    );
-    for (let id of endTouchIDs) {
-      delete this._sortedTouchDict[id];
-    }
-
-    if (deletedTouchArray.length > 0) {
-      if (prevSortedTouchArrayLength === 1) {
-        let [clientX, clientY] = [
-          deletedTouchArray[0].x,
-          deletedTouchArray[0].y,
-        ];
-        const [cameraX, cameraY] = this.global.camera!.getCameraFromScreen(
-          clientX,
-          clientY,
-        );
-        const [worldX, worldY] = this.global.camera!.getWorldFromCamera(
-          cameraX,
-          cameraY,
-        );
-        this.event.touchEndCallback({
-          event: e,
-          element: deletedTouchArray[0].target as HTMLElement | null,
-          button: cursorState.mouseLeft,
-          clientX: clientX,
-          clientY: clientY,
-          worldX: worldX,
-          worldY: worldY,
-          cameraX: cameraX,
-          cameraY: cameraY,
-          screenX: clientX,
-          screenY: clientY,
-          gid: null,
-        });
-        return;
-      }
-
-      if (prevSortedTouchArrayLength === 2) {
-        let [clientX, clientY] = [
-          deletedTouchArray[0].x,
-          deletedTouchArray[0].y,
-        ];
-        const [cameraX, cameraY] = this.global.camera!.getCameraFromScreen(
-          clientX,
-          clientY,
-        );
-        const [worldX, worldY] = this.global.camera!.getWorldFromCamera(
-          cameraX,
-          cameraY,
-        );
-        this.event.touchEndCallback({
-          event: e,
-          element: deletedTouchArray[0].target as HTMLElement | null,
-          button: cursorState.mouseLeft,
-          clientX: clientX,
-          clientY: clientY,
-          worldX: worldX,
-          worldY: worldY,
-          cameraX: cameraX,
-          cameraY: cameraY,
-          screenX: clientX,
-          screenY: clientY,
-          gid: null,
-        });
-      }
-    }
+  addListener<T extends keyof InputEventCallback>(
+    dom: HTMLElement,
+    event: any,
+    callback: any,
+  ) {
+    dom.addEventListener(event, callback.bind(this));
   }
 
   addCursorEventListener(dom: HTMLElement) {
-    dom.addEventListener("mousedown", (e: MouseEvent) => {
-      this.onMouseDown(e);
-    });
-    dom.addEventListener("mousemove", (e: MouseEvent) => {
-      this.onMouseMove(e);
-    });
-    dom.addEventListener("mouseup", (e: MouseEvent) => {
-      this.onMouseUp(e);
-    });
-    dom.addEventListener("wheel", (e: WheelEvent) => {
-      this.onWheel(e);
-    });
-    dom.addEventListener("touchstart", (e: TouchEvent) => {
-      this.onTouchStart(e);
-      e.stopPropagation();
-    });
-    dom.addEventListener("touchmove", (e: TouchEvent) => {
-      this.onTouchMove(e);
-      e.stopPropagation();
-    });
-    dom.addEventListener("touchend", (e: TouchEvent) => {
-      this.onTouchEnd(e);
-    });
+    this.addListener(dom, "pointerdown", this.onPointerDown);
+    this.addListener(dom, "pointermove", this.onPointerMove);
+    this.addListener(dom, "pointerup", this.onPointerUp);
+    this.addListener(dom, "wheel", this.onWheel);
+  }
+
+  addDragMember(member: InputControl) {
+    this.#dragMemberList.push(member);
+  }
+
+  resetDragMembers() {
+    this.#dragMemberList = [];
   }
 }
 
-export { InputControl };
+type gestureType = "drag" | "pinch";
+
+interface dragGesture {
+  type: gestureType;
+  state: "idle" | "drag" | "release";
+  initiatorID: string;
+  memberList: InputControl[];
+}
+
+interface pinchGesture {
+  type: gestureType;
+  state: "idle" | "pinch" | "release";
+  memberList: InputControl[];
+  start: {
+    pointerList: eventPosition[];
+    distance: number;
+  };
+  pointerList: eventPosition[];
+  distance: number;
+}
+
+class GlobalInputControl {
+  #document: Document;
+  global: GlobalManager | null;
+
+  _inputControl: InputControl;
+  globalCallbacks: InputEventCallbackRecord;
+  _pointerDict: { [key: number]: pointerData };
+  _gestureDict: { [key: string]: dragGesture | pinchGesture };
+
+  _event: InputEventCallback;
+  event: InputEventCallback;
+
+  constructor(global: GlobalManager | null = null) {
+    this.global = global;
+    this.#document = document;
+    this._inputControl = new InputControl(this.global, true, null);
+    this._inputControl.addCursorEventListener(
+      this.#document as unknown as HTMLElement,
+    );
+
+    this.globalCallbacks = {
+      pointerDown: {},
+      pointerMove: {},
+      pointerUp: {},
+      mouseWheel: {},
+      dragStart: {},
+      drag: {},
+      dragEnd: {},
+      pinchStart: {},
+      pinch: {},
+      pinchEnd: {},
+    };
+
+    this._pointerDict = {}; // Dictionary of pointers for pointer events, indexed by the pointer identifier
+    this._gestureDict = {}; // Dictionary of gestures for gesture events, indexed by the gesture identifier
+
+    for (const [key, callbackRecord] of Object.entries(this.globalCallbacks)) {
+      this._inputControl.event[key as keyof InputEventCallback] = (
+        prop: any,
+      ) => {
+        // console.log("Global Input Event iteration", key, prop);
+        // console.trace();
+        // this.inputControl.event[key as keyof InputEventCallback]?.call(
+        //   this.inputControl,
+        //   prop,
+        // );
+        for (const callback of Object.values(
+          this.globalCallbacks[key as keyof InputEventCallback],
+        )) {
+          callback(prop);
+        }
+      };
+    }
+    this._event = {
+      pointerDown: null,
+      pointerMove: null,
+      pointerUp: null,
+      mouseWheel: null,
+      dragStart: null,
+      drag: null,
+      dragEnd: null,
+      pinchStart: null,
+      pinch: null,
+      pinchEnd: null,
+    };
+    this.event = new Proxy(this._event, {
+      set: (target, prop, value) => {
+        if (value != null) {
+          this.subscribeGlobalCursorEvent(
+            prop as keyof InputEventCallback,
+            GLOBAL_GID,
+            value.bind(this),
+          );
+        } else {
+          this.unsubscribeGlobalCursorEvent(
+            prop as keyof InputEventCallback,
+            GLOBAL_GID,
+          );
+        }
+        return true;
+      },
+    });
+  }
+
+  subscribeGlobalCursorEvent(
+    event: keyof InputEventCallback,
+    gid: string,
+    callback: (prop: any) => void,
+  ) {
+    this.globalCallbacks[event][gid] = callback;
+  }
+
+  unsubscribeGlobalCursorEvent(event: keyof InputEventCallback, gid: string) {
+    delete this.globalCallbacks[event][gid];
+  }
+}
+
+export { InputControl, GlobalInputControl, GLOBAL_GID };

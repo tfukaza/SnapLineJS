@@ -17,15 +17,17 @@ class LineComponent extends ElementObject {
 
     this.start = parent as unknown as ConnectorComponent;
     this.target = null;
+
+    this.transformMode = "direct";
   }
 
   setLineStartAtConnector() {
-    this.setLineStart(this.start.worldPosition[0], this.start.worldPosition[1]);
+    this.setLineStart(this.start.transform.x, this.start.transform.y);
   }
 
   setLineEndAtConnector() {
     if (this.target) {
-      this.setLineEnd(...this.target.worldPosition);
+      this.setLineEnd(this.target.transform.x, this.target.transform.y);
     }
   }
 
@@ -51,7 +53,7 @@ class LineComponent extends ElementObject {
   applyCache() {
     this.setLineStartAtConnector();
     if (!this.target) {
-      this.setLineEnd(this.global.cursor.worldX, this.global.cursor.worldY);
+      // this.setLineEnd(this.global.cursor.worldX, this.global.cursor.worldY);
     } else {
       this.setLineEndAtConnector();
     }

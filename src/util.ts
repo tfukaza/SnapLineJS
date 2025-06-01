@@ -1,13 +1,13 @@
 import { GlobalManager } from "./global";
-
+import { TransformProperty } from "./object";
 function getDomProperty(global: GlobalManager, dom: HTMLElement) {
   const rect = dom.getBoundingClientRect();
   if (global.camera == null) {
     return {
       height: rect.height,
       width: rect.width,
-      worldX: rect.left,
-      worldY: rect.top,
+      x: rect.left,
+      y: rect.top,
       cameraX: rect.left,
       cameraY: rect.top,
       screenX: rect.left,
@@ -29,12 +29,28 @@ function getDomProperty(global: GlobalManager, dom: HTMLElement) {
   return {
     height: worldHeight,
     width: worldWidth,
-    worldX: worldX,
-    worldY: worldY,
+    x: worldX,
+    y: worldY,
     cameraX: cameraX,
     cameraY: cameraY,
     screenX: rect.left,
     screenY: rect.top,
+  };
+}
+
+function generateTransformString(transform: TransformProperty) {
+  const string = `translate3d(${transform.x}px, ${transform.y}px, 0px) scale(${transform.scaleX}, ${transform.scaleY}) `;
+  return string;
+}
+
+function parseTransformString(transform: string) {
+  console.log("parseTransformString", transform);
+  const transformValues = transform.split("(")[1].split(")")[0].split(",");
+  return {
+    x: parseFloat(transformValues[0]),
+    y: parseFloat(transformValues[1]),
+    scaleX: parseFloat(transformValues[3]) || 1,
+    scaleY: parseFloat(transformValues[4]) || 1,
   };
 }
 
@@ -47,6 +63,22 @@ function camelCaseToKebab(str: string) {
   return str.replace(/([A-Z])/g, "-$1").toLowerCase();
 }
 
+function getDomStyle(dom: HTMLElement | SVGElement) {
+  const existingStyleString = dom.style.cssText;
+  if (existingStyleString == "") {
+    return {};
+  }
+  return existingStyleString
+    .split(";")
+    .map((item) => {
+      const [key, value] = item.split(":");
+      return { [key]: value };
+    })
+    .reduce((acc, curr) => {
+      return { ...acc, ...curr };
+    }, {});
+}
+
 /**
  * Sets the style of a DOM element.
  * @param dom The DOM element to be styled.
@@ -56,29 +88,11 @@ function setDomStyle(
   dom: HTMLElement | SVGElement,
   style: { [key: string]: string },
 ) {
-  // if there is existing style, extract the existing style
-  let existingStyleDict = {};
-  const existingStyleString = dom.style.cssText;
-  if (existingStyleString) {
-    existingStyleDict = existingStyleString
-      .split(";")
-      .map((item) => {
-        const [key, value] = item.split(":");
-        return { [key]: value };
-      })
-      .reduce((acc, curr) => {
-        return { ...acc, ...curr };
-      }, {});
-    style = {
-      ...existingStyleDict,
-      ...style,
-    };
-  }
   // Convert the dict to a single string to reduce the number of DOM calls
-  const styleString = Object.entries(style)
-    .map(([key, value]) => `${camelCaseToKebab(key)}: ${value}`)
-    .join(";");
-  dom.style.cssText = styleString;
+  // const styleString = Object.entries(style)
+  //   .map(([key, value]) => `${camelCaseToKebab(key)}: ${value}`)
+  //   .join(";");
+  Object.assign(dom.style, style);
 }
 
 interface CallbackInterface extends Record<KeyType, Function | null> {}
@@ -105,7 +119,21 @@ function EventProxyFactory<BindObject, Callback extends object>(
       target: Callback & CallbackInterface,
       prop: keyof Callback & KeyType,
     ) => {
+      // console.log(
+      //   object,
+      //   "target[prop]",
+      //   target[prop],
+      //   "secondary[prop]",
+      //   secondary?.[prop],
+      // );
+      // console.trace();
       return (...args: any[]) => {
+        // if (target[prop] != null && typeof target[prop] === "function") {
+        //   console.log("target[prop]", target[prop]);
+        // }
+        // console.log("target[prop]", target[prop]);
+        // console.log("secondary[prop]", secondary?.[prop]);
+        // console.trace();
         target[prop]?.(...args);
         (secondary as Callback & CallbackInterface)?.[prop]?.(...args);
       };
@@ -113,4 +141,10 @@ function EventProxyFactory<BindObject, Callback extends object>(
   });
 }
 
-export { setDomStyle, EventProxyFactory, getDomProperty };
+export {
+  setDomStyle,
+  EventProxyFactory,
+  getDomProperty,
+  generateTransformString,
+  parseTransformString,
+};

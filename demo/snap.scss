@@ -1,0 +1,78 @@
+@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=Tomorrow:wght@400;800&display=swap");
+
+h1 {
+  font-family: "Tomorrow", sans-serif;
+  font-size: 64px;
+  color: #46382f;
+  font-weight: 400;
+  margin: 0;
+}
+p,
+li {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 16px;
+  color: #453e3a;
+  font-weight: 400;
+}
+
+.slot {
+  position: relative;
+  //   overflow: hidden;
+  padding: 0px;
+  border-radius: 12px;
+  background: radial-gradient(
+    109.24% 109.24% at 50% 50%,
+    #e2e2e2 0%,
+    #e7e0d8 100%
+  );
+  box-shadow:
+    -3px -2px 4px 0px rgba(23, 21, 18, 0.02) inset,
+    2px 2px 6.1px -1px rgba(40, 23, 14, 0.31) inset,
+    11px 14px 28.9px -7px rgba(73, 40, 49, 0.25) inset;
+}
+.plate {
+  position: relative;
+  padding: 0px 10px;
+  border-radius: 10px;
+  background: #f6f6f6;
+  // transition: all 0.1s ease-in-out;
+
+  &.float {
+    box-shadow:
+      0px 23px 27.8px -11px rgba(61, 52, 76, 0.28),
+      0px 0px 20.4px -3px rgba(82, 60, 67, 0.13);
+  }
+}
+
+input[type="range"].snap-range {
+  -webkit-appearance: none;
+
+  &::-webkit-slider-thumb {
+    -webkit-appearance: none; /* Override default look */
+    appearance: none;
+    width: 32px; /* Set a specific slider handle width */
+    height: 32px; /* Slider handle height */
+    border-radius: 22px;
+    background: radial-gradient(
+        50% 50% at 50% 50%,
+        #ff7e47 0%,
+        #f76636 70.1%,
+        rgba(247, 105, 45, 0) 75%
+      ),
+      conic-gradient(
+        from 180deg at 50% 50%,
+        #cd331b 25.57670831680298deg,
+        #ff842f 51.608431935310364deg,
+        #ff852e 141.0942041873932deg,
+        #ffc499 161.45666599273682deg,
+        #ff852e 174.595445394516deg,
+        #ff852e 209.74825143814087deg,
+        #de3d24 232.8120732307434deg
+      );
+    box-shadow:
+      0px 0px 4px 4px rgba(255, 255, 255, 0.212) inset,
+      -4px -4px 4px -6px rgba(255, 255, 255, 0.33),
+      3px 5px 4px -0.5px rgba(48, 41, 58, 0.4);
+    cursor: pointer; /* Cursor on hover */
+  }
+}

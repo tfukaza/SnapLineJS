@@ -6,11 +6,11 @@ import {
   readEntry,
   postWriteEntry,
 } from "./object";
-import { AnimationObject } from "./animation";
-import { cursorState } from "./input";
-import { InputControl } from "./input";
+import { AnimationObject, SequenceObject } from "./animation";
+import { GlobalInputControl } from "./input";
 import { CollisionEngine } from "./collision";
 import { SnapLine } from "./snapline";
+
 interface coordinates {
   worldX: number;
   worldY: number;
@@ -20,12 +20,25 @@ interface coordinates {
   screenY: number;
 }
 
+interface debugMarker {
+  type: "point" | "rect" | "circle" | "text";
+  gid: string;
+  id: string;
+  persistent: boolean; // Persists on screen until cleared or replaced
+  color: string;
+  x: number;
+  y: number;
+  width?: number;
+  height?: number;
+  radius?: number;
+  text?: string;
+}
+
 class GlobalManager {
   containerElement: HTMLElement | null;
-  currentCursor: cursorState;
   cursor: coordinates;
   camera: Camera | null;
-  inputEngine: InputControl | null;
+  inputEngine: GlobalInputControl | null;
   collisionEngine: CollisionEngine | null;
   objectTable: Record<string, BaseObject>;
 
@@ -35,7 +48,10 @@ class GlobalManager {
   readQueue: Record<string, readEntry>;
   postWriteQueue: Record<string, postWriteEntry>;
 
-  animationList: AnimationObject[] = [];
+  animationList: (AnimationObject | SequenceObject)[] = [];
+  animationFragment: HTMLDivElement;
+
+  debugMarkerList: Record<string, debugMarker> = {};
 
   data: any;
   snapline: SnapLine | null;
@@ -44,7 +60,6 @@ class GlobalManager {
 
   constructor() {
     this.containerElement = null;
-    this.currentCursor = cursorState.none;
     this.cursor = {
       worldX: 0,
       worldY: 0,
@@ -54,7 +69,7 @@ class GlobalManager {
       screenY: 0,
     };
     this.camera = null;
-    this.inputEngine = null;
+    this.inputEngine = new GlobalInputControl(this);
     this.collisionEngine = null;
     this.objectTable = {};
 
@@ -64,6 +79,8 @@ class GlobalManager {
     this.readQueue = {};
     this.postWriteQueue = {};
     this.animationList = [];
+    this.animationFragment = document.createElement("div");
+    document.body.appendChild(this.animationFragment);
 
     this.data = {};
     this.snapline = null;

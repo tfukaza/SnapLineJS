@@ -1,28 +1,23 @@
 import { GlobalManager } from "../global";
-import { BaseObject, DomElement, ElementObject } from "../object";
-import { cursorMoveProp } from "../input";
+import { BaseObject, ElementObject } from "../object";
+import { pointerMoveProp } from "../input";
 
 class Background extends ElementObject {
   _tileSize: number = 40;
 
-  constructor(globals: GlobalManager, parent: BaseObject) {
+  constructor(globals: GlobalManager, parent: BaseObject | null) {
     super(globals, parent);
-    this.event.global.onCursorMove = this.moveBackground;
-  }
-
-  addDom(dom: HTMLElement): DomElement {
-    const domElement = super.addDom(dom);
-    domElement.style = {
+    this.event.global.pointerMove = this.moveBackground;
+    this.dom.style = {
       position: "absolute",
       top: "0",
       left: "0",
       backgroundSize: `${this._tileSize}px ${this._tileSize}px`,
     };
     this.moveBackground();
-    return domElement;
   }
 
-  moveBackground(_?: cursorMoveProp) {
+  moveBackground(_?: pointerMoveProp) {
     let x = this.global.camera?.cameraPositionX;
     let y = this.global.camera?.cameraPositionY;
     let width = this.global.camera?.cameraWidth! * 5;

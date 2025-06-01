@@ -6,6 +6,7 @@ import { BaseObject, DomEvent } from "./object";
 import { getDomProperty } from "./util";
 import { InputControl } from "./input";
 import { EventProxyFactory } from "./util";
+
 interface CollisionEvent {
   onCollide: null | ((thisObject: Collider, otherObject: Collider) => void);
   onBeginContact:
@@ -14,12 +15,19 @@ interface CollisionEvent {
   onEndContact: null | ((thisObject: Collider, otherObject: Collider) => void);
 }
 
+interface ColliderProperty {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
 class EventCallback {
   _object: BaseObject;
   _collider: CollisionEvent;
   collider: CollisionEvent;
-  _dom: DomEvent;
-  dom: DomEvent;
+  // _dom: DomEvent;
+  // dom: DomEvent;
 
   constructor(object: BaseObject) {
     this._object = object;
@@ -29,14 +37,14 @@ class EventCallback {
       onEndContact: null,
     };
     this.collider = EventProxyFactory(object, this._collider);
-    this._dom = {
-      onCursorDown: null,
-      onCursorMove: null,
-      onCursorUp: null,
-      onCursorScroll: null,
-      onResize: null,
-    };
-    this.dom = EventProxyFactory(object, this._dom);
+    // this._dom = {
+    //   onCursorDown: null,
+    //   onCursorMove: null,
+    //   onCursorUp: null,
+    //   onCursorScroll: null,
+    //   onResize: null,
+    // };
+    // this.dom = EventProxyFactory(object, this._dom);
   }
 }
 
@@ -44,13 +52,12 @@ class Collider {
   global: GlobalManager;
   parent: BaseObject;
   type: "rect" | "circle" | "line" | "point" | "svg";
-  localX: number;
-  localY: number;
-  width: number;
-  height: number;
   uuid: symbol;
-  domElement: HTMLElement | null;
+  _element: HTMLElement | null;
   inputEngine: InputControl;
+
+  transform: ColliderProperty;
+  // local: ColliderProperty;
 
   event: EventCallback;
 
@@ -67,11 +74,19 @@ class Collider {
     this.parent = parent;
     this.type = type;
     this.uuid = Symbol();
-    this.domElement = null;
-    this.localX = localX;
-    this.localY = localY;
-    this.width = 0;
-    this.height = 0;
+    this._element = null;
+    this.transform = {
+      x: localX,
+      y: localY,
+      width: 0,
+      height: 0,
+    };
+    // this.local = {
+    //   x: localX,
+    //   y: localY,
+    //   width: 0,
+    //   height: 0,
+    // };
     this.event = new EventCallback(this.parent);
     this._iterationCollisions = new Set();
     this._currentCollisions = new Set();
@@ -79,32 +94,32 @@ class Collider {
     this.inputEngine = new InputControl(this.global);
   }
 
-  get worldX(): number {
-    return this.parent.worldX + this.localX;
+  get worldPosition(): [number, number] {
+    return [
+      this.parent.transform.x + this.transform.x,
+      this.parent.transform.y + this.transform.y,
+    ];
   }
 
-  set worldX(x: number) {
-    this.localX = x - this.parent.worldX;
+  set worldPosition([x, y]: [number, number]) {
+    this.transform.x = x - this.parent.transform.x;
+    this.transform.y = y - this.parent.transform.y;
   }
 
-  get worldY(): number {
-    return this.parent.worldY + this.localY;
-  }
+  // get localPosition(): [number, number] {
+  //   return [this.local.x, this.local.y];
+  // }
 
-  set worldY(y: number) {
-    this.localY = y - this.parent.worldY;
-  }
+  // set localPosition([x, y]: [number, number]) {
+  //   this.local.x = x;
+  //   this.local.y = y;
+  // }
 
-  set localPosition([x, y]: [number, number]) {
-    this.localX = x;
-    this.localY = y;
-  }
-
-  assignDom(domElement: HTMLElement) {
-    this.domElement = domElement;
-    this.inputEngine?.addCursorEventListener(this.domElement);
+  set element(element: HTMLElement) {
+    this._element = element;
+    // this.inputEngine?.addCursorEventListener(this._element);
     // if parent has the "dom" property, then submit fetch queue
-    if (this.parent.hasOwnProperty("_domElementList")) {
+    if (this.parent.hasOwnProperty("element")) {
       this.parent.requestRead();
     } else {
       this.recalculate();
@@ -112,14 +127,14 @@ class Collider {
   }
 
   read() {
-    if (!this.domElement) {
+    if (!this.element) {
       return;
     }
-    const property = getDomProperty(this.global, this.domElement);
-    this.localX = property.worldX - this.parent.position.worldX;
-    this.localY = property.worldY - this.parent.position.worldY;
-    this.width = property.width;
-    this.height = property.height;
+    const property = getDomProperty(this.global, this.element);
+    this.transform.x = property.x - this.parent.transform.x;
+    this.transform.y = property.y - this.parent.transform.y;
+    this.transform.width = property.width;
+    this.transform.height = property.height;
   }
 
   recalculate() {}
@@ -135,8 +150,8 @@ class RectCollider extends Collider {
     height: number,
   ) {
     super(global, parent, "rect", localX, localY);
-    this.width = width;
-    this.height = height;
+    this.transform.width = width;
+    this.transform.height = height;
   }
 }
 
@@ -186,12 +201,12 @@ class CollisionEngine {
     this.objectList.push(object);
     this.sortedXCoordinates.push({
       collider: object,
-      x: object.worldX,
+      x: object.worldPosition[0],
       left: true,
     });
     this.sortedXCoordinates.push({
       collider: object,
-      x: object.worldX + (object.width ?? 0),
+      x: object.worldPosition[0] + (object.transform.width ?? 0),
       left: false,
     });
   }
@@ -206,21 +221,24 @@ class CollisionEngine {
       if (entry.left) {
         if (entry.collider.type === "circle") {
           entry.x =
-            entry.collider.worldX - (entry.collider as CircleCollider).radius;
+            entry.collider.worldPosition[0] -
+            (entry.collider as CircleCollider).radius;
         } else if (entry.collider.type === "rect") {
-          entry.x = entry.collider.worldX;
+          entry.x = entry.collider.worldPosition[0];
         } else if (entry.collider.type === "point") {
-          entry.x = entry.collider.worldX;
+          entry.x = entry.collider.worldPosition[0];
         }
       } else {
         if (entry.collider.type === "circle") {
           entry.x =
-            entry.collider.worldX + (entry.collider as CircleCollider).radius;
+            entry.collider.worldPosition[0] +
+            (entry.collider as CircleCollider).radius;
         } else if (entry.collider.type === "rect") {
           entry.x =
-            entry.collider.worldX + (entry.collider as RectCollider).width;
+            entry.collider.worldPosition[0] +
+            (entry.collider as RectCollider).transform.width;
         } else if (entry.collider.type === "point") {
-          entry.x = entry.collider.worldX;
+          entry.x = entry.collider.worldPosition[0];
         }
       }
     }
@@ -336,44 +354,52 @@ class CollisionEngine {
   isRectIntersecting(a: Collider, b: Collider) {
     return (
       a.uuid !== b.uuid &&
-      a.worldY < b.worldY + (b as RectCollider).height &&
-      a.worldY + (a as RectCollider).height > b.worldY
+      a.worldPosition[1] <
+        b.worldPosition[1] + (b as RectCollider).transform.height &&
+      a.worldPosition[1] + (a as RectCollider).transform.height >
+        b.worldPosition[1]
     );
   }
 
   isRectCircleIntersecting(rect: RectCollider, circle: CircleCollider) {
-    let rectX = circle.worldX;
-    let rectY = circle.worldY;
-    if (circle.worldX < rect.worldX) {
-      rectX = rect.worldX;
-    } else if (circle.worldX > rect.worldX + rect.width) {
-      rectX = rect.worldX + rect.width;
+    let rectX = circle.worldPosition[0];
+    let rectY = circle.worldPosition[1];
+    if (circle.worldPosition[0] < rect.worldPosition[0]) {
+      rectX = rect.worldPosition[0];
+    } else if (
+      circle.worldPosition[0] >
+      rect.worldPosition[0] + rect.transform.width
+    ) {
+      rectX = rect.worldPosition[0] + rect.transform.width;
     }
 
-    if (circle.worldY < rect.worldY) {
-      rectY = rect.worldY;
-    } else if (circle.worldY > rect.worldY + rect.height) {
-      rectY = rect.worldY + rect.height;
+    if (circle.worldPosition[1] < rect.worldPosition[1]) {
+      rectY = rect.worldPosition[1];
+    } else if (
+      circle.worldPosition[1] >
+      rect.worldPosition[1] + rect.transform.height
+    ) {
+      rectY = rect.worldPosition[1] + rect.transform.height;
     }
 
-    let distanceX = circle.worldX - rectX;
-    let distanceY = circle.worldY - rectY;
+    let distanceX = circle.worldPosition[0] - rectX;
+    let distanceY = circle.worldPosition[1] - rectY;
     let distance = Math.sqrt(distanceX * distanceX + distanceY * distanceY);
     return distance <= (circle.radius ?? 0);
   }
 
   isRectPointIntersecting(rect: RectCollider, point: PointCollider) {
     return (
-      point.worldX >= rect.worldX &&
-      point.worldX <= rect.worldX + rect.width &&
-      point.worldY >= rect.worldY &&
-      point.worldY <= rect.worldY + rect.height
+      point.worldPosition[0] >= rect.worldPosition[0] &&
+      point.worldPosition[0] <= rect.worldPosition[0] + rect.transform.width &&
+      point.worldPosition[1] >= rect.worldPosition[1] &&
+      point.worldPosition[1] <= rect.worldPosition[1] + rect.transform.height
     );
   }
 
   isCirclePointIntersecting(circle: CircleCollider, point: PointCollider) {
-    let distanceX = circle.worldX - point.worldX;
-    let distanceY = circle.worldY - point.worldY;
+    let distanceX = circle.worldPosition[0] - point.worldPosition[0];
+    let distanceY = circle.worldPosition[1] - point.worldPosition[1];
     let distance = Math.sqrt(distanceX * distanceX + distanceY * distanceY);
     return distance <= (circle.radius ?? 0);
   }
@@ -382,8 +408,8 @@ class CollisionEngine {
     if (circleA.uuid === circleB.uuid) {
       return false;
     }
-    let distanceX = circleA.worldX - circleB.worldX;
-    let distanceY = circleA.worldY - circleB.worldY;
+    let distanceX = circleA.worldPosition[0] - circleB.worldPosition[0];
+    let distanceY = circleA.worldPosition[1] - circleB.worldPosition[1];
     let distance = Math.sqrt(distanceX * distanceX + distanceY * distanceY);
     return distance <= (circleA.radius ?? 0) + (circleB.radius ?? 0);
   }
@@ -392,7 +418,10 @@ class CollisionEngine {
     if (pointA.uuid === pointB.uuid) {
       return false;
     }
-    return pointA.worldX === pointB.worldX && pointA.worldY === pointB.worldY;
+    return (
+      pointA.worldPosition[0] === pointB.worldPosition[0] &&
+      pointA.worldPosition[1] === pointB.worldPosition[1]
+    );
   }
 }
 

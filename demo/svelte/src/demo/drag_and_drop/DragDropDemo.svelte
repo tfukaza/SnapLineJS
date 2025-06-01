@@ -4,15 +4,21 @@
     import Item from "../../lib2/drag_and_drop/Item.svelte";
     let itemArray = []
     for (let i = 0; i < 16; i++) {
-        itemArray.push({ id: i, text: `Item ${i}` })
+        let data = { id: i, text: `Item ${i}` };
+        itemArray.push(data);
     }
 </script>
 
 <Canvas id="container1">
     <Container direction="row">
-        {#each itemArray as item}
+        {#each itemArray as item, i}
             <Item>
-                <div class="drag-drop-demo">{item.text}</div>
+                <div class="drag-drop-demo">
+                    {item.text}
+                    {#if i % 4 == 0}
+                        More text than usual
+                    {/if}
+                </div>
             </Item>
         {/each}
     </Container>

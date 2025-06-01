@@ -1,9 +1,9 @@
 <script lang="ts">
     import { NodeComponent, LineComponent, SnapLine } from "../../../../../src/index";
     import Line from "./Line.svelte";
-    import { onMount, setContext, getContext } from "svelte";
+    import { onMount, setContext, getContext, onDestroy } from "svelte";
 
-    let { className, children}: { className: string, children: any} = $props();
+    let { className, LineSvelteComponent, children}: { className: string, LineSvelteComponent: typeof Line, children: any} = $props();
     let nodeDOM: HTMLDivElement | null = null;
     let lineList: LineComponent[] = $state([]);
     let engine:SnapLine = getContext("engine");
@@ -14,17 +14,21 @@
     let formattedLines = $derived(lineList.map(line => ({
         line: line,
         gid: line.gid,
-        positionX: line.parent.worldX,
-        positionY: line.parent.worldY,
+        positionX: line.parent!.transform.x,
+        positionY: line.parent!.transform.y,
         endPositionX: line.endWorldX,
         endPositionY: line.endWorldY
     })));
 
     onMount(() => {
-        nodeObject.addDom(nodeDOM);
+        nodeObject.element = nodeDOM as HTMLElement;
         nodeObject.setLineListCallback((lines: LineComponent[]) => {
             lineList = lines;
         });
+    });
+
+    onDestroy(() => {
+        nodeObject.destroy();
     });
 
     export function addSetPropCallback(name: string, callback: (prop: any) => void) {
@@ -39,7 +43,7 @@
 
 
 {#each formattedLines as line (line.gid)}
-    <Line {line} />
+    <LineSvelteComponent {line} />
 {/each}
 <div bind:this={nodeDOM} class={className}>
     {@render children()}
