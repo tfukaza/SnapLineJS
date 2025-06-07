@@ -29,7 +29,7 @@ class RectSelectComponent extends ElementObject {
 
     this.global.data.select = [];
 
-    this.dom.style = {
+    this.style = {
       width: "0px",
       height: "0px",
       transformOrigin: "top left",
@@ -57,7 +57,7 @@ class RectSelectComponent extends ElementObject {
     this.worldPosition = [prop.position.x, prop.position.y];
     this._selectHitBox.recalculate();
     this._state = "dragging";
-    this.dom.style = {
+    this.style = {
       display: "block",
       width: "0px",
       height: "0px",
@@ -96,7 +96,7 @@ class RectSelectComponent extends ElementObject {
         Math.abs(prop.position.x - this._mouseDownX),
         Math.abs(prop.position.y - this._mouseDownY),
       ];
-      this.dom.style = {
+      this.style = {
         width: `${boxWidth}px`,
         height: `${boxHeight}px`,
       };
@@ -105,19 +105,19 @@ class RectSelectComponent extends ElementObject {
       this._selectHitBox.transform.y = this.transform.y - boxOriginY;
       this._selectHitBox.transform.width = boxWidth;
       this._selectHitBox.transform.height = boxHeight;
-      this.requestPostWrite();
+      this.requestTransform();
     }
   }
 
   onGlobalCursorUp(prop: pointerUpProp): void {
-    this.dom.style = {
+    this.style = {
       display: "none",
     };
     this._state = "none";
 
     this._selectHitBox.event.collider.onBeginContact = null;
     this._selectHitBox.event.collider.onEndContact = null;
-    this.requestPostWrite();
+    this.requestTransform();
   }
 
   onCollideNode(hitBox: Collider, node: Collider): void {}

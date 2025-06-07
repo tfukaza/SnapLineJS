@@ -1,13 +1,11 @@
-import { BaseObject } from "../../object";
+import { BaseObject, ElementObject } from "../../object";
 import { GlobalManager } from "../../global";
 import { ItemObject } from "./item";
-import { dragProp } from "@/input";
 
-export class ItemContainer extends BaseObject {
+export class ItemContainer extends ElementObject {
   itemList: ItemObject[] = [];
   itemRows: ItemObject[][] = [];
   dragItem: ItemObject | null = null;
-  _containerDomElement: HTMLElement | null = null;
   _dropIndex: number = 0;
   _expandAnimations: HTMLElement[] = [];
   _spacerDomElement: HTMLElement | null = null;
@@ -15,6 +13,7 @@ export class ItemContainer extends BaseObject {
   direction: "column" | "row";
   _awaitingRemove: boolean = false;
   _inputLock: boolean = false;
+
   constructor(global: GlobalManager, parent: BaseObject | null) {
     super(global, parent);
     this.itemList = [];
@@ -22,13 +21,16 @@ export class ItemContainer extends BaseObject {
     this.spacerIndex = 0;
     this._awaitingRemove = false;
     this._inputLock = false;
+
+    this.style = {
+      position: "relative",
+    };
   }
 
   addItem(item: ItemObject) {
     this.itemList.push(item);
     item._containerObject = this;
     item.direction = this.direction;
-    // item.requestRead(true, false);
   }
 
   removeItem(item: ItemObject) {
@@ -36,9 +38,9 @@ export class ItemContainer extends BaseObject {
   }
 
   readAllItems() {
-    return this.requestRead().then(() => {
+    return this.queueUpdate("READ_1", () => {
       for (const item of this.itemList) {
-        item.dom.read();
+        item.readDom(false);
       }
     });
   }
@@ -54,10 +56,6 @@ export class ItemContainer extends BaseObject {
         ? 1
         : -1;
     });
-    // console.log(
-    //   "reorderItemList",
-    //   this.itemList.map((item) => item.gid),
-    // );
   }
 
   /**
@@ -68,7 +66,8 @@ export class ItemContainer extends BaseObject {
     let rowList: ItemObject[][] = [];
     let prevHeight = undefined;
     for (const item of this.itemList) {
-      let row = Math.floor(item.dom.property.screenY ?? 0);
+      let row = Math.floor(item.transform.y ?? 0);
+      item._rowIndex = rowList.length;
       if (item == caller) {
         continue;
       }
@@ -99,7 +98,6 @@ export class ItemContainer extends BaseObject {
     // tmpDomElement.style.height = `${caller.dom.property.height}px`;
     // tmpDomElement.style.margin = caller.element!.style.margin;
     // tmpDomElement.style.padding = caller.element!.style.padding;
-    // Get computed style of caller
 
     const computedStyle = window.getComputedStyle(caller.element!);
     tmpDomElement.style.width = computedStyle.width;
@@ -107,6 +105,7 @@ export class ItemContainer extends BaseObject {
     tmpDomElement.style.margin = computedStyle.margin;
     tmpDomElement.style.padding = computedStyle.padding;
     tmpDomElement.style.boxSizing = computedStyle.boxSizing;
+    tmpDomElement.style.backgroundColor = "#ff0000A0";
 
     console.log("addGhostItem", caller.element);
     this._spacerDomElement = tmpDomElement;
@@ -116,151 +115,88 @@ export class ItemContainer extends BaseObject {
 
     // this._inputLock = true;
 
-    this._containerDomElement?.insertBefore(
-      tmpDomElement,
-      item ? item.dom.element : null,
-    );
-    // caller.dom.element.innerHTML = `Spacer index: ${item?.gid}, GID: ${caller.gid}`;
+    this.element?.insertBefore(tmpDomElement, item ? item.element : null);
     this.reorderItemList();
-
-    // for (const item of this.itemList) {
-    //   item.requestPreRead(true, false);
-    // }
-    // this.requestRead().then(() => {
-    //   this._inputLock = false;
-    // });
   }
 
   removeGhostItem() {
-    // return;
     if (this._spacerDomElement) {
       this._spacerDomElement.remove();
       this._spacerDomElement = null;
     }
   }
 
-  addExpandAnimationBeforeItem(
+  addGhostBeforeItem(
     caller: ItemObject,
     itemIndex: number,
     differentRow: boolean,
   ) {
-    console.log("addExpandAnimationBeforeItem", itemIndex, differentRow);
-
     this._inputLock = true;
 
     if (differentRow) {
       console.log("differentRow");
       // Save the DOM positions of all items
-      this.requestPreRead().before(() => {
+      this.queueUpdate("READ_1", () => {
         for (const item of this.itemList) {
-          item.dom.preRead();
+          item.readDom(false);
         }
-        // this.setItemRows(caller);
       });
       // Remove the ghost item
-      this.requestWrite().before(() => {
+      this.queueUpdate("WRITE_1", () => {
         this.removeGhostItem();
       });
       // Save the DOM positions after the ghost item is removed
-      this.requestRead().then(() => {
+      this.queueUpdate("READ_2", () => {
         for (const item of this.itemList) {
-          item.dom.read(false);
-          item.generateCache(true);
+          item.readDom(false);
+          item.saveDomPropertyToTransform("READ_2");
         }
         this.setItemRows(caller);
         // Determine where the caller should be dropped
         let { dropIndex, localDropIndex, closestRowIndex } =
           caller.determineDropIndex();
-        if (dropIndex != this.spacerIndex) {
-          console.log("modified drop index", dropIndex);
-          // this.removeGhostItem();
+        this.queueUpdate("WRITE_2", () => {
           this.addGhostItem(caller, dropIndex);
           caller._dropIndex = dropIndex;
           caller.localDropIndex = localDropIndex;
-        } else {
-          console.log("no change in drop index");
-        }
+        });
       });
-      this.requestPostWrite().then(() => {
+      this.queueUpdate("READ_3", () => {
         for (const item of this.itemList) {
-          item.dom.read(false);
-          item.generateCache(true);
-          item.animateZeroTransform();
+          item.readDom(false, "READ_3");
+          item.saveDomPropertyToTransform("READ_3");
         }
         this.setItemRows(caller);
         this._inputLock = false;
       });
-
-      // console.log("differentRow");
-      // for (const item of this.itemList) {
-      //   let flip = item.requestFLIP();
-      //   flip[3].then(() => {
-      //     item.animateZeroTransform();
-      //     item.requestRead(true, false);
-      //   });
-      // }
-      // this.requestPostWrite()
-      //   .before(() => {
-      //     this.setItemRows(caller);
-      //   })
-      //   .then(() => {
-      //     let { dropIndex, localDropIndex, closestRowIndex } =
-      //       caller.determineDropIndex();
-      //     if (dropIndex != this.spacerIndex) {
-      //       this.removeGhostItem();
-      //       this.addGhostItem(caller, dropIndex);
-      //       caller._dropIndex = dropIndex;
-      //       caller.localDropIndex = localDropIndex;
-      //       // caller.requestRead(true, false);
-      //       // this.#currentRow = closestRowIndex;
-      //       // console.log("addExpandAnimationBeforeItem", dropIndex);
-      //     }
-      //   });
     } else {
-      this.requestWrite(() => {
+      this.queueUpdate("WRITE_1", () => {
         this.removeGhostItem();
         this.addGhostItem(caller, itemIndex);
       });
-      this.requestRead().then(() => {
+      this.queueUpdate("READ_2", () => {
         for (const item of this.itemList) {
-          item.dom.read(false);
-          item.generateCache(true);
+          item.readDom(false, "READ_2");
+          item.saveDomPropertyToTransform("READ_2");
         }
         this.setItemRows(caller);
         this._inputLock = false;
       });
-      for (const item of this.itemList) {
-        let flip = item.requestFLIP();
-        flip[3].before(() => {
-          item.animateZeroTransform();
-        });
-      }
     }
-
-    // this.requestPostWrite();
   }
 
   removeAllExpandAnimation() {
-    // this._awaitingRemove = true;
-    this.requestWrite(() => {
+    this.queueUpdate("WRITE_1", () => {
       this.removeGhostItem();
-    }).then(() => {
-      console.debug("Finished removeAllExpandAnimation");
-      // this._awaitingRemove = false;
     });
-    this.requestRead().then(() => {
+    this.queueUpdate("READ_2", () => {
       for (const item of this.itemList) {
-        item.dom.read(false);
-        item.generateCache(true);
+        item.readDom(false, "READ_2");
+        item.saveDomPropertyToTransform("READ_2");
+        // item.calculateLocalFromTransform();
       }
       this.setItemRows(null);
     });
-    // for (const item of this.itemList) {
-    //   let flip = item.requestFLIP();
-    //   flip[3].before(() => {
-    //     item.animateZeroTransform();
-    //   });
-    // }
     this.spacerIndex = -1;
   }
 

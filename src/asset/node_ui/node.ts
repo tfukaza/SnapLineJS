@@ -66,27 +66,28 @@ class NodeComponent extends ElementObject {
     this._hasMoved = false;
 
     this.event.dom.onResize = () => {
-      let stats: frameStats = this.getCurrentStats();
-      this.read(stats);
-      this.generateCache();
-      for (const connector of Object.values(this._connectors)) {
-        connector.read(stats);
-        connector.generateCache(true);
-        connector.postWrite(stats);
-      }
+      this.queueUpdate("READ_1", () => {
+        this.readDom(false, "READ_1");
+        for (const connector of Object.values(this._connectors)) {
+          connector.readDom(false, "READ_1");
+          connector.calculateLocalFromDom("READ_1");
+          connector.calculateTransformFromLocal();
+        }
+      });
       for (const line of [
         ...this.getAllOutgoingLines(),
         ...this.getAllIncomingLines(),
       ]) {
-        line.calculateCache();
-        line.applyCache();
-        line.postWrite(stats);
+        line.queueUpdate("WRITE_1", () => {
+          line.moveLineToConnectorTransform(); // Move lines to the saved position of connectors
+          line.setLineEndAtConnector();
+          line.writeDom();
+          line.writeTransform();
+        });
       }
-      this.postWrite(stats);
-      // console.log("onResize", this.gid);
     };
 
-    this.dom.style = {
+    this.style = {
       willChange: "transform",
       position: "absolute",
       transformOrigin: "top left",
@@ -103,14 +104,14 @@ class NodeComponent extends ElementObject {
 
   setSelected(selected: boolean) {
     this._selected = selected;
-    this.dom.dataAttribute = {
+    this.dataAttribute = {
       selected: selected,
     };
     if (selected) {
-      this.dom.classList.push("selected");
+      this.classList.push("selected");
       this.global.data.select.push(this);
     } else {
-      this.dom.classList = this.dom.classList.filter(
+      this.classList = this.classList.filter(
         (className) => className !== "selected",
       );
       this.global.data.select = this.global.data.select.filter(
@@ -150,9 +151,6 @@ class NodeComponent extends ElementObject {
     if (e.event.button != 0) {
       return;
     }
-    this.calculateCache();
-
-    // console.log("Node onCursorDown", this.gid);
 
     if (this.global.data.select?.includes(this) == false) {
       for (const node of this.global.data.select) {
@@ -188,9 +186,8 @@ class NodeComponent extends ElementObject {
     const dy = prop.position.y - this._mouseDownY;
 
     this.worldPosition = [this._dragStartX + dx, this._dragStartY + dy];
-    this.calculateCache();
     this.updateNodeLines();
-    this.requestPostWrite();
+    this.requestTransform("WRITE_2");
   }
 
   onDragEnd(prop: dragEndProp) {
@@ -205,7 +202,7 @@ class NodeComponent extends ElementObject {
       prop.end.y - this._mouseDownY,
     ];
     this.worldPosition = [this._dragStartX + dx, this._dragStartY + dy];
-    this.calculateCache();
+    // this.calculateLocalTransform();
     this.updateNodeLines();
   }
 
@@ -270,11 +267,6 @@ class NodeComponent extends ElementObject {
       if (!peer) continue;
       if (!peer.parent) continue;
       let parent = peer.parent as NodeComponent;
-      // parent._prop[peer.name] = value;
-      // if (parent._propSetCallback[peer.name]) {
-      //   parent._propSetCallback[peer.name](value);
-      // }
-      // console.log("setProp", peer.name, value);
       parent.setProp(peer.name, value);
     }
   }

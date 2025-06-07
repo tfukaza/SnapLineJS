@@ -27,15 +27,13 @@
         x2 = dx - Math.abs(dx / 2);
         y2 = dy;
         x3 = dx;
-        y3 = dy;
-        // console.log(x0, y0, x1, y1, x2, y2, x3, y3);
-    }
+        y3 = dy;    }
 
     let lineDOM: SVGElement | null = null; 
 
   onMount(() => {
     line.line.element = (lineDOM as unknown as HTMLElement);
-    line.line.callback.afterPostWrite = renderLine;
+    line.line.callback.afterWrite2 = renderLine;
   });
 </script>
 

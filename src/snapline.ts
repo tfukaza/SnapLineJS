@@ -1,7 +1,7 @@
 import Camera from "./camera";
 import { CollisionEngine } from "./collision";
 import { GlobalManager } from "./global";
-import { BaseObject, ElementObject, frameStats } from "./object";
+import { BaseObject, ElementObject, frameStats, queueEntry } from "./object";
 // import { CameraControl } from "@/asset/node_ui/cameraControl";
 import { AnimationObject, SequenceObject } from "./animation";
 import { EventProxyFactory } from "./util";
@@ -30,6 +30,13 @@ class SnapLine {
 
   constructor(config: SnapLineConfig = {}) {
     this.global = new GlobalManager();
+    this.global.read1Queue = {};
+    this.global.write1Queue = {};
+    this.global.read2Queue = {};
+    this.global.write2Queue = {};
+    this.global.read3Queue = {};
+    this.global.write3Queue = {};
+    this.global.animationList = [];
     this.global.snapline = this;
     let defaultConfig: SnapLineConfig = {
       cameraConfig: {
@@ -97,38 +104,44 @@ class SnapLine {
     ) ?? [0, 0];
     this.debugCtx.rect(cameraX, cameraY, 20, 20);
     this.debugCtx.fill();
-    // text color is white
     this.debugCtx.fillStyle = "white";
     this.debugCtx.fillText(object.gid, cameraX, cameraY + 10);
+
     // If object has a dom, draw a rectangle around the object's width and height, with a 1px black border
     if (object.hasOwnProperty("_dom")) {
       let elementObject = object as ElementObject;
-      // Draw a rectangle around the object's width and height, with a 1px black border
+
+      // Black rectangle represents the object's transform property
       this.debugCtx.beginPath();
       this.debugCtx.strokeStyle = "black";
       this.debugCtx.lineWidth = 1;
       this.debugCtx.rect(
         cameraX,
         cameraY,
-        elementObject.dom.property.width,
-        elementObject.dom.property.height,
+        elementObject._dom.property.width,
+        elementObject._dom.property.height,
       );
-      this.debugCtx.stroke();
-      // Draw a 1px blue box around the dom position and size
-      this.debugCtx.beginPath();
-      this.debugCtx.strokeStyle = "blue";
-      this.debugCtx.lineWidth = 1;
-      const [domCameraX, domCameraY] = this.global.camera?.getCameraFromWorld(
-        elementObject.dom.property.x,
-        elementObject.dom.property.y,
-      ) ?? [0, 0];
-      this.debugCtx.rect(
-        domCameraX,
-        domCameraY,
-        elementObject.dom.property.width,
-        elementObject.dom.property.height,
-      );
-      this.debugCtx.stroke();
+
+      const colors = ["#FF0000A0", "#00FF00A0", "#0000FFA0"];
+      const stages = ["READ_1", "READ_2", "READ_3"];
+      for (let i = 0; i < 3; i++) {
+        const property = elementObject.getDomProperty(stages[i] as any);
+        this.debugCtx.stroke();
+        this.debugCtx.beginPath();
+        this.debugCtx.strokeStyle = colors[i];
+        this.debugCtx.lineWidth = 1;
+        const [domCameraX, domCameraY] = this.global.camera?.getCameraFromWorld(
+          property.x,
+          property.y,
+        ) ?? [0, 0];
+        this.debugCtx.rect(
+          domCameraX,
+          domCameraY,
+          property.width,
+          property.height,
+        );
+        this.debugCtx.stroke();
+      }
     }
   }
 
@@ -183,17 +196,49 @@ class SnapLine {
     }
   }
 
-  // assignCameraControl(canvasElement: HTMLElement) {
-  //   this._cameraControl = new CameraControl(this.global);
-  //   this._cameraControl.assignCanvas(canvasElement);
-  // }
-
   /**
    * Main loop for rendering the canvas.
    */
   #step(): void {
     this._renderFrame();
     window.requestAnimationFrame(this.#step.bind(this));
+  }
+
+  #processQueue(stage: string, queue: Record<string, Map<string, queueEntry>>) {
+    // Keep a set of all objects that have been processed
+    let processedObjects: Set<BaseObject> = new Set();
+    for (const queueEntry of Object.values(queue)) {
+      for (const objectEntry of queueEntry.values()) {
+        if (!objectEntry.callback) {
+          continue;
+        }
+        for (const callback of objectEntry.callback) {
+          callback();
+        }
+        if (!processedObjects.has(objectEntry.object)) {
+          processedObjects.add(objectEntry.object);
+          if (objectEntry.object instanceof ElementObject) {
+            if (stage == "READ_1") {
+              objectEntry.object.callback.afterRead1?.();
+            } else if (stage == "READ_2") {
+              objectEntry.object.callback.afterRead2?.();
+            } else if (stage == "READ_3") {
+              objectEntry.object.callback.afterRead3?.();
+            } else if (stage == "WRITE_1") {
+              objectEntry.object.callback.afterWrite1?.();
+            } else if (stage == "WRITE_2") {
+              objectEntry.object.callback.afterWrite2?.();
+            } else if (stage == "WRITE_3") {
+              objectEntry.object.callback.afterWrite3?.();
+            }
+          }
+        }
+      }
+    }
+  }
+
+  #processCallback(callback: () => void) {
+    callback();
   }
 
   _renderFrame(): void {
@@ -203,25 +248,22 @@ class SnapLine {
       timestamp: timestamp,
     };
 
-    this.global.currentStage = "preRead";
-    for (const entry of Object.values(this.global.preReadQueue)) {
-      entry.object.preRead(stats, entry);
-    }
-    this.global.preReadQueue = {};
+    this.global.currentStage = "READ_1";
+    this.#processQueue("READ_1", this.global.read1Queue);
+    this.global.read1Queue = {};
 
-    this.global.currentStage = "write";
-    for (const entry of Object.values(this.global.writeQueue)) {
-      entry.object.write(stats, entry);
-    }
-    this.global.writeQueue = {};
+    this.global.currentStage = "WRITE_1";
+    this.#processQueue("WRITE_1", this.global.write1Queue);
+    this.global.write1Queue = {};
 
-    this.global.currentStage = "read";
-    for (const entry of Object.values(this.global.readQueue)) {
-      entry.object.read(stats, entry);
-    }
-    this.global.readQueue = {};
+    this.global.currentStage = "READ_2";
+    this.#processQueue("READ_2", this.global.read2Queue);
+    this.global.read2Queue = {};
 
-    this.global.currentStage = "adjust";
+    this.global.currentStage = "WRITE_2";
+    this.#processQueue("WRITE_2", this.global.write2Queue);
+    this.global.write2Queue = {};
+
     let newAnimationList: (AnimationObject | SequenceObject)[] = [];
     for (const animation of this.global.animationList) {
       if (
@@ -233,20 +275,19 @@ class SnapLine {
     }
     this.global.animationList = newAnimationList;
 
-    for (const entry of Object.values(this.global.postWriteQueue)) {
-      entry.object.postWrite(stats, entry);
-    }
-    this.global.postWriteQueue = {};
+    this.global.currentStage = "READ_3";
+    this.#processQueue("READ_3", this.global.read3Queue);
+    this.global.read3Queue = {};
 
-    this.global.currentStage = "idle";
+    this.global.currentStage = "WRITE_3";
+    this.#processQueue("WRITE_3", this.global.write3Queue);
+    this.global.write3Queue = {};
+
+    this.global.currentStage = "IDLE";
 
     this.global.collisionEngine?.detectCollisions();
 
     this.renderDebugFrame(stats);
-  }
-
-  addObject(object: BaseObject) {
-    object.requestWrite();
   }
 }
 

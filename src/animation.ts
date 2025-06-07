@@ -129,7 +129,7 @@ class AnimationObject implements AnimationInterface {
 
     const target =
       this.owner instanceof ElementObject
-        ? this.owner.dom.element
+        ? this.owner._dom.element
         : this.owner.global.animationFragment;
 
     const animationProperty: KeyframeEffectOptions = {

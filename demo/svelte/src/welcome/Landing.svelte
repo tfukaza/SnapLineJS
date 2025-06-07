@@ -124,9 +124,10 @@
         flex-direction: row;
 
         position: absolute;
-        top: 25%;
+        top: 15%;
         left: 50%;
-        transform: translate(-50%, -50%);
+        transform: translate(-50%, 0%);
+        align-items: flex-start;
 
         :global(.item) {
             
