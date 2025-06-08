@@ -59,7 +59,9 @@
                 <ItemContainer direction="row">
                     {#each [1,2,3,4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16] as item}
                     <Item>
-                        <h1 style="width: {(item/40 + 1) * 64}px;">Item {item}</h1>
+                        <div class="item-content">
+                            <h1 style="width: {(item/40 + 1) * 64}px;">Item {item}</h1>
+                        </div>
                     </Item>
                     {/each}
                 </ItemContainer> 
@@ -147,16 +149,18 @@
         transform: translate(-50%, 0%);
         align-items: flex-start;
 
+     
         :global(.item) {
-            
-            height: 64px;
+            padding: 5px;
+        }
+        :global(.item-content) {
+           height: 64px;
             background-color: #F6F6F6;
             border-radius: 10px;
             display: flex;
             padding: 10px;
             box-sizing: border-box;
             border: 2px solid black;
-            margin: 5px;
         }
 
         :global(.item h1) {

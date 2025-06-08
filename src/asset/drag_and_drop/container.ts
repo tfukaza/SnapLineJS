@@ -78,7 +78,6 @@ export class ItemContainer extends ElementObject {
       rowList[rowList.length - 1].push(item);
     }
     this.itemRows = rowList;
-    console.log("setItemRows", this.itemRows);
   }
 
   addGhostItem(caller: ItemObject, itemIndex: number) {
@@ -105,7 +104,7 @@ export class ItemContainer extends ElementObject {
     tmpDomElement.style.margin = computedStyle.margin;
     tmpDomElement.style.padding = computedStyle.padding;
     tmpDomElement.style.boxSizing = computedStyle.boxSizing;
-    tmpDomElement.style.backgroundColor = "#ff0000A0";
+    // tmpDomElement.style.backgroundColor = "#ff0000A0";
 
     console.log("addGhostItem", caller.element);
     this._spacerDomElement = tmpDomElement;
@@ -196,6 +195,7 @@ export class ItemContainer extends ElementObject {
         // item.calculateLocalFromTransform();
       }
       this.setItemRows(null);
+      this.reorderItemList();
     });
     this.spacerIndex = -1;
   }
