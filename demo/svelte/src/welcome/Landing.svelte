@@ -22,52 +22,48 @@
     }
 </script>
 <nav>
-   <ul>
-    <li>Home</li>
-    <li>About</li>
-    <li>Contact</li>
-    <li>
-        <label>
-            <input type="checkbox" onchange={toggleDebug}>
-            Debug Mode
-        </label>
-    </li>
-   </ul>
+   <h1>Snapline</h1>
 </nav>
 <div id="landing">
     <div id="canvas-container">
-    <Canvas id="welcome-canvas" bind:this={canvas}>     
-        <div id="landing-content">
-            <div id="landing-menu">
-                <Menu bind:currentDemo/>
+        <Canvas id="welcome-canvas" bind:this={canvas}>     
+            <div id="debug-toggle">
+                <label>
+                    <input type="checkbox" onchange={toggleDebug}>
+                    Debug Mode
+                </label>
             </div>
-        </div> 
-        <CameraControl panLock={false} zoomLock={true}>
-            {#if currentDemo === 0}
-          
-            {/if}
-            {#if currentDemo === 1}
-                <Math/>
-                <Math/>
-                <Math/> 
-                <Select />
-         
-            {/if}
-        </CameraControl>  
-            {#if currentDemo === 2}
-                <div id="drag-and-drop-container">
-                <ItemContainer direction="row">
-                    {#each [1,2,3,4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16] as item}
-                    <Item>
-                        <div class="item-content">
-                            <h1 style="width: {(item/40 + 1) * 64}px;">Item {item}</h1>
-                        </div>
-                    </Item>
-                    {/each}
-                </ItemContainer> 
+            <div id="landing-content">
+                <div id="landing-menu">
+                    <Menu bind:currentDemo/>
                 </div>
-            {/if}
-    </Canvas>
+            </div> 
+            <CameraControl panLock={false} zoomLock={true}>
+                {#if currentDemo === 0}
+              
+                {/if}
+                {#if currentDemo === 1}
+                    <Math/>
+                    <Math/>
+                    <Math/> 
+                    <Select />
+             
+                {/if}
+            </CameraControl>  
+                {#if currentDemo === 2}
+                    <div id="drag-and-drop-container">
+                    <ItemContainer direction="row">
+                        {#each [1,2,3,4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16] as item}
+                        <Item>
+                            <div class="item-content">
+                                <h1 style="width: {(item/40 + 1) * 64}px;">Item {item}</h1>
+                            </div>
+                        </Item>
+                        {/each}
+                    </ItemContainer> 
+                    </div>
+                {/if}
+        </Canvas>
     </div>
 </div>
 
@@ -80,13 +76,13 @@
         align-items: center;
         height: 100px;
         width: 100%;
+        padding: 0;
 
-        ul {
-            list-style: none;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            gap: 20px;
+        h1 {
+            font-weight: 800;
+            font-size: 16px;
+            width: 80%;
+            max-width: 1200px;
         }
     }
     
@@ -106,6 +102,19 @@
         display: flex;
         justify-content: center;
         align-items: center;
+        position: relative;
+    }
+
+    #debug-toggle {
+        position: absolute;
+        top: 1rem;
+        left: 1rem;
+        z-index: 100;
+
+        label {
+            font-family: "IBM Plex Mono", monospace;
+            font-size: 14px;
+        }
     }
 
     :global(#snap-canvas) {

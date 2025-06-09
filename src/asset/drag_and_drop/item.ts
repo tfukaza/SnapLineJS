@@ -306,15 +306,6 @@ export class ItemObject extends ElementObject {
     );
 
     if (
-      rightItem &&
-      leftItemRight &&
-      rightItemLeft &&
-      Math.abs(rightItemLeft - leftItemRight) <
-        this._domProperty[1].width - BUFFER
-    ) {
-      // "Squeeze in" between the two items when moving to a new row
-      localDropIndex = rowList[closestRowIndex].indexOf(rightItem);
-    } else if (
       leftItem &&
       leftItemRight &&
       leftItemRight - leftItem._domProperty[1].width / 2 + BUFFER > thisWorldX
@@ -326,11 +317,21 @@ export class ItemObject extends ElementObject {
       rightItemLeft + rightItem._domProperty[1].width / 2 - BUFFER < thisWorldX
     ) {
       localDropIndex = rowList[closestRowIndex].indexOf(rightItem) + 1;
+    } else if (
+      rightItem &&
+      leftItemRight &&
+      rightItemLeft &&
+      Math.abs(rightItemLeft - leftItemRight) <
+        this._domProperty[1].width - BUFFER
+    ) {
+      // "Squeeze in" between the two items when moving to a new row
+      localDropIndex = rowList[closestRowIndex].indexOf(rightItem);
     } else if (rightItemLeft == undefined) {
       localDropIndex = rowList[closestRowIndex].length;
     } else if (leftItemRight == undefined) {
       localDropIndex = 0;
     } else {
+      console.log("Else");
     }
     if (localDropIndex > rowList[closestRowIndex].length) {
       dropIndex = -1;
@@ -366,12 +367,11 @@ export class ItemObject extends ElementObject {
 
     if (dropIndex != this._containerObject?.spacerIndex) {
       const differentRow = this.#currentRow != closestRowIndex;
-      // console.log("Previous", this.#currentRow, "New", closestRowIndex);
       this.#currentRow = closestRowIndex;
       this._containerObject?.addGhostBeforeItem(this, dropIndex, differentRow);
+      this._dropIndex = dropIndex;
+      this.localDropIndex = localDropIndex;
     }
-    this._dropIndex = dropIndex;
-    this.localDropIndex = localDropIndex;
   }
 
   cursorUp(prop: dragEndProp) {

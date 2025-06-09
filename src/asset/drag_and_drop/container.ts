@@ -133,7 +133,6 @@ export class ItemContainer extends ElementObject {
     this._inputLock = true;
 
     if (differentRow) {
-      console.log("differentRow");
       // Save the DOM positions of all items
       this.queueUpdate("READ_1", () => {
         for (const item of this.itemList) {
@@ -150,11 +149,14 @@ export class ItemContainer extends ElementObject {
           item.readDom(false);
           item.saveDomPropertyToTransform("READ_2");
         }
+        this.reorderItemList();
         this.setItemRows(caller);
+        this.updateItemIndexes();
         // Determine where the caller should be dropped
         let { dropIndex, localDropIndex, closestRowIndex } =
           caller.determineDropIndex();
         this.queueUpdate("WRITE_2", () => {
+          // console.log("different row WRITE_2");
           this.addGhostItem(caller, dropIndex);
           caller._dropIndex = dropIndex;
           caller.localDropIndex = localDropIndex;
@@ -165,7 +167,9 @@ export class ItemContainer extends ElementObject {
           item.readDom(false, "READ_3");
           item.saveDomPropertyToTransform("READ_3");
         }
+        this.reorderItemList();
         this.setItemRows(caller);
+        this.updateItemIndexes();
         this._inputLock = false;
       });
     } else {
@@ -178,7 +182,9 @@ export class ItemContainer extends ElementObject {
           item.readDom(false, "READ_2");
           item.saveDomPropertyToTransform("READ_2");
         }
+        this.reorderItemList();
         this.setItemRows(caller);
+        this.updateItemIndexes();
         this._inputLock = false;
       });
     }

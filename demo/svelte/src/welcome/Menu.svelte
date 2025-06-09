@@ -316,8 +316,9 @@
      
     }
     .menu-plate {
-       width:400px;
-       height: 100px;
+       width:398px;
+       height: 98px;
+       margin: 1px;
        background: #f6f6f6;
        box-sizing: border-box;
        text-align: center;
