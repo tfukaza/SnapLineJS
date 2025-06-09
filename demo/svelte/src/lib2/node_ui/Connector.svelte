@@ -1,6 +1,6 @@
 <script lang="ts">
     import { NodeComponent, ConnectorComponent, LineComponent, SnapLine } from "../../../../../src/index";
-    import { onMount, getContext, onDestroy } from "svelte";
+    import { getContext, onDestroy } from "svelte";
 
     let { 
         name, 
@@ -16,27 +16,23 @@
 
     let engine:SnapLine = getContext("engine");
     let nodeObject: NodeComponent = getContext("nodeObject");
-    let connectorDOM: HTMLSpanElement | null = null;
     let connector = new ConnectorComponent(engine.global, nodeObject, {
         name: name,
         maxConnectors: maxConnectors,
         allowDragOut: allowDragOut,
-        lineClass: lineClass,
+        lineClass: lineClass || LineComponent,
     });  
     
     nodeObject.addConnectorObject(connector);
 
-  onMount(() => {
-    connector.element = connectorDOM as HTMLElement;
-  });
 
   onDestroy(() => {
-    connector.delete(connector.getCurrentStats());
+    connector.destroy();
   });
     
 </script>
 
-<div class="sl-connector" bind:this={connectorDOM}></div>
+<div class="sl-connector" bind:this={connector.element}></div>
 
 <style>
     .sl-connector {

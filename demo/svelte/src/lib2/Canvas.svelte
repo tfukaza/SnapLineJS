@@ -11,6 +11,14 @@
     onMount(() => {         
         engine.assignDom(canvas as HTMLElement);
     });
+
+    export function enableDebug() {
+        engine.enableDebug();
+    }
+
+    export function disableDebug() {
+        engine.disableDebug();
+    }
 </script>
 
 <div id="snap-canvas" bind:this={canvas}> 

@@ -14,6 +14,7 @@ import {
   keyframeProperty,
   SequenceObject,
 } from "./animation";
+import { UUID } from "crypto";
 
 export interface DomEvent {
   onAssignDom: null | (() => void);
@@ -76,11 +77,6 @@ class EventCallback {
       this._object,
       this._input,
     );
-    // console.warn("this._object", this._object);
-    // console.warn(
-    //   "this.global.inputEngine!.globalCallbacks",
-    //   this._object.global.inputEngine!.globalCallbacks,
-    // );
     this._dom = {
       onAssignDom: null,
       onResize: null,
@@ -89,15 +85,6 @@ class EventCallback {
   }
 }
 
-// export interface ObjectCoordinate {
-//   worldX: number;
-//   worldY: number;
-//   localX: number;
-//   localY: number;
-//   scaleX: number;
-//   scaleY: number;
-// }
-
 export interface TransformProperty {
   x: number;
   y: number;
@@ -105,79 +92,25 @@ export interface TransformProperty {
   scaleY: number;
 }
 
-// export interface ObjectTransform {
-//   world: TransformProperty;
-//   local: TransformProperty;
-// }
-
-class queueEntry {
+export class queueEntry {
+  uuid: UUID | string;
   object: BaseObject;
-  beforeCallback: null | (() => void);
-  afterCallback: null | (() => void);
-  constructor(object: BaseObject) {
+  callback: null | Array<() => void>;
+  constructor(
+    object: BaseObject,
+    callback: null | (() => void),
+    uuid: UUID | string | null = null,
+  ) {
+    this.uuid = uuid ?? crypto.randomUUID();
     this.object = object;
-    this.beforeCallback = null;
-    this.afterCallback = null;
+    this.callback = callback ? [callback.bind(object)] : null;
   }
-
-  before(callback: () => void): this {
-    this.beforeCallback = callback;
-    return this;
-  }
-
-  then(callback: () => void): this {
-    this.afterCallback = callback;
-    return this;
-  }
-
-  submit() {}
-}
-
-export class preReadEntry extends queueEntry {
-  saveDomProperty?: boolean;
-  noTransform?: boolean;
-  constructor(
-    object: BaseObject,
-    saveDomProperty?: boolean,
-    noTransform?: boolean,
-  ) {
-    super(object);
-    this.saveDomProperty = saveDomProperty;
-    this.noTransform = noTransform;
-  }
-}
-
-export class writeEntry extends queueEntry {
-  operation: null | (() => void);
-  isDelete?: boolean;
-  constructor(
-    object: BaseObject,
-    operation: null | (() => void),
-    isDelete?: boolean,
-  ) {
-    super(object);
-    this.operation = operation;
-    this.isDelete = isDelete;
-  }
-}
-
-export class readEntry extends queueEntry {
-  saveDomProperty?: boolean;
-  noTransform?: boolean;
-  constructor(
-    object: BaseObject,
-    saveDomProperty?: boolean,
-    noTransform?: boolean,
-  ) {
-    super(object);
-    this.saveDomProperty = saveDomProperty;
-    this.noTransform = noTransform;
-  }
-}
-
-export class postWriteEntry extends queueEntry {
-  constructor(object: BaseObject) {
-    super(object);
+  addCallback(callback: () => void) {
+    if (this.callback) {
+      this.callback.push(callback.bind(this.object));
+    } else {
+      this.callback = [callback.bind(this.object)];
+    }
   }
 }
 
@@ -194,7 +127,6 @@ export class BaseObject {
   transform: TransformProperty;
   local: TransformProperty;
   offset: TransformProperty;
-  previousTransform: TransformProperty;
 
   event: EventCallback;
 
@@ -229,33 +161,7 @@ export class BaseObject {
       scaleX: 1,
       scaleY: 1,
     };
-    // this.local = new Proxy(this.transform, {
-    //   get: (target: TransformProperty, prop: keyof TransformProperty) => {
-    //     if (this.parent) {
-    //       return target[prop] - this.parent.transform[prop];
-    //     }
-    //     return target[prop];
-    //   },
-    //   set: (
-    //     target: TransformProperty,
-    //     prop: keyof TransformProperty,
-    //     value: number,
-    //   ) => {
-    //     if (this.parent) {
-    //       target[prop] = value + this.parent.transform[prop];
-    //     } else {
-    //       target[prop] = value;
-    //     }
-    //     return true;
-    //   },
-    // });
     this.offset = {
-      x: 0,
-      y: 0,
-      scaleX: 1,
-      scaleY: 1,
-    };
-    this.previousTransform = {
       x: 0,
       y: 0,
       scaleX: 1,
@@ -336,201 +242,96 @@ export class BaseObject {
     ) ?? [0, 0];
   }
 
-  // get worldX(): number {
-  //   return this.position.worldX;
-  // }
-
-  // set worldX(x: number) {
-  //   this.position.worldX = x;
-  // }
-
-  // get worldY(): number {
-  //   return this.position.worldY;
-  // }
-
-  // set worldY(y: number) {
-  //   this.position.worldY = y;
-  // }
-
-  // get localX(): number {
-  //   return this.position.localX;
-  // }
-
-  // set localX(x: number) {
-  //   this.position.localX = x;
-  // }
-
-  // get localY(): number {
-  //   return this.position.localY;
-  // }
-
-  // set localY(y: number) {
-  //   this.position.localY = y;
-  // }
-
-  // set worldPosition(position: [number, number]) {
-  //   if (this.parent) {
-  //     console.warn(
-  //       "Not recommended to directly set world position of a child object",
-  //     );
-  //   }
-  //   this.worldX = position[0];
-  //   this.worldY = position[1];
-  //   if (this.parent) {
-  //     this.localX = this.worldX - this.parent.worldX;
-  //     this.localY = this.worldY - this.parent.worldY;
-  //   }
-  // }
-
-  // get worldPosition(): [number, number] {
-  //   return [this.worldX, this.worldY];
-  // }
-
-  // set localPosition(position: [number, number]) {
-  //   this.localX = position[0];
-  //   this.localY = position[1];
-  //   if (this.parent) {
-  //     this.worldX = this.parent.worldX + this.localX;
-  //     this.worldY = this.parent.worldY + this.localY;
-  //   }
-  // }
-
-  // get localPosition(): [number, number] {
-  //   return [this.localX, this.localY];
-  // }
-
-  requestPreRead(
-    saveDomProperty: boolean = false,
-    noTransform: boolean = false,
-  ) {
-    let request = new preReadEntry(this, saveDomProperty, noTransform);
-    this.global.preReadQueue[this.gid] = request;
-    return request;
-  }
-
-  _preRead(_: frameStats, __: preReadEntry) {}
-
-  preRead(stats: frameStats, options: preReadEntry) {
-    options.beforeCallback?.();
-    this._preRead(stats, options);
-    options.afterCallback?.();
-  }
-
-  requestWrite(
-    operation: null | (() => void) = null,
-    isDelete: boolean = false,
-  ) {
-    let request = new writeEntry(this, operation, isDelete);
-    this.global.writeQueue[this.gid] = request;
-    return request;
-  }
-
-  _write(_: frameStats, options: writeEntry | null = null) {
-    if (options?.isDelete) {
-      if (this.parent) {
-        this.parent.children = this.parent.children.filter(
-          (child) => child !== this,
-        );
-      }
-      delete this.global.objectTable[this.gid];
-    } else {
-      options?.operation?.bind(this)();
+  queueUpdate(
+    stage:
+      | "READ_1"
+      | "WRITE_1"
+      | "READ_2"
+      | "WRITE_2"
+      | "READ_3"
+      | "WRITE_3" = "READ_1",
+    callback: null | (() => void) = null,
+    queueID: string | null = null,
+  ): queueEntry {
+    let request = new queueEntry(this, callback, queueID);
+    let queue = this.global.read1Queue;
+    switch (stage) {
+      case "READ_1":
+        queue = this.global.read1Queue;
+        break;
+      case "WRITE_1":
+        queue = this.global.write1Queue;
+        break;
+      case "READ_2":
+        queue = this.global.read2Queue;
+        break;
+      case "WRITE_2":
+        queue = this.global.write2Queue;
+        break;
+      case "READ_3":
+        queue = this.global.read3Queue;
+        break;
+      case "WRITE_3":
+        queue = this.global.write3Queue;
+        break;
     }
-  }
-
-  write(stats: frameStats, options: writeEntry | null = null) {
-    options?.beforeCallback?.();
-    this._write(stats, options);
-    options?.afterCallback?.();
-  }
-
-  requestDelete() {
-    if (this.gid in this.global.writeQueue) {
-      let request = this.global.writeQueue[this.gid];
-      request.isDelete = true;
-      return request;
+    if (!queue[this.gid]) {
+      queue[this.gid] = new Map();
     }
-
-    let request = new writeEntry(this, null, true);
-    this.global.writeQueue[this.gid] = request;
+    queue[this.gid].set(request.uuid, request);
     return request;
   }
 
   /**
-   * Request a read operation.
-   * @param saveDomProperty - Whether to save the DOM property to the object.
-   * @param noTransform - Whether to include the transform in the DOM property calculation.
-   * @returns The read entry.
+   * Read the DOM property of the object.
    */
-  requestRead(
-    saveDomProperty: boolean = false,
-    noTransform: boolean = false,
-  ): readEntry {
-    // console.log("requestRead", this.gid);
-    // console.trace();
-    let request = new readEntry(this, saveDomProperty, noTransform);
-    this.global.readQueue[this.gid] = request;
-    return request;
-  }
-
-  _read(stats: frameStats, options: readEntry | null = null) {
+  readDom(accountTransform: boolean = false) {
     for (const collider of this._colliderList) {
       collider.read();
     }
   }
 
-  read(stats: frameStats, options: readEntry | null = null) {
-    options?.beforeCallback?.();
-    this._read(stats, options);
-    options?.afterCallback?.();
-  }
+  /**
+   * Write all object properties to the DOM.
+   */
+  writeDom() {}
 
-  requestPostWrite() {
-    let request = new postWriteEntry(this);
-    this.global.postWriteQueue[this.gid] = request;
-    return request;
-  }
+  /**
+   * Write the CSS transform property of the object.
+   * Unlike many other properties, the transform property does not trigger a DOM reflow and is thus more performant.
+   * Whenever possible, use this method to write the transform property.
+   */
+  writeTransform() {}
 
-  _postWrite(stats: frameStats, options: postWriteEntry | null = null) {}
+  /**
+   * Destroy the DOM element of the object.
+   */
+  destroyDom() {}
 
-  postWrite(stats: frameStats, options: postWriteEntry | null = null) {
-    options?.beforeCallback?.();
-    this._postWrite(stats, options);
-    options?.afterCallback?.();
-  }
-
-  generateCache(setWorldPosition: boolean = false) {
-    this.calculateCache();
-  }
-
-  calculateCache() {
-    // console.log("calculateCache", this.gid);
+  /**
+   * Calculate the transform properties of the object based on the saved transform properties of the parent
+   * and the saved local and offset properties of the object.
+   */
+  calculateLocalFromTransform() {
     if (this.parent) {
-      // console.log(
-      //   "Has parent",
-      //   this.parent.transform,
-      //   this.local.x,
-      //   this.local.y,
-      // );
       this.transform.x = this.parent.transform.x + this.local.x;
       this.transform.y = this.parent.transform.y + this.local.y;
-      // console.log("Calculated", this.transform);
     }
     for (const collider of this._colliderList) {
       collider.recalculate();
     }
   }
 
-  requestFLIP(
-    callback: null | (() => void) = null,
-  ): [preReadEntry, writeEntry, readEntry, postWriteEntry] {
-    return [
-      this.requestPreRead(false, true),
-      this.requestWrite(callback?.bind(this)),
-      this.requestRead(true, false),
-      this.requestPostWrite(),
-    ];
-  }
+  // requestFLIP(
+  //   callback: null | (() => void) = null,
+  // ): [preReadEntry, writeEntry, readEntry, postWriteEntry] {
+  //   return [
+  //     this.requestPreRead(false, true),
+  //     this.requestWrite(callback?.bind(this)),
+  //     this.requestRead(true, false),
+  //     this.requestPostWrite(),
+  //   ];
+  // }
 
   animate(keyframe: keyframeList, property: keyframeProperty) {
     let animation = new AnimationObject(this, keyframe, property);
@@ -690,12 +491,8 @@ export class DomElement {
   _style: Record<string, any>;
   _classList: string[];
   _dataAttribute: Record<string, any>;
-  // _inputEngine: InputControl;
-  // _event: DomEvent;
-  // event: DomEvent;
 
   property: DomProperty;
-  prevProperty: DomProperty;
   _transformApplied: TransformProperty;
   insertMode: DomInsertMode;
 
@@ -712,16 +509,6 @@ export class DomElement {
     this._global = global;
     this.element = dom;
     this.property = {
-      x: 0,
-      y: 0,
-      height: 0,
-      width: 0,
-      scaleX: 1,
-      scaleY: 1,
-      screenX: 0,
-      screenY: 0,
-    };
-    this.prevProperty = {
       x: 0,
       y: 0,
       height: 0,
@@ -748,19 +535,6 @@ export class DomElement {
     this._dataAttribute = {};
 
     this._classList = [];
-    // this._event = {
-    //   onCursorDown: null,
-    //   onCursorMove: null,
-    //   onCursorUp: null,
-    //   onCursorScroll: null,
-    //   onResize: null,
-    // };
-    // this.event = EventProxyFactory(owner, this._event);
-    // this._inputEngine = new InputControl(this._global);
-
-    // this.localX = 0;
-    // this.localY = 0;
-
     this.insertMode = insertMode;
   }
 
@@ -778,31 +552,6 @@ export class DomElement {
       this._owner.event.dom.onResize?.();
     });
   }
-  // set localPosition(position: [number, number]) {
-  //   this.localX = position[0];
-  //   this.localY = position[1];
-  //   this._owner.requestPostWrite();
-  // }
-
-  // get localPosition(): [number, number] {
-  //   return [this.localX, this.localY];
-  // }
-
-  // get worldPosition(): [number, number] {
-  //   return [this._owner.transform.x, this._owner.transform.y];
-  // }
-
-  // get cameraPosition(): [number, number] {
-  //   return (
-  //     this._global.camera?.getCameraFromWorld(...this.worldPosition) ?? [0, 0]
-  //   );
-  // }
-
-  // get screenPosition(): [number, number] {
-  //   return (
-  //     this._global.camera?.getScreenFromCamera(...this.cameraPosition) ?? [0, 0]
-  //   );
-  // }
 
   set style(style: Record<string, any>) {
     this._style = Object.assign(this._style, style);
@@ -828,34 +577,17 @@ export class DomElement {
     return this._classList;
   }
 
-  // _onCursorDown(prop: cursorDownProp): void {
-  //   this.event.onCursorDown?.(prop);
-  // }
-
-  // _onCursorMove(prop: cursorMoveProp): void {
-  //   this.event.onCursorMove?.(prop);
-  // }
-
-  // _onCursorUp(prop: cursorUpProp): void {
-  //   this.event.onCursorUp?.(prop);
-  // }
-
-  // _onCursorScroll(prop: cursorScrollProp): void {
-  //   this.event.onCursorScroll?.(prop);
-  // }
-
-  moveTo(mode: DomInsertMode) {
-    this.insertMode = mode;
-    this._pendingInsert = true;
-    this._owner.requestWrite();
-  }
-
-  readDomProperty(noTransform: boolean = false) {
+  /**
+   * Read the DOM property of the element.
+   * @param accountTransform If true, the returned transform property will subtract any transform applied to the element.
+   *      Note that transforms applied to the parent will not be accounted for.
+   */
+  readDom(accountTransform: boolean = false) {
     if (!this.element) {
       throw new Error("Element is not set");
     }
-    const property = getDomProperty(this._global, this.element);
 
+    const property = getDomProperty(this._global, this.element);
     const transform = this.element.style.transform;
     let transformApplied = {
       x: 0,
@@ -864,15 +596,10 @@ export class DomElement {
       scaleY: 1,
     };
 
-    if (transform && transform != "none" && !noTransform) {
+    if (transform && transform != "none" && accountTransform) {
       transformApplied = parseTransformString(transform);
     }
 
-    /* getBoundingClientRect() returns the property after applying the transform,
-     * so we need to account for any current transform applied to the element.
-     * Note that this doesn't account for the transform applied to the parent.
-     */
-    // console.log("readDomProperty", transformApplied);
     this.property.height = property.height / transformApplied.scaleY;
     this.property.width = property.width / transformApplied.scaleX;
     this.property.x = property.x - transformApplied.x;
@@ -881,12 +608,10 @@ export class DomElement {
     this.property.screenY = property.screenY;
   }
 
-  preRead(noTransform: boolean = false) {
-    this.readDomProperty(noTransform);
-    Object.assign(this.prevProperty, this.property);
-  }
-
-  write() {
+  /**
+   * Write all properties of the element to the DOM, like style, class list, and data attributes.
+   */
+  writeDom() {
     if (!this.element) {
       throw new Error("Element is not set");
     }
@@ -900,40 +625,16 @@ export class DomElement {
       this.element.setAttribute(`data-${key}`, value);
     }
     this.element.setAttribute("data-snapline-gid", this._owner.gid);
-
-    if (this._pendingInsert) {
-      this._pendingInsert = false;
-      if (this.insertMode.appendChild) {
-        this.insertMode.appendChild.appendChild(this.element);
-      } else if (this.insertMode.insertBefore) {
-        this.insertMode.insertBefore[0].insertBefore(
-          this.element,
-          this.insertMode.insertBefore[1],
-        );
-      } else if (this.insertMode.replaceChild) {
-        this.insertMode.replaceChild.replaceChild(
-          this.element,
-          this.insertMode.replaceChild,
-        );
-      } else {
-        this._global.containerElement?.appendChild(this.element);
-      }
-    }
   }
 
-  delete(): void {
-    this.resizeObserver?.disconnect();
-    this.mutationObserver?.disconnect();
-    if (this.element) {
-      this.element.remove();
-    }
-  }
-
-  read(noTransform: boolean = false) {
-    this.readDomProperty(noTransform);
-  }
-
-  postWrite() {
+  /**
+   * Write the CSS transform property of the element.
+   * Unlike many other properties, the transform property does not trigger a DOM reflow and is thus more performant.
+   * Whenever possible, use this method instead of writeDom.
+   * For example, if you are moving an element, instead of changing the left and top properties,
+   * you should use this method to set the transform property.
+   */
+  writeTransform() {
     if (!this.element) {
       throw new Error("Element is not set");
     }
@@ -941,6 +642,8 @@ export class DomElement {
       transform: "",
     };
     if (this._owner.transformMode == "direct") {
+      // If the transform mode is direct, the transform property is applied directly to the element,
+      // ignoring the current position of the element.
       transformStyle = {
         transform: generateTransformString({
           x: this._owner.transform.x + this._owner.offset.x,
@@ -950,11 +653,12 @@ export class DomElement {
         }),
       };
     } else if (this._owner.transformMode == "relative") {
+      // If the transform mode is relative, the final transform property is calculated taking into account
+      // the current position of the element.
       let [newX, newY] = [
         this._owner.transform.x - this.property.x,
         this._owner.transform.y - this.property.y,
       ];
-      // console.log("postWrite", this._owner.transform, this.property);
       transformStyle = {
         transform: generateTransformString({
           x: newX + this._owner.offset.x,
@@ -964,8 +668,26 @@ export class DomElement {
         }),
       };
     } else if (this._owner.transformMode == "none") {
+      // If the transform mode is none, no transform is applied to the element.
       transformStyle = {
         transform: "",
+      };
+    } else if (this._owner.transformMode == "offset") {
+      if (!this._owner.transformOrigin) {
+        throw new Error("Transform origin is not set");
+      }
+      // If the transform mode is offset, the transform is applied relative to the position of a parent object.
+      transformStyle = {
+        transform: generateTransformString({
+          x: this._owner.transform.x - this._owner.transformOrigin.transform.x,
+          y: this._owner.transform.y - this._owner.transformOrigin.transform.y,
+          scaleX:
+            this._owner.transform.scaleX *
+            this._owner.transformOrigin.transform.scaleX,
+          scaleY:
+            this._owner.transform.scaleY *
+            this._owner.transformOrigin.transform.scaleY,
+        }),
       };
     }
 
@@ -979,17 +701,23 @@ export class DomElement {
 
     setDomStyle(this.element, { ...this._style, ...transformStyle });
   }
+
+  destroyDom(): void {
+    this.resizeObserver?.disconnect();
+    this.mutationObserver?.disconnect();
+    if (this.element) {
+      this.element.remove();
+    }
+  }
 }
 
 interface RenderCallback {
-  beforePreRead: null | (() => void);
-  afterPreRead: null | (() => void);
-  beforeRead: null | (() => void);
-  afterRead: null | (() => void);
-  beforeWrite: null | (() => void);
-  afterWrite: null | (() => void);
-  beforePostWrite: null | (() => void);
-  afterPostWrite: null | (() => void);
+  afterRead1: null | (() => void);
+  afterRead2: null | (() => void);
+  afterRead3: null | (() => void);
+  afterWrite1: null | (() => void);
+  afterWrite2: null | (() => void);
+  afterWrite3: null | (() => void);
 }
 
 export class ElementObject extends BaseObject {
@@ -1001,16 +729,20 @@ export class ElementObject extends BaseObject {
   _state: any = {};
   state: Record<string, any>;
 
-  transformMode: "direct" | "relative" | "none";
+  transformMode: "direct" | "relative" | "offset" | "none";
+  transformOrigin: BaseObject | null;
   /**
    * direct: Applies the transform directly to the object.
-   * relative: Perform calculations to apply the transform relative to the DOM element.
+   * relative: Perform calculations to apply the transform relative to the DOM element's
+   *      current position. The current position must be read from the DOM explicitly beforehand.
    *      Only applicable if the object owns a DOM element.
+   * offset: Apply the transform relative to the position of a parent object.
    * none: No transform is applied to the object.
    */
 
   // _parentElement: HTMLElement | null;
   // _elementIndex: number;
+  _domProperty: Array<DomProperty>;
 
   inScene: boolean = false;
   _callback: RenderCallback;
@@ -1022,22 +754,51 @@ export class ElementObject extends BaseObject {
     super(global, parent);
     this._dom = new DomElement(global, this, null);
     this.inScene = false;
-    // this._parentElement = null;
-    // this._elementIndex = -1;
     this._requestWrite = false;
     this._requestRead = false;
     this._requestDelete = false;
     this._requestPostWrite = false;
+    this._domProperty = [
+      {
+        x: 0,
+        y: 0,
+        height: 0,
+        width: 0,
+        scaleX: 1,
+        scaleY: 1,
+        screenX: 0,
+        screenY: 0,
+      },
+      {
+        x: 0,
+        y: 0,
+        height: 0,
+        width: 0,
+        scaleX: 1,
+        scaleY: 1,
+        screenX: 0,
+        screenY: 0,
+      },
+      {
+        x: 0,
+        y: 0,
+        height: 0,
+        width: 0,
+        scaleX: 1,
+        scaleY: 1,
+        screenX: 0,
+        screenY: 0,
+      },
+    ];
     this.transformMode = "direct";
+    this.transformOrigin = null;
     this._callback = {
-      beforePreRead: null,
-      afterPreRead: null,
-      beforeRead: null,
-      afterRead: null,
-      beforeWrite: null,
-      afterWrite: null,
-      beforePostWrite: null,
-      afterPostWrite: null,
+      afterRead1: null,
+      afterRead2: null,
+      afterRead3: null,
+      afterWrite1: null,
+      afterWrite2: null,
+      afterWrite3: null,
     };
     this.callback = EventProxyFactory(this, this._callback);
     this.state = new Proxy(this._state, {
@@ -1052,49 +813,85 @@ export class ElementObject extends BaseObject {
 
   destroy() {
     // this.inputEngine.destroy();
-    this.dom.delete();
+    this._dom.destroyDom();
     super.destroy();
   }
 
-  // set worldPosition(position: [number, number]) {
-  //   if (this.positionMode == "relative") {
-  //     throw new Error("Cannot set world position in relative mode");
-  //   }
-  //   this.worldX = position[0];
-  //   this.worldY = position[1];
-  // }
+  getDomProperty(stage: "READ_1" | "READ_2" | "READ_3" | null = null) {
+    const index = stage == "READ_1" ? 0 : stage == "READ_2" ? 1 : 2;
+    return this._domProperty[index];
+  }
 
-  // get worldPosition(): [number, number] {
-  //   return [this.worldX, this.worldY];
-  // }
+  /**
+   * Save the DOM property to the transform property.
+   * Currently only saves the x and y properties.
+   * This function assumes that the element position has already been read from the DOM.
+   */
+  saveDomPropertyToTransform(
+    stage: "READ_1" | "READ_2" | "READ_3" | null = null,
+  ) {
+    let currentStage = stage ?? this.global.currentStage;
+    currentStage = currentStage == "IDLE" ? "READ_2" : currentStage;
 
-  generateCache(setWorldPosition: boolean = false) {
-    if (setWorldPosition == true) {
-      // Note that dom property is saved in world coordinates
-      this.transform.x = this._dom.property.x;
-      this.transform.y = this._dom.property.y;
-    }
+    const property = this.getDomProperty(currentStage as any);
+    this.transform.x = property.x;
+    this.transform.y = property.y;
+  }
+
+  /**
+   * Calculate the local offsets relative to the parent.
+   * This function assumes that the element position has already been read from the DOM
+   * in both the parent and the current object.
+   */
+  calculateLocalFromTransform() {
     if (this.parent) {
-      this.local.x = this._dom.property.x - this.parent.transform.x;
-      this.local.y = this._dom.property.y - this.parent.transform.y;
+      this.local.x = this.transform.x - this.parent.transform.x;
+      this.local.y = this.transform.y - this.parent.transform.y;
     }
   }
 
-  // addDom(dom: HTMLElement): DomElement {
-  //   this.elementList.push(new DomElement(this.global, this, dom));
-  //   this.dom.event.onCursorDown = this.event.dom.onCursorDown;
-  //   this.dom.event.onCursorMove = this.event.dom.onCursorMove;
-  //   this.dom.event.onCursorUp = this.event.dom.onCursorUp;
-  //   this.dom.event.onCursorScroll = this.event.dom.onCursorScroll;
-  //   this.dom.event.onResize = this.event.dom.onResize;
+  calculateLocalFromDom(stage: "READ_1" | "READ_2" | "READ_3" | null = null) {
+    if (this.parent) {
+      const property = this.getDomProperty(stage);
+      if (this.parent instanceof ElementObject) {
+        this.local.x = property.x - this.parent.getDomProperty(stage).x;
+        this.local.y = property.y - this.parent.getDomProperty(stage).y;
+      } else {
+        this.local.x = this.transform.x - this.parent.transform.x;
+        this.local.y = this.transform.y - this.parent.transform.y;
+      }
+    }
+  }
 
-  //   this.requestPreRead(true, true);
+  calculateTransformFromLocal() {
+    if (this.parent) {
+      this.transform.x = this.parent.transform.x + this.local.x;
+      this.transform.y = this.parent.transform.y + this.local.y;
+    }
+  }
 
-  //   return this._dom;
-  // }
+  get style(): Record<string, any> {
+    return this._dom.style;
+  }
 
-  get dom(): DomElement {
-    return this._dom;
+  set style(style: Record<string, any>) {
+    this._dom.style = style;
+  }
+
+  get classList(): string[] {
+    return this._dom.classList;
+  }
+
+  set classList(classList: string[]) {
+    this._dom.classList = classList;
+  }
+
+  get dataAttribute(): Record<string, any> {
+    return this._dom.dataAttribute;
+  }
+
+  set dataAttribute(dataAttribute: Record<string, any>) {
+    this._dom.dataAttribute = dataAttribute;
   }
 
   get element(): HTMLElement | null {
@@ -1120,64 +917,90 @@ export class ElementObject extends BaseObject {
     this.event.dom.onAssignDom?.();
   }
 
-  // set elementPositionMode(mode: "absolute" | "relative" | "fixed") {
-  //   this._positionMode = mode;
-  //   // this.requestPostWrite();
-  // }
+  readDom(
+    accountTransform: boolean = false,
+    stage: "READ_1" | "READ_2" | "READ_3" | null = null,
+  ) {
+    let currentStage = stage ?? this.global.currentStage;
+    currentStage = currentStage == "IDLE" ? "READ_2" : currentStage;
 
-  // get elementPositionMode(): "absolute" | "relative" | "fixed" {
-  //   return this._positionMode;
-  // }
-
-  preRead(stats: frameStats, options: preReadEntry): void {
-    this.callback.beforePreRead?.();
-    options.beforeCallback?.();
-    this._preRead(stats, options);
-    this._dom.preRead(options.noTransform);
-    if (options.saveDomProperty) {
-      this.generateCache(true);
-      Object.assign(this.previousTransform, this.transform);
+    this._dom.readDom(accountTransform);
+    super.readDom(accountTransform);
+    if (currentStage == "READ_1") {
+      Object.assign(this._domProperty[0], this._dom.property);
+    } else if (currentStage == "READ_2") {
+      Object.assign(this._domProperty[1], this._dom.property);
+    } else if (currentStage == "READ_3") {
+      Object.assign(this._domProperty[2], this._dom.property);
     }
-    this.callback.afterPreRead?.();
-    options.afterCallback?.();
   }
 
-  write(stats: frameStats, options: writeEntry | null = null): void {
-    this.callback.beforeWrite?.();
-    options?.beforeCallback?.();
-    this._write(stats, options);
-    if (options?.isDelete) {
-      this._dom.delete();
-    } else {
-      this._dom.write();
-    }
-    this.callback.afterWrite?.();
-    options?.afterCallback?.();
+  writeDom() {
+    this._dom.writeDom();
+    super.writeDom();
   }
 
-  delete(stats: frameStats): void {
-    this._write(stats, new writeEntry(this, null, true));
-    this._dom.delete();
+  writeTransform() {
+    this._dom.writeTransform();
+    super.writeTransform();
   }
 
-  read(stats: frameStats, options: readEntry | null = null) {
-    this.callback.beforeRead?.();
-    options?.beforeCallback?.();
-    this._dom.read(options?.noTransform);
-    this._read(stats, options);
-    if (options?.saveDomProperty) {
-      this.generateCache(true);
-    }
-    this.callback.afterRead?.();
-    options?.afterCallback?.();
+  destroyDom() {
+    this._dom.destroyDom();
+    super.destroyDom();
   }
 
-  postWrite(stats: frameStats, options: postWriteEntry | null = null): void {
-    this.callback.beforePostWrite?.();
-    options?.beforeCallback?.();
-    this._postWrite(stats, options);
-    this._dom.postWrite();
-    options?.afterCallback?.();
-    this.callback.afterPostWrite?.();
+  /**
+   * Common queue requests for element objects.
+   */
+  requestRead(
+    accountTransform: boolean = false,
+    saveTransform: boolean = true,
+    stage: "READ_1" | "READ_2" | "READ_3" = "READ_1",
+  ): queueEntry {
+    let callback = () => {
+      this.readDom(accountTransform);
+      if (saveTransform) {
+        this.saveDomPropertyToTransform(stage);
+      }
+    };
+    return this.queueUpdate(stage, callback, stage);
+  }
+
+  requestWrite(
+    mutate: boolean = true,
+    writeCallback: null | (() => void) = null,
+    stage: "WRITE_1" | "WRITE_2" | "WRITE_3" = "WRITE_1",
+  ): queueEntry {
+    let callback = () => {
+      if (mutate) {
+        this.writeDom();
+      }
+      writeCallback?.();
+    };
+    return this.queueUpdate(stage, callback, stage);
+  }
+
+  requestDestroy(): queueEntry {
+    let callback = () => {
+      this.destroyDom();
+    };
+    return this.queueUpdate("WRITE_2", callback, "destroy");
+  }
+
+  requestTransform(
+    stage: "WRITE_1" | "WRITE_2" | "WRITE_3" = "WRITE_2",
+  ): queueEntry {
+    let callback = () => {
+      this.writeTransform();
+    };
+    return this.queueUpdate(stage, callback, "transform");
+  }
+
+  requestFLIP(writeCallback: () => void, transformCallback: () => void): void {
+    this.requestRead(false, true, "READ_1");
+    this.requestWrite(true, writeCallback, "WRITE_1");
+    this.requestRead(false, true, "READ_2");
+    this.requestWrite(false, transformCallback, "WRITE_2");
   }
 }

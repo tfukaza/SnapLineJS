@@ -17,78 +17,96 @@ class Camera {
   /**
    * Represents a camera that can be used to pan and zoom the view of a DOM element.
    * This class maintains 3 coordinate systems:
-   * - Device coordinates: The x,y coordinates of the pointer on the device screen.
+   * - Viewport coordinates: The x,y coordinates of the pointer on the browser viewport.
    *   (0,0) is the top left corner of the screen and the x,y coordinates increase as you move right and down.
    * - Camera coordinates: The x,y coordinates of the camera view.
    *   (0,0) is the top left corner of the camera view and the x,y coordinates increase as you move right and down.
+   *   The position of the camera is the top left corner of the camera view.
    * - World coordinates: The x,y coordinates of the world that the camera is viewing.
    *   (0,0) is the CENTER of the world and the x,y coordinates increase as you move right and down.
    */
-  containerDom: HTMLElement; // The DOM that represents the camera view
-  containerOffsetX: number; // The x coordinate of the container DOM on the device screen
-  containerOffsetY: number; // The y coordinate of the container DOM on the device screen
-  // canvasDom: HTMLElement; // The dom that the camera is rendering
-  cameraWidth: number; // The width of the camera view. This should be the same as the container width.
-  cameraHeight: number; // The height of the camera view. This should be the same as the container height.
-  cameraPositionX: number; // Position of the center of the camera
-  cameraPositionY: number;
-  cameraPanStartX: number; // Initial position of the camera when panning
-  cameraPanStartY: number;
-  zoom: number; // The zoom level of the camera, 1 means no zoom, smaller values zoom out, larger values zoom in
-
-  config: CameraConfig;
-
-  canvasStyle: string; // The CSS transform style that should be applied to the DOM element
-
-  cameraCenterMode: "center" | "topLeft";
-
-  resizeObserver: ResizeObserver;
+  #containerDom: HTMLElement; // The DOM element that represents the camera view
+  #containerOffsetX: number; // The x coordinate of the container DOM on the browser viewport
+  #containerOffsetY: number; // The y coordinate of the container DOM on the browser viewport
+  #cameraWidth: number; // The width of the camera view. This should be the same as the container width.
+  #cameraHeight: number; // The height of the camera view. This should be the same as the container height.
+  #cameraPositionX: number; // Position of the center of the camera
+  #cameraPositionY: number;
+  #cameraPanStartX: number; // Initial position of the camera when panning
+  #cameraPanStartY: number;
+  #zoom: number; // The zoom level of the camera, 1 means no zoom, smaller values zoom out, larger values zoom in
+  #config: CameraConfig;
+  #canvasStyle: string; // The CSS transform style that should be applied to the DOM element
+  // #cameraCenterMode: "center" | "topLeft";
+  #resizeObserver: ResizeObserver;
 
   constructor(container: HTMLElement, config: CameraConfig = {}) {
     let containerRect = container.getBoundingClientRect();
-    this.containerDom = container;
-    this.containerOffsetX = containerRect.left;
-    this.containerOffsetY = containerRect.top;
-    this.cameraWidth = containerRect.width;
-    this.cameraHeight = containerRect.height;
-    this.cameraPositionX = 0;
-    this.cameraPositionY = 0;
-    this.cameraCenterMode = "topLeft";
-    if (this.cameraCenterMode == "topLeft") {
-      this.cameraPositionX = this.cameraWidth / 2;
-      this.cameraPositionY = this.cameraHeight / 2;
-    }
-    this.cameraPanStartX = 0;
-    this.cameraPanStartY = 0;
-    this.zoom = 1;
+    this.#containerDom = container;
+    this.#containerOffsetX = containerRect.left;
+    this.#containerOffsetY = containerRect.top;
+    this.#cameraWidth = containerRect.width;
+    this.#cameraHeight = containerRect.height;
+    this.#cameraPositionX = 0;
+    this.#cameraPositionY = 0;
+    // this.#cameraCenterMode = "topLeft";
+    // if (this.#cameraCenterMode == "topLeft") {
+    //   this.#cameraPositionX = this.#cameraWidth / 2;
+    //   this.#cameraPositionY = this.#cameraHeight / 2;
+    // }
+    this.#cameraPanStartX = 0;
+    this.#cameraPanStartY = 0;
+    this.#zoom = 1;
     const defaultConfig = {
       enableZoom: true,
       zoomBounds: { min: 0.2, max: 1 },
       enablePan: true,
       panBounds: { top: null, left: null, right: null, bottom: null },
     };
-    this.config = { ...defaultConfig, ...config };
+    this.#config = { ...defaultConfig, ...config };
 
-    this.canvasStyle = "";
+    this.#canvasStyle = "";
     this.updateCamera();
 
-    const resizeObserver = new ResizeObserver(() => {
+    this.#resizeObserver = new ResizeObserver(() => {
+      console.log("resizeObserver");
       this.updateCameraProperty();
     });
-    resizeObserver.observe(this.containerDom);
-    this.resizeObserver = resizeObserver;
+    this.#resizeObserver.observe(this.#containerDom);
 
     window.addEventListener("scroll", () => {
-      this.updateCameraProperty();
+      this.updateCamera();
     });
   }
 
+  get cameraWidth() {
+    return this.#cameraWidth;
+  }
+  get cameraHeight() {
+    return this.#cameraHeight;
+  }
+  get cameraPositionX() {
+    return this.#cameraPositionX;
+  }
+  get cameraPositionY() {
+    return this.#cameraPositionY;
+  }
+  get zoom() {
+    return this.#zoom;
+  }
+  get containerOffsetX() {
+    return this.#containerOffsetX;
+  }
+  get containerOffsetY() {
+    return this.#containerOffsetY;
+  }
+
   updateCameraProperty() {
-    let containerRect = this.containerDom.getBoundingClientRect();
-    this.containerOffsetX = containerRect.left;
-    this.containerOffsetY = containerRect.top;
-    this.cameraWidth = containerRect.width;
-    this.cameraHeight = containerRect.height;
+    let containerRect = this.#containerDom.getBoundingClientRect();
+    this.#containerOffsetX = containerRect.left;
+    this.#containerOffsetY = containerRect.top;
+    this.#cameraWidth = containerRect.width;
+    this.#cameraHeight = containerRect.height;
   }
 
   /**
@@ -98,21 +116,15 @@ class Camera {
    * @param cameraX   The x coordinate of the point in the world
    * @param cameraY   The y coordinate of the point in the world
    * @param zoom  The zoom level of the camera
-   * @param cameraWidth  The width of the camera view
-   * @param cameraHeight The height of the camera view
+   * @param #cameraWidth  The width of the camera view
+   * @param #cameraHeight The height of the camera view
    * @returns A string representing the CSS transform matrix that should be applied to the DOM element
    */
-  worldToCameraMatrix(
-    cameraX: number,
-    cameraY: number,
-    zoom: number,
-    cameraWidth: number,
-    cameraHeight: number,
-  ): string {
+  worldToCameraMatrix(cameraX: number, cameraY: number, zoom: number): string {
     const s1 = zoom;
     const s2 = zoom;
-    const t1 = -cameraX * zoom + cameraWidth / 2;
-    const t2 = -cameraY * zoom + cameraHeight / 2;
+    const t1 = -cameraX * zoom;
+    const t2 = -cameraY * zoom;
     return `${s1},0,0,0,0,${s2},0,0,0,0,1,0,${t1},${t2},0,1`;
   }
 
@@ -121,14 +133,16 @@ class Camera {
    */
   updateCamera() {
     const matrix = this.worldToCameraMatrix(
-      this.cameraPositionX,
-      this.cameraPositionY,
-      this.zoom,
-      this.containerDom.clientWidth,
-      this.containerDom.clientHeight,
+      this.#cameraPositionX,
+      this.#cameraPositionY,
+      this.#zoom,
     );
     // Apply the transformation matrix, and translate the camera to the center of the container
-    this.canvasStyle = `matrix3d(${matrix})`;
+    this.#canvasStyle = `matrix3d(${matrix})`;
+  }
+
+  get canvasStyle() {
+    return this.#canvasStyle;
   }
 
   /**
@@ -138,38 +152,38 @@ class Camera {
    * @param cameraY The y coordinate of the pointer in the camera view
    */
   handleScroll(deltaZoom: number, cameraX: number, cameraY: number) {
-    if (!this.config.enableZoom) {
+    if (!this.#config.enableZoom) {
       return;
     }
 
     // Limit zoom
-    if (this.zoom + deltaZoom < 0.2) {
-      deltaZoom = 0.2 - this.zoom;
-    } else if (this.zoom + deltaZoom > 1) {
-      deltaZoom = 1 - this.zoom;
+    if (this.#zoom + deltaZoom < 0.2) {
+      deltaZoom = 0.2 - this.#zoom;
+    } else if (this.#zoom + deltaZoom > 1) {
+      deltaZoom = 1 - this.#zoom;
     }
 
-    if (this.config.zoomBounds) {
-      if (this.zoom + deltaZoom < this.config.zoomBounds.min) {
+    if (this.#config.zoomBounds) {
+      if (this.#zoom + deltaZoom < this.#config.zoomBounds.min) {
         deltaZoom = 0;
-      } else if (this.zoom + deltaZoom > this.config.zoomBounds.max) {
+      } else if (this.#zoom + deltaZoom > this.#config.zoomBounds.max) {
         deltaZoom = 0;
       }
     }
 
-    const zoomRatio = this.zoom / (this.zoom + deltaZoom); // Ratio of current zoom to new zoom
+    const zoomRatio = this.#zoom / (this.#zoom + deltaZoom); // Ratio of current zoom to new zoom
     // Move camera to zoom in on the mouse position
-    if (this.config.enablePan) {
-      this.cameraPositionX -=
-        (this.cameraWidth / this.zoom) *
+    if (this.#config.enablePan) {
+      this.#cameraPositionX -=
+        (this.#cameraWidth / this.#zoom) *
         (zoomRatio - 1) *
-        (1 - (this.cameraWidth * 1.5 - cameraX) / this.cameraWidth);
-      this.cameraPositionY -=
-        (this.cameraHeight / this.zoom) *
+        (1 - (this.#cameraWidth * 1.5 - cameraX) / this.#cameraWidth);
+      this.#cameraPositionY -=
+        (this.#cameraHeight / this.#zoom) *
         (zoomRatio - 1) *
-        (1 - (this.cameraHeight * 1.5 - cameraY) / this.cameraHeight);
+        (1 - (this.#cameraHeight * 1.5 - cameraY) / this.#cameraHeight);
     }
-    this.zoom += deltaZoom;
+    this.#zoom += deltaZoom;
 
     this.updateCamera();
   }
@@ -183,11 +197,11 @@ class Camera {
    * @param deltaY  Change in mouse position
    */
   handlePan(deltaX: number, deltaY: number) {
-    if (!this.config.enablePan) {
+    if (!this.#config.enablePan) {
       return;
     }
-    this.cameraPositionX += deltaX / this.zoom;
-    this.cameraPositionY += deltaY / this.zoom;
+    this.#cameraPositionX += deltaX / this.#zoom;
+    this.#cameraPositionY += deltaY / this.#zoom;
 
     this.updateCamera();
   }
@@ -199,11 +213,11 @@ class Camera {
    * This allows camera pans based on the absolute position of the pointer relative to when the pan started.
    */
   handlePanStart() {
-    if (!this.config.enablePan) {
+    if (!this.#config.enablePan) {
       return;
     }
-    this.cameraPanStartX = this.cameraPositionX;
-    this.cameraPanStartY = this.cameraPositionY;
+    this.#cameraPanStartX = this.#cameraPositionX;
+    this.#cameraPanStartY = this.#cameraPositionY;
   }
 
   /**
@@ -213,35 +227,35 @@ class Camera {
    * @param deltaY  Change in mouse position
    */
   handlePanDrag(deltaX: number, deltaY: number) {
-    if (!this.config.enablePan) {
+    if (!this.#config.enablePan) {
       return;
     }
-    this.cameraPositionX = -deltaX / this.zoom + this.cameraPanStartX;
-    this.cameraPositionY = -deltaY / this.zoom + this.cameraPanStartY;
-    if (this.config.panBounds) {
+    this.#cameraPositionX = -deltaX / this.#zoom + this.#cameraPanStartX;
+    this.#cameraPositionY = -deltaY / this.#zoom + this.#cameraPanStartY;
+    if (this.#config.panBounds) {
       if (
-        this.config.panBounds.left !== null &&
-        this.cameraPositionX < this.config.panBounds.left
+        this.#config.panBounds.left !== null &&
+        this.#cameraPositionX < this.#config.panBounds.left
       ) {
-        this.cameraPositionX = this.config.panBounds.left + 1;
+        this.#cameraPositionX = this.#config.panBounds.left + 1;
       }
       if (
-        this.config.panBounds.right !== null &&
-        this.cameraPositionX > this.config.panBounds.right
+        this.#config.panBounds.right !== null &&
+        this.#cameraPositionX > this.#config.panBounds.right
       ) {
-        this.cameraPositionX = this.config.panBounds.right - 1;
+        this.#cameraPositionX = this.#config.panBounds.right - 1;
       }
       if (
-        this.config.panBounds.top !== null &&
-        this.cameraPositionY < this.config.panBounds.top
+        this.#config.panBounds.top !== null &&
+        this.#cameraPositionY < this.#config.panBounds.top
       ) {
-        this.cameraPositionY = this.config.panBounds.top - 1;
+        this.#cameraPositionY = this.#config.panBounds.top - 1;
       }
       if (
-        this.config.panBounds.bottom !== null &&
-        this.cameraPositionY > this.config.panBounds.bottom
+        this.#config.panBounds.bottom !== null &&
+        this.#cameraPositionY > this.#config.panBounds.bottom
       ) {
-        this.cameraPositionY = this.config.panBounds.bottom + 1;
+        this.#cameraPositionY = this.#config.panBounds.bottom + 1;
       }
     }
     this.updateCamera();
@@ -253,11 +267,11 @@ class Camera {
    *    handlePanStart -> handlePanDrag -> handlePanEnd
    */
   handlePanEnd() {
-    if (!this.config.enablePan) {
+    if (!this.#config.enablePan) {
       return;
     }
-    this.cameraPanStartX = 0;
-    this.cameraPanStartY = 0;
+    this.#cameraPanStartX = 0;
+    this.#cameraPanStartY = 0;
   }
 
   /**
@@ -267,23 +281,21 @@ class Camera {
    * @returns The x and y coordinates of the point in the camera view
    */
   getCameraFromWorld(worldX: number, worldY: number): [number, number] {
-    const c_x =
-      (worldX - this.cameraPositionX) * this.zoom + this.cameraWidth / 2;
-    const c_y =
-      (worldY - this.cameraPositionY) * this.zoom + this.cameraHeight / 2;
+    const c_x = (worldX - this.#cameraPositionX) * this.#zoom; // + this.#cameraWidth / 2;
+    const c_y = (worldY - this.#cameraPositionY) * this.#zoom; // + this.#cameraHeight / 2;
 
     return [c_x, c_y];
   }
 
   /**
-   * Converts the x and y coordinates of the camera view to the x and y coordinates of the device screen.
+   * Converts the x and y coordinates of the camera view to the x and y coordinates of the browser viewport.
    * @param cameraX The x coordinate of the point in the camera view
    * @param cameraY The y coordinate of the point in the camera view
    * @returns
    */
   getScreenFromCamera(cameraX: number, cameraY: number): [number, number] {
-    const s_x = cameraX + this.containerOffsetX;
-    const s_y = cameraY + this.containerOffsetY;
+    const s_x = cameraX + this.#containerOffsetX;
+    const s_y = cameraY + this.#containerOffsetY;
 
     return [s_x, s_y];
   }
@@ -295,17 +307,15 @@ class Camera {
    * @returns
    */
   getWorldFromCamera(cameraX: number, cameraY: number): [number, number] {
-    const w_x =
-      (cameraX - this.cameraWidth / 2) / this.zoom + this.cameraPositionX;
-    const w_y =
-      (cameraY - this.cameraHeight / 2) / this.zoom + this.cameraPositionY;
+    const w_x = cameraX / this.#zoom + this.#cameraPositionX;
+    const w_y = cameraY / this.#zoom + this.#cameraPositionY;
 
     return [w_x, w_y];
   }
 
   getCameraFromScreen(mouseX: number, mouseY: number): [number, number] {
-    mouseX = mouseX - this.containerOffsetX;
-    mouseY = mouseY - this.containerOffsetY;
+    mouseX = mouseX - this.#containerOffsetX;
+    mouseY = mouseY - this.#containerOffsetY;
     return [mouseX, mouseY];
   }
 
@@ -319,8 +329,8 @@ class Camera {
     worldDeltaX: number,
     worldDeltaY: number,
   ): [number, number] {
-    const c_dx = worldDeltaX * this.zoom;
-    const c_dy = worldDeltaY * this.zoom;
+    const c_dx = worldDeltaX * this.#zoom;
+    const c_dy = worldDeltaY * this.#zoom;
 
     return [c_dx, c_dy];
   }
@@ -335,8 +345,8 @@ class Camera {
     cameraDeltaX: number,
     cameraDeltaY: number,
   ): [number, number] {
-    const w_dx = cameraDeltaX / this.zoom;
-    const w_dy = cameraDeltaY / this.zoom;
+    const w_dx = cameraDeltaX / this.#zoom;
+    const w_dy = cameraDeltaY / this.#zoom;
 
     return [w_dx, w_dy];
   }

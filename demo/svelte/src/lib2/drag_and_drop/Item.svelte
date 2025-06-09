@@ -11,7 +11,6 @@
     let itemObject: ItemObject = new ItemObject(engine.global, null);
 
     onMount(() => {
-        engine.addObject(itemObject);
         itemContainer.addItem(itemObject);
     });
 

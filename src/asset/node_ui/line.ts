@@ -50,7 +50,7 @@ class LineComponent extends ElementObject {
     this.setLineEnd(endWorldX, endWorldY);
   }
 
-  applyCache() {
+  moveLineToConnectorTransform() {
     this.setLineStartAtConnector();
     if (!this.target) {
       // this.setLineEnd(this.global.cursor.worldX, this.global.cursor.worldY);

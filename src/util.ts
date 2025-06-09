@@ -44,7 +44,6 @@ function generateTransformString(transform: TransformProperty) {
 }
 
 function parseTransformString(transform: string) {
-  console.log("parseTransformString", transform);
   const transformValues = transform.split("(")[1].split(")")[0].split(",");
   return {
     x: parseFloat(transformValues[0]),
@@ -88,10 +87,6 @@ function setDomStyle(
   dom: HTMLElement | SVGElement,
   style: { [key: string]: string },
 ) {
-  // Convert the dict to a single string to reduce the number of DOM calls
-  // const styleString = Object.entries(style)
-  //   .map(([key, value]) => `${camelCaseToKebab(key)}: ${value}`)
-  //   .join(";");
   Object.assign(dom.style, style);
 }
 

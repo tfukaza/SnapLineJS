@@ -4,7 +4,7 @@
     let { line }: { line: { line: LineComponent, gid: string, positionX: number, positionY: number, endPositionX: number, endPositionY: number } } = $props();
     
     let shadowOffset = 6;
-    let style = $state("position: absolute; overflow: visible; pointer-events: none; will-change: transform; transform: translate3d(0px, 0px, 0);");
+    let style = $state("position: absolute; overflow: visible; pointer-events: none; will-change: transform;");
     let shadowStyle = $state("position: absolute; overflow: visible; pointer-events: none; will-change: transform; transform: translate3d(0px, 0px, 0);");
     let endX = $state(0);
     let endY = $state(0);
@@ -31,12 +31,11 @@
       endY = y3;
     }
 
-    let lineDOM: SVGElement | null = null; 
-
   onMount(() => {
     renderLine();
-    line.line.element = (lineDOM as unknown as HTMLElement);
-    line.line.callback.afterPostWrite = renderLine;
+    line.line.writeTransform();
+    line.line.callback.afterWrite1 = renderLine;
+    line.line.callback.afterWrite2 = renderLine;
   });
 </script>
 
@@ -45,7 +44,7 @@
   width="4"
   height="4"
   style={style}
-  bind:this={lineDOM}
+  bind:this={line.line.element as any}
 >
   <defs>
     <linearGradient id="line-start-gradient" gradientTransform="rotate(0)">

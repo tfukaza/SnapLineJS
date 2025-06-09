@@ -1,11 +1,5 @@
 import Camera from "./camera";
-import {
-  BaseObject,
-  preReadEntry,
-  writeEntry,
-  readEntry,
-  postWriteEntry,
-} from "./object";
+import { BaseObject, queueEntry } from "./object";
 import { AnimationObject, SequenceObject } from "./animation";
 import { GlobalInputControl } from "./input";
 import { CollisionEngine } from "./collision";
@@ -42,11 +36,20 @@ class GlobalManager {
   collisionEngine: CollisionEngine | null;
   objectTable: Record<string, BaseObject>;
 
-  currentStage: "preRead" | "write" | "read" | "adjust" | "idle";
-  preReadQueue: Record<string, preReadEntry>;
-  writeQueue: Record<string, writeEntry>;
-  readQueue: Record<string, readEntry>;
-  postWriteQueue: Record<string, postWriteEntry>;
+  currentStage:
+    | "IDLE"
+    | "READ_1"
+    | "WRITE_1"
+    | "READ_2"
+    | "WRITE_2"
+    | "READ_3"
+    | "WRITE_3";
+  read1Queue: Record<string, Map<string, queueEntry>>;
+  write1Queue: Record<string, Map<string, queueEntry>>;
+  read2Queue: Record<string, Map<string, queueEntry>>;
+  write2Queue: Record<string, Map<string, queueEntry>>;
+  read3Queue: Record<string, Map<string, queueEntry>>;
+  write3Queue: Record<string, Map<string, queueEntry>>;
 
   animationList: (AnimationObject | SequenceObject)[] = [];
   animationFragment: HTMLDivElement;
@@ -73,11 +76,13 @@ class GlobalManager {
     this.collisionEngine = null;
     this.objectTable = {};
 
-    this.currentStage = "idle";
-    this.preReadQueue = {};
-    this.writeQueue = {};
-    this.readQueue = {};
-    this.postWriteQueue = {};
+    this.currentStage = "IDLE";
+    this.read1Queue = {};
+    this.write1Queue = {};
+    this.read2Queue = {};
+    this.write2Queue = {};
+    this.read3Queue = {};
+    this.write3Queue = {};
     this.animationList = [];
     this.animationFragment = document.createElement("div");
     document.body.appendChild(this.animationFragment);

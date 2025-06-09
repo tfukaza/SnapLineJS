@@ -1,12 +1,7 @@
 import { ElementObject, frameStats, BaseObject } from "../../object";
 import { NodeComponent } from "./node";
 import { LineComponent } from "./line";
-import {
-  pointerDownProp,
-  dragProp,
-  dragEndProp,
-  pointerUpProp,
-} from "../../input";
+import { pointerDownProp, dragProp, dragEndProp } from "../../input";
 import { Collider } from "../../collision";
 import { CircleCollider, PointCollider } from "../../collision";
 import { GlobalManager } from "../../global";
@@ -63,7 +58,7 @@ class ConnectorComponent extends ElementObject {
     this._targetConnector = null;
     this._mousedownX = 0;
     this._mousedownY = 0;
-    this.transformMode = "relative";
+    this.transformMode = "none";
   }
 
   onCursorDown(prop: pointerDownProp): void {
@@ -85,13 +80,6 @@ class ConnectorComponent extends ElementObject {
     }
   }
 
-  // componentCursorUp(): void {
-  //   if (this.parent == null) {
-  //     return;
-  //   }
-  //   this.endDragOutLine();
-  // }
-
   deleteLine(i: number): LineComponent | null {
     console.debug(`Deleting line ${this.gid} at index ${i}`);
     if (this.outgoingLines.length == 0) {
@@ -99,26 +87,25 @@ class ConnectorComponent extends ElementObject {
     }
 
     const line = this.outgoingLines[i];
-    line.delete(this.getCurrentStats());
+    line.destroy();
     this.outgoingLines.splice(i, 1);
     return line;
   }
 
   deleteAllLines() {
-    let stats: frameStats = this.getCurrentStats();
     for (const line of this.outgoingLines) {
-      line.delete(stats);
+      line.destroy();
     }
   }
 
   updateAllLines() {
-    this.calculateCache();
+    this.calculateTransformFromLocal();
 
     for (const line of [...this.outgoingLines, ...this.incomingLines]) {
-      line.target?.calculateCache();
-      line.calculateCache();
-      line.applyCache();
-      line.requestPostWrite();
+      line.target?.calculateTransformFromLocal();
+      line.calculateLocalFromTransform();
+      line.moveLineToConnectorTransform();
+      line.requestTransform("WRITE_2");
     }
   }
 
@@ -148,10 +135,10 @@ class ConnectorComponent extends ElementObject {
   }
 
   startDragOutLine(prop: pointerDownProp): void {
-    // console.debug(`Starting drag out line ${this.gid}`);
     let newLine = this.createLine();
     newLine.setLineEnd(prop.position.x, prop.position.y);
     newLine.setLineStartAtConnector();
+
     this.outgoingLines.unshift(newLine);
 
     this.parent.updateNodeLines();
@@ -237,7 +224,7 @@ class ConnectorComponent extends ElementObject {
       if (result) {
         line.setLineEnd(result[0], result[1]);
         line.setLineStartAtConnector();
-        line.requestPostWrite();
+        line.requestTransform("WRITE_2");
         return;
       }
     }
@@ -260,7 +247,7 @@ class ConnectorComponent extends ElementObject {
     if (targetConnector.gid == this.gid) {
       return;
     }
-    targetConnector.calculateCache();
+    targetConnector.calculateLocalFromTransform();
     const connectorX = targetConnector.transform.x;
     const connectorY = targetConnector.transform.y;
 
@@ -352,7 +339,7 @@ class ConnectorComponent extends ElementObject {
       this.outgoingLines.unshift(line);
     }
 
-    this.calculateCache();
+    this.calculateLocalFromTransform();
     line.target = connector;
     connector.incomingLines.push(line);
 

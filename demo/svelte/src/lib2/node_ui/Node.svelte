@@ -45,7 +45,7 @@
 {#each formattedLines as line (line.gid)}
     <LineSvelteComponent {line} />
 {/each}
-<div bind:this={nodeDOM} class={className}>
+<div bind:this={nodeDOM} class={className} style="position: absolute;">
     {@render children()}
 </div>
 
