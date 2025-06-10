@@ -38,6 +38,8 @@ class Camera {
   #config: CameraConfig;
   #canvasStyle: string; // The CSS transform style that should be applied to the DOM element
   // #cameraCenterMode: "center" | "topLeft";
+  #cameraCenterX: number;
+  #cameraCenterY: number;
   #resizeObserver: ResizeObserver;
 
   constructor(container: HTMLElement, config: CameraConfig = {}) {
@@ -47,6 +49,8 @@ class Camera {
     this.#containerOffsetY = containerRect.top;
     this.#cameraWidth = containerRect.width;
     this.#cameraHeight = containerRect.height;
+    this.#cameraCenterX = this.#cameraWidth / 2;
+    this.#cameraCenterY = this.#cameraHeight / 2;
     this.#cameraPositionX = 0;
     this.#cameraPositionY = 0;
     // this.#cameraCenterMode = "topLeft";
@@ -69,7 +73,6 @@ class Camera {
     this.updateCamera();
 
     this.#resizeObserver = new ResizeObserver(() => {
-      console.log("resizeObserver");
       this.updateCameraProperty();
     });
     this.#resizeObserver.observe(this.#containerDom);
@@ -102,11 +105,28 @@ class Camera {
   }
 
   updateCameraProperty() {
+    // TODO: Move this read operation to the READ queue
     let containerRect = this.#containerDom.getBoundingClientRect();
     this.#containerOffsetX = containerRect.left;
     this.#containerOffsetY = containerRect.top;
     this.#cameraWidth = containerRect.width;
     this.#cameraHeight = containerRect.height;
+    this.#cameraCenterX = this.#cameraWidth / 2 + this.#cameraPositionX;
+    this.#cameraCenterY = this.#cameraHeight / 2 + this.#cameraPositionY;
+
+    // console.log(
+    //   `Updated camera property: ${this.#cameraWidth}x${this.#cameraHeight}, ${this.#cameraCenterX}, ${this.#cameraCenterY}`,
+    // );
+
+    // this.centerCamera(0, 0);
+  }
+
+  centerCamera(x: number, y: number) {
+    let dx = this.#cameraPositionX - this.#cameraCenterX + x;
+    let dy = this.#cameraPositionY - this.#cameraCenterY + y;
+    this.#cameraPositionX = dx;
+    this.#cameraPositionY = dy;
+    this.updateCamera();
   }
 
   /**
@@ -143,6 +163,12 @@ class Camera {
 
   get canvasStyle() {
     return this.#canvasStyle;
+  }
+
+  setCameraPosition(x: number, y: number) {
+    this.#cameraPositionX = x;
+    this.#cameraPositionY = y;
+    this.updateCamera();
   }
 
   /**
