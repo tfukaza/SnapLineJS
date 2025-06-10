@@ -1,4 +1,4 @@
-import type { ObjectData } from "../../lib2/engine.svelte";
+import type { ObjectData } from "../../../../../svelte/src/lib/engine.svelte";
 
 // import Event from "./Event.svelte";
 import Math from "./Math.svelte";

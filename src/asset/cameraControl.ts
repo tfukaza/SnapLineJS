@@ -15,6 +15,8 @@ class CameraControl extends ElementObject {
   zoomLock: boolean;
   panLock: boolean;
 
+  resizeObserver: ResizeObserver | null = null;
+
   constructor(
     globals: GlobalManager,
     zoomLock: boolean = false,
@@ -40,6 +42,25 @@ class CameraControl extends ElementObject {
       width: "0px",
       height: "0px",
     };
+    this.requestTransform("WRITE_2");
+
+    this.resizeObserver = null;
+
+    this.global.snapline!.event.containerElementAssigned = () => {
+      this.resizeObserver = new ResizeObserver(() => {
+        this.global.camera?.updateCameraProperty();
+        this.global.camera?.centerCamera(0, 0);
+        this.global.camera?.updateCamera();
+        this.style.transform = this.global.camera?.canvasStyle as string;
+        this.requestTransform("WRITE_2");
+      });
+      this.resizeObserver.observe(this.global.containerElement!);
+    };
+  }
+
+  setCameraPosition(x: number, y: number) {
+    this.global.camera?.setCameraPosition(x, y);
+    this.style.transform = this.global.camera?.canvasStyle as string;
     this.requestTransform("WRITE_2");
   }
 
