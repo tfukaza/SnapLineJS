@@ -18,8 +18,8 @@
   }
 </script>
 
-<Node bind:this={node} className="node-print" LineSvelteComponent={DemoLine}>
-  <div class="row">
+<Node bind:this={node} className="node card" LineSvelteComponent={DemoLine}>
+  <div class="row-container">
     <input type="text" oninput={onInput} />
     <Connector name="text" maxConnectors={1} allowDragOut={true} />
   </div>

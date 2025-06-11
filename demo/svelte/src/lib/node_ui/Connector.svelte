@@ -31,15 +31,7 @@
   });
 </script>
 
-<div class="sl-connector" bind:this={connector.element}></div>
+<div class="connector" bind:this={connector.element}></div>
 
 <style>
-  .sl-connector {
-    width: 10px;
-    height: 10px;
-    fill: #fff;
-    box-shadow: 3px 3px 4px 0px rgba(40, 24, 28, 0.31) inset;
-    border-radius: 50%;
-    margin: 12px;
-  }
 </style>

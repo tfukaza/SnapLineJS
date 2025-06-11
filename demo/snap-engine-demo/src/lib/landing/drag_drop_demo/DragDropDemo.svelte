@@ -1,21 +1,39 @@
 <script lang="ts">
-  import Container from "./../../../../../svelte/src/lib/drag_and_drop/ItemContainer.svelte";
-  import Item from "./../../../../../svelte/src/lib/drag_and_drop/Item.svelte";
-  let itemArray = [];
-  for (let i = 0; i < 16; i++) {
-    let data = { id: i, text: `Item ${i}` };
-    itemArray.push(data);
-  }
+  import Container from "./ItemContainer.svelte";
+  import Item from "./Item.svelte";
+  import "../../../app.scss";
+
+  let wordArray = [
+    "すごい",
+    "が",
+    "ドロップ",
+    "とても",
+    "ウェブ",
+    "チョコミント",
+    "アンド",
+    "あなた",
+    "の",
+    "捨てる",
+    "ニューヨーク",
+    "よりも",
+    "な",
+    "の",
+    "為",
+    "ドラッグストア",
+    "は",
+    "か",
+    "甘い",
+    "ドラッグ",
+  ];
+
+  let itemArray = wordArray.map((word, i) => ({ id: i, text: word }));
 </script>
 
 <Container direction="row">
   {#each itemArray as item, i}
     <Item>
       <div class="drag-drop-demo">
-        {item.text}
-        {#if i % 4 == 0}
-          More text than usual
-        {/if}
+        <p>{item.text}</p>
       </div>
     </Item>
   {/each}
