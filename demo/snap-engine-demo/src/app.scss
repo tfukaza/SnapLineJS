@@ -48,6 +48,8 @@ label {
   font-size: 14px;
   color: var(--color-text);
   font-weight: 500;
+  margin: 0;
+  margin-bottom: 0.1em;
 }
 
 .page-width {
@@ -134,5 +136,46 @@ input[type="range"] {
       -4px -4px 4px -6px rgba(255, 255, 255, 0.33),
       3px 5px 4px -0.5px rgba(48, 41, 58, 0.4);
     cursor: pointer;
+  }
+}
+
+button {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: #f5f5f5;
+  border: none;
+  transition: all 0.2s ease-in-out;
+  cursor: pointer;
+
+  &:hover {
+    background: #ebebeb;
+    transform: translate(0, 1px);
+  }
+
+  &.active {
+    background: #919191;
+    transform: translate(0, -2px);
+    box-shadow: 2px 6px 6.5px 0px rgba(68, 43, 44, 0.28);
+    h1 {
+      color: #fff;
+    }
+  }
+}
+
+input[type="number"],
+input[type="text"] {
+  font-family: "IBM Plex Mono", monospace;
+  user-select: none;
+
+  height: 30px;
+  border: 0px solid #ccc;
+  border-radius: 5px;
+  width: 100px;
+  background-color: #f3f3f3;
+  flex-grow: 1;
+
+  &:focus {
+    border: 1px solid #ccc;
   }
 }

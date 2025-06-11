@@ -21,14 +21,14 @@
   });
 </script>
 
-<Node bind:this={node} className="node-print" LineSvelteComponent={DemoLine}>
-  <div class="row">
+<Node bind:this={node} className="node card" LineSvelteComponent={DemoLine}>
+  <div class="row-container">
     <Connector name="text" maxConnectors={1} allowDragOut={false} />
   </div>
-  <div class="row">
+  <div class="row-container">
     <Connector name="font-size" maxConnectors={1} allowDragOut={false} />
   </div>
-  <div class="row">
+  <div class="row-container">
     <h1 style="font-size: {fontSize}px;">{text}</h1>
   </div>
 </Node>
