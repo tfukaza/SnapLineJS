@@ -1,4 +1,5 @@
 import { GlobalManager } from "./global";
+import { BaseObject } from "./object";
 import { EventProxyFactory } from "./util";
 
 export enum mouseButton {
@@ -192,6 +193,8 @@ class InputControl {
   _uuid: Symbol;
   _ownerGID: string | null;
 
+  #debugObject: BaseObject; 
+
   #dragMemberList: InputControl[];
 
   constructor(
@@ -225,6 +228,7 @@ class InputControl {
       this._isGlobal ? null : this.globalInputEngine?._inputControl.event,
     );
     this._uuid = Symbol();
+    this.#debugObject = new BaseObject(this.global!, null);
   }
 
   destroy() {
@@ -327,7 +331,7 @@ class InputControl {
       start: coordinates,
       button: e.buttons,
     });
-    console.debug("dragStart", coordinates);
+    this.#debugObject.addDebugPoint(coordinates.x, coordinates.y, "red", true, "pointerDown");
     if (this.globalGestureDict[e.pointerId]) {
       this.globalGestureDict[e.pointerId].memberList.push(this);
     } else {

@@ -72,9 +72,9 @@ class GlobalManager {
       screenY: 0,
     };
     this.camera = null;
-    this.inputEngine = new GlobalInputControl(this);
     this.collisionEngine = null;
     this.objectTable = {};
+    this.inputEngine = new GlobalInputControl(this);
 
     this.currentStage = "IDLE";
     this.read1Queue = {};

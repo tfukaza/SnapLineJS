@@ -333,7 +333,7 @@ class SnapLine {
       if (marker.type == "point") {
         this.debugCtx.beginPath();
         this.debugCtx.fillStyle = marker.color;
-        this.debugCtx.arc(marker.x, marker.y, 5, 0, 2 * Math.PI);
+        this.debugCtx.arc(cameraX, cameraY, 5, 0, 2 * Math.PI);
         this.debugCtx.fill();
       } else if (marker.type == "rect") {
         this.debugCtx.beginPath();
