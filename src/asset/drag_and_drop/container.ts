@@ -9,8 +9,13 @@ export class ItemContainer extends ElementObject {
   #spacerDomElement: HTMLElement | null = null;
   #spacerIndex: number = 0;
   #direction: "column" | "row";
+  #groupID: string;
 
-  constructor(global: GlobalManager, parent: BaseObject | null) {
+  constructor(
+    global: GlobalManager,
+    parent: BaseObject | null,
+    groupID?: string,
+  ) {
     super(global, parent);
     this.#itemList = [];
     this.#direction = "column";
@@ -19,6 +24,17 @@ export class ItemContainer extends ElementObject {
     this.style = {
       position: "relative",
     };
+
+    this.#groupID = groupID || "default-group";
+
+    if (!this.global.data["dragAndDropGroups"]) {
+      this.global.data["dragAndDropGroups"] = {};
+    }
+    if (this.global.data["dragAndDropGroups"][this.#groupID]) {
+      this.global.data["dragAndDropGroups"][this.#groupID].push(this);
+    } else {
+      this.global.data["dragAndDropGroups"][this.#groupID] = [this];
+    }
   }
 
   get direction() {
@@ -68,6 +84,27 @@ export class ItemContainer extends ElementObject {
         item.readDom(false);
       }
     });
+  }
+
+  getClosestContainer(worldX: number, worldY: number) {
+    let closestContainer = null;
+    let closestDistance = Infinity;
+
+    for (let c of this.global.data["dragAndDropGroups"][this.#groupID] || []) {
+      const container: ItemContainer = c as ItemContainer;
+      const property = container.getDomProperty("READ_1");
+      const centerX = property.x + property.width / 2;
+      const centerY = property.y + property.height / 2;
+      const distance = Math.sqrt(
+        Math.pow(centerX - worldX, 2) + Math.pow(centerY - worldY, 2),
+      );
+
+      if (distance < closestDistance) {
+        closestDistance = distance;
+        closestContainer = container;
+      }
+    }
+    return closestContainer;
   }
 
   /**
@@ -172,13 +209,13 @@ export class ItemContainer extends ElementObject {
         this.setItemRows(caller);
         this.updateItemIndexes();
         // Determine where the caller should be dropped
-        let { dropIndex, localDropIndex, closestRowIndex } =
+        let { dropIndex, rowDropIndex, closestRowIndex } =
           caller.determineDropIndex();
         this.queueUpdate("WRITE_2", () => {
           // console.log("different row WRITE_2");
           this.addGhostItem(caller, dropIndex);
           caller.dropIndex = dropIndex;
-          caller.localDropIndex = localDropIndex;
+          caller.rowDropIndex = rowDropIndex;
         });
       });
       this.queueUpdate("READ_3", () => {

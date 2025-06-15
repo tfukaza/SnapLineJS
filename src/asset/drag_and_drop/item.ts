@@ -16,7 +16,7 @@ export class ItemObject extends ElementObject {
   #mouseOffsetX: number = 0;
   #mouseOffsetY: number = 0;
   #dropIndex: number = 0;
-  #localDropIndex: number = 0;
+  #rowDropIndex: number = 0;
   #direction: "column" | "row";
   #rowIndex: number = 0;
   #currentRow: number = 0;
@@ -84,8 +84,8 @@ export class ItemObject extends ElementObject {
     this.#dropIndex = value;
   }
 
-  set localDropIndex(value: number) {
-    this.#localDropIndex = value;
+  set rowDropIndex(value: number) {
+    this.#rowDropIndex = value;
   }
 
   set indexInList(value: number) {
@@ -151,7 +151,7 @@ export class ItemObject extends ElementObject {
       this.transform.y + property.height / 2,
     );
     this.#dropIndex = this.#indexInList;
-    this.#localDropIndex =
+    this.#rowDropIndex =
       this.#dropIndex - rowBoundaries[closestRow.index].cumulativeLength;
     this.container.addGhostBeforeItem(this, this.#dropIndex, false);
     this.#currentRow = closestRow.index;
@@ -266,8 +266,25 @@ export class ItemObject extends ElementObject {
     const thisWorldX = this.transform.x + this._domProperty[1].width / 2;
     const thisWorldY = this.transform.y + this._domProperty[1].height / 2;
 
+    const closestContainer = this.container.getClosestContainer(
+      thisWorldX,
+      thisWorldY,
+    );
+    if (closestContainer !== this.#containerObject) {
+      this.container.removeAllExpandAnimation();
+      this.container.dragItem = null;
+      this.#containerObject = closestContainer;
+      this.container.setItemRows(this);
+      this.container.dragItem = this;
+
+      this.transformOrigin = this.container;
+      // TODO: Manipulate DOM in the write queue
+      this.container.element?.appendChild(this.element!);
+      // this.requestRead(false, true, "READ_1");
+    }
+
     let dropIndex = this.#dropIndex;
-    let localDropIndex = this.#localDropIndex;
+    let rowDropIndex = this.#rowDropIndex;
 
     for (const item of this.orderedItemList) {
       item.clearAllDebugMarkers();
@@ -339,13 +356,13 @@ export class ItemObject extends ElementObject {
       leftItemRight &&
       leftItemRight - leftItem._domProperty[1].width / 2 + BUFFER > thisWorldX
     ) {
-      localDropIndex = rowList[closestRowIndex].indexOf(leftItem);
+      rowDropIndex = rowList[closestRowIndex].indexOf(leftItem);
     } else if (
       rightItem &&
       rightItemLeft &&
       rightItemLeft + rightItem._domProperty[1].width / 2 - BUFFER < thisWorldX
     ) {
-      localDropIndex = rowList[closestRowIndex].indexOf(rightItem) + 1;
+      rowDropIndex = rowList[closestRowIndex].indexOf(rightItem) + 1;
     } else if (
       rightItem &&
       leftItemRight &&
@@ -354,23 +371,23 @@ export class ItemObject extends ElementObject {
         this._domProperty[1].width - BUFFER
     ) {
       // "Squeeze in" between the two items when moving to a new row
-      localDropIndex = rowList[closestRowIndex].indexOf(rightItem);
+      rowDropIndex = rowList[closestRowIndex].indexOf(rightItem);
     } else if (rightItemLeft == undefined) {
-      localDropIndex = rowList[closestRowIndex].length;
+      rowDropIndex = rowList[closestRowIndex].length;
     } else if (leftItemRight == undefined) {
-      localDropIndex = 0;
+      rowDropIndex = 0;
     } else {
       console.log("Else");
     }
-    if (localDropIndex > rowList[closestRowIndex].length) {
+    if (rowDropIndex > rowList[closestRowIndex].length) {
       dropIndex = -1;
     } else {
-      dropIndex = cumulativeLength + localDropIndex;
+      dropIndex = cumulativeLength + rowDropIndex;
     }
 
     return {
       dropIndex,
-      localDropIndex,
+      rowDropIndex,
       closestRowIndex,
     };
   }
@@ -388,9 +405,10 @@ export class ItemObject extends ElementObject {
       prop.position.x - this.#mouseOffsetX,
       prop.position.y - this.#mouseOffsetY,
     ];
+    this.container.requestRead(false, true, "READ_1");
     this.requestTransform();
 
-    let { dropIndex, localDropIndex, closestRowIndex } =
+    let { dropIndex, rowDropIndex, closestRowIndex } =
       this.determineDropIndex();
 
     if (dropIndex != this.container.spacerIndex) {
@@ -398,7 +416,7 @@ export class ItemObject extends ElementObject {
       this.#currentRow = closestRowIndex;
       this.container.addGhostBeforeItem(this, dropIndex, differentRow);
       this.#dropIndex = dropIndex;
-      this.#localDropIndex = localDropIndex;
+      this.#rowDropIndex = rowDropIndex;
     }
   }
 

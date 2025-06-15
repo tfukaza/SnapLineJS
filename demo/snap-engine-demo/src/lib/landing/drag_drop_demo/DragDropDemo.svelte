@@ -3,7 +3,7 @@
   import Item from "./Item.svelte";
   import "../../../app.scss";
 
-  let wordArray = [
+  let japaneseWords = [
     "すごい",
     "が",
     "ドロップ",
@@ -26,15 +26,21 @@
     "ドラッグ",
   ];
 
-  let itemArray = wordArray.map((word, i) => ({ id: i, text: word }));
 </script>
 
 <Container direction="row">
-  {#each itemArray as item, i}
+ <div />
+</Container>
+
+<hr style="margin: 20px 0;" />
+
+<Container direction="row">
+  {#each japaneseWords as item, i}
     <Item>
       <div class="drag-drop-demo">
-        <p>{item.text}</p>
+        <p>{item}</p>
       </div>
     </Item>
   {/each}
 </Container>
+
