@@ -101,7 +101,7 @@ export class queueEntry {
     callback: null | (() => void),
     uuid: UUID | string | null = null,
   ) {
-    this.uuid = uuid ?? crypto.randomUUID();
+    this.uuid = uuid ?? object.global.getGlobalId();
     this.object = object;
     this.callback = callback ? [callback.bind(object)] : null;
   }

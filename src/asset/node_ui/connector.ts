@@ -247,7 +247,6 @@ class ConnectorComponent extends ElementObject {
     if (targetConnector.gid == this.gid) {
       return;
     }
-    targetConnector.calculateLocalFromTransform();
     const connectorX = targetConnector.transform.x;
     const connectorY = targetConnector.transform.y;
 
