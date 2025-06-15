@@ -11,16 +11,14 @@ import {
 const BUFFER = 20;
 
 export class ItemObject extends ElementObject {
-  _containerObject: ItemContainer | null;
-  indexInList: number = 0;
-  _mouseOffsetX: number = 0;
-  _mouseOffsetY: number = 0;
-  _cloneDomElement: HTMLElement | null = null;
-  _dropIndex: number = 0;
-  spacerIndex: number = 0;
-  localDropIndex: number = 0;
-  direction: "column" | "row";
-  _rowIndex: number = 0;
+  #containerObject: ItemContainer | null;
+  #indexInList: number = 0;
+  #mouseOffsetX: number = 0;
+  #mouseOffsetY: number = 0;
+  #dropIndex: number = 0;
+  #localDropIndex: number = 0;
+  #direction: "column" | "row";
+  #rowIndex: number = 0;
   #currentRow: number = 0;
 
   constructor(global: GlobalManager, parent: BaseObject | null) {
@@ -29,9 +27,8 @@ export class ItemObject extends ElementObject {
     this.event.input.drag = this.cursorMove;
     this.event.input.dragEnd = this.cursorUp;
     this.transformMode = "none";
-    this._containerObject = null;
-    this.direction = "column";
-    this.spacerIndex = 0;
+    this.#containerObject = null;
+    this.#direction = "column";
   }
 
   animateZeroTransform() {
@@ -59,38 +56,70 @@ export class ItemObject extends ElementObject {
     // };
   }
 
+  get container(): ItemContainer {
+    if (!this.#containerObject) {
+      throw new Error("ItemObject has no container set.");
+    }
+    return this.#containerObject;
+  }
+
+  setContainer(value: ItemContainer) {
+    this.#containerObject = value;
+    this.#direction = value.direction;
+  }
+
+  get orderedItemList() {
+    return this.container.itemList ?? [];
+  }
+
+  get rowIndex() {
+    return this.#rowIndex;
+  }
+
+  set rowIndex(value: number) {
+    this.#rowIndex = value;
+  }
+
+  set dropIndex(value: number) {
+    this.#dropIndex = value;
+  }
+
+  set localDropIndex(value: number) {
+    this.#localDropIndex = value;
+  }
+
+  set indexInList(value: number) {
+    this.#indexInList = value;
+  }
+
   debug_all_items() {
-    for (const item of this._containerObject?.itemList ?? []) {
+    for (const item of this.container.itemList ?? []) {
       const property = item.getDomProperty("READ_2");
       item.addDebugText(
         property.x,
         property.y,
-        `Index: ${this._containerObject?.itemList.indexOf(item)}, GID: ${item.gid}, ${property.x}, ${property.y}`,
+        `Index: ${this.container.itemList.indexOf(item)}, GID: ${item.gid}, ${property.x}, ${property.y}`,
         "black",
       );
     }
   }
 
-  get orderedItemList() {
-    return this._containerObject?.itemList ?? [];
-  }
-
   cursorDown(prop: dragStartProp) {
-    this._containerObject?.readDom(false, "READ_2");
-    this._containerObject?.saveDomPropertyToTransform("READ_2");
-    for (const item of this._containerObject?.itemList ?? []) {
+    this.container.readDom(false, "READ_2");
+    this.container.saveDomPropertyToTransform("READ_2");
+    for (const item of this.container.itemList ?? []) {
       item.readDom(false, "READ_2");
       item.saveDomPropertyToTransform("READ_2");
     }
-    this._containerObject?.setItemRows(this);
+    this.container.setItemRows(this);
     let property = this.getDomProperty("READ_2");
 
-    this._mouseOffsetX = prop.start.screenX - (property.screenX ?? 0);
-    this._mouseOffsetY = prop.start.screenY - (property.screenY ?? 0);
+    this.#mouseOffsetX = prop.start.screenX - (property.screenX ?? 0);
+    this.#mouseOffsetY = prop.start.screenY - (property.screenY ?? 0);
 
     this.worldPosition = [
-      prop.start.x - this._mouseOffsetX,
-      prop.start.y - this._mouseOffsetY,
+      prop.start.x - this.#mouseOffsetX,
+      prop.start.y - this.#mouseOffsetY,
     ];
 
     this.style = {
@@ -101,7 +130,7 @@ export class ItemObject extends ElementObject {
       left: "0px",
     };
     this.transformMode = "offset";
-    this.transformOrigin = this._containerObject; // TODO: Take padding into account
+    this.transformOrigin = this.container; // TODO: Take padding into account
     this.requestWrite(
       false,
       () => {
@@ -111,27 +140,27 @@ export class ItemObject extends ElementObject {
       "WRITE_1", // Must apply transform early since we need to read the position of the other items in READ_2
     );
 
-    this.indexInList = this.orderedItemList.indexOf(this) ?? 0;
-    if (this._containerObject) {
-      this._containerObject.dragItem = this;
-      this._containerObject?.removeItem(this);
-      this._containerObject.updateItemIndexes();
+    this.#indexInList = this.orderedItemList.indexOf(this) ?? 0;
+    if (this.container) {
+      this.container.dragItem = this;
+      this.container.removeItem(this);
+      this.container.updateItemIndexes();
     }
-    this.#currentRow = this._rowIndex;
+    this.#currentRow = this.#rowIndex;
     let { rowList, closestRow, rowBoundaries } = this.getClosestRow(
       this.transform.y + property.height / 2,
     );
-    this._dropIndex = this.indexInList;
-    this.localDropIndex =
-      this._dropIndex - rowBoundaries[closestRow.index].cumulativeLength;
-    this._containerObject?.addGhostBeforeItem(this, this._dropIndex, false);
+    this.#dropIndex = this.#indexInList;
+    this.#localDropIndex =
+      this.#dropIndex - rowBoundaries[closestRow.index].cumulativeLength;
+    this.container.addGhostBeforeItem(this, this.#dropIndex, false);
     this.#currentRow = closestRow.index;
 
     this.debug_all_items();
   }
 
   getClosestRow(thisScreenY: number) {
-    let rowList = this._containerObject?.itemRows ?? [];
+    let rowList = this.container.itemRows ?? [];
     // Draw a horizontal line through each row
     const colors = ["orange", "yellow", "green", "purple", "gray", "black"];
     for (let i = 0; i < rowList.length; i++) {
@@ -237,8 +266,8 @@ export class ItemObject extends ElementObject {
     const thisWorldX = this.transform.x + this._domProperty[1].width / 2;
     const thisWorldY = this.transform.y + this._domProperty[1].height / 2;
 
-    let dropIndex = this._dropIndex;
-    let localDropIndex = this.localDropIndex;
+    let dropIndex = this.#dropIndex;
+    let localDropIndex = this.#localDropIndex;
 
     for (const item of this.orderedItemList) {
       item.clearAllDebugMarkers();
@@ -349,38 +378,36 @@ export class ItemObject extends ElementObject {
   cursorMove(prop: dragProp) {
     if (
       !(prop.button & mouseButtonBitmap.LEFT) ||
-      !this._containerObject ||
-      this._containerObject.dragItem !== this ||
-      this._containerObject._inputLock
+      !this.container ||
+      this.container.dragItem !== this
     ) {
       return;
     }
 
     this.worldPosition = [
-      prop.position.x - this._mouseOffsetX,
-      prop.position.y - this._mouseOffsetY,
+      prop.position.x - this.#mouseOffsetX,
+      prop.position.y - this.#mouseOffsetY,
     ];
     this.requestTransform();
 
     let { dropIndex, localDropIndex, closestRowIndex } =
       this.determineDropIndex();
 
-    if (dropIndex != this._containerObject?.spacerIndex) {
+    if (dropIndex != this.container.spacerIndex) {
       const differentRow = this.#currentRow != closestRowIndex;
       this.#currentRow = closestRowIndex;
-      this._containerObject?.addGhostBeforeItem(this, dropIndex, differentRow);
-      this._dropIndex = dropIndex;
-      this.localDropIndex = localDropIndex;
+      this.container.addGhostBeforeItem(this, dropIndex, differentRow);
+      this.#dropIndex = dropIndex;
+      this.#localDropIndex = localDropIndex;
     }
   }
 
   cursorUp(prop: dragEndProp) {
-    if (!this._containerObject || this._containerObject.dragItem !== this) {
+    if (this.container.dragItem !== this) {
       return;
     }
-    if (this._containerObject) {
-      this._containerObject.dragItem = null;
-    }
+    this.container.dragItem = null;
+
     // this.event.global.drag = null;
     this.transformMode = "none";
     this.style = {
@@ -388,22 +415,18 @@ export class ItemObject extends ElementObject {
       position: "relative",
       zIndex: "0",
     };
-    if (this._containerObject) {
-      this._containerObject.addItemAfter(
-        this,
-        this.orderedItemList[this._dropIndex],
-      );
-      this._containerObject.removeAllExpandAnimation();
-    }
+
+    this.container.addItemAfter(this, this.orderedItemList[this.#dropIndex]);
+    this.container.removeAllExpandAnimation();
 
     this.requestWrite(
       true,
       () => {
-        this._containerObject?.element?.insertBefore(
+        this.container.element?.insertBefore(
           this.element as HTMLElement,
-          this._dropIndex >= this.orderedItemList.length - 1
+          this.#dropIndex >= this.orderedItemList.length - 1
             ? (null as unknown as HTMLElement)
-            : this.orderedItemList[this._dropIndex].element,
+            : this.orderedItemList[this.#dropIndex].element,
         );
         this.writeDom();
         this.writeTransform();
