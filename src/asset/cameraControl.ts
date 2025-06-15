@@ -55,6 +55,7 @@ class CameraControl extends ElementObject {
         this.requestTransform("WRITE_2");
       });
       this.resizeObserver.observe(this.global.containerElement!);
+      this.resizeObserver.observe(window.document.body);
     };
   }
 

@@ -1,8 +1,7 @@
 import Camera from "./camera";
-import { CollisionEngine } from "./collision";
+import { CircleCollider, CollisionEngine } from "./collision";
 import { GlobalManager } from "./global";
 import { BaseObject, ElementObject, frameStats, queueEntry } from "./object";
-// import { CameraControl } from "@/asset/node_ui/cameraControl";
 import { AnimationObject, SequenceObject } from "./animation";
 import { EventProxyFactory } from "./util";
 
@@ -160,6 +159,41 @@ class SnapLine {
         elementObject._dom.property.height,
       );
     }
+
+    const COLLIDER_BLUE = "rgba(0, 0, 255, 0.5)";
+
+    for (let collisionObject of object._colliderList) {
+      this.debugCtx.beginPath();
+      this.debugCtx.strokeStyle = COLLIDER_BLUE
+      this.debugCtx.lineWidth = 1;
+      const [colliderCameraX, colliderCameraY] =
+        this.global.camera?.getCameraFromWorld(
+          object.transform.x + collisionObject.transform.x,
+          object.transform.y + collisionObject.transform.y,
+        ) ?? [0, 0];
+      if (collisionObject.type == "circle") {
+        this.debugCtx.arc(
+          colliderCameraX,
+          colliderCameraY,
+          (collisionObject as CircleCollider).radius,
+          0,
+          2 * Math.PI,
+        );
+        this.debugCtx.stroke();
+      } else if (collisionObject.type == "rect") {
+        this.debugCtx.rect(
+          colliderCameraX,
+          colliderCameraY,
+          collisionObject.transform.width,
+          collisionObject.transform.height,
+        );
+        this.debugCtx.stroke();
+      } else if (collisionObject.type == "point") {
+        this.debugCtx.arc(colliderCameraX, colliderCameraY, 2, 0, 2 * Math.PI);
+        this.debugCtx.fillStyle = COLLIDER_BLUE;
+        this.debugCtx.fill();
+      }
+    }
   }
 
   renderDebugGrid() {
@@ -299,7 +333,7 @@ class SnapLine {
       if (marker.type == "point") {
         this.debugCtx.beginPath();
         this.debugCtx.fillStyle = marker.color;
-        this.debugCtx.arc(marker.x, marker.y, 5, 0, 2 * Math.PI);
+        this.debugCtx.arc(cameraX, cameraY, 5, 0, 2 * Math.PI);
         this.debugCtx.fill();
       } else if (marker.type == "rect") {
         this.debugCtx.beginPath();

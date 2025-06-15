@@ -11,6 +11,7 @@ export interface CameraConfig {
     right: number | null;
     bottom: number | null;
   };
+  handleResize?: boolean; // Whether to handle resize events and update camera properties
 }
 
 class Camera {
@@ -72,11 +73,15 @@ class Camera {
     this.#canvasStyle = "";
     this.updateCamera();
 
-    this.#resizeObserver = new ResizeObserver(() => {
-      this.updateCameraProperty();
-    });
-    this.#resizeObserver.observe(this.#containerDom);
-
+    // For now, we always handle resize events.
+    if (this.#config.handleResize || true) {
+      this.#resizeObserver = new ResizeObserver(() => {
+        this.updateCameraProperty();
+      });
+      this.#resizeObserver.observe(this.#containerDom);
+      this.#resizeObserver.observe(window.document.body);
+    }
+  
     window.addEventListener("scroll", () => {
       this.updateCamera();
     });
@@ -113,12 +118,6 @@ class Camera {
     this.#cameraHeight = containerRect.height;
     this.#cameraCenterX = this.#cameraWidth / 2 + this.#cameraPositionX;
     this.#cameraCenterY = this.#cameraHeight / 2 + this.#cameraPositionY;
-
-    // console.log(
-    //   `Updated camera property: ${this.#cameraWidth}x${this.#cameraHeight}, ${this.#cameraCenterX}, ${this.#cameraCenterY}`,
-    // );
-
-    // this.centerCamera(0, 0);
   }
 
   centerCamera(x: number, y: number) {

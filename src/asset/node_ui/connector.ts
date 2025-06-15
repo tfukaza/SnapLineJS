@@ -183,7 +183,7 @@ class ConnectorComponent extends ElementObject {
   findClosestConnector() {
     let connectorCollider: Array<Collider> = Array.from(
       this._mouseHitBox._currentCollisions,
-    ).filter((c) => c.parent.constructor.name == "ConnectorComponent");
+    ).filter((c) => c.parent instanceof ConnectorComponent);
     let connectors: Array<ConnectorComponent> = connectorCollider
       .map((c) => c.parent as ConnectorComponent)
       .sort((a, b) => {
@@ -247,7 +247,6 @@ class ConnectorComponent extends ElementObject {
     if (targetConnector.gid == this.gid) {
       return;
     }
-    targetConnector.calculateLocalFromTransform();
     const connectorX = targetConnector.transform.x;
     const connectorY = targetConnector.transform.y;
 

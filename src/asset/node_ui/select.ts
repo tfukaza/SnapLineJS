@@ -69,7 +69,7 @@ class RectSelectComponent extends ElementObject {
       _: Collider,
       otherObject: Collider,
     ) => {
-      if (otherObject.parent.constructor.name === "NodeComponent") {
+      if (otherObject.parent instanceof NodeComponent) {
         let node = otherObject.parent as NodeComponent;
         node.setSelected(true);
       }
@@ -79,7 +79,7 @@ class RectSelectComponent extends ElementObject {
       otherObject: Collider,
     ) => {
       console.debug("onEndContact", thisObject, otherObject);
-      if (otherObject.parent.constructor.name === "NodeComponent") {
+      if (otherObject.parent instanceof NodeComponent) {
         let node = otherObject.parent as NodeComponent;
         node.setSelected(false);
       }
