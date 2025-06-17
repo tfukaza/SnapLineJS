@@ -57,12 +57,6 @@
         return;
       }
       if (index !== this.prevIndex) {
-        console.log(
-          "Different index",
-          index,
-          this.prevIndex,
-          this.animationState
-        );
         this.prevIndex = index;
         if (this.animationState == "moving") {
           let offset = index * -400; //this.dom.property.worldWidth;

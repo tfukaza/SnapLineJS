@@ -345,7 +345,7 @@ export class ItemObject extends ElementObject {
     let { rowList, closestRow, rowBoundaries, overshoot } =
       this.getClosestRow(thisWorldY);
     if (rowList.length == 0 || !closestRow) {
-      return { dropIndex: -1, rowDropIndex: -1, closestRowIndex: 0 };
+      return { dropIndex: 0, rowDropIndex: 0, closestRowIndex: 0 };
     }
     let closestRowIndex = closestRow.index;
     let cumulativeLength = closestRow.cumulativeLength;
@@ -405,17 +405,9 @@ export class ItemObject extends ElementObject {
       `thisItem-${this.gid}`,
     );
 
-    // console.log(
-    //   `Determining drop index for item ${this.gid} at world position (${thisWorldX}, ${thisWorldY})`,
-    //   `Left item: ${leftItem?.gid}, Right item: ${rightItem?.gid}`,
-    //   `Left item right: ${leftItemRight}, Right item left: ${rightItemLeft}`,
-    //   this._domProperty[1].width
-    // );
     if (overshoot == "ABOVE") {
-      console.log("Overshoot above, dropping at index 0");
       rowDropIndex = 0;
     } else if (overshoot == "BELOW") {
-      console.log("Overshoot below, dropping at end of row");
       rowDropIndex = rowList[closestRowIndex].length;
     } else if (overshoot == "MIDDLE") {
       if (
@@ -438,11 +430,6 @@ export class ItemObject extends ElementObject {
         Math.abs(rightItemLeft - leftItemRight) <
           this._domProperty[1].width - BUFFER
       ) {
-        console.log(
-          "Squeezing in between items",
-          `Left item: ${leftItem?.gid}, Right item: ${rightItem?.gid}`,
-          `Left item right: ${leftItemRight}, Right item left: ${rightItemLeft}`,
-        );
         // "Squeeze in" between the two items when moving to a new row
         rowDropIndex = rowList[closestRowIndex].indexOf(rightItem);
       } else if (rightItemLeft == undefined) {
@@ -450,7 +437,6 @@ export class ItemObject extends ElementObject {
       } else if (leftItemRight == undefined) {
         rowDropIndex = 0;
       } else {
-        console.log("Else");
       }
     }
 
@@ -487,9 +473,6 @@ export class ItemObject extends ElementObject {
       this.determineDropIndex();
 
     if (dropIndex != this.container.spacerIndex) {
-      console.log(
-        `Item ${this.gid} moving to drop index ${dropIndex}, row drop index ${rowDropIndex}, closest row index ${closestRowIndex}`,
-      );
       const differentRow =
         this.#currentRow != closestRowIndex ||
         this.#containerObject !== this.#prevContainer;
