@@ -37,8 +37,16 @@ export class ItemContainer extends ElementObject {
     }
   }
 
+  get groupID() {
+    return this.#groupID;
+  }
+
   get direction() {
     return this.#direction;
+  }
+
+  get numberOfItems() {
+    return this.#itemList.length;
   }
 
   set direction(value: "column" | "row") {
@@ -92,7 +100,7 @@ export class ItemContainer extends ElementObject {
 
     for (let c of this.global.data["dragAndDropGroups"][this.#groupID] || []) {
       const container: ItemContainer = c as ItemContainer;
-      const property = container.getDomProperty("READ_1");
+      const property = container.getDomProperty("READ_2");
       const centerX = property.x + property.width / 2;
       const centerY = property.y + property.height / 2;
       const distance = Math.sqrt(
@@ -146,7 +154,6 @@ export class ItemContainer extends ElementObject {
     if (this.#spacerDomElement) {
       this.#spacerDomElement.remove();
       this.#spacerDomElement = null;
-      return;
     }
 
     if (itemIndex == -1) {
@@ -165,14 +172,17 @@ export class ItemContainer extends ElementObject {
     tmpDomElement.style.margin = computedStyle.margin;
     tmpDomElement.style.padding = computedStyle.padding;
     tmpDomElement.style.boxSizing = computedStyle.boxSizing;
-    // tmpDomElement.style.backgroundColor = "#ff0000A0";
+    tmpDomElement.style.backgroundColor = "#ff0000A0";
 
-    this.#spacerDomElement = tmpDomElement;
-    this.#spacerIndex = itemIndex;
     let item =
       itemIndex > this.#itemList.length - 1 ? null : this.#itemList[itemIndex];
 
-    this.element?.insertBefore(tmpDomElement, item ? item.element : null);
+    if (!this.element) {
+      return;
+    }
+    this.element.insertBefore(tmpDomElement, item ? item.element : null);
+    this.#spacerDomElement = tmpDomElement;
+    this.#spacerIndex = itemIndex;
     this.reorderItemList();
   }
 
@@ -228,11 +238,11 @@ export class ItemContainer extends ElementObject {
         this.updateItemIndexes();
       });
     } else {
-      this.queueUpdate("WRITE_1", () => {
+      this.queueUpdate("WRITE_2", () => {
         this.removeGhostItem();
         this.addGhostItem(caller, itemIndex);
       });
-      this.queueUpdate("READ_2", () => {
+      this.queueUpdate("READ_3", () => {
         for (const item of this.#itemList) {
           item.readDom(false, "READ_2");
           item.saveDomPropertyToTransform("READ_2");

@@ -21,6 +21,8 @@ export class ItemObject extends ElementObject {
   #rowIndex: number = 0;
   #currentRow: number = 0;
 
+  #prevContainer: ItemContainer | null = null;
+
   constructor(global: GlobalManager, parent: BaseObject | null) {
     super(global, parent);
     this.event.input.dragStart = this.cursorDown;
@@ -28,6 +30,7 @@ export class ItemObject extends ElementObject {
     this.event.input.dragEnd = this.cursorUp;
     this.transformMode = "none";
     this.#containerObject = null;
+    this.#prevContainer = null;
     this.#direction = "column";
   }
 
@@ -111,6 +114,12 @@ export class ItemObject extends ElementObject {
       item.readDom(false, "READ_2");
       item.saveDomPropertyToTransform("READ_2");
     }
+    for (const container of this.global.data["dragAndDropGroups"][
+      this.container.groupID
+    ] ?? []) {
+      container.readDom(false, "READ_2");
+      container.saveDomPropertyToTransform("READ_2");
+    }
     this.container.setItemRows(this);
     let property = this.getDomProperty("READ_2");
 
@@ -147,20 +156,50 @@ export class ItemObject extends ElementObject {
       this.container.updateItemIndexes();
     }
     this.#currentRow = this.#rowIndex;
-    let { rowList, closestRow, rowBoundaries } = this.getClosestRow(
+    let { rowList, closestRow, rowBoundaries, overshoot } = this.getClosestRow(
       this.transform.y + property.height / 2,
     );
-    this.#dropIndex = this.#indexInList;
-    this.#rowDropIndex =
-      this.#dropIndex - rowBoundaries[closestRow.index].cumulativeLength;
-    this.container.addGhostBeforeItem(this, this.#dropIndex, false);
-    this.#currentRow = closestRow.index;
+    if (rowList.length == 0) {
+      this.#currentRow = 0;
+      this.#dropIndex = 0;
+      this.#rowDropIndex = 0;
+    } else {
+      if (overshoot == "ABOVE") {
+        this.#dropIndex = 0;
+        this.#rowDropIndex = 0;
+      } else if (overshoot == "BELOW") {
+        this.#dropIndex = this.container.numberOfItems;
+        this.#rowDropIndex =
+          this.#dropIndex -
+          rowBoundaries[rowBoundaries.length - 1].cumulativeLength;
+      } else {
+        this.#dropIndex = this.#indexInList;
+        this.#rowDropIndex =
+          this.#dropIndex - rowBoundaries[closestRow.index].cumulativeLength;
+      }
+      this.container.addGhostBeforeItem(this, this.#dropIndex, false);
+      this.#currentRow = closestRow.index;
+    }
 
     this.debug_all_items();
   }
 
-  getClosestRow(thisScreenY: number) {
+  /**
+   * Get the closest row to the given screen Y position.
+   * If the closest row is below the given position - some buffer, it will also return "ABOVE".
+   * Likewise, if the closest row is above the given position + some buffer, it will return "BELOW".
+   * @param thisScreenY The screen Y position to check against.
+   * @return An object containing the row list, the closest row, and the row boundaries.
+   * */
+  getClosestRow(worldY: number) {
     let rowList = this.container.itemRows ?? [];
+    if (rowList.length == 0) {
+      return {
+        rowList,
+        closestRow: { index: 0, cumulativeLength: 0 },
+        rowBoundaries: [],
+      };
+    }
     // Draw a horizontal line through each row
     const colors = ["orange", "yellow", "green", "purple", "gray", "black"];
     for (let i = 0; i < rowList.length; i++) {
@@ -200,19 +239,11 @@ export class ItemObject extends ElementObject {
       );
     }
     // Draw a circle at thisScreenY
-    this.addDebugRect(
-      10,
-      thisScreenY,
-      10,
-      10,
-      "#000000FF",
-      true,
-      `thisScreenY`,
-    );
+    this.addDebugRect(10, worldY, 10, 10, "#000000FF", true, `worldY`);
 
     let closestRow = rowBoundaries.reduce((prev, curr) => {
-      return Math.abs((curr.bottom + curr.top) / 2 - thisScreenY) <
-        Math.abs((prev.bottom + prev.top) / 2 - thisScreenY)
+      return Math.abs((curr.bottom + curr.top) / 2 - worldY) <
+        Math.abs((prev.bottom + prev.top) / 2 - worldY)
         ? curr
         : prev;
     });
@@ -228,14 +259,32 @@ export class ItemObject extends ElementObject {
         `item-${item.gid}`,
       );
     }
+    let overshoot = "MIDDLE";
+    if (worldY < rowBoundaries[0].top - BUFFER) {
+      overshoot = "ABOVE";
+    } else if (
+      worldY >
+      rowBoundaries[rowBoundaries.length - 1].bottom + BUFFER
+    ) {
+      overshoot = "BELOW";
+    }
     return {
       rowList,
       closestRow,
       rowBoundaries,
+      overshoot,
     };
   }
 
   findClosestItems(rowItemList: ItemObject[], thisWorldX: number) {
+    if (!rowItemList || rowItemList.length == 0) {
+      return {
+        leftItem: undefined,
+        rightItem: undefined,
+        leftItemRight: undefined,
+        rightItemLeft: undefined,
+      };
+    }
     const sortedItemList = rowItemList.sort(
       (a, b) =>
         a.transform.x +
@@ -270,6 +319,7 @@ export class ItemObject extends ElementObject {
       thisWorldX,
       thisWorldY,
     );
+    this.#prevContainer = this.#containerObject;
     if (closestContainer !== this.#containerObject) {
       this.container.removeAllExpandAnimation();
       this.container.dragItem = null;
@@ -292,7 +342,11 @@ export class ItemObject extends ElementObject {
 
     this.debug_all_items();
 
-    let { rowList, closestRow, rowBoundaries } = this.getClosestRow(thisWorldY);
+    let { rowList, closestRow, rowBoundaries, overshoot } =
+      this.getClosestRow(thisWorldY);
+    if (rowList.length == 0 || !closestRow) {
+      return { dropIndex: -1, rowDropIndex: -1, closestRowIndex: 0 };
+    }
     let closestRowIndex = closestRow.index;
     let cumulativeLength = closestRow.cumulativeLength;
     let { leftItem, rightItem, leftItemRight, rightItemLeft } =
@@ -351,34 +405,55 @@ export class ItemObject extends ElementObject {
       `thisItem-${this.gid}`,
     );
 
-    if (
-      leftItem &&
-      leftItemRight &&
-      leftItemRight - leftItem._domProperty[1].width / 2 + BUFFER > thisWorldX
-    ) {
-      rowDropIndex = rowList[closestRowIndex].indexOf(leftItem);
-    } else if (
-      rightItem &&
-      rightItemLeft &&
-      rightItemLeft + rightItem._domProperty[1].width / 2 - BUFFER < thisWorldX
-    ) {
-      rowDropIndex = rowList[closestRowIndex].indexOf(rightItem) + 1;
-    } else if (
-      rightItem &&
-      leftItemRight &&
-      rightItemLeft &&
-      Math.abs(rightItemLeft - leftItemRight) <
-        this._domProperty[1].width - BUFFER
-    ) {
-      // "Squeeze in" between the two items when moving to a new row
-      rowDropIndex = rowList[closestRowIndex].indexOf(rightItem);
-    } else if (rightItemLeft == undefined) {
-      rowDropIndex = rowList[closestRowIndex].length;
-    } else if (leftItemRight == undefined) {
+    // console.log(
+    //   `Determining drop index for item ${this.gid} at world position (${thisWorldX}, ${thisWorldY})`,
+    //   `Left item: ${leftItem?.gid}, Right item: ${rightItem?.gid}`,
+    //   `Left item right: ${leftItemRight}, Right item left: ${rightItemLeft}`,
+    //   this._domProperty[1].width
+    // );
+    if (overshoot == "ABOVE") {
+      console.log("Overshoot above, dropping at index 0");
       rowDropIndex = 0;
-    } else {
-      console.log("Else");
+    } else if (overshoot == "BELOW") {
+      console.log("Overshoot below, dropping at end of row");
+      rowDropIndex = rowList[closestRowIndex].length;
+    } else if (overshoot == "MIDDLE") {
+      if (
+        leftItem &&
+        leftItemRight &&
+        leftItemRight - leftItem._domProperty[1].width / 2 + BUFFER > thisWorldX
+      ) {
+        rowDropIndex = rowList[closestRowIndex].indexOf(leftItem);
+      } else if (
+        rightItem &&
+        rightItemLeft &&
+        rightItemLeft + rightItem._domProperty[1].width / 2 - BUFFER <
+          thisWorldX
+      ) {
+        rowDropIndex = rowList[closestRowIndex].indexOf(rightItem) + 1;
+      } else if (
+        rightItem &&
+        leftItemRight &&
+        rightItemLeft &&
+        Math.abs(rightItemLeft - leftItemRight) <
+          this._domProperty[1].width - BUFFER
+      ) {
+        console.log(
+          "Squeezing in between items",
+          `Left item: ${leftItem?.gid}, Right item: ${rightItem?.gid}`,
+          `Left item right: ${leftItemRight}, Right item left: ${rightItemLeft}`,
+        );
+        // "Squeeze in" between the two items when moving to a new row
+        rowDropIndex = rowList[closestRowIndex].indexOf(rightItem);
+      } else if (rightItemLeft == undefined) {
+        rowDropIndex = rowList[closestRowIndex].length;
+      } else if (leftItemRight == undefined) {
+        rowDropIndex = 0;
+      } else {
+        console.log("Else");
+      }
     }
+
     if (rowDropIndex > rowList[closestRowIndex].length) {
       dropIndex = -1;
     } else {
@@ -412,7 +487,12 @@ export class ItemObject extends ElementObject {
       this.determineDropIndex();
 
     if (dropIndex != this.container.spacerIndex) {
-      const differentRow = this.#currentRow != closestRowIndex;
+      console.log(
+        `Item ${this.gid} moving to drop index ${dropIndex}, row drop index ${rowDropIndex}, closest row index ${closestRowIndex}`,
+      );
+      const differentRow =
+        this.#currentRow != closestRowIndex ||
+        this.#containerObject !== this.#prevContainer;
       this.#currentRow = closestRowIndex;
       this.container.addGhostBeforeItem(this, dropIndex, differentRow);
       this.#dropIndex = dropIndex;
@@ -442,7 +522,9 @@ export class ItemObject extends ElementObject {
       () => {
         this.container.element?.insertBefore(
           this.element as HTMLElement,
-          this.#dropIndex >= this.orderedItemList.length - 1
+          this.#dropIndex >= this.orderedItemList.length - 1 ||
+            this.orderedItemList.length == 0 ||
+            this.orderedItemList[this.#dropIndex] == null
             ? (null as unknown as HTMLElement)
             : this.orderedItemList[this.#dropIndex].element,
         );

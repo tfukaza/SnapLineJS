@@ -81,7 +81,7 @@ class Camera {
       this.#resizeObserver.observe(this.#containerDom);
       this.#resizeObserver.observe(window.document.body);
     }
-  
+
     window.addEventListener("scroll", () => {
       this.updateCamera();
     });
@@ -120,13 +120,13 @@ class Camera {
     this.#cameraCenterY = this.#cameraHeight / 2 + this.#cameraPositionY;
   }
 
-  centerCamera(x: number, y: number) {
-    let dx = this.#cameraPositionX - this.#cameraCenterX + x;
-    let dy = this.#cameraPositionY - this.#cameraCenterY + y;
-    this.#cameraPositionX = dx;
-    this.#cameraPositionY = dy;
-    this.updateCamera();
-  }
+  // centerCamera(x: number, y: number) {
+  //   let dx = this.#cameraPositionX - this.#cameraCenterX + x;
+  //   let dy = this.#cameraPositionY - this.#cameraCenterY + y;
+  //   this.#cameraPositionX = dx;
+  //   this.#cameraPositionY = dy;
+  //   this.updateCamera();
+  // }
 
   /**
    * Given the x and y coordinates of the camera, the zoom level, and the width and height of the camera,
@@ -168,6 +168,20 @@ class Camera {
     this.#cameraPositionX = x;
     this.#cameraPositionY = y;
     this.updateCamera();
+  }
+
+  setCameraCenterPosition(x: number, y: number) {
+    // Set the camera position to the center of the camera view
+    this.#cameraPositionX = x - this.#cameraWidth / 2;
+    this.#cameraPositionY = y - this.#cameraHeight / 2;
+    this.updateCamera();
+  }
+
+  getCameraCenterPosition(): [number, number] {
+    // Get the center position of the camera view
+    const centerX = this.#cameraPositionX + this.#cameraWidth / 2;
+    const centerY = this.#cameraPositionY + this.#cameraHeight / 2;
+    return [centerX, centerY];
   }
 
   /**

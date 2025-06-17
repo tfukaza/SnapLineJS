@@ -17,6 +17,9 @@ class CameraControl extends ElementObject {
 
   resizeObserver: ResizeObserver | null = null;
 
+  #prevCenterX: number = 0;
+  #prevCenterY: number = 0;
+
   constructor(
     globals: GlobalManager,
     zoomLock: boolean = false,
@@ -46,23 +49,45 @@ class CameraControl extends ElementObject {
 
     this.resizeObserver = null;
 
+    this.#prevCenterX = 0;
+    this.#prevCenterY = 0;
+
     this.global.snapline!.event.containerElementAssigned = () => {
       this.resizeObserver = new ResizeObserver(() => {
-        this.global.camera?.updateCameraProperty();
-        this.global.camera?.centerCamera(0, 0);
-        this.global.camera?.updateCamera();
-        this.style.transform = this.global.camera?.canvasStyle as string;
-        this.requestTransform("WRITE_2");
+        this.updateCameraCenterPosition(this.#prevCenterX, this.#prevCenterY);
+        this.paintCamera();
       });
       this.resizeObserver.observe(this.global.containerElement!);
       this.resizeObserver.observe(window.document.body);
     };
   }
 
-  setCameraPosition(x: number, y: number) {
-    this.global.camera?.setCameraPosition(x, y);
+  paintCamera() {
+    this.global.camera?.updateCameraProperty();
+    this.global.camera?.updateCamera();
     this.style.transform = this.global.camera?.canvasStyle as string;
     this.requestTransform("WRITE_2");
+  }
+
+  updateCameraCenterPosition(x: number = 0, y: number = 0) {
+    this.global.camera?.setCameraCenterPosition(x, y);
+    [this.#prevCenterX, this.#prevCenterY] =
+      this.global.camera?.getCameraCenterPosition() || [0, 0];
+    this.paintCamera();
+  }
+
+  setCameraPosition(x: number, y: number) {
+    this.global.camera?.setCameraPosition(x, y);
+    this.paintCamera();
+  }
+
+  setCameraCenterPosition(x: number, y: number) {
+    this.global.camera?.setCameraCenterPosition(x, y);
+    this.paintCamera();
+  }
+
+  getCameraCenterPosition() {
+    return this.global.camera?.getCameraCenterPosition() || { x: 0, y: 0 };
   }
 
   onCursorDown(prop: pointerDownProp) {
@@ -97,6 +122,8 @@ class CameraControl extends ElementObject {
     this._state = "idle";
     this.global.camera?.handlePanEnd();
     this.style.transform = this.global.camera?.canvasStyle as string;
+    [this.#prevCenterX, this.#prevCenterY] =
+      this.global.camera?.getCameraCenterPosition() || [0, 0];
     this.requestTransform("WRITE_2");
   }
 

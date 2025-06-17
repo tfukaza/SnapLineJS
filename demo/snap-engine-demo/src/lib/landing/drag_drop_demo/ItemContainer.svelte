@@ -1,6 +1,6 @@
 <script lang="ts">
   import { ItemContainer } from "../../../../../../src/asset/drag_and_drop/container";
-  import { getContext, setContext } from "svelte";
+  import { getContext, setContext, onMount } from "svelte";
   import type { SnapLine } from "../../../../../../src/index";
 
   let { direction, children }: { direction: "column" | "row"; children: any } =
@@ -28,6 +28,6 @@
     align-items: flex-start;
     width: 400px;
 
-    transform: translate(-50%, 100px);
+
   }
 </style>
