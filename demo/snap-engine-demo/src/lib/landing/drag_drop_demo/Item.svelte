@@ -32,10 +32,25 @@
   }
 
   .item {
-    height: var(--size-16);
+    padding: 8px 12px;
   }
 
   .card {
-    padding: var(--size-12);
+  }
+
+  @media (max-width: 600px) and (min-width: 401px) {
+    .item {
+      padding: var(--size-8);
+    }
+  }
+
+  @media (max-width: 400px) {
+    .item {
+      padding: 6px 8px 4px 8px;
+      border-radius: 8px;
+      :global(p) {
+        font-size: 0.8rem;
+      }
+    }
   }
 </style>

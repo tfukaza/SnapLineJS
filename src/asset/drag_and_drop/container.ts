@@ -172,7 +172,7 @@ export class ItemContainer extends ElementObject {
     tmpDomElement.style.margin = computedStyle.margin;
     tmpDomElement.style.padding = computedStyle.padding;
     tmpDomElement.style.boxSizing = computedStyle.boxSizing;
-    tmpDomElement.style.backgroundColor = "#ff0000A0";
+    // tmpDomElement.style.backgroundColor = "#ff0000A0";
 
     let item =
       itemIndex > this.#itemList.length - 1 ? null : this.#itemList[itemIndex];

@@ -177,11 +177,11 @@ class Camera {
     this.updateCamera();
   }
 
-  getCameraCenterPosition(): [number, number] {
+  getCameraCenterPosition(): { x: number; y: number } {
     // Get the center position of the camera view
     const centerX = this.#cameraPositionX + this.#cameraWidth / 2;
     const centerY = this.#cameraPositionY + this.#cameraHeight / 2;
-    return [centerX, centerY];
+    return { x: centerX, y: centerY };
   }
 
   /**

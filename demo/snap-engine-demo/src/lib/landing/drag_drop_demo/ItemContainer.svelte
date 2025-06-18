@@ -26,8 +26,6 @@
     display: flex;
     flex-wrap: wrap;
     align-items: flex-start;
-    width: 400px;
-
-
+    width: 100%;
   }
 </style>

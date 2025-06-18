@@ -71,8 +71,9 @@ class CameraControl extends ElementObject {
 
   updateCameraCenterPosition(x: number = 0, y: number = 0) {
     this.global.camera?.setCameraCenterPosition(x, y);
-    [this.#prevCenterX, this.#prevCenterY] =
-      this.global.camera?.getCameraCenterPosition() || [0, 0];
+    const prev = this.global.camera?.getCameraCenterPosition();
+    this.#prevCenterX = prev?.x || 0;
+    this.#prevCenterY = prev?.y || 0;
     this.paintCamera();
   }
 
@@ -122,8 +123,9 @@ class CameraControl extends ElementObject {
     this._state = "idle";
     this.global.camera?.handlePanEnd();
     this.style.transform = this.global.camera?.canvasStyle as string;
-    [this.#prevCenterX, this.#prevCenterY] =
-      this.global.camera?.getCameraCenterPosition() || [0, 0];
+    const prev = this.global.camera?.getCameraCenterPosition();
+    this.#prevCenterX = prev?.x || 0;
+    this.#prevCenterY = prev?.y || 0;
     this.requestTransform("WRITE_2");
   }
 

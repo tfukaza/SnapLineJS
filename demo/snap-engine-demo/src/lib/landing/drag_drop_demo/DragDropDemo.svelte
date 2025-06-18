@@ -31,8 +31,23 @@
   ];
 
   onMount(() => {
+    const cameraStart = cameraControl.getCameraCenterPosition();
+    const cameraTarget = { x: 0, y: cameraControl.global.camera!.cameraHeight / 3.2 };
     cameraControl.queueUpdate("WRITE_1").addCallback(() => {
-      cameraControl.updateCameraCenterPosition(0,cameraControl.global.camera!.cameraHeight / 3);
+      cameraControl.animate({
+        $t: [0, 1],
+      },
+      {
+        duration: 1000,
+        easing: "ease-in-out",
+        tick: (values) => {
+          cameraControl.updateCameraCenterPosition(
+            cameraStart.x + (cameraTarget.x - cameraStart.x) * values.$t,
+            cameraStart.y + (cameraTarget.y - cameraStart.y) * values.$t
+          );
+        },
+      });
+      cameraControl.animation.play();
     });
   });
 
@@ -62,10 +77,21 @@
   </Container>
 </div>
 
+<div id="button-container">
+  <button>Submit</button>
+</div>
+
 <style lang="scss">
+  @import "../../../app.scss";
   #drop-zone {
 
-    --item-height: 50px;
+    --item-height: 48px;
+    @media screen and (max-width: 600px) {
+      --item-height: 45px;
+    }
+    @media screen and (max-width: 400px) {
+      --item-height: 40px;
+    }
 
     display: grid;
     grid-template-columns: repeat(1, 1fr);
@@ -73,7 +99,7 @@
     width:400px;
     height: calc(var(--item-height) * 2);
 
-    transform: translate(-50%, 100px);
+    transform: translate(-50%, 80px);
 
     > :global(.container) {
       grid-area: 1 / 1 / 2 / 2;
@@ -89,11 +115,33 @@
         border-bottom: 2px dashed #bdbdbd;
       }
     }
+
+    @media screen and (max-width: 600px) {
+      width: 80vw;
+    }
   }
 
   #item-zone {
     width: 400px;
+    transform: translate(-50%, 60px);
+    @media screen and (max-width: 600px) {
+      width: 80vw;
+    }
+  }
+
+  #button-container {  
+
+    width: 200px;
+
+    @media screen and (max-width: 600px) {
+      width: 40vw;
+      
+    }
     transform: translate(-50%, 100px);
+  }
+
+  button {
+    width:100%;
   }
 
 </style>

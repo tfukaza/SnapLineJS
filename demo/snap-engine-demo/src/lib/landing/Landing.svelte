@@ -5,6 +5,7 @@
   import Menu from "./Menu.svelte";
   import NodeUIDemo from "./node_ui_demo/NodeUIDemo.svelte";
   import DragDropDemo from "./drag_drop_demo/DragDropDemo.svelte";
+  import Stub from "./Stub.svelte";
 
   let currentDemo = $state(0);
   let debugEnabled = $state(false);
@@ -31,7 +32,9 @@
     <CameraControl panLock={false} zoomLock={true}>
       <Menu bind:currentDemo />
 
-      {#if currentDemo === 0}{/if}
+      {#if currentDemo === 0}
+        <Stub />
+      {/if}
       {#if currentDemo === 1}
         <NodeUIDemo />
       {/if}

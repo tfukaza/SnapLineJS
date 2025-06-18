@@ -59,8 +59,9 @@
       if (index !== this.prevIndex) {
         this.prevIndex = index;
         if (this.animationState == "moving") {
-          let offset = index * -400; //this.dom.property.worldWidth;
-          let startX = this.prevIndex1 * -400;
+          const property = this.getDomProperty("READ_1");
+          let offset = index * -property.width / this.itemList.length;
+          let startX = this.prevIndex1 * -property.width / this.itemList.length;
           this.prevIndex1 = index;
           this.animate(
             {
@@ -96,8 +97,9 @@
     }
 
     moveToIndex(index: number) {
-      let offset = index * -400; //this.dom.property.worldWidth;
-      const startX = this.prevIndex1 * -400;
+      const property = this.getDomProperty("READ_1");
+      const offset = index * -property.width / this.itemList.length;
+      const startX = this.prevIndex1 * -property.width / this.itemList.length;
       this.prevIndex1 = index;
       this.animate(
         {
@@ -176,6 +178,16 @@
         this.container!.animationState = "selectedIdle";
         return;
       }
+
+      const setAlpha = (alpha: number) => {
+        this.currentZ = alpha;
+        this.style.boxShadow = slotShadowLerp(this.currentZ);
+        this.transform.scaleX = 1 - (this.currentZ * 4) / 100;
+        this.transform.scaleY = 1 - (this.currentZ * 4) / 100;
+        this.transform.x = 0;
+        this.transform.y = 0;
+        this.requestTransform("WRITE_2");
+      };
       this.animate(
         {
           $alpha: [this.currentZ, 0],
@@ -185,24 +197,11 @@
           delay: delay,
           easing: PANEL_ASCENDING_EASING,
           tick: (value: Record<string, number>) => {
-            this.currentZ = value["$alpha"];
-            this.style.boxShadow = slotShadowLerp(this.currentZ);
-            this.transform.scaleX = 1 - (this.currentZ * 4) / 100;
-            this.transform.scaleY = 1 - (this.currentZ * 4) / 100;
-            this.transform.x = 0;
-            this.transform.y = 0;
-            this.requestTransform("WRITE_2");
+            setAlpha(value["$alpha"]);
           },
           finish: () => {
             currentDemo = this.index;
-            this.currentZ = 0;
-            this.container!.animationState = "selectedIdle";
-            this.style.boxShadow = slotShadowLerp(this.currentZ);
-            this.transform.scaleX = 1 - (this.currentZ * 4) / 100;
-            this.transform.scaleY = 1 - (this.currentZ * 4) / 100;
-            this.transform.x = 0;
-            this.transform.y = 0;
-            this.requestTransform("WRITE_2");
+            setAlpha(0);
           },
         }
       );
@@ -295,9 +294,32 @@
 </div>
 
 <style lang="scss">
+
+  :root {
+    --card-width: 300px;
+    --card-height: 100px;
+
+    @media screen and (max-width: 600px) {
+      --card-width: 300px;
+      --card-height: 80px;
+    }
+    @media screen and (max-width: 400px) {
+      --card-width: 250px;
+      --card-height: 60px;
+    }
+
+  }
+  
+  h1 {
+    font-weight: 800;
+    @media screen and (max-width: 600px) {
+      font-size: 1.8rem;
+    }
+  }
+
+
   #menu-container {
     position: absolute;
-
     display: grid;
     grid-template-columns: auto auto;
     align-items: center;
@@ -306,15 +328,18 @@
     width: max-content;
     transform: translate(-50%, -50%);
 
-    h1 {
-      font-weight: 800;
+    @media screen and (max-width: 600px) {
+      grid-template-columns: 1fr;
+      width: 90vw;
+      
     }
   }
+
   #menu-slot {
     overflow: hidden;
     position: relative;
-    height: 100px;
-    width: 400px;
+    height: var(--card-height);
+    width: var(--card-width);
   }
 
   #menu-carousel {
@@ -326,9 +351,10 @@
     justify-content: space-between;
     align-items: center;
   }
+
   .menu-plate {
-    width: 398px;
-    height: 98px;
+    width: calc(var(--card-width) - 2px);
+    height: calc(var(--card-height) - 2px);
     margin: 1px;
     background: #f6f6f6;
     box-sizing: border-box;
@@ -337,6 +363,9 @@
     align-items: center;
     justify-content: center;
 
+
+      
+
     &:nth-child(1) h1 {
     }
 
@@ -344,7 +373,7 @@
     }
 
     &:nth-child(3) h1 {
-      font-size: 50px;
+
     }
   }
 
@@ -356,10 +385,17 @@
     transform-origin: center;
     transform: scale(0.98) translate(0px, -20px);
   }
+
   #menu-slider {
     #menu-slider-rail {
       height: 10px;
       width: 200px;
     }
+
+    @media screen and (max-width: 600px) {
+     grid-area: 1 / 1 / 2 / 2;
+      
+    }
   }
+
 </style>
