@@ -29,11 +29,11 @@
     </label>
   </div>
   <Canvas id="welcome-canvas" bind:this={canvas}>
-    <CameraControl panLock={false} zoomLock={true}>
+    <CameraControl panLock={true} zoomLock={true}>
       <Menu bind:currentDemo />
 
       {#if currentDemo === 0}
-        <Stub />
+        <Stub  />
       {/if}
       {#if currentDemo === 1}
         <NodeUIDemo />

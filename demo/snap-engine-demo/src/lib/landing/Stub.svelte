@@ -5,7 +5,7 @@
 
   let cameraControl: CameraControl = getContext("cameraControl");
 
-  onMount(() => {
+  onMount(() => {   
     cameraControl.queueUpdate("WRITE_2").addCallback(() => {
       const cameraStart = cameraControl.getCameraCenterPosition();
       const cameraTarget = { x: 0, y: 0 };

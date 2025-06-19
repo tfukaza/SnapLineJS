@@ -78,40 +78,40 @@
 </script>
 
 <Node bind:this={node} className="node card" LineSvelteComponent={Line}>
-  <div class="row-container right-align op-container">
+  <div class="row-container op-container">
     <div>
       <button
-        class="op"
+        class="op small"
         class:active={operation == "+"}
         onclick={() => {
           setOperation("+");
-        }}><h1>+</h1></button
+        }}><p>+</p></button
       >
       <button
-        class="op"
+        class="op small"
         class:active={operation == "-"}
         onclick={() => {
           setOperation("-");
-        }}><h1>-</h1></button
+        }}><p>-</p></button
       >
       <button
-        class="op"
+        class="op small"
         class:active={operation == "*"}
         onclick={() => {
           setOperation("*");
-        }}><h1>*</h1></button
+        }}><p>*</p></button
       >
       <button
-        class="op"
+        class="op small"
         class:active={operation == "/"}
         onclick={() => {
           setOperation("/");
-        }}><h1>/</h1></button
+        }}><p>/</p></button
       >
     </div>
     <Connector name="output" maxConnectors={0} allowDragOut={true} />
   </div>
-
+  <hr>
   {#each Object.values(inputValues) as input (input.uuid)}
     <div class="row-container">
       <Connector
@@ -119,24 +119,92 @@
         maxConnectors={1}
         allowDragOut={false}
       />
-      <input
-        type="number"
-        oninput={(e) => calculate(input.uuid, (e.target as any).value)}
-      />
-      <button
-        class="input-add-remove"
-        onclick={() => {
-          removeInput(input.uuid);
-        }}>-</button
-      >
+      <div class="input-container">
+        <input
+          type="number"
+          oninput={(e) => calculate(input.uuid, (e.target as any).value)}
+        />
+        <button
+          onclick={() => {
+            removeInput(input.uuid);
+          }}>-</button
+        >
+      </div>
     </div>
   {/each}
-  <button
-    class="input-add-remove add-input"
-    style="right: 0;"
-    onclick={addInput}>+</button
-  >
+
+  <div class="row-container">
+    <div/>
+    <div class="input-container">
+      <button
+        class="input-add-remove"
+        style="right: 0;"
+        onclick={addInput}>+</button
+      >
+      <button style="display:none">stub</button>
+    </div>
+  </div>
+
 </Node>
 
 <style lang="scss">
+  
+  .op-container {  
+    height: auto!important;
+    > div {
+      grid-column: 2 / 3;
+      width: 100%;
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: var(--size-8);
+    
+      
+    }
+    h1 {
+      font-size: 1rem;
+    }
+    button {
+      height: var(--size-24);
+      padding: var(--size-2);
+    }
+  }
+
+  .row-container {
+    width: 200px;
+    height: var(--size-24);
+    > * {
+      height: inherit;
+    }
+  }
+
+  hr {
+    margin: var(--size-4) 0;
+    border: 1px solid var(--color-background-tint);
+  }
+
+  .input-container {
+    display: grid;
+    grid-template-columns: 1fr var(--size-32);
+    width: 100%;
+    gap: var(--size-8);
+
+    input {
+      width: 100%;
+    }
+
+    button {
+      box-sizing: border-box;
+      padding: 0;
+      text-align: center;
+    }
+  }
+
+  .input-add-remove {
+    width: 100%;
+    cursor: pointer;
+  }
+
+
+
+
 </style>

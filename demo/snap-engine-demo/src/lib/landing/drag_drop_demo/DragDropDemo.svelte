@@ -78,7 +78,7 @@
 </div>
 
 <div id="button-container">
-  <button>Submit</button>
+  <button class="primary">Submit</button>
 </div>
 
 <style lang="scss">

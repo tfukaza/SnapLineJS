@@ -19,7 +19,7 @@ body {
   --color-secondary: #1e2659;
   --color-accent: #4b403a;
   --color-background: #f6f5f4;
-  --color-background-tint: #e7e0de;
+  --color-background-tint: #e7e3e2;
   --color-background-dark: #8b817d;
   --color-text: #453e3a;
 
@@ -36,6 +36,8 @@ body {
   --size-8: 8px;
   --size-4: 4px;
   --size-2: 2px;
+
+  --ui-radius: var(--size-8);
 }
 
 h1,
@@ -121,24 +123,24 @@ input[type="range"] {
   &::-webkit-slider-thumb {
     -webkit-appearance: none;
     appearance: none;
-    width: var(--size-16);
-    height: var(--size-16);
+    width: var(--size-24);
+    height: var(--size-24);
     border-radius: 50%;
     background: radial-gradient(
         50% 50% at 50% 50%,
         #ff7e47 0%,
-        #f76636 70.1%,
-        rgba(247, 105, 45, 0) 75%
+        #f76636 80%,
+        rgba(247, 105, 45, 0) 90%
       ),
       conic-gradient(
         from 180deg at 50% 50%,
-        #cd331b 25.57670831680298deg,
-        #ff842f 51.608431935310364deg,
-        #ff852e 141.0942041873932deg,
-        #ffc499 161.45666599273682deg,
-        #ff852e 174.595445394516deg,
-        #ff852e 209.74825143814087deg,
-        #de3d24 232.8120732307434deg
+        #cd331b 25deg,
+        #ff842f 51deg,
+        #ff852e 141deg,
+        #ffc499 161deg,
+        #ff852e 174deg,
+        #ff852e 209deg,
+        #de3d24 232deg
       );
     box-shadow:
       0px 0px 4px 4px rgba(255, 255, 255, 0.212) inset,
@@ -150,23 +152,19 @@ input[type="range"] {
 
 button,
 .button {
-  position: relative;
-  border-radius: 8px;
-  border: none;
-  transition: all 0.2s ease-in-out;
+  --button-border: 2px;
+  --button-color: var(--color-background);
+
   cursor: pointer;
+  font-family: "IBM Plex Mono", monospace;
+  position: relative;
+  border-radius: var(--ui-radius);
+  border: none;
   padding: var(--size-8) var(--size-16);
-  color: white;
-  // background-color: var(--color-primary);
-  // z-index: 1;
-
-  &:hover {
-  }
-
-  &.active {
-  }
-
-  --button-border: 1.5px;
+  margin: var(--button-border);
+  background-color: var(--button-color);
+  box-shadow: 0px 0px var(--button-border) calc(var(--button-border) / 2)
+    var(--button-color);
 
   &::before {
     content: "";
@@ -176,11 +174,107 @@ button,
     left: calc(-1 * var(--button-border));
     width: calc(100% + 2 * var(--button-border));
     height: calc(100% + 2 * var(--button-border));
-    border-radius: 10px;
-
+    border-radius: calc(var(--ui-radius) + var(--button-border));
+    transition: box-shadow 0.05s ease-in;
     box-shadow:
-      -4px -4px 8px -6px rgba(255, 255, 255, 0.33),
-      3px 5px 8px -0.5px rgba(48, 41, 58, 0.4);
+      4px 4px 8px 0px rgba(255, 255, 255, 0.468) inset,
+      -4px -4px 8px 0px rgba(46, 41, 58, 0.55) inset,
+      0.5px 0.5px 1px 0px rgba(36, 29, 38, 0.473),
+      2px 2px 4px 0.5px rgba(48, 41, 57, 0.208),
+      0px 0px 0px calc(var(--button-border) / 3) rgb(214, 214, 216);
+  }
+
+  &::after {
+    content: "";
+    position: absolute;
+    border-radius: calc(var(--ui-radius) + var(--button-border));
+    top: 0;
+    left: 0;
+    width: calc(100% + var(--button-border) / 6);
+    height: calc(100% + var(--button-border) / 6);
+    border: 1px solid rgb(255, 255, 255);
+    --webkit-mask-image: linear-gradient(
+      to bottom right,
+      rgba(0, 0, 0, 0) 50%,
+      rgba(0, 0, 0, 1) 100%
+    );
+    mask-image: linear-gradient(
+      to bottom right,
+      rgba(0, 0, 0, 0) 80%,
+      rgba(0, 0, 0, 1) 100%
+    );
+    filter: blur(0.2px);
+  }
+
+  &:hover {
+    &::before {
+      box-shadow:
+        2px 2px 8px 0px rgba(140, 139, 142, 0.468) inset,
+        -2px -2px 8px 0px rgba(43, 43, 44, 0.427) inset,
+        0.5px 0.5px 1px 0px rgba(36, 29, 38, 0),
+        2px 2px 4px 0.5px rgba(48, 41, 57, 0);
+    }
+  }
+
+  &.active {
+    &::before {
+      box-shadow:
+        4px 4px 8px 0px rgba(60, 59, 63, 0.468) inset,
+        -4px -4px 8px 0px rgba(255, 255, 255, 0.427) inset,
+        0.5px 0.5px 1px 0px rgba(36, 29, 38, 0),
+        2px 2px 4px 0.5px rgba(48, 41, 57, 0);
+    }
+  }
+}
+
+button,
+.button {
+  &.primary {
+    --button-color: var(--color-primary);
+    color: #fff;
+    background-color: var(--button-color);
+    box-shadow: 0px 0px var(--button-border) calc(var(--button-border) / 2)
+      var(--button-color);
+    &::before {
+      box-shadow:
+        4px 4px 8px 0px rgba(255, 255, 255, 0.468) inset,
+        -4px -4px 8px 0px rgba(48, 41, 58, 0.427) inset,
+        3px 3px 8px -1px rgba(53, 41, 57, 0.285),
+        0px 0px 0px calc(var(--button-border) / 3) rgb(214, 214, 216);
+      background: conic-gradient(
+        from 134deg at 50% 50%,
+        #f26637 72deg,
+        #ff753a 154deg,
+        #ffc277 184deg,
+        #ff753a 219deg,
+        #ed5126 321deg,
+        #ff7439 360deg
+      );
+    }
+
+    &:hover {
+      &::before {
+        box-shadow:
+          4px 4px 8px 0px rgba(60, 59, 63, 0.468) inset,
+          -4px -4px 8px 0px rgba(255, 255, 255, 0.427) inset,
+          0.5px 0.5px 1px 0px rgba(36, 29, 38, 0),
+          2px 2px 4px 0.5px rgba(48, 41, 57, 0);
+      }
+    }
+
+    &.active {
+      &::before {
+        box-shadow:
+          4px 4px 8px 0px rgba(60, 59, 63, 0.468) inset,
+          -4px -4px 8px 0px rgba(255, 255, 255, 0.427) inset,
+          0.5px 0.5px 1px 0px rgba(36, 29, 38, 0),
+          2px 2px 4px 0.5px rgba(48, 41, 57, 0);
+      }
+    }
+  }
+
+  &.small {
+    padding: var(--size-8);
   }
 }
 
@@ -189,12 +283,11 @@ input[type="text"] {
   font-family: "IBM Plex Mono", monospace;
   user-select: none;
 
-  height: 30px;
   border: 0px solid #ccc;
-  border-radius: 5px;
-  width: 100px;
+  border-radius: var(--ui-radius);
   background-color: #f3f3f3;
-  flex-grow: 1;
+  padding: 0px var(--size-8);
+  box-sizing: border-box;
 
   &:focus {
     border: 1px solid #ccc;

@@ -2,6 +2,7 @@
     import { NodeComponent, LineComponent, SnapLine } from "../../../../../src/index";
     import Line from "./Line.svelte";
     import { onMount, setContext, getContext, onDestroy } from "svelte";
+    import { blur } from "svelte/transition";
 
     let { className, LineSvelteComponent, children}: { className: string, LineSvelteComponent: typeof Line, children: any} = $props();
     let nodeDOM: HTMLDivElement | null = null;
@@ -45,7 +46,7 @@
 {#each formattedLines as line (line.gid)}
     <LineSvelteComponent {line} />
 {/each}
-<div bind:this={nodeDOM} class={className} style="position: absolute;">
+<div bind:this={nodeDOM} class={className} style="position: absolute;" transition:blur|global={{duration: 200}}>
     {@render children()}
 </div>
 

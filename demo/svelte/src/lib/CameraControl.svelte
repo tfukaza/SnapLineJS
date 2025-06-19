@@ -21,10 +21,6 @@
 
   onMount(() => {
     cameraControl.element = cameraControlElement as HTMLElement;
-    cameraControl.setCameraCenterPosition(
-      0,
-      0
-    );
   });
 </script>
 
