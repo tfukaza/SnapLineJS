@@ -22,12 +22,14 @@ class LineComponent extends ElementObject {
   }
 
   setLineStartAtConnector() {
-    this.setLineStart(this.start.transform.x, this.start.transform.y);
+    const center = this.start.center;
+    this.setLineStart(center.x, center.y);
   }
 
   setLineEndAtConnector() {
     if (this.target) {
-      this.setLineEnd(this.target.transform.x, this.target.transform.y);
+      const center = this.target.center;
+      this.setLineEnd(center.x, center.y);
     }
   }
 

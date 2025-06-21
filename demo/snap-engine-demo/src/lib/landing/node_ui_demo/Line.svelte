@@ -1,18 +1,9 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import type { LineComponent } from "../../../../../../src/index";
-  let {
-    line,
-  }: {
-    line: {
-      line: LineComponent;
-      gid: string;
-      positionX: number;
-      positionY: number;
-      endPositionX: number;
-      endPositionY: number;
-    };
-  } = $props();
+  import {blur} from "svelte/transition";
+
+  let { line }: { line: LineComponent } = $props();
 
   let shadowOffset = 6;
   let style = $state(
@@ -29,7 +20,7 @@
 
   function renderLine() {
     // For now, assume the line starts heading to the right
-    const thisLine: LineComponent = line.line;
+    const thisLine: LineComponent = line;
     const x0 = thisLine.transform.x;
     const y0 = thisLine.transform.y;
     style = `position: absolute; overflow: visible; pointer-events: none; will-change: transform;`;
@@ -48,9 +39,9 @@
 
   onMount(() => {
     renderLine();
-    line.line.writeTransform();
-    line.line.callback.afterWrite1 = renderLine;
-    line.line.callback.afterWrite2 = renderLine;
+    line.writeTransform();
+    line.callback.afterWrite1 = renderLine;
+    line.callback.afterWrite2 = renderLine;
   });
 </script>
 
@@ -59,7 +50,8 @@
   width="4"
   height="4"
   {style}
-  bind:this={line.line.element as any}
+  bind:this={line.element as any}
+  transition:blur|global={{ duration: 200 }}
 >
   <defs>
     <linearGradient id="line-start-gradient" gradientTransform="rotate(0)">
@@ -84,7 +76,7 @@
   <circle cx={endX} cy={endY} r="6" />
 </svg>
 
-<svg
+<!-- <svg
   data-snapline-type="connector-line"
   width="4"
   height="4"
@@ -96,7 +88,7 @@
     d={path}
     marker-end="url(#arrow)"
   />
-</svg>
+</svg> -->
 
 <style>
   svg {

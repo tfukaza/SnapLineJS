@@ -2,23 +2,22 @@
     import { NodeComponent, LineComponent, SnapLine } from "../../../../../src/index";
     import Line from "./Line.svelte";
     import { onMount, setContext, getContext, onDestroy } from "svelte";
+    import { blur } from "svelte/transition";
 
-    let { className, LineSvelteComponent, children}: { className: string, LineSvelteComponent: typeof Line, children: any} = $props();
+    let { className, LineSvelteComponent, nodeObject, children}: { 
+        className: string, 
+        LineSvelteComponent: typeof Line, 
+        nodeObject?: NodeComponent | null,
+        children: any
+    } = $props();
     let nodeDOM: HTMLDivElement | null = null;
-    let lineList: LineComponent[] = $state([]);
     let engine:SnapLine = getContext("engine");
-    let nodeObject = new NodeComponent(engine.global, null);
+    if (!nodeObject) {
+         nodeObject = new NodeComponent(engine.global, null);
+    }
+    let lineList: LineComponent[] = $state(nodeObject.getAllOutgoingLines());
 
     setContext("nodeObject", nodeObject);
-
-    let formattedLines = $derived(lineList.map(line => ({
-        line: line,
-        gid: line.gid,
-        positionX: line.parent!.transform.x,
-        positionY: line.parent!.transform.y,
-        endPositionX: line.endWorldX,
-        endPositionY: line.endWorldY
-    })));
 
     onMount(() => {
         nodeObject.element = nodeDOM as HTMLElement;
@@ -32,7 +31,7 @@
     });
 
     export function addSetPropCallback(name: string, callback: (prop: any) => void) {
-        nodeObject.addSetPropCallback(callback, name);
+        nodeObject!.addSetPropCallback(callback, name);
     }
 
     export function getNodeObject() {
@@ -42,10 +41,10 @@
 </script>
 
 
-{#each formattedLines as line (line.gid)}
+{#each lineList as line (line.gid)}
     <LineSvelteComponent {line} />
 {/each}
-<div bind:this={nodeDOM} class={className} style="position: absolute;">
+<div bind:this={nodeDOM} class={className} style="position: absolute;" transition:blur|global={{duration: 200}}>
     {@render children()}
 </div>
 

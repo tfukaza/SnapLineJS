@@ -50,9 +50,8 @@ class NodeComponent extends ElementObject {
     this._mouseDownY = 0;
     this._prop = {};
     this._propSetCallback = {};
-    this.transform.x = 0;
-    this.transform.y = 0;
     this._lineListCallback = null;
+    this.transformMode = "direct";
 
     this.event.input.pointerDown = this.onCursorDown;
     this.event.input.dragStart = this.onDragStart;
@@ -97,7 +96,7 @@ class NodeComponent extends ElementObject {
     };
   }
 
-  #setStartPositions() {
+  setStartPositions() {
     this._dragStartX = this.transform.x;
     this._dragStartY = this.transform.y;
   }
@@ -108,7 +107,6 @@ class NodeComponent extends ElementObject {
       selected: selected,
     };
     if (selected) {
-      this.classList.push("selected");
       this.global.data.select.push(this);
     } else {
       this.classList = this.classList.filter(
@@ -162,7 +160,7 @@ class NodeComponent extends ElementObject {
 
   onDragStart(prop: dragStartProp): void {
     for (const node of this.global.data.select ?? []) {
-      node.#setStartPositions();
+      node.setStartPositions();
       node._mouseDownX = prop.start.x;
       node._mouseDownY = prop.start.y;
     }
@@ -268,6 +266,12 @@ class NodeComponent extends ElementObject {
       if (!peer.parent) continue;
       let parent = peer.parent as NodeComponent;
       parent.setProp(peer.name, value);
+    }
+  }
+
+  propagateProp() {
+    for (const connector of Object.values(this._connectors)) {
+      this.setProp(connector.name, this.getProp(connector.name));
     }
   }
 }

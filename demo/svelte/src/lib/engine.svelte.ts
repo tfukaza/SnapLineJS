@@ -1,4 +1,4 @@
-import { SnapLine } from "../../../../src/index";
+import { ElementObject, SnapLine } from "../../../../src/index";
 import type { Component } from "svelte";
 let engineDict: { [key: string]: SnapLine } = {};
 
@@ -11,5 +11,6 @@ export function getEngine(id: string) {
 
 export interface ObjectData {
   svelteComponent: Component;
-  prop: any;
+  object: ElementObject;
+  prop?: { [key: string]: any };
 }
