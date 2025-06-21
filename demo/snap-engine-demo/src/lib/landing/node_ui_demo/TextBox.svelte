@@ -6,10 +6,15 @@
   import { onMount } from "svelte";
 
   let node: any = $state(null);
-  let nodeObject: NodeComponent | null = null;
+  let { nodeObject, text }: { nodeObject?: NodeComponent | null, text?: string | null } = $props();
+  let input: HTMLInputElement | null = null;
 
   onMount(() => {
     nodeObject = (node as any).getNodeObject();
+    if (text) {
+      input!.value = text;
+      nodeObject!.setProp("text", text);
+    }
   });
 
   function onInput(e: any) {
@@ -18,9 +23,9 @@
   }
 </script>
 
-<Node bind:this={node} className="node card" LineSvelteComponent={DemoLine}>
+<Node bind:this={node} className="node card" LineSvelteComponent={DemoLine} nodeObject={nodeObject}>
   <div class="row-container">
-    <input type="text" oninput={onInput} />
+    <input type="text" oninput={onInput} bind:this={input} />
     <Connector name="text" maxConnectors={0} allowDragOut={true} />
   </div>
 </Node>

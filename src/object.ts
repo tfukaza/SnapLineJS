@@ -213,7 +213,6 @@ export class BaseObject {
   }
 
   set worldPosition(position: [number, number]) {
-    // console.log("set worldPosition", position);
     this.transform.x = position[0];
     this.transform.y = position[1];
   }
@@ -613,7 +612,8 @@ export class DomElement {
    */
   writeDom() {
     if (!this.element) {
-      throw new Error("Element is not set");
+      console.warn("Element is not set, cannot write DOM properties");
+      return;
     }
     setDomStyle(this.element, this._style);
     // TODO: See if we can batch the class list updates
@@ -636,7 +636,8 @@ export class DomElement {
    */
   writeTransform() {
     if (!this.element) {
-      throw new Error("Element is not set");
+      console.warn("Element is not set, cannot write transform properties");
+      return;
     }
     let transformStyle = {
       transform: "",
@@ -834,8 +835,7 @@ export class ElementObject extends BaseObject {
     currentStage = currentStage == "IDLE" ? "READ_2" : currentStage;
 
     const property = this.getDomProperty(currentStage as any);
-    this.transform.x = property.x;
-    this.transform.y = property.y;
+    this.worldPosition = [property.x, property.y];
   }
 
   /**

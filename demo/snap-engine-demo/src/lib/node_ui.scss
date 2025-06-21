@@ -1,12 +1,14 @@
 .node {
   background: #fff;
-  box-shadow: 0px 15px 20px -9px rgba(82, 60, 66, 0.23);
+  box-shadow: 0px 10px 16px -9px rgba(82, 60, 66, 0.23);
   transition: box-shadow 0.1s ease-in;
   padding: var(--size-16) 0px;
+  z-index: 1;
 
   &[data-selected="true"] {
     border: 1px solid rgb(3, 166, 194);
     box-shadow: 0px 29px 46.5px -9px rgba(82, 60, 66, 0.23);
+    z-index: 100;
   }
 }
 

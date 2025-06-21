@@ -26,6 +26,10 @@
 
   nodeObject.addConnectorObject(connector);
 
+  export function object(): ConnectorComponent {
+    return connector;
+  }
+
   onDestroy(() => {
     connector.destroy();
   });

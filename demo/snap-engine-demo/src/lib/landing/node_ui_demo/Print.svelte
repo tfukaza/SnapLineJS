@@ -6,9 +6,9 @@
   import { onMount } from "svelte";
 
   let node: any = $state(null);
-  let nodeObject: NodeComponent | null = null;
   let text: string = $state("Hello World");
   let fontSize: number = $state(20);
+  let { nodeObject }: { nodeObject?: NodeComponent | null } = $props();
 
   onMount(() => {
     nodeObject = (node as any).getNodeObject();
@@ -21,7 +21,7 @@
   });
 </script>
 
-<Node bind:this={node} className="node card" LineSvelteComponent={DemoLine}>
+<Node bind:this={node} className="node card" LineSvelteComponent={DemoLine} nodeObject={nodeObject}>
   <div class="row-container">
     <Connector name="text" maxConnectors={1} allowDragOut={false} />
     <p>Text</p>

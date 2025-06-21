@@ -1,13 +1,13 @@
 <script lang="ts">
     import type { LineComponent } from "../../../../../src/index";
     import { onMount } from "svelte";
-    let { line }: { line: { line: LineComponent, gid: string, positionX: number, positionY: number, endPositionX: number, endPositionY: number } } = $props();
-    
+    let { line }: { line: LineComponent } = $props();
+
     let style = $state("position: absolute; overflow: visible; pointer-events: none; will-change: transform; transform: translate3d(0px, 0px, 0);");
     let dx = $state(0);
     let dy = $state(0);
-    let x0 = $state(line.line.transform.x);
-    let y0 = $state(line.line.transform.y);
+    let x0 = $state(line.transform.x);
+    let y0 = $state(line.transform.y);
     let x1 = $state(0);
     let y1 = $state(0);
     let x2 = $state(0);
@@ -15,25 +15,26 @@
     let x3 = $state(0);
     let y3 = $state(0);
 
-    function renderLine() {  
-      const thisLine:LineComponent = line.line;
-        x0 = thisLine.transform.x;
-        y0 = thisLine.transform.y;
-        style = `position: absolute; overflow: visible; pointer-events: none; will-change: transform; transform: translate3d(${x0}px, ${y0}px, 0);`;
-        dx = thisLine.endWorldX - thisLine.transform.x;
-        dy = thisLine.endWorldY - thisLine.transform.y;
+    function renderLine() {
+      const thisLine: LineComponent = line;
+      x0 = thisLine.transform.x;
+      y0 = thisLine.transform.y;
+      style = `position: absolute; overflow: visible; pointer-events: none; will-change: transform; transform: translate3d(${x0}px, ${y0}px, 0);`;
+      dx = thisLine.endWorldX - thisLine.transform.x;
+      dy = thisLine.endWorldY - thisLine.transform.y;
         x1 = Math.abs(dx / 2);
         y1 = 0;
         x2 = dx - Math.abs(dx / 2);
         y2 = dy;
         x3 = dx;
-        y3 = dy;    }
+        y3 = dy;
+    }
 
     let lineDOM: SVGElement | null = null; 
 
   onMount(() => {
-    line.line.element = (lineDOM as unknown as HTMLElement);
-    line.line.callback.afterWrite2 = renderLine;
+    line.element = (lineDOM as unknown as HTMLElement);
+    line.callback.afterWrite2 = renderLine;
   });
 </script>
 

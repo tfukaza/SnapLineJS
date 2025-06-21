@@ -154,6 +154,8 @@ button,
 .button {
   --button-border: 2px;
   --button-color: var(--color-background);
+  --ui-radius: var(--size-4);
+  --button-shadow-color: #1e21276e;
 
   cursor: pointer;
   font-family: "IBM Plex Mono", monospace;
@@ -162,7 +164,12 @@ button,
   border: none;
   padding: var(--size-8) var(--size-16);
   margin: var(--button-border);
-  background-color: var(--button-color);
+  background: var(--button-color);
+  background: radial-gradient(
+    circle,
+    hsl(from var(--button-color) h s calc(l - 5)) 0%,
+    var(--button-color) 100%
+  );
   box-shadow: 0px 0px var(--button-border) calc(var(--button-border) / 2)
     var(--button-color);
 
@@ -181,27 +188,31 @@ button,
       -4px -4px 8px 0px rgba(46, 41, 58, 0.55) inset,
       0.5px 0.5px 1px 0px rgba(36, 29, 38, 0.473),
       2px 2px 4px 0.5px rgba(48, 41, 57, 0.208),
-      0px 0px 0px calc(var(--button-border) / 3) rgb(214, 214, 216);
+      0px 0px 0px calc(var(--button-border) / 2.5) var(--button-shadow-color);
   }
 
   &::after {
     content: "";
     position: absolute;
-    border-radius: calc(var(--ui-radius) + var(--button-border));
-    top: 0;
-    left: 0;
-    width: calc(100% + var(--button-border) / 6);
-    height: calc(100% + var(--button-border) / 6);
-    border: 1px solid rgb(255, 255, 255);
+    border-radius: calc(var(--ui-radius) + var(--button-border) / 1.5);
+    top: calc(-0.8 * var(--button-border));
+    left: calc(-0.8 * var(--button-border));
+    width: calc(100% + var(--button-border) * 1.2);
+    height: calc(100% + var(--button-border) * 1.2);
+    border: 0.3px solid rgb(255, 255, 255);
     --webkit-mask-image: linear-gradient(
       to bottom right,
-      rgba(0, 0, 0, 0) 50%,
-      rgba(0, 0, 0, 1) 100%
+      rgba(0, 0, 0, 1) 5%,
+      rgba(0, 0, 0, 0) 20%,
+      rgba(0, 0, 0, 0) 70%,
+      rgba(0, 0, 0, 0.9) 95%
     );
     mask-image: linear-gradient(
       to bottom right,
-      rgba(0, 0, 0, 0) 80%,
-      rgba(0, 0, 0, 1) 100%
+      rgba(0, 0, 0, 1) 5%,
+      rgba(0, 0, 0, 0) 20%,
+      rgba(0, 0, 0, 0) 70%,
+      rgba(0, 0, 0, 0.9) 95%
     );
     filter: blur(0.2px);
   }
@@ -212,7 +223,8 @@ button,
         2px 2px 8px 0px rgba(140, 139, 142, 0.468) inset,
         -2px -2px 8px 0px rgba(43, 43, 44, 0.427) inset,
         0.5px 0.5px 1px 0px rgba(36, 29, 38, 0),
-        2px 2px 4px 0.5px rgba(48, 41, 57, 0);
+        2px 2px 4px 0.5px rgba(48, 41, 57, 0),
+        0px 0px 0px calc(var(--button-border) / 2.5) var(--button-shadow-color);
     }
   }
 
@@ -222,7 +234,8 @@ button,
         4px 4px 8px 0px rgba(60, 59, 63, 0.468) inset,
         -4px -4px 8px 0px rgba(255, 255, 255, 0.427) inset,
         0.5px 0.5px 1px 0px rgba(36, 29, 38, 0),
-        2px 2px 4px 0.5px rgba(48, 41, 57, 0);
+        2px 2px 4px 0.5px rgba(48, 41, 57, 0),
+        0px 0px 0px calc(var(--button-border) / 2.5) var(--button-shadow-color);
     }
   }
 }
