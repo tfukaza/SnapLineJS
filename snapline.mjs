@@ -9,7 +9,7 @@ var __privateGet = (obj, member, getter) => (__accessCheck(obj, member, "read fr
 var __privateAdd = (obj, member, value) => member.has(obj) ? __typeError("Cannot add the same private member more than once") : member instanceof WeakSet ? member.add(obj) : member.set(obj, value);
 var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "write to private field"), setter ? setter.call(obj, value) : member.set(obj, value), value);
 var __privateMethod = (obj, member, method) => (__accessCheck(obj, member, "access private method"), method);
-var _containerDom, _containerOffsetX, _containerOffsetY, _cameraWidth, _cameraHeight, _cameraPositionX, _cameraPositionY, _cameraPanStartX, _cameraPanStartY, _zoom, _config, _canvasStyle, _cameraCenterX, _cameraCenterY, _resizeObserver, _variables, _animation, _varAnimation, _offset, _easing, _duration, _delay, _hasVariable, _deleteOnFinish, _debugObject, _dragMemberList, _InputControl_instances, handleMultiPointer_fn, _document, _containerStyle, _resizeObserver2, _SnapLine_instances, step_fn, processQueue_fn, _NodeComponent_instances, setStartPositions_fn;
+var _containerDom, _containerOffsetX, _containerOffsetY, _cameraWidth, _cameraHeight, _cameraPositionX, _cameraPositionY, _cameraPanStartX, _cameraPanStartY, _zoom, _config, _canvasStyle, _cameraCenterX, _cameraCenterY, _resizeObserver, _variables, _animation, _varAnimation, _offset, _easing, _duration, _delay, _hasVariable, _deleteOnFinish, _debugObject, _dragMemberList, _InputControl_instances, handleMultiPointer_fn, _document, _containerStyle, _resizeObserver2, _SnapLine_instances, step_fn, processQueue_fn, _config2, _name, _prop, _outgoingLines, _incomingLines, _state, _hitCircle, _mouseHitBox, _targetConnector, _connectorCallback, _prevCenterX, _prevCenterY;
 class Camera {
   constructor(container, config = {}) {
     /**
@@ -111,13 +111,13 @@ class Camera {
     __privateSet(this, _cameraCenterX, __privateGet(this, _cameraWidth) / 2 + __privateGet(this, _cameraPositionX));
     __privateSet(this, _cameraCenterY, __privateGet(this, _cameraHeight) / 2 + __privateGet(this, _cameraPositionY));
   }
-  centerCamera(x, y) {
-    let dx = __privateGet(this, _cameraPositionX) - __privateGet(this, _cameraCenterX) + x;
-    let dy = __privateGet(this, _cameraPositionY) - __privateGet(this, _cameraCenterY) + y;
-    __privateSet(this, _cameraPositionX, dx);
-    __privateSet(this, _cameraPositionY, dy);
-    this.updateCamera();
-  }
+  // centerCamera(x: number, y: number) {
+  //   let dx = this.#cameraPositionX - this.#cameraCenterX + x;
+  //   let dy = this.#cameraPositionY - this.#cameraCenterY + y;
+  //   this.#cameraPositionX = dx;
+  //   this.#cameraPositionY = dy;
+  //   this.updateCamera();
+  // }
   /**
    * Given the x and y coordinates of the camera, the zoom level, and the width and height of the camera,
    * calculates the transformation matrix that converts a x,y coordinate of the DOM to
@@ -154,6 +154,16 @@ class Camera {
     __privateSet(this, _cameraPositionX, x);
     __privateSet(this, _cameraPositionY, y);
     this.updateCamera();
+  }
+  setCameraCenterPosition(x, y) {
+    __privateSet(this, _cameraPositionX, x - __privateGet(this, _cameraWidth) / 2);
+    __privateSet(this, _cameraPositionY, y - __privateGet(this, _cameraHeight) / 2);
+    this.updateCamera();
+  }
+  getCameraCenterPosition() {
+    const centerX = __privateGet(this, _cameraPositionX) + __privateGet(this, _cameraWidth) / 2;
+    const centerY = __privateGet(this, _cameraPositionY) + __privateGet(this, _cameraHeight) / 2;
+    return { x: centerX, y: centerY };
   }
   /**
    * Handle the scroll event to zoom in and out of the camera view
@@ -1137,7 +1147,8 @@ class DomElement {
    */
   writeDom() {
     if (!this.element) {
-      throw new Error("Element is not set");
+      console.warn("Element is not set, cannot write DOM properties");
+      return;
     }
     setDomStyle(this.element, this._style);
     this.element.classList.forEach((className) => {
@@ -1157,7 +1168,8 @@ class DomElement {
    */
   writeTransform() {
     if (!this.element) {
-      throw new Error("Element is not set");
+      console.warn("Element is not set, cannot write transform properties");
+      return;
     }
     let transformStyle = {
       transform: ""
@@ -1316,8 +1328,7 @@ class ElementObject extends BaseObject {
     let currentStage = stage ?? this.global.currentStage;
     currentStage = currentStage == "IDLE" ? "READ_2" : currentStage;
     const property = this.getDomProperty(currentStage);
-    this.transform.x = property.x;
-    this.transform.y = property.y;
+    this.worldPosition = [property.x, property.y];
   }
   /**
    * Calculate the local offsets relative to the parent.
@@ -2634,11 +2645,13 @@ class LineComponent extends ElementObject {
     this.transformMode = "direct";
   }
   setLineStartAtConnector() {
-    this.setLineStart(this.start.transform.x, this.start.transform.y);
+    const center = this.start.center;
+    this.setLineStart(center.x, center.y);
   }
   setLineEndAtConnector() {
     if (this.target) {
-      this.setLineEnd(this.target.transform.x, this.target.transform.y);
+      const center = this.target.center;
+      this.setLineEnd(center.x, center.y);
     }
   }
   setLineStart(startPositionX, startPositionY) {
@@ -2660,37 +2673,78 @@ class LineComponent extends ElementObject {
     }
   }
 }
-class ConnectorComponent extends ElementObject {
+const _ConnectorComponent = class _ConnectorComponent extends ElementObject {
   constructor(global, parent, config = {}) {
     super(global, parent);
-    __publicField(this, "config");
-    __publicField(this, "name");
-    __publicField(this, "prop");
-    __publicField(this, "outgoingLines");
-    __publicField(this, "incomingLines");
-    __publicField(this, "_state", 0);
-    __publicField(this, "_hitCircle");
-    __publicField(this, "_mouseHitBox");
-    __publicField(this, "_targetConnector", null);
-    __publicField(this, "_mousedownX", 0);
-    __publicField(this, "_mousedownY", 0);
-    this.prop = {};
-    this.outgoingLines = [];
-    this.incomingLines = [];
-    this.config = config;
-    this.name = config.name || this.gid || "";
+    __privateAdd(this, _config2);
+    __privateAdd(this, _name);
+    __privateAdd(this, _prop);
+    __privateAdd(this, _outgoingLines);
+    __privateAdd(this, _incomingLines);
+    __privateAdd(this, _state, 0);
+    __privateAdd(this, _hitCircle);
+    __privateAdd(this, _mouseHitBox);
+    __privateAdd(this, _targetConnector, null);
+    __privateAdd(this, _connectorCallback, null);
+    __privateSet(this, _prop, {});
+    __privateSet(this, _outgoingLines, []);
+    __privateSet(this, _incomingLines, []);
+    __privateSet(this, _config2, config);
+    __privateSet(this, _name, config.name || this.gid || "");
     this.event.input.pointerDown = this.onCursorDown;
-    this._hitCircle = new CircleCollider(global, this, 0, 0, 30);
-    this.addCollider(this._hitCircle);
-    this._mouseHitBox = new PointCollider(global, this, 0, 0);
-    this.addCollider(this._mouseHitBox);
-    this._targetConnector = null;
-    this._mousedownX = 0;
-    this._mousedownY = 0;
+    __privateSet(this, _hitCircle, new CircleCollider(global, this, 0, 0, 30));
+    this.addCollider(__privateGet(this, _hitCircle));
+    __privateSet(this, _mouseHitBox, new PointCollider(global, this, 0, 0));
+    this.addCollider(__privateGet(this, _mouseHitBox));
+    __privateSet(this, _targetConnector, null);
     this.transformMode = "none";
+    __privateSet(this, _connectorCallback, {
+      onConnectOutgoing: null,
+      onConnectIncoming: null,
+      onDisconnectOutgoing: null,
+      onDisconnectIncoming: null
+    });
+    __privateSet(this, _connectorCallback, EventProxyFactory(this, __privateGet(this, _connectorCallback)));
+  }
+  get name() {
+    return __privateGet(this, _name);
+  }
+  get config() {
+    return __privateGet(this, _config2);
+  }
+  get prop() {
+    return __privateGet(this, _prop);
+  }
+  get outgoingLines() {
+    return __privateGet(this, _outgoingLines);
+  }
+  get incomingLines() {
+    return __privateGet(this, _incomingLines);
+  }
+  get targetConnector() {
+    return __privateGet(this, _targetConnector);
+  }
+  set targetConnector(value) {
+    __privateSet(this, _targetConnector, value);
+  }
+  get numIncomingLines() {
+    return __privateGet(this, _incomingLines).length;
+  }
+  get numOutgoingLines() {
+    return __privateGet(this, _outgoingLines).length;
+  }
+  get center() {
+    const prop = this.getDomProperty("READ_1");
+    return {
+      x: this.transform.x + prop.width / 2,
+      y: this.transform.y + prop.height / 2
+    };
+  }
+  get connectorCallback() {
+    return __privateGet(this, _connectorCallback);
   }
   onCursorDown(prop) {
-    const currentIncomingLines = this.incomingLines.filter(
+    const currentIncomingLines = __privateGet(this, _incomingLines).filter(
       (i) => !i._requestDelete
     );
     if (prop.event.button != 0) {
@@ -2701,30 +2755,30 @@ class ConnectorComponent extends ElementObject {
       this.startPickUpLine(currentIncomingLines[0], prop);
       return;
     }
-    if (this.config.allowDragOut) {
+    if (__privateGet(this, _config2).allowDragOut) {
       console.debug("Starting drag out line");
       this.startDragOutLine(prop);
     }
   }
   deleteLine(i) {
     console.debug(`Deleting line ${this.gid} at index ${i}`);
-    if (this.outgoingLines.length == 0) {
+    if (__privateGet(this, _outgoingLines).length == 0) {
       return null;
     }
-    const line = this.outgoingLines[i];
+    const line = __privateGet(this, _outgoingLines)[i];
     line.destroy();
-    this.outgoingLines.splice(i, 1);
+    __privateGet(this, _outgoingLines).splice(i, 1);
     return line;
   }
   deleteAllLines() {
-    for (const line of this.outgoingLines) {
+    for (const line of __privateGet(this, _outgoingLines)) {
       line.destroy();
     }
   }
   updateAllLines() {
     var _a;
     this.calculateTransformFromLocal();
-    for (const line of [...this.outgoingLines, ...this.incomingLines]) {
+    for (const line of [...__privateGet(this, _outgoingLines), ...__privateGet(this, _incomingLines)]) {
       (_a = line.target) == null ? void 0 : _a.calculateTransformFromLocal();
       line.calculateLocalFromTransform();
       line.moveLineToConnectorTransform();
@@ -2735,19 +2789,19 @@ class ConnectorComponent extends ElementObject {
     this.parent = parent;
     parent.children.push(this);
     let parent_ref = this.parent;
-    parent_ref._prop[this.name] = null;
-    this.prop = parent_ref._prop;
-    parent_ref._connectors[this.name] = this;
-    this.outgoingLines = [];
-    this.incomingLines = [];
+    parent_ref._prop[__privateGet(this, _name)] = null;
+    __privateSet(this, _prop, parent_ref._prop);
+    parent_ref._connectors[__privateGet(this, _name)] = this;
+    __privateSet(this, _outgoingLines, []);
+    __privateSet(this, _incomingLines, []);
     if (parent_ref.global && this.global == null) {
       this.global = parent_ref.global;
     }
   }
   createLine() {
     let line;
-    if (this.config.lineClass) {
-      line = new this.config.lineClass(this.global, this);
+    if (__privateGet(this, _config2).lineClass) {
+      line = new (__privateGet(this, _config2)).lineClass(this.global, this);
     } else {
       line = new LineComponent(this.global, this);
     }
@@ -2758,20 +2812,20 @@ class ConnectorComponent extends ElementObject {
     let newLine = this.createLine();
     newLine.setLineEnd(prop.position.x, prop.position.y);
     newLine.setLineStartAtConnector();
-    this.outgoingLines.unshift(newLine);
+    __privateGet(this, _outgoingLines).unshift(newLine);
     this.parent.updateNodeLines();
     this.parent.updateNodeLineList();
-    this._state = 1;
-    this._targetConnector = null;
+    __privateSet(this, _state, 1);
+    __privateSet(this, _targetConnector, null);
     this.event.input.drag = this.runDragOutLine;
     this.event.input.dragEnd = this.endDragOutLine;
-    this._mouseHitBox.event.collider.onCollide = (_, __) => {
+    __privateGet(this, _mouseHitBox).event.collider.onCollide = (_, __) => {
       this.findClosestConnector();
     };
-    this._mouseHitBox.event.collider.onEndContact = (_, otherObject) => {
+    __privateGet(this, _mouseHitBox).event.collider.onEndContact = (_, otherObject) => {
       var _a;
-      if (((_a = this._targetConnector) == null ? void 0 : _a.gid) == otherObject.parent.gid) {
-        this._targetConnector = null;
+      if (((_a = __privateGet(this, _targetConnector)) == null ? void 0 : _a.gid) == otherObject.parent.gid) {
+        __privateSet(this, _targetConnector, null);
       }
     };
     this.runDragOutLine({
@@ -2788,37 +2842,39 @@ class ConnectorComponent extends ElementObject {
   }
   findClosestConnector() {
     let connectorCollider = Array.from(
-      this._mouseHitBox._currentCollisions
-    ).filter((c) => c.parent instanceof ConnectorComponent);
+      __privateGet(this, _mouseHitBox)._currentCollisions
+    ).filter((c) => c.parent instanceof _ConnectorComponent);
     let connectors = connectorCollider.map((c) => c.parent).sort((a, b) => {
+      const centerA = a.center;
+      const centerB = b.center;
       let da = Math.sqrt(
-        Math.pow(a.transform.x - this._mouseHitBox.transform.x, 2) + Math.pow(a.transform.y - this._mouseHitBox.transform.y, 2)
+        Math.pow(centerA.x - __privateGet(this, _mouseHitBox).transform.x, 2) + Math.pow(centerA.y - __privateGet(this, _mouseHitBox).transform.y, 2)
       );
       let db = Math.sqrt(
-        Math.pow(b.transform.x - this._mouseHitBox.transform.x, 2) + Math.pow(b.transform.y - this._mouseHitBox.transform.y, 2)
+        Math.pow(centerB.x - __privateGet(this, _mouseHitBox).transform.x, 2) + Math.pow(centerB.y - __privateGet(this, _mouseHitBox).transform.y, 2)
       );
       return da - db;
     });
     if (connectors.length > 0) {
-      this._targetConnector = connectors[0];
+      __privateSet(this, _targetConnector, connectors[0]);
     } else {
-      this._targetConnector = null;
+      __privateSet(this, _targetConnector, null);
     }
   }
   runDragOutLine(prop) {
     console.debug(`Running drag out line ${this.gid}`);
-    if (this._state != 1) {
+    if (__privateGet(this, _state) != 1) {
       return;
     }
-    if (this.outgoingLines.length == 0) {
+    if (__privateGet(this, _outgoingLines).length == 0) {
       console.error(`Error: Outgoing lines is empty`);
       return;
     }
-    this._mouseHitBox.transform.x = prop.position.x - this.transform.x;
-    this._mouseHitBox.transform.y = prop.position.y - this.transform.y;
-    let line = this.outgoingLines[0];
-    if (this._targetConnector) {
-      const result = this.hoverWhileDragging(this._targetConnector);
+    __privateGet(this, _mouseHitBox).transform.x = prop.position.x - this.transform.x;
+    __privateGet(this, _mouseHitBox).transform.y = prop.position.y - this.transform.y;
+    let line = __privateGet(this, _outgoingLines)[0];
+    if (__privateGet(this, _targetConnector)) {
+      const result = this.hoverWhileDragging(__privateGet(this, _targetConnector));
       if (result) {
         line.setLineEnd(result[0], result[1]);
         line.setLineStartAtConnector();
@@ -2831,7 +2887,7 @@ class ConnectorComponent extends ElementObject {
     this.parent.updateNodeLines();
   }
   hoverWhileDragging(targetConnector) {
-    if (!(targetConnector instanceof ConnectorComponent)) {
+    if (!(targetConnector instanceof _ConnectorComponent)) {
       return;
     }
     if (targetConnector == null) {
@@ -2841,28 +2897,27 @@ class ConnectorComponent extends ElementObject {
     if (targetConnector.gid == this.gid) {
       return;
     }
-    const connectorX = targetConnector.transform.x;
-    const connectorY = targetConnector.transform.y;
-    return [connectorX, connectorY];
+    const connectorCenter = targetConnector.center;
+    return [connectorCenter.x, connectorCenter.y];
   }
   endDragOutLine(_) {
     console.debug(`Ending drag out line ${this.gid}`);
     this.inputEngine.resetDragMembers();
-    if (this._targetConnector && this._targetConnector instanceof ConnectorComponent) {
-      console.debug(`Connecting ${this.gid} to ${this._targetConnector.gid}`);
-      const target = this._targetConnector;
+    if (__privateGet(this, _targetConnector) && __privateGet(this, _targetConnector) instanceof _ConnectorComponent) {
+      console.debug(`Connecting ${this.gid} to ${__privateGet(this, _targetConnector).gid}`);
+      const target = __privateGet(this, _targetConnector);
       if (target == null) {
         console.error(`Error: target is null`);
         this._endLineDragCleanup();
         return;
       }
-      if (this.connectToConnector(target, this.outgoingLines[0]) == false) {
+      if (this.connectToConnector(target, __privateGet(this, _outgoingLines)[0]) == false) {
         this._endLineDragCleanup();
         this.deleteLine(0);
         return;
       }
-      target.prop[target.name] = this.prop[this.name];
-      this.outgoingLines[0].setLineEnd(target.transform.x, target.transform.y);
+      __privateGet(target, _prop)[__privateGet(target, _name)] = __privateGet(this, _prop)[__privateGet(this, _name)];
+      __privateGet(this, _outgoingLines)[0].setLineEnd(target.transform.x, target.transform.y);
     } else {
       console.debug(`Deleting line ${this.gid} at index 0`);
       this.deleteLine(0);
@@ -2873,15 +2928,15 @@ class ConnectorComponent extends ElementObject {
     this._endLineDragCleanup();
   }
   _endLineDragCleanup() {
-    this._state = 0;
+    __privateSet(this, _state, 0);
     this.event.global.pointerMove = null;
     this.event.global.pointerUp = null;
     this.parent.updateNodeLineList();
-    this._targetConnector = null;
-    this._mouseHitBox.event.collider.onBeginContact = null;
-    this._mouseHitBox.event.collider.onEndContact = null;
-    this._mouseHitBox.transform.x = 0;
-    this._mouseHitBox.transform.y = 0;
+    __privateSet(this, _targetConnector, null);
+    __privateGet(this, _mouseHitBox).event.collider.onBeginContact = null;
+    __privateGet(this, _mouseHitBox).event.collider.onEndContact = null;
+    __privateGet(this, _mouseHitBox).transform.x = 0;
+    __privateGet(this, _mouseHitBox).transform.y = 0;
   }
   startPickUpLine(line, prop) {
     line.start.disconnectFromConnector(this);
@@ -2889,11 +2944,12 @@ class ConnectorComponent extends ElementObject {
     line.start.deleteLine(line.start.outgoingLines.indexOf(line));
     this.inputEngine.resetDragMembers();
     this.inputEngine.addDragMember(line.start.inputEngine);
-    line.start._targetConnector = this;
+    line.start.targetConnector = this;
     line.start.startDragOutLine(prop);
-    this._state = 1;
+    __privateSet(this, _state, 1);
   }
   connectToConnector(connector, line) {
+    var _a, _b, _c, _d;
     console.debug(`Connecting ${this.gid} to connector ${connector.gid}`);
     const currentIncomingLines = connector.incomingLines.filter(
       (i) => !i._requestDelete
@@ -2912,27 +2968,44 @@ class ConnectorComponent extends ElementObject {
     }
     if (line == null) {
       line = this.createLine();
-      this.outgoingLines.unshift(line);
+      __privateGet(this, _outgoingLines).unshift(line);
     }
     this.calculateLocalFromTransform();
     line.target = connector;
     connector.incomingLines.push(line);
+    this.parent.updateNodeLineList();
+    (_b = (_a = __privateGet(this, _connectorCallback)) == null ? void 0 : _a.onConnectOutgoing) == null ? void 0 : _b.call(_a, connector);
+    (_d = (_c = __privateGet(connector, _connectorCallback)) == null ? void 0 : _c.onConnectIncoming) == null ? void 0 : _d.call(_c, this);
+    this.parent.setProp(__privateGet(this, _name), __privateGet(this, _prop)[__privateGet(this, _name)]);
     return true;
   }
   disconnectFromConnector(connector) {
+    var _a, _b, _c, _d;
     console.debug(`Disconnecting ${this.gid} from connector ${connector.gid}`);
-    for (const line of this.outgoingLines) {
+    for (const line of __privateGet(this, _outgoingLines)) {
       if (line.target == connector) {
         line._requestDelete = true;
         break;
       }
     }
+    (_b = (_a = __privateGet(this, _connectorCallback)) == null ? void 0 : _a.onDisconnectOutgoing) == null ? void 0 : _b.call(_a, connector);
+    (_d = (_c = __privateGet(connector, _connectorCallback)) == null ? void 0 : _c.onDisconnectIncoming) == null ? void 0 : _d.call(_c, this);
   }
-}
+};
+_config2 = new WeakMap();
+_name = new WeakMap();
+_prop = new WeakMap();
+_outgoingLines = new WeakMap();
+_incomingLines = new WeakMap();
+_state = new WeakMap();
+_hitCircle = new WeakMap();
+_mouseHitBox = new WeakMap();
+_targetConnector = new WeakMap();
+_connectorCallback = new WeakMap();
+let ConnectorComponent = _ConnectorComponent;
 class NodeComponent extends ElementObject {
   constructor(global, parent, config = {}) {
     super(global, parent);
-    __privateAdd(this, _NodeComponent_instances);
     __publicField(this, "_config");
     __publicField(this, "_connectors");
     __publicField(this, "_components");
@@ -2958,9 +3031,8 @@ class NodeComponent extends ElementObject {
     this._mouseDownY = 0;
     this._prop = {};
     this._propSetCallback = {};
-    this.transform.x = 0;
-    this.transform.y = 0;
     this._lineListCallback = null;
+    this.transformMode = "direct";
     this.event.input.pointerDown = this.onCursorDown;
     this.event.input.dragStart = this.onDragStart;
     this.event.input.drag = this.onDrag;
@@ -3000,13 +3072,16 @@ class NodeComponent extends ElementObject {
       this._hitBox.element = this.element;
     };
   }
+  setStartPositions() {
+    this._dragStartX = this.transform.x;
+    this._dragStartY = this.transform.y;
+  }
   setSelected(selected) {
     this._selected = selected;
     this.dataAttribute = {
       selected
     };
     if (selected) {
-      this.classList.push("selected");
       this.global.data.select.push(this);
     } else {
       this.classList = this.classList.filter(
@@ -3052,9 +3127,8 @@ class NodeComponent extends ElementObject {
     }
   }
   onDragStart(prop) {
-    var _a;
     for (const node of this.global.data.select ?? []) {
-      __privateMethod(_a = node, _NodeComponent_instances, setStartPositions_fn).call(_a);
+      node.setStartPositions();
       node._mouseDownX = prop.start.x;
       node._mouseDownY = prop.start.y;
     }
@@ -3144,12 +3218,12 @@ class NodeComponent extends ElementObject {
       parent.setProp(peer.name, value);
     }
   }
+  propagateProp() {
+    for (const connector of Object.values(this._connectors)) {
+      this.setProp(connector.name, this.getProp(connector.name));
+    }
+  }
 }
-_NodeComponent_instances = new WeakSet();
-setStartPositions_fn = function() {
-  this._dragStartX = this.transform.x;
-  this._dragStartY = this.transform.y;
-};
 class RectSelectComponent extends ElementObject {
   constructor(globals, parent) {
     super(globals, parent);
@@ -3286,6 +3360,8 @@ class CameraControl extends ElementObject {
     __publicField(this, "zoomLock");
     __publicField(this, "panLock");
     __publicField(this, "resizeObserver", null);
+    __privateAdd(this, _prevCenterX, 0);
+    __privateAdd(this, _prevCenterY, 0);
     this.zoomLock = zoomLock;
     this.panLock = panLock;
     this._mouseDownX = 0;
@@ -3305,24 +3381,45 @@ class CameraControl extends ElementObject {
     };
     this.requestTransform("WRITE_2");
     this.resizeObserver = null;
+    __privateSet(this, _prevCenterX, 0);
+    __privateSet(this, _prevCenterY, 0);
     this.global.snapline.event.containerElementAssigned = () => {
       this.resizeObserver = new ResizeObserver(() => {
-        var _a, _b, _c, _d;
-        (_a = this.global.camera) == null ? void 0 : _a.updateCameraProperty();
-        (_b = this.global.camera) == null ? void 0 : _b.centerCamera(0, 0);
-        (_c = this.global.camera) == null ? void 0 : _c.updateCamera();
-        this.style.transform = (_d = this.global.camera) == null ? void 0 : _d.canvasStyle;
-        this.requestTransform("WRITE_2");
+        this.updateCameraCenterPosition(__privateGet(this, _prevCenterX), __privateGet(this, _prevCenterY));
+        this.paintCamera();
       });
       this.resizeObserver.observe(this.global.containerElement);
       this.resizeObserver.observe(window.document.body);
     };
   }
-  setCameraPosition(x, y) {
-    var _a, _b;
-    (_a = this.global.camera) == null ? void 0 : _a.setCameraPosition(x, y);
-    this.style.transform = (_b = this.global.camera) == null ? void 0 : _b.canvasStyle;
+  paintCamera() {
+    var _a, _b, _c;
+    (_a = this.global.camera) == null ? void 0 : _a.updateCameraProperty();
+    (_b = this.global.camera) == null ? void 0 : _b.updateCamera();
+    this.style.transform = (_c = this.global.camera) == null ? void 0 : _c.canvasStyle;
     this.requestTransform("WRITE_2");
+  }
+  updateCameraCenterPosition(x = 0, y = 0) {
+    var _a, _b;
+    (_a = this.global.camera) == null ? void 0 : _a.setCameraCenterPosition(x, y);
+    const prev = (_b = this.global.camera) == null ? void 0 : _b.getCameraCenterPosition();
+    __privateSet(this, _prevCenterX, (prev == null ? void 0 : prev.x) || 0);
+    __privateSet(this, _prevCenterY, (prev == null ? void 0 : prev.y) || 0);
+    this.paintCamera();
+  }
+  setCameraPosition(x, y) {
+    var _a;
+    (_a = this.global.camera) == null ? void 0 : _a.setCameraPosition(x, y);
+    this.paintCamera();
+  }
+  setCameraCenterPosition(x, y) {
+    var _a;
+    (_a = this.global.camera) == null ? void 0 : _a.setCameraCenterPosition(x, y);
+    this.paintCamera();
+  }
+  getCameraCenterPosition() {
+    var _a;
+    return ((_a = this.global.camera) == null ? void 0 : _a.getCameraCenterPosition()) || { x: 0, y: 0 };
   }
   onCursorDown(prop) {
     var _a;
@@ -3350,13 +3447,16 @@ class CameraControl extends ElementObject {
     this.requestTransform("WRITE_2");
   }
   onCursorUp(prop) {
-    var _a, _b;
+    var _a, _b, _c;
     if (this._state != "panning") {
       return;
     }
     this._state = "idle";
     (_a = this.global.camera) == null ? void 0 : _a.handlePanEnd();
     this.style.transform = (_b = this.global.camera) == null ? void 0 : _b.canvasStyle;
+    const prev = (_c = this.global.camera) == null ? void 0 : _c.getCameraCenterPosition();
+    __privateSet(this, _prevCenterX, (prev == null ? void 0 : prev.x) || 0);
+    __privateSet(this, _prevCenterY, (prev == null ? void 0 : prev.y) || 0);
     this.requestTransform("WRITE_2");
   }
   onZoom(prop) {
@@ -3378,6 +3478,8 @@ class CameraControl extends ElementObject {
     prop.event.preventDefault();
   }
 }
+_prevCenterX = new WeakMap();
+_prevCenterY = new WeakMap();
 export {
   Background,
   BaseObject,
