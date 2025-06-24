@@ -23,8 +23,9 @@
 
 <div class="page-width" id="landing" style="height: 80vh; position: relative">
   <div id="debug-toggle">
-    <label>
+    <label>  
       <input type="checkbox" onchange={toggleDebug} />
+      <span></span>  
       Debug Mode
     </label>
   </div>

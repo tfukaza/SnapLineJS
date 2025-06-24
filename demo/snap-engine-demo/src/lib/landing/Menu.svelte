@@ -255,9 +255,20 @@
     });
   });
 
+  function f(x:number, A = 100, c = 10, sigma = 10) {
+    return x + A * Math.exp(-Math.pow(x - c, 2) / (2 * Math.pow(sigma, 2)));
+}
+
   function handleSliderChange(event: Event) {
     const slider = event.target as HTMLInputElement;
     const value = parseInt(slider.value);
+    menuCarousel.queueUpdate("WRITE_2", () => {
+      slider.style.setProperty(
+        "--specular-angle",
+        `${f(value/3)+50}deg`
+      );
+    });
+  
 
     let currentIndex = Math.floor(value / (101 / menuItems.length));
 
