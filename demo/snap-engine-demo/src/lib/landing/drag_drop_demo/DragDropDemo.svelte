@@ -53,91 +53,101 @@
 
 </script>
 
-<div id="drop-zone">
-  <Container direction="row">
-    <div />
-  </Container>
-  <div id="drop-zone-background">
-    <span></span>
-    <span></span>
+<div id="drag-drop-demo">
+  <hr/>
+  <div id="drop-zone">
+    <Container config={{ direction: "row", groupID: "language-quiz" }}>
+      <div />
+    </Container>
+    <div id="drop-zone-background">
+      <span></span>
+      <span></span>
+    </div>
   </div>
-</div>
-
-<hr style="margin: 20px 0;" />
-
-<div id="item-zone">
-  <Container direction="row">
-    {#each japaneseWords as item, i}
-      <Item>
-        <div class="drag-drop-demo">
-          <p>{item}</p>
-        </div>
-      </Item>
-    {/each}
-  </Container>
-</div>
-
-<div id="button-container">
-  <button class="primary">Submit</button>
+  <hr />
+  <div id="item-zone">
+    <Container config={{ direction: "row", groupID: "language-quiz" }}>
+      {#each japaneseWords as item, i}
+        <Item>
+          <div class="drag-drop-demo">
+            <p>{item}</p>
+          </div>
+        </Item>
+      {/each}
+    </Container>
+  </div>
+  <hr />
+  <div id="button-container">
+    <button class="primary">Submit</button>
+  </div>
 </div>
 
 <style lang="scss">
   @import "../../../app.scss";
-  #drop-zone {
 
-    --item-height: 48px;
+  #drag-drop-demo {    
+    --item-height: 45.5px;
     @media screen and (max-width: 600px) {
       --item-height: 45px;
     }
     @media screen and (max-width: 400px) {
       --item-height: 40px;
     }
-
-    display: grid;
-    grid-template-columns: repeat(1, 1fr);
-    grid-template-rows: repeat(1, 1fr);
-    width:400px;
-    height: calc(var(--item-height) * 2);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 400px;
 
     transform: translate(-50%, 80px);
 
-    > :global(.container) {
-      grid-area: 1 / 1 / 2 / 2;
+    @media screen and (max-width: 600px) {
+      width: 80vw;
     }
+
+    hr {
+      width: 100%;
+      border: none;
+      margin: var(--size-16) 0;
+    }
+
+    :global(.ghost) {
+      opacity: 0.2;
+      background-color: #000;
+      margin: 16px;
+      border-radius: 8px;
+    }
+  }
+
+  #drop-zone {
+    position: relative;
+    min-height: var(--item-height);
+    width: 100%;
   
     #drop-zone-background {
       z-index: -1;
-      grid-area: 1 / 1 / 2 / 2;
-      span {
-        display: block;
-        padding-top: var(--item-height);
-        width: 100%;
-        border-bottom: 2px dashed #bdbdbd;
-      }
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      min-height: var(--item-height);
+      background: 
+        repeating-linear-gradient(0deg, rgba(255, 255, 255, 0) 0px, var(--color-background) 2px, var(--color-background) var(--item-height)),
+        repeating-linear-gradient(90deg, black 0px, black 2px, transparent 1px, transparent 6px);
     }
 
-    @media screen and (max-width: 600px) {
-      width: 80vw;
-    }
+  
   }
 
   #item-zone {
-    width: 400px;
-    transform: translate(-50%, 60px);
-    @media screen and (max-width: 600px) {
-      width: 80vw;
-    }
+    width: 100%;
   }
 
   #button-container {  
-
     width: 200px;
-
     @media screen and (max-width: 600px) {
       width: 40vw;
-      
     }
-    transform: translate(-50%, 100px);
   }
 
   button {

@@ -2,47 +2,56 @@ import { BaseObject, ElementObject } from "../../object";
 import { GlobalManager } from "../../global";
 import { ItemObject } from "./item";
 
+export interface ItemContainerConfig {
+  groupID?: string; // Containers belonging to the same group can drag and drop items between them.
+  direction?: "column" | "row"; // The direction of the container, either column or row.
+}
+
 export class ItemContainer extends ElementObject {
   #itemList: ItemObject[] = [];
   #itemRows: ItemObject[][] = [];
   #dragItem: ItemObject | null = null;
   #spacerDomElement: HTMLElement | null = null;
   #spacerIndex: number = 0;
-  #direction: "column" | "row";
-  #groupID: string;
+  #config: ItemContainerConfig;
 
   constructor(
     global: GlobalManager,
     parent: BaseObject | null,
-    groupID?: string,
+    config?: ItemContainerConfig,
   ) {
     super(global, parent);
+    this.#config = config || {};
     this.#itemList = [];
-    this.#direction = "column";
+    if (!this.#config.groupID) {
+      this.#config.groupID = "default-group"; // Default group ID
+    }
+    if (!this.#config.direction) {
+      this.#config.direction = "column";
+    }
+
     this.#spacerIndex = 0;
 
     this.style = {
       position: "relative",
     };
 
-    this.#groupID = groupID || "default-group";
-
     if (!this.global.data["dragAndDropGroups"]) {
       this.global.data["dragAndDropGroups"] = {};
     }
-    if (this.global.data["dragAndDropGroups"][this.#groupID]) {
-      this.global.data["dragAndDropGroups"][this.#groupID].push(this);
+    if (this.global.data["dragAndDropGroups"][this.#config.groupID]) {
+      this.global.data["dragAndDropGroups"][this.#config.groupID].push(this);
     } else {
-      this.global.data["dragAndDropGroups"][this.#groupID] = [this];
+      this.global.data["dragAndDropGroups"][this.#config.groupID] = [this];
     }
   }
 
   get groupID() {
-    return this.#groupID;
+    return this.#config.groupID;
   }
 
   get direction() {
-    return this.#direction;
+    return this.#config.direction || "column";
   }
 
   get numberOfItems() {
@@ -50,7 +59,7 @@ export class ItemContainer extends ElementObject {
   }
 
   set direction(value: "column" | "row") {
-    this.#direction = value;
+    this.#config.direction = value;
   }
 
   get spacerIndex() {
@@ -86,19 +95,19 @@ export class ItemContainer extends ElementObject {
     this.#itemList = this.#itemList.filter((i) => i !== item);
   }
 
-  readAllItems() {
-    return this.queueUpdate("READ_1", () => {
-      for (const item of this.#itemList) {
-        item.readDom(false);
-      }
-    });
-  }
-
-  getClosestContainer(worldX: number, worldY: number) {
+  /**
+   * Get the closest container to the given world coordinates.
+   * @param worldX
+   * @param worldY
+   * @returns
+   */
+  getClosestContainer(worldX: number, worldY: number): ItemContainer | null {
     let closestContainer = null;
     let closestDistance = Infinity;
 
-    for (let c of this.global.data["dragAndDropGroups"][this.#groupID] || []) {
+    for (let c of this.global.data["dragAndDropGroups"][
+      this.#config.groupID!
+    ] || []) {
       const container: ItemContainer = c as ItemContainer;
       const property = container.getDomProperty("READ_2");
       const centerX = property.x + property.width / 2;
@@ -172,7 +181,7 @@ export class ItemContainer extends ElementObject {
     tmpDomElement.style.margin = computedStyle.margin;
     tmpDomElement.style.padding = computedStyle.padding;
     tmpDomElement.style.boxSizing = computedStyle.boxSizing;
-    // tmpDomElement.style.backgroundColor = "#ff0000A0";
+    tmpDomElement.classList.add("ghost");
 
     let item =
       itemIndex > this.#itemList.length - 1 ? null : this.#itemList[itemIndex];
@@ -238,11 +247,11 @@ export class ItemContainer extends ElementObject {
         this.updateItemIndexes();
       });
     } else {
-      this.queueUpdate("WRITE_2", () => {
+      this.queueUpdate("WRITE_1", () => {
         this.removeGhostItem();
         this.addGhostItem(caller, itemIndex);
       });
-      this.queueUpdate("READ_3", () => {
+      this.queueUpdate("READ_2", () => {
         for (const item of this.#itemList) {
           item.readDom(false, "READ_2");
           item.saveDomPropertyToTransform("READ_2");
@@ -254,7 +263,7 @@ export class ItemContainer extends ElementObject {
     }
   }
 
-  removeAllExpandAnimation() {
+  removeAllGhost() {
     this.queueUpdate("WRITE_1", () => {
       this.removeGhostItem();
     });

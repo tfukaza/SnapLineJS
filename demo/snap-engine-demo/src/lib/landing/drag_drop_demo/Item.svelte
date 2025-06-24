@@ -28,7 +28,13 @@
 
 <style>
   .item-wrapper {
-    padding: var(--size-4);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 0px var(--size-4);
+    box-sizing: border-box;
+    height: var(--item-height);
   }
 
   .item {
