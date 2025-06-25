@@ -265,7 +265,7 @@ export class ItemObject extends ElementObject {
       overshoot = "ABOVE";
     } else if (
       worldY >
-      rowBoundaries[rowBoundaries.length - 1].bottom + BUFFER
+      rowBoundaries[rowBoundaries.length - 1].bottom + BUFFER / (BUFFER + 1)
     ) {
       overshoot = "BELOW";
     }

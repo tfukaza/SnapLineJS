@@ -70,6 +70,10 @@ export class ItemContainer extends ElementObject {
     this.#spacerIndex = value;
   }
 
+  get spacerDomElement() {
+    return this.#spacerDomElement;
+  }
+
   get itemList() {
     return this.#itemList;
   }
@@ -221,7 +225,7 @@ export class ItemContainer extends ElementObject {
       // Save the DOM positions after the ghost item is removed
       this.queueUpdate("READ_2", () => {
         for (const item of this.#itemList) {
-          item.readDom(false);
+          item.readDom(false, "READ_2");
           item.saveDomPropertyToTransform("READ_2");
         }
         this.reorderItemList();

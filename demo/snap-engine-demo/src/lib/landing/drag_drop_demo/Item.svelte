@@ -39,6 +39,7 @@
 
   .item {
     padding: 8px 12px;
+    box-sizing: border-box;
   }
 
   .card {
@@ -53,7 +54,7 @@
   @media (max-width: 400px) {
     .item {
       padding: 6px 8px 4px 8px;
-      border-radius: 8px;
+      border-radius: var(--size-12);
       :global(p) {
         font-size: 0.8rem;
       }
