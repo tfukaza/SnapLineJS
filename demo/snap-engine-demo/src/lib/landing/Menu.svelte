@@ -295,7 +295,7 @@
         min="0"
         max="100"
         value="0"
-        class="snap-range slot"
+        class="snap-range large"
         id="menu-slider-rail"
         on:input={handleSliderChange}
         list="menu-slider-datalist"
@@ -342,7 +342,6 @@
     @media screen and (max-width: 600px) {
       grid-template-columns: 1fr;
       width: 90vw;
-      
     }
   }
 
@@ -373,6 +372,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
+    border-radius: calc(var(--ui-radius) - 1px);
 
 
       
@@ -398,10 +398,6 @@
   }
 
   #menu-slider {
-    #menu-slider-rail {
-      height: 10px;
-      width: 200px;
-    }
 
     @media screen and (max-width: 600px) {
      grid-area: 1 / 1 / 2 / 2;

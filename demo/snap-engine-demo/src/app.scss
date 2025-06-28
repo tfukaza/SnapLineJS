@@ -79,11 +79,54 @@ label {
 }
 
 .card {
+  --card-border: 1.5px;
+  --card-color: var(--color-background);
+
   padding: var(--size-16);
-  border-radius: var(--size-16);
+  border-radius: var(--ui-radius);
   background-color: var(--color-background);
   box-shadow: 0px 4px 12px 0px rgba(0, 0, 0, 0.05);
-  border: 1px solid var(--color-background-tint);
+  position: relative;
+  z-index: 1;
+
+  &::before {
+    content: "";
+    position: absolute;
+    pointer-events: none;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    border-radius: var(--ui-radius);
+    box-sizing: border-box;
+    box-shadow:
+      1px 1px 1px 0px rgba(255, 255, 255, 0.18) inset,
+      -1px -1px 1px 0px rgba(0, 0, 0, 0.1) inset;
+  }
+
+  &::after {
+    content: "";
+    position: absolute;
+    pointer-events: none;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    border-radius: var(--ui-radius);
+    box-sizing: border-box;
+    border-style: inset;
+    border: var(--card-border) solid rgb(255, 255, 255);
+    mask-image: linear-gradient(
+      to bottom right,
+      rgba(0, 0, 0, 0.9) 5%,
+      rgba(0, 0, 0, 0) 20%,
+      rgba(0, 0, 0, 1) 60%,
+      rgba(0, 0, 0, 0) 70%,
+      rgba(0, 0, 0, 0.4) 95%
+    );
+    filter: blur(0.3px);
+    background-blend-mode: multiply;
+  }
 
   &.float {
     box-shadow:
@@ -93,7 +136,7 @@ label {
 }
 
 .slot {
-  border-radius: var(--size-16);
+  border-radius: var(--ui-radius);
   background: radial-gradient(
     109.24% 109.24% at 50% 50%,
     #e2e2e2 0%,
@@ -102,78 +145,9 @@ label {
   box-shadow:
     -3px -2px 4px 0px rgba(23, 21, 18, 0.02) inset,
     2px 2px 6.1px -1px rgba(40, 23, 14, 0.31) inset,
+    -1px -1px 1px 0px rgba(73, 40, 49, 0.25),
+    1px 1px 1px 0px rgba(255, 255, 255, 0.25),
     11px 14px 28.9px -7px rgba(73, 40, 49, 0.25) inset;
-}
-
-label:has(input[type="checkbox"]),
-label:has(input[type="radio"]) {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--size-8);
-  cursor: pointer;
-  input[type="checkbox"] + span,
-  input[type="radio"] + span {
-    display: inline-block;
-    position: relative;
-    top: 0;
-    width: var(--size-16);
-    height: var(--size-16);
-    border-radius: var(--size-4);
-    background-color: #e7e0de;
-    box-shadow: 1.5px 1.5px 4px 0px rgba(73, 40, 49, 0.25) inset;
-    overflow: hidden;
-
-    &::before,
-    &::after {
-      position: absolute;
-      content: "";
-    }
-
-    &::before {
-      left: 16px;
-      top: 2px;
-      width: var(--size-12);
-      height: var(--size-12);
-      border-radius: var(--size-2);
-      box-shadow:
-        0px 0px 2.1px 2px rgba(255, 255, 255, 0.21) inset,
-        2px 2px 4.1px -1px rgba(48, 41, 58, 0.5);
-      background: conic-gradient(
-        from 120deg at center,
-        #ff916c 3%,
-        #ff8c7a 21%,
-        #ff852e 31%,
-        #ff8336 43%,
-        #e5b89d 57%,
-        #ff8337 69%,
-        #ff823a 76%,
-        #fd654d 82%,
-        #fb8371 96%
-      );
-      transition: left 0.1s ease-in;
-    }
-
-    &::after {
-      left: 16px;
-      top: 4px;
-      width: calc(var(--size-12) - 4px);
-      height: calc(var(--size-12) - 4px);
-      border-radius: 1px;
-      background: #ff8337;
-    }
-  }
-
-  input[type="checkbox"]:checked + span,
-  input[type="radio"]:checked + span {
-    &::before {
-      left: 2px;
-      transition: left 0.1s ease-in;
-    }
-    &::after {
-      left: 4px;
-      transition: left 0.1s ease-in;
-    }
-  }
 }
 
 input[type="checkbox"],
@@ -184,57 +158,184 @@ input[type="radio"] {
   height: 0;
 }
 
+label:has(input[type="checkbox"]),
+label:has(input[type="radio"]) {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--size-8);
+  cursor: pointer;
+
+  input + span {
+    top: 0;
+    width: var(--size-16);
+    height: var(--size-16);
+    border-radius: var(--size-4);
+    background-color: #e7e0de;
+    box-shadow:
+      -0.3px -0.3px 0.5px 0px rgba(73, 40, 49, 0.25),
+      0.3px 0.3px 0.5px 0px rgba(255, 255, 255, 0.25),
+      1.5px 1.5px 4px 0px rgba(73, 40, 49, 0.25) inset;
+    overflow: hidden;
+    display: inline-block;
+    position: relative;
+
+    &::before,
+    &::after {
+      position: absolute;
+      content: "";
+    }
+  }
+}
+
+label:has(input[type="checkbox"]) {
+  input + span {
+    &::before {
+      left: 16px;
+      top: 1px;
+      width: calc(var(--size-16) - 2px);
+      height: calc(var(--size-16) - 2px);
+      border-radius: calc(var(--size-4) - 1px);
+      box-shadow:
+        0px 0px 1px 0.5px #ffffff6c inset,
+        2px 2px 4.1px -1px rgba(48, 41, 58, 0.5);
+      box-sizing: border-box;
+      background-color: var(--color-primary);
+      transition: left 0.05s ease-in;
+    }
+
+    &::after {
+      left: 20px;
+      top: 5px;
+      width: calc(var(--size-12) - 6px);
+      height: calc(var(--size-12) - 6px);
+      border-radius: 1px;
+      background-color: var(--color-background-tint);
+      box-shadow: 0px 0px 4px -2px rgba(48, 41, 58, 0.5);
+      transition:
+        left 0.05s ease-in,
+        box-shadow 0.05s ease-in;
+    }
+  }
+
+  input:checked + span {
+    &::before {
+      left: 1px;
+    }
+    &::after {
+      left: 5px;
+      box-shadow: 2px 2px 4px -1px rgba(48, 41, 58, 0.5);
+    }
+  }
+}
+
+label:has(input[type="radio"]) {
+  input + span {
+    --specular-angle: 120deg;
+    border-radius: 50%;
+
+    &::before {
+      left: 16px;
+      top: calc(var(--size-16) / 4);
+      width: calc(var(--size-16) / 2);
+      height: calc(var(--size-16) / 2);
+      border-radius: 50%;
+      box-shadow:
+        0px 0px 1px 0.5px #ffffff6c inset,
+        2px 2px 4px -1px rgba(48, 41, 58, 0.5);
+      box-sizing: border-box;
+      background: radial-gradient(
+          hsl(from var(--color-primary) h calc(s + 5) calc(l + 5)) 0%,
+          hsl(from var(--color-primary) h calc(s + 10) calc(l - 0)) 40%,
+          hsla(from var(--color-primary) h calc(s + 15) calc(l - 0) / 0) 50%
+        ),
+        conic-gradient(
+          from var(--specular-angle) at center,
+          hsla(from var(--color-primary) h calc(s + 5) calc(l + 5) / 0) 43%,
+          hsla(from var(--color-primary) h calc(s - 20) calc(l + 25) / 0.95) 57%,
+          hsla(from var(--color-primary) h calc(s + 10) calc(l + 5) / 0) 69%
+        ),
+        conic-gradient(
+          from 120deg at center,
+          hsl(from var(--color-primary) h calc(s - 5) calc(l + 5)) 3%,
+          hsl(from var(--color-primary) h calc(s - 10) calc(l + 2)) 21%,
+          hsl(from var(--color-primary) h calc(s + 5) calc(l - 2)) 43%,
+          hsl(from var(--color-primary) h calc(s + 15) calc(l - 12)) 82%,
+          hsl(from var(--color-primary) h calc(s - 8) calc(l + 0)) 96%
+        );
+
+      transition: left 0.05s ease-in;
+    }
+  }
+
+  input:checked + span {
+    &::before {
+      left: calc(var(--size-16) / 4);
+    }
+  }
+}
+
 input[type="range"] {
   --specular-angle: 130deg;
 
   -webkit-appearance: none;
-  padding: 0px;
+  padding: var(--size-2);
   border-radius: var(--size-16);
   background: radial-gradient(
-    109.24% 109.24% at 50% 50%,
-    #e2e2e2 0%,
-    #e7e0d8 100%
+    hsl(from var(--color-background) h calc(s + 5) calc(l + 5)) 0%,
+    hsl(from var(--color-background) h calc(s + 10) l) 70%
   );
   box-shadow:
+    -0.8px -0.8px 0.8px 0px rgba(73, 40, 49, 0.25),
+    0.8px 0.8px 0.8px 0px rgba(255, 255, 255, 0.25),
     -3px -2px 4px 0px rgba(23, 21, 18, 0.02) inset,
     2px 2px 6.1px -1px rgba(40, 23, 14, 0.31) inset,
-    11px 14px 28.9px -7px rgba(73, 40, 49, 0.25) inset;
+    8px 8px 28px -7px rgba(73, 40, 49, 0.25) inset;
+  overflow: hidden;
 
   &::-webkit-slider-thumb {
     -webkit-appearance: none;
     appearance: none;
-    width: var(--size-24);
-    height: var(--size-24);
+    width: var(--size-12);
+    height: var(--size-12);
+
     border-radius: 50%;
     background: radial-gradient(
         50% 50% at center,
-        #ff7e47 0%,
-        #f76636 70%,
-        rgba(247, 105, 45, 0) 80%
+        hsl(from var(--color-primary) h calc(s + 5) calc(l + 5)) 0%,
+        hsl(from var(--color-primary) h calc(s + 10) calc(l - 5)) 70%,
+        hsla(from var(--color-primary) h calc(s + 15) calc(l - 10) / 0) 80%
       ),
       conic-gradient(
         from var(--specular-angle) at center,
-        #ff833600 43%,
-        #ffe5d6f3 57%,
-        #ff843700 69%
+        hsla(from var(--color-primary) h calc(s + 5) calc(l + 5) / 0) 43%,
+        hsla(from var(--color-primary) h calc(s - 20) calc(l + 25) / 0.95) 57%,
+        hsla(from var(--color-primary) h calc(s + 10) calc(l + 5) / 0) 69%
       ),
       conic-gradient(
         from 120deg at center,
-        #ff916c 3%,
-        #ff8c7a 21%,
-        #ff852e 31%,
-        #ff8336 43%,
-        #ff8337 69%,
-        #ff823a 76%,
-        #fd654d 82%,
-        #fb8371 96%
+        hsl(from var(--color-primary) h calc(s - 5) calc(l + 5)) 3%,
+        hsl(from var(--color-primary) h calc(s - 10) calc(l + 2)) 21%,
+        hsl(from var(--color-primary) h calc(s + 5) calc(l - 5)) 31%,
+        hsl(from var(--color-primary) h calc(s + 5) calc(l - 2)) 43%,
+        hsl(from var(--color-primary) h calc(s + 5) calc(l - 2)) 69%,
+        hsl(from var(--color-primary) h calc(s + 8) calc(l - 3)) 76%,
+        hsl(from var(--color-primary) h calc(s + 15) calc(l - 12)) 82%,
+        hsl(from var(--color-primary) h calc(s - 8) calc(l + 0)) 96%
       );
 
     box-shadow:
       0px 0px 4px 4px rgba(255, 255, 255, 0.212) inset,
+      0px 0px 4px 2px rgba(63, 42, 93, 0.105),
       -4px -4px 4px -6px rgba(255, 255, 255, 0.33),
-      3px 5px 4px -0.5px rgba(48, 41, 58, 0.4);
+      2px 2px 4px -0.5px rgba(48, 41, 58, 0.4);
     cursor: pointer;
+  }
+}
+
+input[type="range"].large {
+  &::-webkit-slider-thumb {
+    width: var(--size-16);
+    height: var(--size-16);
   }
 }
 
@@ -250,70 +351,75 @@ button,
   position: relative;
   border-radius: var(--ui-radius);
   border: none;
-  padding: var(--size-8) var(--size-16);
+  padding: var(--size-4) var(--size-12);
   margin: var(--button-border);
   background: var(--button-color);
-  background: radial-gradient(
-    circle,
-    hsl(from var(--button-color) h s calc(l - 5)) 0%,
-    var(--button-color) 100%
-  );
-  box-shadow: 0px 0px var(--button-border) calc(var(--button-border) / 2)
+  box-shadow: 0px 0px var(--button-border) calc(var(--button-border) / 1)
     var(--button-color);
 
   &::before {
     content: "";
     position: absolute;
     z-index: -1;
-    top: calc(-1 * var(--button-border));
-    left: calc(-1 * var(--button-border));
-    width: calc(100% + 2 * var(--button-border));
-    height: calc(100% + 2 * var(--button-border));
-    border-radius: calc(var(--ui-radius) + var(--button-border));
-    transition: box-shadow 0.05s ease-in;
+    top: calc(-2 * var(--button-border));
+    left: calc(-2 * var(--button-border));
+    width: calc(100% + 4 * var(--button-border));
+    height: calc(100% + 4 * var(--button-border));
+    border-radius: calc(var(--ui-radius) + var(--button-border) * 2);
+
     box-shadow:
-      4px 4px 8px 0px rgba(255, 255, 255, 0.468) inset,
-      -4px -4px 8px 0px rgba(46, 41, 58, 0.55) inset,
-      0.5px 0.5px 1px 0px rgba(36, 29, 38, 0.473),
-      2px 2px 4px 0.5px rgba(48, 41, 57, 0.208),
-      0px 0px 0px calc(var(--button-border) / 2.5) var(--button-shadow-color);
+      calc(var(--button-border) * -0.5) calc(var(--button-border) * -0.5) 2px
+        0px rgba(0, 28, 61, 0.411) inset,
+      0px 0px calc(var(--button-border) / 2) 0px rgb(255, 255, 255) inset,
+      -0.2px -0.2px 1px 1px hsl(from var(--button-color) 0 0 calc(l - 30));
+    background: linear-gradient(
+      to bottom right,
+      hsl(from var(--button-color) calc(h - 1) calc(s - 1) calc(l + 1)) 0%,
+      hsl(from var(--button-color) h calc(s + 1) calc(l - 1)) 15%,
+      hsl(from var(--button-color) calc(h + 5) calc(s - 5) calc(l + 10)) 45%,
+      hsl(from var(--button-color) h calc(s) calc(l - 5)) 75%,
+      hsl(from var(--button-color) calc(h) calc(s + 1) calc(l - 10)) 100%
+    );
+
+    transition: all 0.05s ease-in;
   }
 
   &::after {
     content: "";
     position: absolute;
-    border-radius: calc(var(--ui-radius) + var(--button-border) / 1.5);
-    top: calc(-0.8 * var(--button-border));
-    left: calc(-0.8 * var(--button-border));
-    width: calc(100% + var(--button-border) * 1.2);
-    height: calc(100% + var(--button-border) * 1.2);
-    border: 0.3px solid rgba(255, 255, 255, 1);
+    top: calc(-2 * var(--button-border));
+    left: calc(-2 * var(--button-border));
+    width: calc(100% + 4 * var(--button-border));
+    height: calc(100% + 4 * var(--button-border));
+    border-radius: calc(var(--ui-radius) + var(--button-border) * 2);
+    box-sizing: border-box;
+    border-style: inset;
+    border: 1.5px solid rgb(255, 255, 255);
     mask-image: linear-gradient(
       to bottom right,
-      rgba(0, 0, 0, 0.5) 5%,
+      rgba(0, 0, 0, 0.9) 5%,
       rgba(0, 0, 0, 0) 20%,
       rgba(0, 0, 0, 0) 70%,
-      rgba(0, 0, 0, 0.9) 95%
+      rgba(0, 0, 0, 0.4) 95%
     );
-    filter: blur(0.2px);
+    filter: blur(0.3px);
   }
 
   &:hover {
     &::before {
       box-shadow:
-        2px 2px 8px 0px rgba(140, 139, 142, 0.468) inset,
-        -2px -2px 8px 0px rgba(43, 43, 44, 0.427) inset,
-        0.5px 0.5px 1px 0px rgba(36, 29, 38, 0),
-        2px 2px 4px 0.5px rgba(48, 41, 57, 0),
-        0px 0px 0px calc(var(--button-border) / 2.5) var(--button-shadow-color);
+        calc(var(--button-border) * -0.5) calc(var(--button-border) * -0.5) 2px
+          0px rgba(0, 28, 61, 0.411) inset,
+        0px 0px calc(var(--button-border)) 0px rgba(49, 34, 59, 0.664) inset,
+        -0.2px -0.2px 1px 1px hsl(from var(--button-color) 0 0 calc(l - 30));
     }
     &::after {
       mask-image: linear-gradient(
         to bottom right,
-        rgba(0, 0, 0, 0) 5%,
+        rgba(0, 0, 0, 0.4) 5%,
         rgba(0, 0, 0, 0) 20%,
         rgba(0, 0, 0, 0) 70%,
-        rgba(0, 0, 0, 1) 95%
+        rgba(0, 0, 0, 0.3) 95%
       );
     }
   }
@@ -321,19 +427,20 @@ button,
   &.active {
     &::before {
       box-shadow:
-        4px 4px 8px 0px rgba(60, 59, 63, 0.468) inset,
-        -4px -4px 8px 0px rgba(255, 255, 255, 0.427) inset,
-        0.5px 0.5px 1px 0px rgba(36, 29, 38, 0),
-        2px 2px 4px 0.5px rgba(48, 41, 57, 0),
-        0px 0px 0px calc(var(--button-border) / 2.5) var(--button-shadow-color);
+        calc(var(--button-border) * 0.5) calc(var(--button-border) * 0.5) 2px
+          0px rgba(0, 28, 61, 0.411) inset,
+        calc(var(--button-border) * -0.5) calc(var(--button-border) * -0.5) 2px
+          0px rgba(255, 255, 255, 0.411) inset,
+        0px 0px calc(var(--button-border)) 0px rgba(49, 34, 59, 0.664) inset,
+        -0.2px -0.2px 1px 1px hsl(from var(--button-color) 0 0 calc(l - 30));
     }
     &::after {
       mask-image: linear-gradient(
         to bottom right,
-        rgba(0, 0, 0, 0) 5%,
+        rgba(0, 0, 0, 0.4) 5%,
         rgba(0, 0, 0, 0) 20%,
         rgba(0, 0, 0, 0) 70%,
-        rgba(0, 0, 0, 1) 95%
+        rgba(0, 0, 0, 0.9) 95%
       );
     }
   }
@@ -343,45 +450,11 @@ button,
 .button {
   &.primary {
     --button-color: var(--color-primary);
+    --button-border: 3px;
     color: #fff;
-    background-color: var(--button-color);
-    box-shadow: 0px 0px var(--button-border) calc(var(--button-border) / 2)
-      var(--button-color);
-    &::before {
-      box-shadow:
-        4px 4px 8px 0px rgba(255, 255, 255, 0.468) inset,
-        -4px -4px 8px 0px rgba(48, 41, 58, 0.427) inset,
-        3px 3px 8px -1px rgba(53, 41, 57, 0.285),
-        0px 0px 0px calc(var(--button-border) / 3) rgb(214, 214, 216);
-      background: conic-gradient(
-        from 134deg at 50% 50%,
-        #f26637 72deg,
-        #ff753a 154deg,
-        #ffc277 184deg,
-        #ff753a 219deg,
-        #ed5126 321deg,
-        #ff7439 360deg
-      );
-    }
 
-    &:hover {
-      &::before {
-        box-shadow:
-          4px 4px 8px 0px rgba(60, 59, 63, 0.468) inset,
-          -4px -4px 8px 0px rgba(255, 255, 255, 0.427) inset,
-          0.5px 0.5px 1px 0px rgba(36, 29, 38, 0),
-          2px 2px 4px 0.5px rgba(48, 41, 57, 0);
-      }
-    }
-
-    &.active {
-      &::before {
-        box-shadow:
-          4px 4px 8px 0px rgba(60, 59, 63, 0.468) inset,
-          -4px -4px 8px 0px rgba(255, 255, 255, 0.427) inset,
-          0.5px 0.5px 1px 0px rgba(36, 29, 38, 0),
-          2px 2px 4px 0.5px rgba(48, 41, 57, 0);
-      }
+    &:disabled {
+      cursor: not-allowed;
     }
   }
 

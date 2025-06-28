@@ -8,7 +8,8 @@
 
   let cameraControl: CameraControl = getContext("cameraControl");
   let dropZone: HTMLElement;
-  let isCorrect = false;
+  let isCorrect = $state(false);
+  let disabled = $state(true);
 
   let japaneseWords = [
     "すごい",
@@ -167,9 +168,9 @@
     }
 
     :global(.item.correct) {
-      background-color: #94f83d !important;
-      border: 1px solid #59a51e;
-      box-shadow: 0 6px 10px -2px rgba(8, 69, 50, 0.388);
+      background-color: #9cff46 !important;
+      border: 1px solid #88db49;
+      box-shadow: 0 6px 10px -2px rgba(8, 69, 50, 0.21);
       transition: 0.2s ease-in-out;
       pointer-events: none;
     }
@@ -205,6 +206,9 @@
     position: relative;
     min-height: var(--item-height);
     width: 100%;
+    box-shadow: 0px 0px 0px 1px var(--color-background),
+      1px 1px 0px 1px var(--color-background) inset;
+    ;
   
     #drop-zone-background {
       z-index: -1;
@@ -215,8 +219,8 @@
       height: 100%;
       min-height: var(--item-height);
       background: 
-        repeating-linear-gradient(0deg, rgba(255, 255, 255, 0) 0px, var(--color-background) 2px, var(--color-background) var(--item-height)),
-        repeating-linear-gradient(90deg, black 0px, black 2px, transparent 1px, transparent 6px);
+        repeating-linear-gradient(0deg, transparent 0px, transparent 2px, var(--color-background) 2px, var(--color-background) var(--item-height)),
+        repeating-linear-gradient(90deg, var(--color-text) 0px, var(--color-text) 2px, transparent 2px, transparent 6px,  var(--color-text) 6px);
     }
 
   
