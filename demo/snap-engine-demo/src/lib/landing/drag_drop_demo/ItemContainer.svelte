@@ -1,20 +1,21 @@
 <script lang="ts">
   import { ItemContainer } from "../../../../../../src/asset/drag_and_drop/container";
+  import type { ItemContainerConfig } from "../../../../../../src/asset/drag_and_drop/container";
+
   import { getContext, setContext, onMount } from "svelte";
   import type { SnapLine } from "../../../../../../src/index";
 
-  let { direction, children }: { direction: "column" | "row"; children: any } =
+  let { config, children }: { config: ItemContainerConfig; children: any } =
     $props();
   const engine: SnapLine = getContext("engine");
-  let itemContainer: ItemContainer = new ItemContainer(engine.global, null);
-  itemContainer.direction = direction;
+  let itemContainer: ItemContainer = new ItemContainer(engine.global, null, config);
 
   setContext("itemContainer", itemContainer);
 </script>
 
 <div
   class="container"
-  style="flex-direction: {direction}"
+  style="flex-direction: {config.direction}"
   bind:this={itemContainer.element}
 >
   {@render children()}

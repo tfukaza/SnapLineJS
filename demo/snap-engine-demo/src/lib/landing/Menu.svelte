@@ -255,9 +255,20 @@
     });
   });
 
+  function f(x:number, A = 100, c = 10, sigma = 10) {
+    return x + A * Math.exp(-Math.pow(x - c, 2) / (2 * Math.pow(sigma, 2)));
+}
+
   function handleSliderChange(event: Event) {
     const slider = event.target as HTMLInputElement;
     const value = parseInt(slider.value);
+    menuCarousel.queueUpdate("WRITE_2", () => {
+      slider.style.setProperty(
+        "--specular-angle",
+        `${f(value/3)+50}deg`
+      );
+    });
+  
 
     let currentIndex = Math.floor(value / (101 / menuItems.length));
 
@@ -284,7 +295,7 @@
         min="0"
         max="100"
         value="0"
-        class="snap-range slot"
+        class="snap-range large"
         id="menu-slider-rail"
         on:input={handleSliderChange}
         list="menu-slider-datalist"
@@ -331,7 +342,6 @@
     @media screen and (max-width: 600px) {
       grid-template-columns: 1fr;
       width: 90vw;
-      
     }
   }
 
@@ -362,6 +372,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
+    border-radius: calc(var(--ui-radius) - 1px);
 
 
       
@@ -387,10 +398,6 @@
   }
 
   #menu-slider {
-    #menu-slider-rail {
-      height: 10px;
-      width: 200px;
-    }
 
     @media screen and (max-width: 600px) {
      grid-area: 1 / 1 / 2 / 2;

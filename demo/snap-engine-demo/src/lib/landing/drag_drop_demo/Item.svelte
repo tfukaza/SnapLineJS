@@ -28,11 +28,18 @@
 
 <style>
   .item-wrapper {
-    padding: var(--size-4);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 0px var(--size-4);
+    box-sizing: border-box;
+    height: var(--item-height);
   }
 
   .item {
     padding: 8px 12px;
+    box-sizing: border-box;
   }
 
   .card {
@@ -47,7 +54,7 @@
   @media (max-width: 400px) {
     .item {
       padding: 6px 8px 4px 8px;
-      border-radius: 8px;
+      border-radius: var(--size-12);
       :global(p) {
         font-size: 0.8rem;
       }

@@ -17,7 +17,6 @@ export class ItemObject extends ElementObject {
   #mouseOffsetY: number = 0;
   #dropIndex: number = 0;
   #rowDropIndex: number = 0;
-  #direction: "column" | "row";
   #rowIndex: number = 0;
   #currentRow: number = 0;
 
@@ -31,7 +30,6 @@ export class ItemObject extends ElementObject {
     this.transformMode = "none";
     this.#containerObject = null;
     this.#prevContainer = null;
-    this.#direction = "column";
   }
 
   animateZeroTransform() {
@@ -68,7 +66,10 @@ export class ItemObject extends ElementObject {
 
   setContainer(value: ItemContainer) {
     this.#containerObject = value;
-    this.#direction = value.direction;
+  }
+
+  set container(value: ItemContainer) {
+    this.#containerObject = value;
   }
 
   get orderedItemList() {
@@ -115,7 +116,7 @@ export class ItemObject extends ElementObject {
       item.saveDomPropertyToTransform("READ_2");
     }
     for (const container of this.global.data["dragAndDropGroups"][
-      this.container.groupID
+      this.container.groupID!
     ] ?? []) {
       container.readDom(false, "READ_2");
       container.saveDomPropertyToTransform("READ_2");
@@ -264,7 +265,7 @@ export class ItemObject extends ElementObject {
       overshoot = "ABOVE";
     } else if (
       worldY >
-      rowBoundaries[rowBoundaries.length - 1].bottom + BUFFER
+      rowBoundaries[rowBoundaries.length - 1].bottom + BUFFER / (BUFFER + 1)
     ) {
       overshoot = "BELOW";
     }
@@ -311,26 +312,31 @@ export class ItemObject extends ElementObject {
     };
   }
 
+  handoffToContainer(newContainer: ItemContainer) {
+    if (!this.#containerObject) {
+      throw new Error("ItemObject has no container set.");
+    }
+    this.#containerObject.removeAllGhost();
+    this.#containerObject.dragItem = null;
+    this.#containerObject = newContainer;
+    this.#containerObject.setItemRows(this);
+    this.#containerObject.dragItem = this;
+    this.transformOrigin = this.#containerObject;
+    // TODO: Manipulate DOM in the write queue
+    this.#containerObject.element?.appendChild(this.element!);
+  }
+
   determineDropIndex() {
     const thisWorldX = this.transform.x + this._domProperty[1].width / 2;
     const thisWorldY = this.transform.y + this._domProperty[1].height / 2;
 
-    const closestContainer = this.container.getClosestContainer(
+    const closestContainer = this.#containerObject!.getClosestContainer(
       thisWorldX,
       thisWorldY,
     );
     this.#prevContainer = this.#containerObject;
     if (closestContainer !== this.#containerObject) {
-      this.container.removeAllExpandAnimation();
-      this.container.dragItem = null;
-      this.#containerObject = closestContainer;
-      this.container.setItemRows(this);
-      this.container.dragItem = this;
-
-      this.transformOrigin = this.container;
-      // TODO: Manipulate DOM in the write queue
-      this.container.element?.appendChild(this.element!);
-      // this.requestRead(false, true, "READ_1");
+      this.handoffToContainer(closestContainer!);
     }
 
     let dropIndex = this.#dropIndex;
@@ -498,7 +504,7 @@ export class ItemObject extends ElementObject {
     };
 
     this.container.addItemAfter(this, this.orderedItemList[this.#dropIndex]);
-    this.container.removeAllExpandAnimation();
+    this.container.removeAllGhost();
 
     this.requestWrite(
       true,
