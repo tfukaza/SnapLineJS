@@ -20,6 +20,8 @@
     pointerPanLock?: boolean | "touch";
     /** Require ctrl/cmd for wheel zoom so unmodified scrolling pans the page. */
     wheelZoomModifier?: "none" | "ctrlOrMeta";
+    /** Which mouse button starts a pointer pan (default "left"). */
+    panButton?: "left" | "middle" | "both";
     /** Options forwarded to the underlying Camera, e.g. zoomBounds and contentBounds. */
     cameraConfig?: CameraConfig;
     cameraControl?: CameraControlObject | null;
@@ -34,6 +36,7 @@
     panLock = false,
     pointerPanLock = false,
     wheelZoomModifier = "none",
+    panButton = "left",
     cameraConfig,
     cameraControl = $bindable<CameraControlObject | null>(null),
     style = "",
@@ -51,6 +54,7 @@
     zoomLock,
     pointerPanLock,
     wheelZoomModifier,
+    panButton,
     camera: cameraConfig,
   }));
   const cameraControlInstance =
@@ -74,6 +78,7 @@
       zoomLock,
       pointerPanLock,
       wheelZoomModifier,
+      panButton,
     };
   });
 

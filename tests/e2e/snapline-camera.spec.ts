@@ -22,11 +22,12 @@ async function dragFromTo(
   page: Page,
   from: { x: number; y: number },
   to: { x: number; y: number },
+  button: "left" | "middle" = "left",
 ) {
   await page.mouse.move(from.x, from.y);
-  await page.mouse.down();
+  await page.mouse.down({ button });
   await page.mouse.move(to.x, to.y, { steps: 12 });
-  await page.mouse.up();
+  await page.mouse.up({ button });
 }
 
 test.beforeEach(async ({ page }) => {
@@ -75,6 +76,24 @@ test("dragging a connector line does not pan the camera", async ({ page }) => {
   await dragFromTo(page, start, { x: start.x + 180, y: start.y + 140 });
   expect(await cameraTransform(page)).toBe(before);
   await expect(page.locator("[data-snapline-type='connector-line']")).toHaveCount(0);
+});
+
+test("panButton='middle': middle-drag pans, left-drag does not", async ({ page }) => {
+  await page.goto("/snapline-camera?panButton=middle");
+  await expect(page.locator("[data-snapline-type='node']")).toHaveCount(3);
+  const nodeA = page.locator("[data-snapline-type='node']", { hasText: "Node A" });
+
+  // Left-drag the background: with panButton='middle' this must NOT pan.
+  const beforeLeft = await cameraTransform(page);
+  await dragFromTo(page, { x: 900, y: 620 }, { x: 700, y: 470 }, "left");
+  expect(await cameraTransform(page)).toBe(beforeLeft);
+
+  // Middle-drag the background: this pans.
+  const before = await nodeA.boundingBox();
+  await dragFromTo(page, { x: 900, y: 620 }, { x: 700, y: 470 }, "middle");
+  const after = await nodeA.boundingBox();
+  expect(after!.x - before!.x).toBeLessThan(-150);
+  expect(after!.y - before!.y).toBeLessThan(-100);
 });
 
 test("connecting after pan and zoom still lands on the target connector", async ({ page }) => {

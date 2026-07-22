@@ -1,6 +1,12 @@
 <script lang="ts">
   import { Camera, Engine } from "@snap-engine/asset-base-svelte";
   import SimpleNode from "../node_ui_demo/SimpleNode.svelte";
+
+  // The pan button is configurable via ?panButton= so the e2e suite can
+  // exercise left / middle / both without a second route.
+  const raw = new URLSearchParams(globalThis.location?.search ?? "").get("panButton");
+  const panButton: "left" | "middle" | "both" =
+    raw === "middle" || raw === "both" ? raw : "left";
 </script>
 
 <!--
@@ -12,7 +18,7 @@
   composition question.
 -->
 <Engine id="node-ui-camera-canvas">
-  <Camera id="node-ui-camera" wheelZoomModifier="ctrlOrMeta">
+  <Camera id="node-ui-camera" wheelZoomModifier="ctrlOrMeta" {panButton}>
     <div id="node-ui-camera-layer">
       <div id="nuc-background"></div>
       <SimpleNode title="Node A" x={120} y={120} />
