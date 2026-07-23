@@ -722,7 +722,7 @@
           return;
         }
 
-        object.global.data.allowCameraControl = false;
+        object.global.suspend("cameraControl", object.id);
         isDragging = true;
         dragStartX = object.worldTransform.x;
         dragStartY = object.worldTransform.y;
@@ -738,7 +738,7 @@
 
       object.event.input.dragEnd = () => {
         if (object) {
-          object.global.data.allowCameraControl = true;
+          object.global.resume("cameraControl", object.id);
         }
 
         isDragging = false;

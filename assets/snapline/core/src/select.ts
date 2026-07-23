@@ -1,4 +1,4 @@
-import { BaseObject, ElementObject } from "@snap-engine/core";
+import { BaseObject, ElementObject, EventProxyFactory } from "@snap-engine/core";
 import type {
   pointerDownProp,
   pointerMoveProp,
@@ -6,12 +6,35 @@ import type {
 } from "@snap-engine/core";
 import { RectCollider, Collider } from "@snap-engine/core/collision";
 import { NodeComponent } from "./node";
+import { getSelectList, snapData } from "./snapline-globals";
+
+/** World-space rectangle the framework renders as the selection box. */
+export interface SelectRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  visible: boolean;
+}
+
+interface SelectCallback {
+  /**
+   * The rubber-band rectangle changed — the FRAMEWORK renders it (position,
+   * size, visibility, and any custom styling). Core keeps only the pointer
+   * math and the selection collider; it never writes the box's DOM. This is
+   * deliberately a plain callback with no flush handshake: the box visual is
+   * not paint-atomic, so the framework may flush on its own schedule.
+   */
+  onRectChange: null | ((rect: SelectRect) => void);
+}
 
 class RectSelectComponent extends ElementObject {
   _state: "none" | "dragging";
   _mouseDownX: number;
   _mouseDownY: number;
   _selectHitBox: Collider;
+  #selectCallback: SelectCallback;
+
   constructor(engine: any, parent: BaseObject | null) {
     super(engine, parent);
 
@@ -29,31 +52,25 @@ class RectSelectComponent extends ElementObject {
 
     this.addCollider(this._selectHitBox);
 
-    this.global.data.select = [];
+    snapData(this.global).select = [];
 
-    this.style = {
-      width: "0px",
-      height: "0px",
-      transformOrigin: "top left",
-      position: "absolute",
-      left: "0px",
-      top: "0px",
-      pointerEvents: "none",
-    };
-    this.schedule(() => this.writeDom(), {
-      stage: "WRITE_1",
-      queueId: `${this.id}-dom`,
-    });
+    this.#selectCallback = EventProxyFactory<RectSelectComponent, SelectCallback>(
+      this,
+      { onRectChange: null },
+    );
   }
 
-  scheduleWrite() {
-    this.schedule(() => this.writeDom(), {
-      stage: "WRITE_1",
-      queueId: `${this.id}-dom`,
-    });
-    this.schedule(() => this.writeTransform(), {
-      stage: "WRITE_2",
-      queueId: `${this.id}-transform`,
+  get selectCallback(): SelectCallback {
+    return this.#selectCallback;
+  }
+
+  #fireRect(width: number, height: number, visible: boolean): void {
+    this.#selectCallback.onRectChange?.({
+      x: this.worldTransform.x,
+      y: this.worldTransform.y,
+      width,
+      height,
+      visible,
     });
   }
 
@@ -65,21 +82,18 @@ class RectSelectComponent extends ElementObject {
     ) {
       return;
     }
-    for (let node of [...this.global.data.select]) {
+    for (let node of [...getSelectList(this.global)]) {
       node.setSelected(false);
     }
 
-    this.global.data.select = [];
+    snapData(this.global).select = [];
+    // worldTransform positions the selection collider (its transform parent);
+    // the visual box is framework-rendered from the callback rect.
     this.worldTransform = { x: prop.position.x, y: prop.position.y };
     this._state = "dragging";
-    this.style = {
-      display: "block",
-      width: "0px",
-      height: "0px",
-    };
     this._mouseDownX = prop.position.x;
     this._mouseDownY = prop.position.y;
-    this.scheduleWrite();
+    this.#fireRect(0, 0, true);
 
     this._selectHitBox.event.collider.onBeginContact = (
       _: Collider,
@@ -111,27 +125,21 @@ class RectSelectComponent extends ElementObject {
         Math.abs(prop.position.x - this._mouseDownX),
         Math.abs(prop.position.y - this._mouseDownY),
       ];
-      this.style = {
-        width: `${boxWidth}px`,
-        height: `${boxHeight}px`,
-      };
       this.worldTransform = { x: boxOriginX, y: boxOriginY };
       this._selectHitBox.localTransform = { x: 0, y: 0 };
       this._selectHitBox.width = boxWidth;
       this._selectHitBox.height = boxHeight;
-      this.scheduleWrite();
+      this.#fireRect(boxWidth, boxHeight, true);
     }
   }
 
   onGlobalCursorUp(_prop: pointerUpProp): void {
-    this.style = {
-      display: "none",
-    };
+    const wasDragging = this._state === "dragging";
     this._state = "none";
 
     this._selectHitBox.event.collider.onBeginContact = null;
     this._selectHitBox.event.collider.onEndContact = null;
-    this.scheduleWrite();
+    if (wasDragging) this.#fireRect(0, 0, false);
   }
 
   onCollideNode(_hitBox: Collider, _node: Collider): void {}

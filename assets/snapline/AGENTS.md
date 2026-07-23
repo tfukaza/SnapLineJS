@@ -15,11 +15,12 @@ private and are intentionally excluded from npm publish workflows.
 **Dependencies:** `@snap-engine/core`
 
 **Exports:**
-- `NodeComponent` - Graph node with connectors
+- `NodeComponent` - Graph node with connectors (opt-in corner resize via `resizable`)
 - `ConnectorComponent` - Input/output connector
 - `LineComponent` - Visual connection line
+- `GroupNodeComponent` - Resizable box that carries the nodes inside it
 - `RectSelectComponent` - Rectangle selection tool
-- `GlobalManager` - Shared state manager
+- `snapline-globals` - Typed accessors for the shared `global.data` registries
 
 ### @snap-engine/snapline-svelte
 **Location:** `svelte/src/`
@@ -147,6 +148,62 @@ snapline/
 **Purpose:** Rectangle selection wrapper
 
 **Props:** None
+
+## DOM ownership contract (framework-cooperative rendering)
+
+Mirrors the SnapSort rule: when a framework binding (Svelte/React) is in use,
+**structural DOM (adding, moving, removing, or reparenting elements) is
+framework-owned.** Core never inserts or removes elements. Core MAY directly
+write **transforms, `data-*` attributes, and property tweaks on existing
+elements** — frameworks recover fine from property changes.
+
+Concretely:
+
+- **Node width/height** are framework-rendered: core fires
+  `nodeCallback.onSizeChange(w, h)` during a resize drag and the adapter binds
+  the size as state. Core only updates its collision hitboxes synchronously
+  (`setSizeState`). The connector/line re-glue closes itself through the
+  ResizeObserver after the framework's DOM write reflows.
+- **The rubber-band selection box** is framework-rendered: core fires
+  `selectCallback.onRectChange({x, y, width, height, visible})` and the adapter
+  draws (and can restyle/replace) the box. Deliberately NO flush handshake —
+  the box visual is not paint-atomic.
+- **Node drag transforms, `data-selected` attributes, and line SVG transforms**
+  stay engine-written (property writes on existing elements).
+- **Adapters must render node/group elements with
+  `position: absolute; transform-origin: top left`** (and ideally
+  `will-change: transform`) — core no longer seeds base styles.
+- SnapLine has **no `flushMutation`/`settleMutation` equivalent and must not
+  grow one**: unlike SnapSort's FLIP pipeline, none of SnapLine's delegated
+  visuals are paint-atomic.
+
+### Callback conventions
+
+Domain/lifecycle callbacks live in `EventProxyFactory` dictionaries —
+`nodeCallback` (`onSizeChange`, `onResizeCommit`, `onLinesChanged`),
+`groupCallback` (`onMemberEnter`, `onMemberLeave`, `onDragCommit`),
+`selectCallback` (`onRectChange`), `connectorCallback` (connect/disconnect).
+`setLineListCallback` and `_onResizeCommit` are deprecated shims. Raw input/DOM
+plumbing stays on the `event.*` slots.
+
+### Shared global registries
+
+Everything SnapLine stores on the engine's shared `global.data` bag is declared
+in `core/src/snapline-globals.ts` (`SnapLineSharedData`) and accessed through
+its typed helpers. Engine core's `input.ts` reads `resizeHandles` duck-typed
+(it cannot import snapline) — keep the two shapes in sync. Camera-control
+suspension uses the owned-token channel API
+(`global.suspend("cameraControl", token)` / `resume` / `isSuspended`), not the
+deprecated `allowCameraControl` boolean.
+
+### Design limits (v1, by intent)
+
+- Groups never join other groups (nested groups are excluded in
+  `computeMembers`).
+- Carried group members are moved via transform parenting only — they are never
+  added to `global.data.select`, so a group drag does not alter the selection.
+- `attachTransformToGroup`/`detachTransformFromGroup` are the public
+  transform-only reparent seam used by the group carry.
 
 ## Key Concepts
 

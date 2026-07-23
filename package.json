@@ -48,6 +48,8 @@
     "test:asset-base-react": "playwright test -c tests/e2e/asset-base-react.playwright.config.ts",
     "test:snapline": "playwright test -c tests/e2e/snapline.playwright.config.ts",
     "test:snapline-camera": "playwright test -c tests/e2e/snapline-camera.playwright.config.ts",
+    "test:snapline-group": "playwright test -c tests/e2e/snapline-group.playwright.config.ts",
+    "test:snapline-resize": "playwright test -c tests/e2e/snapline-resize.playwright.config.ts",
     "test:snapline-react": "playwright test -c tests/e2e/snapline-react.playwright.config.ts",
     "test:layout": "playwright test -c tests/e2e/snapsort-layout.playwright.config.ts",
     "test:snapsort": "playwright test -c tests/e2e/snapsort.playwright.config.ts",

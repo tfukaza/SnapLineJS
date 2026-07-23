@@ -264,7 +264,8 @@ class ConnectorComponent extends ElementObject {
     this.#incomingLines = [];
   }
 
-  updateAllLines() {
+  /** Schedules a WRITE_2 write for every line on this connector. */
+  scheduleAllLineWrites() {
     for (const line of [...this.#outgoingLines, ...this.#incomingLines]) {
       line.schedule(
         () => {
@@ -279,7 +280,13 @@ class ConnectorComponent extends ElementObject {
     }
   }
 
-  writeAllLines() {
+  /** @deprecated Renamed: use `scheduleAllLineWrites` (schedules, does not write now). */
+  updateAllLines() {
+    this.scheduleAllLineWrites();
+  }
+
+  /** Synchronously writes every line on this connector (call inside a WRITE stage). */
+  writeAllLinesNow() {
     for (const line of [...this.#outgoingLines, ...this.#incomingLines]) {
       line.moveLineToConnectorTransform();
       line.writeTransform();
@@ -310,9 +317,9 @@ class ConnectorComponent extends ElementObject {
   }
 
   startDragOutLine(prop: pointerDownProp): void {
-    // Disable camera control while dragging a connection, mirroring node
+    // Suspend camera control while dragging a connection, mirroring node
     // drags: without this, drawing a line under a Camera also pans the canvas.
-    this.global.data.allowCameraControl = false;
+    this.global.suspend("cameraControl", this.id);
 
     let newLine = this.createLine();
     newLine.setLineEnd(prop.position.x, prop.position.y);
@@ -320,7 +327,7 @@ class ConnectorComponent extends ElementObject {
 
     this.#outgoingLines.unshift(newLine);
 
-    this.parent.updateNodeLines();
+    this.parent.scheduleLineWrites();
     this.parent.updateNodeLineList();
 
     this.#state = ConnectorState.DRAGGING;
@@ -456,7 +463,7 @@ class ConnectorComponent extends ElementObject {
     }
     line.setLineEnd(prop.position.x, prop.position.y);
     line.setLineStartAtConnector();
-    this.parent.updateNodeLines();
+    this.parent.scheduleLineWrites();
   }
 
   hoverWhileDragging(
@@ -501,15 +508,15 @@ class ConnectorComponent extends ElementObject {
       this.deleteLine(0);
     }
     if (this.parent) {
-      this.parent.updateNodeLines();
+      this.parent.scheduleLineWrites();
     }
 
     this._endLineDragCleanup();
   }
 
   _endLineDragCleanup() {
-    // Re-enable camera control after the line drag ends (see startDragOutLine).
-    this.global.data.allowCameraControl = true;
+    // Release camera control after the line drag ends (see startDragOutLine).
+    this.global.resume("cameraControl", this.id);
 
     this.#state = ConnectorState.IDLE;
     this.event.input.drag = null;
@@ -569,6 +576,8 @@ class ConnectorComponent extends ElementObject {
   }
 
   destroy() {
+    // A mid-gesture unmount must not strand a camera suspension.
+    this.global.resume("cameraControl", this.id);
     this.deleteAllLines();
     if (this.parent?._connectors[this.#name] === this) {
       delete this.parent._connectors[this.#name];

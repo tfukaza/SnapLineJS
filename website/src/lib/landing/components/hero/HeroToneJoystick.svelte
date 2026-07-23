@@ -124,7 +124,7 @@
     knobObject.event.input.dragStart = (prop: dragStartProp) => {
       if (!knobObject) return;
 
-      knobObject.global.data.allowCameraControl = false;
+      knobObject.global.suspend("cameraControl", knobObject.id);
       isDragging = true;
       dragStartX = knobObject.worldTransform.x;
       dragStartY = knobObject.worldTransform.y;
@@ -148,7 +148,7 @@
     };
 
     knobObject.event.input.dragEnd = (_: dragEndProp) => {
-      if (knobObject) knobObject.global.data.allowCameraControl = true;
+      if (knobObject) knobObject.global.resume("cameraControl", knobObject.id);
       isDragging = false;
     };
   });
