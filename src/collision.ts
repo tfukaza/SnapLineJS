@@ -290,6 +290,27 @@ class Collider extends CoreObject {
     return currentCollisionsFor(this).size;
   }
 
+  /**
+   * Synchronous world-space point test against this collider's cached bounds.
+   * Unlike currentCollisions/isCollidingWith it does NOT depend on the per-frame
+   * collision sweep, so it is safe to call at pointerdown for a hitbox that was
+   * just moved (e.g. a resize handle following its node).
+   */
+  containsWorldPoint(x: number, y: number): boolean {
+    const bounds = this.getWorldBoundsSnapshot();
+    if (this.type === "circle") {
+      const dx = x - bounds.x;
+      const dy = y - bounds.y;
+      return Math.sqrt(dx * dx + dy * dy) <= bounds.radius;
+    }
+    return (
+      x >= bounds.left &&
+      x <= bounds.right &&
+      y >= bounds.top &&
+      y <= bounds.bottom
+    );
+  }
+
   destroy() {
     this.engine.collisionEngine?.removeObject(this.id);
     this.detachTransformParent(false);

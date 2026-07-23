@@ -485,8 +485,12 @@ class InputControl {
       return;
     }
 
-    const owner = object ?? this.#getTargetOwner(event);
     const position = this.#getCoordinates(event.clientX, event.clientY);
+    // A resize-hitbox hit supersedes the DOM owner under it, and covers the case
+    // where the pointer is inside the (virtual) hitbox but outside the node's DOM
+    // box (so DOM routing would miss it). Explicit `object` still wins.
+    const owner =
+      object ?? this.#resolveResizeOwner(position) ?? this.#getTargetOwner(event);
     const isWithinEngine = this.#isCoordinateWithinEngine(
       event.clientX,
       event.clientY,
@@ -888,6 +892,31 @@ class InputControl {
       }
       callback(prop);
     }
+  }
+
+  // Colliders never appear in composedPath, so a registered resize hitbox is
+  // resolved geometrically: if the pointerdown is inside one, the owner is the
+  // hitbox's object (collider.parent), so the whole gesture flows to it through
+  // the normal owner dispatch. Synchronous point test — independent of the
+  // frame-delayed collision sweep. The registry shape is declared in
+  // snapline's snapline-globals.ts (engine core cannot import snapline, hence
+  // the structural type here) — keep the two in sync.
+  #resolveResizeOwner(position: eventPosition): ElementObject | null {
+    const handles = this.global?.data?.resizeHandles as
+      | Array<{
+          engine: unknown;
+          parent: unknown;
+          containsWorldPoint(x: number, y: number): boolean;
+        }>
+      | undefined;
+    if (!handles) return null;
+    for (const collider of handles) {
+      if (collider.engine !== this.#engine) continue;
+      if (collider.containsWorldPoint(position.x, position.y)) {
+        return collider.parent as ElementObject;
+      }
+    }
+    return null;
   }
 
   #getTargetOwner(event: Event): ElementObject | null {

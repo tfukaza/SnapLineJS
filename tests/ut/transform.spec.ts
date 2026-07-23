@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { BaseObject, CoreObject } from "../../src/object";
+import { BaseObject, CoreObject, ElementObject } from "../../src/object";
 import {
   CircleCollider,
   CollisionEngine,
@@ -342,5 +342,95 @@ test.describe("Collider transforms", () => {
     expect(collider.worldRadius).toBe(40);
     expect(collider.worldTop).toBe(240);
     expect(collider.worldBottom).toBe(320);
+  });
+});
+
+// Spies writeTransform so the cascade can be tested without a real DOM element
+// (writeTransform throws when #element is unset).
+class WriteSpyObject extends ElementObject {
+  writeCount = 0;
+  writeTransform() {
+    this.writeCount++;
+  }
+}
+
+test.describe("ElementObject writeTransformRecursive", () => {
+  test("cascades the write to direct-mode children, skipping none-mode and colliders", () => {
+    const engine = createEngine();
+    const parent = new WriteSpyObject(engine);
+    const directChild = new WriteSpyObject(engine);
+    const noneChild = new WriteSpyObject(engine);
+    parent.appendChild(directChild);
+    parent.appendChild(noneChild);
+    noneChild.transformMode = "none";
+    const collider = new RectCollider(engine, parent, 0, 0, 10, 10);
+    parent.addCollider(collider);
+
+    expect(parent.transformChildren).toContain(directChild);
+    expect(parent.transformChildren).toContain(noneChild);
+    expect(parent.transformChildren).toContain(collider);
+
+    engine.global.currentStage = "WRITE_2";
+    parent.writeTransformRecursive();
+
+    expect(parent.writeCount).toBe(1);
+    expect(directChild.writeCount).toBe(1);
+    expect(noneChild.writeCount).toBe(0); // none-mode pruned (with its subtree)
+  });
+
+  test("recurses through nested direct-mode children", () => {
+    const engine = createEngine();
+    const parent = new WriteSpyObject(engine);
+    const child = new WriteSpyObject(engine);
+    const grandchild = new WriteSpyObject(engine);
+    parent.appendChild(child);
+    child.appendChild(grandchild);
+
+    engine.global.currentStage = "WRITE_2";
+    parent.writeTransformRecursive();
+
+    expect(parent.writeCount).toBe(1);
+    expect(child.writeCount).toBe(1);
+    expect(grandchild.writeCount).toBe(1);
+  });
+
+  test("throws when invoked outside a write stage", () => {
+    const engine = createEngine();
+    const parent = new WriteSpyObject(engine);
+    engine.global.currentStage = "READ_1";
+    expect(() => parent.writeTransformRecursive()).toThrow(/Invalid stage/);
+  });
+});
+
+test.describe("Collider.containsWorldPoint", () => {
+  test("circle: tests distance to the world center, and follows its parent", () => {
+    const engine = createEngine();
+    const parent = new BaseObject(engine);
+    parent.worldTransform = { x: 100, y: 200 };
+    const circle = new CircleCollider(engine, parent, 0, 0, 15);
+    parent.addCollider(circle);
+
+    expect(circle.containsWorldPoint(100, 200)).toBe(true); // center
+    expect(circle.containsWorldPoint(110, 200)).toBe(true); // dist 10 <= 15
+    expect(circle.containsWorldPoint(120, 200)).toBe(false); // dist 20 > 15
+
+    // No collision sweep has run; moving the parent still updates the test
+    // synchronously (epoch-invalidated bounds).
+    parent.worldTransform = { x: 300, y: 300 };
+    expect(circle.containsWorldPoint(300, 300)).toBe(true);
+    expect(circle.containsWorldPoint(100, 200)).toBe(false);
+  });
+
+  test("rect: tests the world bounds box", () => {
+    const engine = createEngine();
+    const parent = new BaseObject(engine);
+    parent.worldTransform = { x: 100, y: 200 };
+    const rect = new RectCollider(engine, parent, 10, 20, 30, 40);
+    parent.addCollider(rect);
+    // World box: left 110, top 220, right 140, bottom 260.
+    expect(rect.containsWorldPoint(120, 240)).toBe(true);
+    expect(rect.containsWorldPoint(110, 220)).toBe(true); // corner inclusive
+    expect(rect.containsWorldPoint(200, 240)).toBe(false);
+    expect(rect.containsWorldPoint(120, 300)).toBe(false);
   });
 });

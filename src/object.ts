@@ -1296,6 +1296,32 @@ export class ElementObject extends BaseObject {
     super.writeTransform();
   }
 
+  // Write twin of readDomRecursive: cascades a transform WRITE down the graph the
+  // same way readDomRecursive cascades a DOM READ. Synchronous polymorphic
+  // recursion, no scheduling of its own — the caller schedules one WRITE-stage
+  // callback that invokes this, exactly as a READ callback invokes
+  // readDomRecursive. It walks transformChildren (world transforms compose along
+  // the transform graph) where the read walks public children (DOM layout nests
+  // publicly). No reparenting or position mutation: each descendant's world value
+  // is already current via the epoch cache, so writeTransform just paints it.
+  writeTransformRecursive() {
+    const stage = this.global.currentStage as FrameWriteStages;
+    if (!["WRITE_1", "WRITE_2", "WRITE_3"].includes(stage)) {
+      throw new Error(`Invalid stage: ${stage}`);
+    }
+
+    this.writeTransform();
+
+    for (const child of this.transformChildren) {
+      // Skip transformMode "none" (connectors follow their node for free, and
+      // this prunes their line subtree so world-space lines keep their own glue)
+      // and non-ElementObject children (e.g. RectCollider hit boxes).
+      if (child instanceof ElementObject && child.transformMode !== "none") {
+        child.writeTransformRecursive();
+      }
+    }
+  }
+
   destroyDom(removeElement: boolean = true) {
     this.#resizeObserver?.disconnect();
     this.#mutationObserver?.disconnect();
