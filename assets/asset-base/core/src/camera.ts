@@ -9,29 +9,66 @@ import { ElementObject } from "@snap-engine/core";
 import { Camera } from "@snap-engine/core";
 import type { CameraConfig } from "@snap-engine/core";
 
-export type CameraControlConfig = {
-  zoomLock?: boolean;
-  panLock?: boolean;
+/** What the mouse wheel / trackpad two-finger scroll does. */
+export type CameraWheelConfig = {
   /**
-   * Disables panning with a single pointer while leaving two-finger pinch panning
-   * intact. Use when the camera sits inside a scrollable page and a one-finger drag
-   * should scroll the page instead of moving the camera.
-   *
-   * Pass "touch" to restrict the lock to touch pointers, so a mouse drag still pans —
-   * on desktop a drag never scrolls the page, so it costs nothing to keep.
+   * What an unmodified wheel event does. "zoom" (default) zooms; "pan" is the
+   * trackpad "map" convention — two-finger scroll pans while a ctrl/cmd wheel
+   * (and trackpad pinch, which browsers report as a ctrl-wheel) still zooms.
    */
-  pointerPanLock?: boolean | "touch";
+  action?: "zoom" | "pan";
   /**
-   * Requires a modifier key for wheel zoom. With "ctrlOrMeta", an unmodified wheel
-   * event is left alone so the page scrolls normally; trackpad pinch still zooms,
-   * because browsers report it as a wheel event with ctrlKey set.
+   * Requires a modifier key for wheel zoom. With "ctrlOrMeta", an unmodified
+   * wheel event is left alone so the page scrolls normally; trackpad pinch
+   * still zooms, because browsers report it as a wheel event with ctrlKey set.
    */
-  wheelZoomModifier?: "none" | "ctrlOrMeta";
+  zoomModifier?: "none" | "ctrlOrMeta";
+  /** Multiplies wheel-zoom speed (default 1). */
+  zoomSensitivity?: number;
+  /** Multiplies wheel-pan speed (default 1 = 1:1 screen pixels). */
+  panSensitivity?: number;
+  /**
+   * Extra gain applied to trackpad pinch zoom (default 10). Chrome/Safari
+   * deliver a pinch as a ctrl-wheel whose deltaY is roughly an order of
+   * magnitude smaller than a mouse scroll notch; this brings it up to a
+   * comparable rate so pinch doesn't feel dead.
+   */
+  pinchZoomGain?: number;
+};
+
+/** What pointer (mouse/touch drag) input does. */
+export type CameraPointerConfig = {
   /**
    * Which mouse button starts a pointer pan. "left" (the default) preserves the
    * original behavior; "middle" frees the left button for other gestures (e.g.
    * rubber-band select) while the middle button pans; "both" pans on either.
    */
+  panButton?: "left" | "middle" | "both";
+  /**
+   * Disables panning with a single pointer while leaving two-finger pinch
+   * panning intact. Pass "touch" to restrict the lock to touch pointers.
+   */
+  panLock?: boolean | "touch";
+};
+
+export type CameraControlConfig = {
+  zoomLock?: boolean;
+  panLock?: boolean;
+  /** Wheel/trackpad behavior, grouped. Wins over the flat deprecated aliases. */
+  wheel?: CameraWheelConfig;
+  /** Pointer behavior, grouped. Wins over the flat deprecated aliases. */
+  pointer?: CameraPointerConfig;
+  /** @deprecated Use `pointer.panLock` instead. */
+  pointerPanLock?: boolean | "touch";
+  /** @deprecated Use `wheel.zoomModifier` instead. */
+  wheelZoomModifier?: "none" | "ctrlOrMeta";
+  /** @deprecated Use `wheel.action: "pan"` instead. */
+  wheelPan?: boolean;
+  /** @deprecated Use `wheel.zoomSensitivity` instead. */
+  zoomSensitivity?: number;
+  /** @deprecated Use `wheel.panSensitivity` instead. */
+  wheelPanSensitivity?: number;
+  /** @deprecated Use `pointer.panButton` instead. */
   panButton?: "left" | "middle" | "both";
   /** Options forwarded to the underlying Camera, e.g. zoomBounds and contentBounds. */
   camera?: CameraConfig;
@@ -42,8 +79,44 @@ const DEFAULT_CONFIG: CameraControlConfig = {
   panLock: false,
   pointerPanLock: false,
   wheelZoomModifier: "none",
+  wheelPan: false,
   panButton: "left",
+  zoomSensitivity: 1,
+  wheelPanSensitivity: 1,
 };
+
+export interface ResolvedCameraOptions {
+  wheelAction: "zoom" | "pan";
+  wheelZoomModifier: "none" | "ctrlOrMeta";
+  zoomSensitivity: number;
+  wheelPanSensitivity: number;
+  pinchZoomGain: number;
+  panButton: "left" | "middle" | "both";
+  pointerPanLock: boolean | "touch";
+}
+
+/**
+ * Resolves the effective camera options at READ time: a grouped key, when
+ * defined, wins over its flat deprecated alias; an undefined grouped key falls
+ * back to the flat key, then to the default. Resolution happens per-read (not
+ * at construction) because `config` is a public field that adapters reassign
+ * wholesale when props change.
+ */
+export function resolveCameraOptions(
+  config: CameraControlConfig,
+): ResolvedCameraOptions {
+  return {
+    wheelAction: config.wheel?.action ?? (config.wheelPan ? "pan" : "zoom"),
+    wheelZoomModifier:
+      config.wheel?.zoomModifier ?? config.wheelZoomModifier ?? "none",
+    zoomSensitivity: config.wheel?.zoomSensitivity ?? config.zoomSensitivity ?? 1,
+    wheelPanSensitivity:
+      config.wheel?.panSensitivity ?? config.wheelPanSensitivity ?? 1,
+    pinchZoomGain: config.wheel?.pinchZoomGain ?? 10,
+    panButton: config.pointer?.panButton ?? config.panButton ?? "left",
+    pointerPanLock: config.pointer?.panLock ?? config.pointerPanLock ?? false,
+  };
+}
 
 type PinchAnchor = {
   centerX: number;
@@ -169,9 +242,10 @@ class CameraControl extends ElementObject {
   // Event Handlers
 
   onCursorDown(prop: pointerDownProp) {
+    const options = resolveCameraOptions(this.config);
     // Left button is 0, middle button is 1. The pan button is configurable so
     // consumers can reserve the left button for another gesture.
-    const panButton = this.config.panButton ?? "left";
+    const panButton = options.panButton;
     const buttonPans =
       (panButton === "left" || panButton === "both") && prop.event.button === 0
         ? true
@@ -185,14 +259,18 @@ class CameraControl extends ElementObject {
     if (this.config.panLock) {
       return;
     }
-    const pointerPanLock = this.config.pointerPanLock;
+    const pointerPanLock = options.pointerPanLock;
     if (
       pointerPanLock === true ||
       (pointerPanLock === "touch" && prop.event.pointerType === "touch")
     ) {
       return;
     }
-    if (this.global.data.allowCameraControl === false) {
+    if (
+      this.global.isSuspended("cameraControl") ||
+      // Legacy channel: third parties may still write the shared boolean.
+      this.global.data.allowCameraControl === false
+    ) {
       return;
     }
     if (prop.isWithinEngine === false) {
@@ -214,7 +292,11 @@ class CameraControl extends ElementObject {
     if (prop.event?.pointerId !== this.#panPointerId) {
       return;
     }
-    if (this.global.data.allowCameraControl === false) {
+    if (
+      this.global.isSuspended("cameraControl") ||
+      // Legacy channel: third parties may still write the shared boolean.
+      this.global.data.allowCameraControl === false
+    ) {
       return;
     }
     const dx = prop.position.screenX - this.#mouseDownX;
@@ -245,15 +327,21 @@ class CameraControl extends ElementObject {
   }
 
   onZoom(prop: mouseWheelProp) {
+    const options = resolveCameraOptions(this.config);
+    const event = prop.event as WheelEvent;
+    const zoomIntent = event.ctrlKey || event.metaKey;
+    // Trackpad two-finger scroll pans; a modifier (and trackpad pinch, reported as
+    // a ctrl-wheel) falls through to zoom.
+    if (options.wheelAction === "pan" && !zoomIntent) {
+      this.panByWheel(prop, options.wheelPanSensitivity);
+      return;
+    }
     if (this.config.zoomLock) {
       return;
     }
-    if (this.config.wheelZoomModifier === "ctrlOrMeta") {
-      const event = prop.event as WheelEvent;
-      if (!event.ctrlKey && !event.metaKey) {
-        // Return without preventDefault so the page keeps scrolling.
-        return;
-      }
+    if (options.wheelZoomModifier === "ctrlOrMeta" && !zoomIntent) {
+      // Return without preventDefault so the page keeps scrolling.
+      return;
     }
     const camera = this.engine.camera!;
     if (
@@ -264,11 +352,53 @@ class CameraControl extends ElementObject {
     ) {
       return;
     }
+    // A trackpad pinch is a ctrl-wheel; Cmd+scroll is a meta-wheel with much larger
+    // deltas, so only the pinch gets the extra gain. Negate so pinch-out / scroll-up
+    // zooms in — the natural direction on every platform.
+    const pinch = event.ctrlKey && !event.metaKey;
+    const sensitivity =
+      options.zoomSensitivity * (pinch ? options.pinchZoomGain : 1);
     this.zoomBy(
-      prop.delta / 2000,
+      (-prop.delta * sensitivity) / 2000,
       prop.position.cameraX,
       prop.position.cameraY,
     );
+    prop.event.preventDefault();
+  }
+
+  private panByWheel(prop: mouseWheelProp, sensitivity: number) {
+    if (this.config.panLock) {
+      return;
+    }
+    if (
+      this.global.isSuspended("cameraControl") ||
+      // Legacy channel: third parties may still write the shared boolean.
+      this.global.data.allowCameraControl === false
+    ) {
+      return;
+    }
+    const camera = this.engine.camera;
+    if (!camera) {
+      return;
+    }
+    if (
+      prop.position.screenX < camera.containerOffsetX ||
+      prop.position.screenX > camera.containerOffsetX + camera.cameraWidth ||
+      prop.position.screenY < camera.containerOffsetY ||
+      prop.position.screenY > camera.containerOffsetY + camera.cameraHeight
+    ) {
+      return;
+    }
+    // Wheel deltas are screen pixels in the document-scroll sense (deltaY > 0 =
+    // scroll down); handlePan reads them the same way (positive = pan down) and
+    // divides by zoom, giving 1:1 screen-pixel panning like a pointer drag.
+    const event = prop.event as WheelEvent;
+    camera.handlePan(event.deltaX * sensitivity, event.deltaY * sensitivity);
+    this.style.transform = camera.canvasStyle as string;
+    this.schedule(() => this.writeTransform(), {
+      stage: "WRITE_2",
+      queueId: `${this.id}-transform`,
+    });
     prop.event.preventDefault();
   }
 
@@ -276,7 +406,11 @@ class CameraControl extends ElementObject {
     if (this.config.zoomLock && this.config.panLock) {
       return;
     }
-    if (this.global.data.allowCameraControl === false) {
+    if (
+      this.global.isSuspended("cameraControl") ||
+      // Legacy channel: third parties may still write the shared boolean.
+      this.global.data.allowCameraControl === false
+    ) {
       return;
     }
     this.#state = "pinching";
@@ -289,7 +423,11 @@ class CameraControl extends ElementObject {
     if (this.config.zoomLock && this.config.panLock) {
       return;
     }
-    if (this.global.data.allowCameraControl === false) {
+    if (
+      this.global.isSuspended("cameraControl") ||
+      // Legacy channel: third parties may still write the shared boolean.
+      this.global.data.allowCameraControl === false
+    ) {
       return;
     }
     const [pointer0, pointer1] = prop.current.pointerList;

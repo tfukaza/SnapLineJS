@@ -9,6 +9,12 @@ async function cameraTransform(page: Page): Promise<string> {
   return page.locator(CAMERA).evaluate((el) => getComputedStyle(el).transform);
 }
 
+// scaleX is the first number of the computed matrix(...) (1 when untransformed).
+async function cameraScale(page: Page): Promise<number> {
+  const nums = (await cameraTransform(page)).match(/-?\d*\.?\d+/g);
+  return nums ? Number.parseFloat(nums[0]) : 1;
+}
+
 async function centerOf(locator: Locator) {
   const box = await locator.boundingBox();
   expect(box).not.toBeNull();
@@ -47,8 +53,9 @@ test("background drag pans the camera", async ({ page }) => {
 test("ctrl+wheel zooms the camera", async ({ page }) => {
   const before = await cameraTransform(page);
   await page.mouse.move(640, 450);
+  // The camera starts at its max zoom (1), so scroll down / pinch-in zooms out.
   await page.keyboard.down("Control");
-  await page.mouse.wheel(0, -240);
+  await page.mouse.wheel(0, 240);
   await page.keyboard.up("Control");
   await expect.poll(() => cameraTransform(page)).not.toBe(before);
 });
@@ -96,11 +103,53 @@ test("panButton='middle': middle-drag pans, left-drag does not", async ({ page }
   expect(after!.y - before!.y).toBeLessThan(-100);
 });
 
+test("wheelPan: unmodified wheel pans, ctrl+wheel still zooms", async ({ page }) => {
+  await page.goto("/snapline-camera?wheelPan=1");
+  await expect(page.locator("[data-snapline-type='node']")).toHaveCount(3);
+  const nodeA = page.locator("[data-snapline-type='node']", { hasText: "Node A" });
+
+  // Two-finger scroll (an unmodified wheel with deltaX/deltaY) pans the camera:
+  // a downward + rightward scroll pans the view down/right, so nodes shift up/left.
+  const before = await nodeA.boundingBox();
+  await page.mouse.move(640, 450);
+  await page.mouse.wheel(160, 200);
+  await expect
+    .poll(async () => (await nodeA.boundingBox())!.y - before!.y)
+    .toBeLessThan(-80);
+  const after = await nodeA.boundingBox();
+  expect(after!.x - before!.x).toBeLessThan(-60);
+
+  // A ctrl+wheel over the same surface still zooms rather than panning (scroll
+  // down zooms out from the starting max zoom).
+  const beforeZoom = await cameraTransform(page);
+  await page.keyboard.down("Control");
+  await page.mouse.wheel(0, 240);
+  await page.keyboard.up("Control");
+  await expect.poll(() => cameraTransform(page)).not.toBe(beforeZoom);
+});
+
+test("ctrl+wheel direction: scroll down / pinch in zooms out, scroll up / pinch out zooms in", async ({ page }) => {
+  await page.mouse.move(640, 450);
+  // Starts at max zoom (1), so first zoom out (scroll down / pinch in): scale drops.
+  const base = await cameraScale(page);
+  await page.keyboard.down("Control");
+  await page.mouse.wheel(0, 40);
+  await page.keyboard.up("Control");
+  await expect.poll(() => cameraScale(page)).toBeLessThan(base);
+
+  // Now scroll up / pinch out zooms back in: scale rises — the natural direction.
+  const zoomedOut = await cameraScale(page);
+  await page.keyboard.down("Control");
+  await page.mouse.wheel(0, -40);
+  await page.keyboard.up("Control");
+  await expect.poll(() => cameraScale(page)).toBeGreaterThan(zoomedOut);
+});
+
 test("connecting after pan and zoom still lands on the target connector", async ({ page }) => {
   await dragFromTo(page, { x: 900, y: 620 }, { x: 780, y: 540 });
   await page.mouse.move(640, 450);
   await page.keyboard.down("Control");
-  await page.mouse.wheel(0, -120);
+  await page.mouse.wheel(0, 120);
   await page.keyboard.up("Control");
 
   const nodeA = page.locator("[data-snapline-type='node']", { hasText: "Node A" });

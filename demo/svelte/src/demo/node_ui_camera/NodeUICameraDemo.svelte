@@ -4,9 +4,13 @@
 
   // The pan button is configurable via ?panButton= so the e2e suite can
   // exercise left / middle / both without a second route.
-  const raw = new URLSearchParams(globalThis.location?.search ?? "").get("panButton");
+  const params = new URLSearchParams(globalThis.location?.search ?? "");
+  const raw = params.get("panButton");
   const panButton: "left" | "middle" | "both" =
     raw === "middle" || raw === "both" ? raw : "left";
+  // ?wheelPan=1 makes an unmodified wheel pan (trackpad two-finger scroll) while
+  // ctrl/cmd wheel keeps zooming.
+  const wheelPan = params.get("wheelPan") === "1";
 </script>
 
 <!--
@@ -18,7 +22,7 @@
   composition question.
 -->
 <Engine id="node-ui-camera-canvas">
-  <Camera id="node-ui-camera" wheelZoomModifier="ctrlOrMeta" {panButton}>
+  <Camera id="node-ui-camera" wheelZoomModifier="ctrlOrMeta" {wheelPan} {panButton}>
     <div id="node-ui-camera-layer">
       <div id="nuc-background"></div>
       <SimpleNode title="Node A" x={120} y={120} />

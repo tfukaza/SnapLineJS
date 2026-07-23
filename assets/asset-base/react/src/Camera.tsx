@@ -11,6 +11,10 @@ import {
   type ReactNode,
 } from "react";
 import { CameraControl } from "@snap-engine/asset-base";
+import type {
+  CameraWheelConfig,
+  CameraPointerConfig,
+} from "@snap-engine/asset-base";
 import type { CameraConfig } from "@snap-engine/core";
 import { useSnapEngine } from "./Engine";
 
@@ -40,6 +44,18 @@ export interface CameraProps
   pointerPanLock?: boolean | "touch";
   /** Require ctrl/cmd for wheel zoom so unmodified scrolling pans the page. */
   wheelZoomModifier?: "none" | "ctrlOrMeta";
+  /** Pan on unmodified wheel (trackpad two-finger scroll); ctrl/cmd wheel zooms. */
+  wheelPan?: boolean;
+  /** Multiplies wheel-zoom speed (default 1); trackpad pinch is scaled up further. */
+  zoomSensitivity?: number;
+  /** Multiplies wheel-pan speed (default 1 = 1:1 screen pixels), independent of zoom. */
+  wheelPanSensitivity?: number;
+  /** Which mouse button starts a pointer pan (default "left"). */
+  panButton?: "left" | "middle" | "both";
+  /** Wheel/trackpad behavior, grouped. Wins over the flat deprecated props. */
+  wheel?: CameraWheelConfig;
+  /** Pointer behavior, grouped. Wins over the flat deprecated props. */
+  pointer?: CameraPointerConfig;
   zoomLock?: boolean;
 }
 
@@ -65,6 +81,12 @@ export const Camera = forwardRef<CameraControl, CameraProps>(function Camera(
     panLock = false,
     pointerPanLock = false,
     wheelZoomModifier = "none",
+    wheelPan = false,
+    zoomSensitivity = 1,
+    wheelPanSensitivity = 1,
+    panButton = "left",
+    wheel = undefined,
+    pointer = undefined,
     style,
     zoomLock = false,
     ...divProps
@@ -95,6 +117,12 @@ export const Camera = forwardRef<CameraControl, CameraProps>(function Camera(
         zoomLock,
         pointerPanLock,
         wheelZoomModifier,
+        wheelPan,
+        zoomSensitivity,
+        wheelPanSensitivity,
+        panButton,
+        wheel,
+        pointer,
         camera: cameraConfig,
       });
       ownedCameraControlRef.current = cameraControl;
@@ -160,8 +188,26 @@ export const Camera = forwardRef<CameraControl, CameraProps>(function Camera(
       zoomLock,
       pointerPanLock,
       wheelZoomModifier,
+      wheelPan,
+      zoomSensitivity,
+      wheelPanSensitivity,
+      panButton,
+      wheel,
+      pointer,
     };
-  }, [activeCameraControl, panLock, zoomLock, pointerPanLock, wheelZoomModifier]);
+  }, [
+    activeCameraControl,
+    panLock,
+    zoomLock,
+    pointerPanLock,
+    wheelZoomModifier,
+    wheelPan,
+    zoomSensitivity,
+    wheelPanSensitivity,
+    panButton,
+    wheel,
+    pointer,
+  ]);
 
   // Bounds often depend on measured layout, so keep applying them as they change.
   useEffect(() => {
