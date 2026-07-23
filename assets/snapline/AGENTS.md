@@ -191,10 +191,28 @@ plumbing stays on the `event.*` slots.
 Everything SnapLine stores on the engine's shared `global.data` bag is declared
 in `core/src/snapline-globals.ts` (`SnapLineSharedData`) and accessed through
 its typed helpers. Engine core's `input.ts` reads `resizeHandles` duck-typed
-(it cannot import snapline) — keep the two shapes in sync. Camera-control
-suspension uses the owned-token channel API
-(`global.suspend("cameraControl", token)` / `resume` / `isSuspended`), not the
-deprecated `allowCameraControl` boolean.
+(it cannot import snapline) — keep the two shapes in sync.
+
+### Pointer claims (camera blocking)
+
+Gesture owners block the camera (and any other GLOBAL input listener) at the
+input-dispatch layer, not through a side-channel flag: call
+`engine.input.claimPointer(pointerId)` from the gesture's **pointerDown**
+handler (claiming at dragStart is legal, but the camera may already have
+panned by the 3px drag-start threshold). While a pointer is claimed:
+
+- global `pointerDown`/`pointerMove`/`dragStart`/`drag` for that pointer are
+  not delivered; owner dispatch is unaffected;
+- global pinches involving the claimed pointer are suppressed;
+- global `mouseWheel` is suppressed while ANY claim is held (no camera
+  wheel-pan mid-drag);
+- end events (`pointerUp`/`dragEnd`/`pinchEnd`) ALWAYS deliver, so a global
+  listener that engaged before a late claim can terminate cleanly.
+
+Claims are anchored to the input layer's per-pointer records and **die with
+the gesture** (pointer up/cancel) — there is no release call to pair, and a
+destroyed owner cannot strand a claim. The deprecated `allowCameraControl`
+boolean remains readable by the camera for third-party writers only.
 
 ### Design limits (v1, by intent)
 

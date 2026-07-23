@@ -387,11 +387,11 @@ class NodeComponent extends ElementObject {
       return;
     }
 
-    // Suspend camera control from the very first pointer event: waiting for
-    // the drag-start threshold lets the camera pan by one move event before
-    // onDragStart runs. onUp / onDragEnd / destroy resume it; the token makes
-    // the dual release paths idempotent.
-    this.global.suspend("cameraControl", this.id);
+    // Claim the pointer from the very first pointer event: waiting for the
+    // drag-start threshold would let the camera pan by one move event before
+    // onDragStart runs. The claim auto-releases when the gesture ends, so no
+    // paired release is needed anywhere.
+    this.engine.input.claimPointer(e.event.pointerId);
 
     this._hasMoved = false;
     // Synchronous point test against this node's own resize hitbox (no reliance
@@ -463,8 +463,6 @@ class NodeComponent extends ElementObject {
   }
 
   onDragEnd(prop: dragEndProp) {
-    // Release camera control after drag ends
-    this.global.resume("cameraControl", this.id);
 
     if (this._resizing) {
       this.#applyResizeDrag(
@@ -511,7 +509,6 @@ class NodeComponent extends ElementObject {
   }
 
   onUp(_prop: pointerUpProp) {
-    this.global.resume("cameraControl", this.id);
 
     // pointerUp is dispatched to whatever is under the release point, which for a
     // resize may be a DIFFERENT node than the one being resized. Skip click-select
@@ -593,8 +590,6 @@ class NodeComponent extends ElementObject {
   }
 
   destroy() {
-    // A mid-gesture unmount must not strand a camera suspension.
-    this.global.resume("cameraControl", this.id);
     for (const connector of Object.values(this._connectors)) {
       connector.deleteAllLines();
     }

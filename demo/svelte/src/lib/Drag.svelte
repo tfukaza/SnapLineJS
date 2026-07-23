@@ -61,8 +61,8 @@
     // Drag event handlers
     object.event.input.dragStart = (prop: dragStartProp) => {
       if (!object) return;
-      // Disable camera control while dragging
-      object.global.suspend("cameraControl", object.id);
+      // Claim the pointer while dragging (auto-releases at gesture end).
+      object.engine.input.claimPointer(prop.pointerId);
 
       isDragging = true;
       dragStartX = object.worldTransform.x;
@@ -92,10 +92,6 @@
     };
 
     object.event.input.dragEnd = (_: dragEndProp) => {
-      if (object) {
-        // Re-enable camera control after drag ends
-        object.global.resume("cameraControl", object.id);
-      }
 
       isDragging = false;
 

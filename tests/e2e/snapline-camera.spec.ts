@@ -162,3 +162,26 @@ test("connecting after pan and zoom still lands on the target connector", async 
   await expect(line).toHaveCount(1);
   await expect(line.locator("path")).toHaveAttribute("d", /C/);
 });
+
+test("wheel does not pan or zoom the camera mid node-drag (pointer claim blocks it)", async ({ page }) => {
+  await page.goto("/snapline-camera?wheelPan=1");
+  await expect(page.locator("[data-snapline-type='node']")).toHaveCount(3);
+  const nodeA = page.locator("[data-snapline-type='node']", { hasText: "Node A" });
+  const startBox = await nodeA.boundingBox();
+
+  // Hold a node drag, then wheel: the claim must suppress the camera globally.
+  await page.mouse.move(startBox!.x + 40, startBox!.y + 24);
+  await page.mouse.down();
+  await page.mouse.move(startBox!.x + 90, startBox!.y + 60, { steps: 8 });
+  const midDrag = await cameraTransform(page);
+  await page.mouse.wheel(120, 160);
+  await page.waitForTimeout(120);
+  expect(await cameraTransform(page)).toBe(midDrag);
+  await page.mouse.up();
+
+  // After the gesture ends the claim auto-releases: wheel pans again.
+  await page.mouse.move(900, 620);
+  const atRest = await cameraTransform(page);
+  await page.mouse.wheel(120, 160);
+  await expect.poll(() => cameraTransform(page)).not.toBe(atRest);
+});

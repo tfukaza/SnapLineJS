@@ -722,7 +722,8 @@
           return;
         }
 
-        object.global.suspend("cameraControl", object.id);
+        // Claim the pointer while dragging (auto-releases at gesture end).
+        object.engine.input.claimPointer(prop.pointerId);
         isDragging = true;
         dragStartX = object.worldTransform.x;
         dragStartY = object.worldTransform.y;
@@ -737,9 +738,6 @@
       };
 
       object.event.input.dragEnd = () => {
-        if (object) {
-          object.global.resume("cameraControl", object.id);
-        }
 
         isDragging = false;
       };

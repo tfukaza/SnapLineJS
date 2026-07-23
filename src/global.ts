@@ -30,7 +30,6 @@ class GlobalManager {
   #engineObjectTables: Map<Engine, Record<string, BaseObject>>;
   #data: any;
   #id: number;
-  #suspenders: Map<string, Set<string>>;
 
   currentStage:
     | "IDLE"
@@ -46,7 +45,6 @@ class GlobalManager {
     this.#engineObjectTables = new Map();
     this.#data = {};
     this.#id = 0;
-    this.#suspenders = new Map();
     this.currentStage = "IDLE";
     this.queue = {
       READ_1: new Map(),
@@ -231,34 +229,6 @@ class GlobalManager {
 
   get data(): any {
     return this.#data;
-  }
-
-  /**
-   * Owned suspension channels. Unlike a shared boolean on `data` (last writer
-   * wins — an unrelated gesture ending could re-enable a channel another
-   * gesture still holds suspended), each suspender registers a token and the
-   * channel stays suspended until every token resumes. Tokens are idempotent:
-   * suspending twice with the same token holds one slot, and resuming a token
-   * that never suspended is a no-op — so dual release paths are safe.
-   */
-  suspend(channel: string, token: string): void {
-    let tokens = this.#suspenders.get(channel);
-    if (!tokens) {
-      tokens = new Set();
-      this.#suspenders.set(channel, tokens);
-    }
-    tokens.add(token);
-  }
-
-  resume(channel: string, token: string): void {
-    const tokens = this.#suspenders.get(channel);
-    if (!tokens) return;
-    tokens.delete(token);
-    if (tokens.size === 0) this.#suspenders.delete(channel);
-  }
-
-  isSuspended(channel: string): boolean {
-    return (this.#suspenders.get(channel)?.size ?? 0) > 0;
   }
 
   getEngineObjectTable(engine: Engine): Record<string, BaseObject> {

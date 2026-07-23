@@ -168,6 +168,15 @@ type GlobalCallbackRegistry = Record<
 type TrackedPointer = pointerData & {
   owner: ElementObject | null;
   currentOwner: ElementObject | null;
+  /**
+   * When true, GLOBAL listeners no longer receive this pointer's events
+   * (pointerDown/Move, dragStart/drag; pinches involving it; and wheel while
+   * any claim is held) — owner dispatch is unaffected, and end events
+   * (pointerUp/dragEnd/pinchEnd) always deliver so an already-engaged global
+   * listener can terminate cleanly. The claim dies with this entry (pointer
+   * up/cancel), so it can never be stranded by a destroyed owner.
+   */
+  claimed: boolean;
 };
 
 interface dragGesture {
@@ -382,6 +391,42 @@ class InputControl {
     }
   }
 
+  /**
+   * Claims a pointer for its current gesture: GLOBAL listeners stop receiving
+   * that pointer's events (down/move, dragStart/drag; pinches involving it;
+   * wheel while any claim is held). Owner dispatch is unaffected, and end
+   * events (pointerUp/dragEnd/pinchEnd) still deliver so an already-engaged
+   * global listener can terminate cleanly. Call from a gesture owner's
+   * pointerDown handler (claiming at dragStart is legal but the camera may
+   * already have panned by the drag-start threshold).
+   *
+   * The claim is anchored to the input layer's pointer record and dies with it
+   * on pointer up/cancel — it auto-releases and cannot be stranded, even if
+   * the claiming object is destroyed mid-gesture.
+   */
+  claimPointer(pointerId: number): void {
+    const pointer = this.#pointerDict[pointerId];
+    if (pointer) pointer.claimed = true;
+  }
+
+  /** Releases a claim early (rarely needed — claims auto-release on gesture end). */
+  releasePointerClaim(pointerId: number): void {
+    const pointer = this.#pointerDict[pointerId];
+    if (pointer) pointer.claimed = false;
+  }
+
+  #isPointerClaimed(pointerId: number | undefined): boolean {
+    if (pointerId === undefined) return false;
+    return this.#pointerDict[pointerId]?.claimed === true;
+  }
+
+  #hasClaimedPointer(): boolean {
+    for (const pointer of Object.values(this.#pointerDict)) {
+      if (pointer.claimed) return true;
+    }
+    return false;
+  }
+
   subscribeGlobalCursorEvent<EventName extends keyof InputEventCallback>(
     event: EventName,
     id: string,
@@ -513,6 +558,7 @@ class InputControl {
       isWithinEngine,
       owner,
       currentOwner: owner,
+      claimed: false,
     };
 
     this.#gestureDict[event.pointerId] = {
@@ -531,7 +577,10 @@ class InputControl {
     };
 
     this.#dispatchObjectEvent(owner, "pointerDown", prop);
-    this.#dispatchGlobalEvent("pointerDown", prop);
+    // An owner's pointerDown handler may have claimed the pointer just above.
+    if (!this.#isPointerClaimed(event.pointerId)) {
+      this.#dispatchGlobalEvent("pointerDown", prop);
+    }
   };
 
   #onContainerPointerMove = (event: PointerEvent) => {
@@ -565,7 +614,9 @@ class InputControl {
     };
 
     this.#dispatchObjectEvent(currentOwner, "pointerMove", prop);
-    this.#dispatchGlobalEvent("pointerMove", prop);
+    if (!this.#isPointerClaimed(event.pointerId)) {
+      this.#dispatchGlobalEvent("pointerMove", prop);
+    }
 
     if (pointer) {
       Object.assign(pointer, {
@@ -650,7 +701,11 @@ class InputControl {
     };
 
     this.#dispatchObjectEvent(owner, "mouseWheel", prop);
-    this.#dispatchGlobalEvent("mouseWheel", prop);
+    // Wheel has no pointer identity; block it globally while any gesture holds
+    // a claim (e.g. no camera wheel-pan mid node-drag).
+    if (!this.#hasClaimedPointer()) {
+      this.#dispatchGlobalEvent("mouseWheel", prop);
+    }
   };
 
   #getCoordinates(screenX: number, screenY: number): eventPosition {
@@ -728,7 +783,9 @@ class InputControl {
     };
 
     this.#dispatchObjectEvent(pointer.owner, "dragStart", prop);
-    this.#dispatchGlobalEvent("dragStart", prop);
+    if (!pointer.claimed) {
+      this.#dispatchGlobalEvent("dragStart", prop);
+    }
   }
 
   #fireDrag(pointer: TrackedPointer) {
@@ -751,7 +808,9 @@ class InputControl {
     };
 
     this.#dispatchObjectEvent(pointer.owner, "drag", prop);
-    this.#dispatchGlobalEvent("drag", prop);
+    if (!pointer.claimed) {
+      this.#dispatchGlobalEvent("drag", prop);
+    }
   }
 
   #fireDragEnd(pointer: TrackedPointer, button: number) {
@@ -824,7 +883,12 @@ class InputControl {
           start: pinchStartGesture.start,
         };
         this.#dispatchObjectEvent(pinchStartGesture.member, "pinchStart", prop);
-        this.#dispatchGlobalEvent("pinchStart", prop);
+        if (
+          !this.#isPointerClaimed(pinchStartGesture.pointerId0) &&
+          !this.#isPointerClaimed(pinchStartGesture.pointerId1)
+        ) {
+          this.#dispatchGlobalEvent("pinchStart", prop);
+        }
       }
 
       const gesture = this.#gestureDict[gestureKey] as pinchGesture;
@@ -840,7 +904,14 @@ class InputControl {
         current: gesture.current,
       };
       this.#dispatchObjectEvent(gesture.member, "pinch", prop);
-      this.#dispatchGlobalEvent("pinch", prop);
+      // A pinch involving a claimed pointer is suppressed globally; pinchEnd
+      // still delivers (end events always do) so engaged listeners clean up.
+      if (
+        !this.#isPointerClaimed(gesture.pointerId0) &&
+        !this.#isPointerClaimed(gesture.pointerId1)
+      ) {
+        this.#dispatchGlobalEvent("pinch", prop);
+      }
     }
   }
 

@@ -29,9 +29,10 @@ export interface SnapLineSharedData {
   /** The node mid-resize, so an unrelated pointerUp doesn't click-select. */
   resizingNode?: NodeComponent | null;
   /**
-   * @deprecated Legacy camera-control boolean (last-writer-wins). Superseded by
-   * `global.suspend("cameraControl", token)` — the camera still honors `false`
-   * for third-party writers.
+   * @deprecated Legacy camera-control boolean (last-writer-wins), read by the
+   * camera for third-party writers only. In-repo gesture owners block the
+   * camera at the input-dispatch layer instead: `engine.input.claimPointer()`
+   * (claims auto-release when the gesture ends).
    */
   allowCameraControl?: boolean;
 }

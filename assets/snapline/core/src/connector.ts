@@ -317,9 +317,10 @@ class ConnectorComponent extends ElementObject {
   }
 
   startDragOutLine(prop: pointerDownProp): void {
-    // Suspend camera control while dragging a connection, mirroring node
-    // drags: without this, drawing a line under a Camera also pans the canvas.
-    this.global.suspend("cameraControl", this.id);
+    // Claim the pointer while dragging a connection, mirroring node drags:
+    // without this, drawing a line under a Camera also pans the canvas. The
+    // claim auto-releases when the gesture ends.
+    this.engine.input.claimPointer(prop.event.pointerId);
 
     let newLine = this.createLine();
     newLine.setLineEnd(prop.position.x, prop.position.y);
@@ -515,9 +516,6 @@ class ConnectorComponent extends ElementObject {
   }
 
   _endLineDragCleanup() {
-    // Release camera control after the line drag ends (see startDragOutLine).
-    this.global.resume("cameraControl", this.id);
-
     this.#state = ConnectorState.IDLE;
     this.event.input.drag = null;
     this.event.input.dragEnd = null;
@@ -576,8 +574,6 @@ class ConnectorComponent extends ElementObject {
   }
 
   destroy() {
-    // A mid-gesture unmount must not strand a camera suspension.
-    this.global.resume("cameraControl", this.id);
     this.deleteAllLines();
     if (this.parent?._connectors[this.#name] === this) {
       delete this.parent._connectors[this.#name];

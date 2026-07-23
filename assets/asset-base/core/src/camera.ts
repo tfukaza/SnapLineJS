@@ -266,11 +266,9 @@ class CameraControl extends ElementObject {
     ) {
       return;
     }
-    if (
-      this.global.isSuspended("cameraControl") ||
-      // Legacy channel: third parties may still write the shared boolean.
-      this.global.data.allowCameraControl === false
-    ) {
+    // Gesture owners block the camera at the input-dispatch layer (pointer
+    // claims); this legacy boolean remains for third-party writers only.
+    if (this.global.data.allowCameraControl === false) {
       return;
     }
     if (prop.isWithinEngine === false) {
@@ -292,11 +290,9 @@ class CameraControl extends ElementObject {
     if (prop.event?.pointerId !== this.#panPointerId) {
       return;
     }
-    if (
-      this.global.isSuspended("cameraControl") ||
-      // Legacy channel: third parties may still write the shared boolean.
-      this.global.data.allowCameraControl === false
-    ) {
+    // Gesture owners block the camera at the input-dispatch layer (pointer
+    // claims); this legacy boolean remains for third-party writers only.
+    if (this.global.data.allowCameraControl === false) {
       return;
     }
     const dx = prop.position.screenX - this.#mouseDownX;
@@ -370,11 +366,9 @@ class CameraControl extends ElementObject {
     if (this.config.panLock) {
       return;
     }
-    if (
-      this.global.isSuspended("cameraControl") ||
-      // Legacy channel: third parties may still write the shared boolean.
-      this.global.data.allowCameraControl === false
-    ) {
+    // Gesture owners block the camera at the input-dispatch layer (pointer
+    // claims); this legacy boolean remains for third-party writers only.
+    if (this.global.data.allowCameraControl === false) {
       return;
     }
     const camera = this.engine.camera;
@@ -406,11 +400,9 @@ class CameraControl extends ElementObject {
     if (this.config.zoomLock && this.config.panLock) {
       return;
     }
-    if (
-      this.global.isSuspended("cameraControl") ||
-      // Legacy channel: third parties may still write the shared boolean.
-      this.global.data.allowCameraControl === false
-    ) {
+    // Gesture owners block the camera at the input-dispatch layer (pointer
+    // claims); this legacy boolean remains for third-party writers only.
+    if (this.global.data.allowCameraControl === false) {
       return;
     }
     this.#state = "pinching";
@@ -423,11 +415,9 @@ class CameraControl extends ElementObject {
     if (this.config.zoomLock && this.config.panLock) {
       return;
     }
-    if (
-      this.global.isSuspended("cameraControl") ||
-      // Legacy channel: third parties may still write the shared boolean.
-      this.global.data.allowCameraControl === false
-    ) {
+    // Gesture owners block the camera at the input-dispatch layer (pointer
+    // claims); this legacy boolean remains for third-party writers only.
+    if (this.global.data.allowCameraControl === false) {
       return;
     }
     const [pointer0, pointer1] = prop.current.pointerList;
