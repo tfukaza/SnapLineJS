@@ -137,12 +137,12 @@ function rewriteDocTarget(
   const markdownPath = path.endsWith(".md") ? path : `${path}.md`;
   const search = new URLSearchParams(query);
   const explicitFrameworkPath =
-    /^\/docs\/snapsort\/reference\/(svelte|react|vanilla|core)(?:\/|$)/.test(
+    /^\/docs\/(?:snapsort|snapline)\/reference\/(svelte|react|vanilla|core)(?:\/|$)/.test(
       path,
     );
 
   if (
-    path.startsWith("/docs/snapsort/") &&
+    /^\/docs\/(?:snapsort|snapline)\//.test(path) &&
     !explicitFrameworkPath &&
     !search.has("framework")
   ) {

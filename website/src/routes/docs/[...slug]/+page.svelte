@@ -15,12 +15,14 @@
 
 	// Import the grouped entries function from +page.ts for sidebar
 	import { _getGroupedEntries, entries } from './+page.js';
+	import { docProjects, findDocProject } from '$lib/docsCatalog';
 	const docSections = _getGroupedEntries();
 	const allEntries = entries();
-	const projectOptions = [
-		{ slug: 'snapengine', label: 'SnapEngine', href: '/docs/snapengine/introduction' },
-		{ slug: 'snapsort', label: 'SnapSort', href: '/docs/snapsort/introduction' }
-	];
+	const projectOptions = docProjects.map((project) => ({
+		slug: project.slug,
+		label: project.title,
+		href: project.href
+	}));
 
 	// Compute breadcrumbs from $page.params.slug
 	import { page } from '$app/stores';
@@ -50,14 +52,13 @@
 	const currentSlug = $derived($page.params.slug || '');
 	const isDocsHome = $derived(slugParts.length === 0);
 	const currentProject = $derived(slugParts[0] || 'snapengine');
-	const currentProjectTitle = $derived(
-		isDocsHome ? 'SnapEngine' : currentProject === 'snapsort' ? 'SnapSort' : 'SnapEngine Core'
-	);
+	const currentProjectConfig = $derived(findDocProject(currentProject));
+	const currentProjectTitle = $derived(currentProjectConfig?.title ?? currentProject);
+	const showFrameworkSelect = $derived((currentProjectConfig?.frameworks.length ?? 0) > 1);
 	const docDescription = $derived(
 		data.metadata?.description ??
-			(currentProject === 'snapsort'
-				? 'Documentation for installing, configuring, and building drag and drop interfaces with SnapSort.'
-				: 'Documentation for building draggable, animated, collision-aware web experiences with SnapEngine.')
+			currentProjectConfig?.description ??
+			'SnapEngine documentation.'
 	);
 	const docTitle = $derived(
 		isDocsHome
@@ -171,10 +172,9 @@
 	</div>
 
 	<!-- Mobile dropdown menu -->
-	<div id="mobile-doc-menu" class="mobile-menu-dropdown" class:open={mobileMenuOpen}>
-		<nav aria-label="Documentation">
-			<ProjectSelect id="mobile-doc-project" value={currentProject} options={projectOptions} />
-			{#if currentProject === 'snapsort'}
+	<div class="mobile-menu-dropdown" class:open={mobileMenuOpen}>
+		<nav>
+			{#if showFrameworkSelect}
 				<FrameworkSelect
 					id="mobile-doc-framework"
 					value={$selectedFramework}
@@ -208,8 +208,7 @@
 
 <div class="doc-layout">
 	<aside class="doc-sidebar">
-		<ProjectSelect id="desktop-doc-project" value={currentProject} options={projectOptions} />
-		{#if currentProject === 'snapsort'}
+		{#if showFrameworkSelect}
 			<FrameworkSelect
 				id="desktop-doc-framework"
 				value={$selectedFramework}

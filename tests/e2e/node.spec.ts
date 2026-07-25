@@ -28,8 +28,8 @@ async function waitForAnimationFrame(page: Page) {
   });
 }
 
-async function lineEndpoints(page: Page) {
-  return page.locator("[data-snapline-type='connector-line']").evaluate((svg) => {
+async function endpointsOf(line: Locator) {
+  return line.evaluate((svg) => {
     const rect = svg.getBoundingClientRect();
     const transform = new DOMMatrixReadOnly(getComputedStyle(svg).transform);
     const path = svg.querySelector("path");
@@ -55,6 +55,10 @@ async function lineEndpoints(page: Page) {
       },
     };
   });
+}
+
+async function lineEndpoints(page: Page) {
+  return endpointsOf(page.locator("[data-snapline-type='connector-line']"));
 }
 
 function expectPointCloseTo(
@@ -102,6 +106,33 @@ test("selects and drags a node", async ({ page }) => {
   expect(endBox!.y - startBox!.y).toBeLessThan(65);
 });
 
+test("a node follows the pointer live on repeated drags", async ({ page }) => {
+  const node = page.locator("[data-snapline-type='node']", {
+    hasText: "Node B",
+  });
+  const first = await node.boundingBox();
+  expect(first).not.toBeNull();
+
+  await dragFromTo(
+    page,
+    { x: first!.x + 40, y: first!.y + 24 },
+    { x: first!.x + 90, y: first!.y + 64 },
+  );
+
+  const settled = await node.boundingBox();
+  expect(settled).not.toBeNull();
+  await page.mouse.move(settled!.x + 40, settled!.y + 24);
+  await page.mouse.down();
+  await page.mouse.move(settled!.x + 120, settled!.y + 84, { steps: 8 });
+  await waitForAnimationFrame(page);
+
+  const live = await node.boundingBox();
+  expect(live).not.toBeNull();
+  expect(live!.x - settled!.x).toBeGreaterThan(65);
+  expect(live!.y - settled!.y).toBeGreaterThan(45);
+  await page.mouse.up();
+});
+
 test("connects an output connector to an input connector", async ({ page }) => {
   const nodeA = page.locator("[data-snapline-type='node']", {
     hasText: "Node A",
@@ -117,6 +148,80 @@ test("connects an output connector to an input connector", async ({ page }) => {
   const line = page.locator("[data-snapline-type='connector-line']");
   await expect(line).toHaveCount(1);
   await expect(line.locator("path")).toHaveAttribute("d", /C/);
+});
+
+test("replaces the oldest line when a finite input is full", async ({
+  page,
+}) => {
+  const nodeA = page.locator("[data-snapline-type='node']", {
+    hasText: "Node A",
+  });
+  const nodeB = page.locator("[data-snapline-type='node']", {
+    hasText: "Node B",
+  });
+  const nodeC = page.locator("[data-snapline-type='node']", {
+    hasText: "Node C",
+  });
+  const input = nodeB.locator("[data-snapline-name='input']");
+  const outputA = nodeA.locator("[data-snapline-name='output']");
+  const outputC = nodeC.locator("[data-snapline-name='output']");
+
+  await dragFromTo(page, await centerOf(outputA), await centerOf(input));
+  await expect(page.locator("[data-snapline-type='connector-line']")).toHaveCount(
+    1,
+  );
+
+  await dragFromTo(page, await centerOf(outputC), await centerOf(input));
+  const lines = page.locator("[data-snapline-type='connector-line']");
+  await expect(lines).toHaveCount(1);
+
+  const endpoints = await lineEndpoints(page);
+  expectPointCloseTo(endpoints.start, await centerOf(outputC));
+  expectPointCloseTo(endpoints.end, await centerOf(input));
+});
+
+test("evicts only the oldest lines needed for a larger finite capacity", async ({
+  page,
+}) => {
+  const nodeA = page.locator("[data-snapline-type='node']", {
+    hasText: "Node A",
+  });
+  const nodeB = page.locator("[data-snapline-type='node']", {
+    hasText: "Node B",
+  });
+  const nodeC = page.locator("[data-snapline-type='node']", {
+    hasText: "Node C",
+  });
+  const input = nodeC.locator("[data-snapline-name='input']");
+  const outputA = nodeA.locator("[data-snapline-name='output']");
+  const outputB = nodeB.locator("[data-snapline-name='output']");
+  const outputC = nodeC.locator("[data-snapline-name='output']");
+  const lines = page.locator("[data-snapline-type='connector-line']");
+
+  await dragFromTo(page, await centerOf(outputA), await centerOf(input));
+  await dragFromTo(page, await centerOf(outputB), await centerOf(input));
+  await expect(lines).toHaveCount(2);
+
+  await dragFromTo(page, await centerOf(outputC), await centerOf(input));
+  await expect(lines).toHaveCount(2);
+
+  const endpoints = await Promise.all([
+    endpointsOf(lines.nth(0)),
+    endpointsOf(lines.nth(1)),
+  ]);
+  const expectedStarts = await Promise.all([centerOf(outputB), centerOf(outputC)]);
+  for (const endpoint of endpoints) {
+    expectPointCloseTo(endpoint.end, await centerOf(input));
+  }
+  for (const expectedStart of expectedStarts) {
+    expect(
+      endpoints.some(
+        ({ start }) =>
+          Math.abs(start.x - expectedStart.x) <= 3 &&
+          Math.abs(start.y - expectedStart.y) <= 3,
+      ),
+    ).toBe(true);
+  }
 });
 
 test("keeps a line endpoint aligned while the target node is moving", async ({

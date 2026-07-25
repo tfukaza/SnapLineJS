@@ -2,6 +2,7 @@ import { StationaryCamera } from "./camera";
 import type { Camera } from "./camera";
 import { GlobalManager } from "./global";
 import { InputControl } from "./input";
+import type { eventPosition } from "./input";
 import { BaseObject, FrameTask, detachAnimationFromOwner } from "./object";
 import type { CollisionEngine } from "./collision";
 import type { AnimationInterface } from "./animation";
@@ -9,6 +10,16 @@ import type { DebugRenderer } from "./debug";
 import type { FrameStats } from "./object";
 
 export interface EngineConfig {}
+
+export interface EdgePanController {
+  startEdgePan(
+    pointerId: number,
+    position: eventPosition,
+    onFrame: (position: eventPosition) => void,
+  ): void;
+  updateEdgePan(pointerId: number, position: eventPosition): void;
+  stopEdgePan(pointerId: number): void;
+}
 
 const DEFAULT_ENGINE_CONFIG: EngineConfig = {};
 
@@ -94,6 +105,7 @@ class Engine {
   #containerElement: HTMLElement | null = null; // The DOM element for the engine's container.
   #containerBounds: ContainerBounds | null = null; // Cached bounding rect of the container
   #camera: Camera | null = null; // Optional camera instance
+  #edgePanController: EdgePanController | null = null;
   #collisionEngine: CollisionEngine | null = null; // Optional collision engine instance
   #animationList: AnimationInterface[] = []; // List of active animations, if animation engine is enabled
   #animationProcessor: AnimationProcessor | null = null;
@@ -177,6 +189,14 @@ class Engine {
 
   set camera(camera: Camera | null) {
     this.#camera = camera;
+  }
+
+  get edgePanController(): EdgePanController | null {
+    return this.#edgePanController;
+  }
+
+  set edgePanController(controller: EdgePanController | null) {
+    this.#edgePanController = controller;
   }
 
   get collisionEngine(): CollisionEngine | null {

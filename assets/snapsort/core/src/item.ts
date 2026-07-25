@@ -18,6 +18,7 @@ import type {
   GhostKind,
   GhostRect,
   GhostRole,
+  VisualGeometryInvalidationReason,
 } from "./events";
 import {
   assertCanFireGhostInsert,
@@ -355,6 +356,24 @@ export class Item extends ElementObject {
 
   get rootContainer(): Container {
     return this.#rootContainer ?? (this as unknown as Container);
+  }
+
+  /**
+   * Base implementation for items outside any container tree (for example a
+   * ghost anchor mid-move, whose `rootContainer` getter falls back to the
+   * item itself). Forwards to the owning container when one exists; there is
+   * no consumer to notify otherwise. `Container` overrides this with the
+   * accumulating implementation.
+   * @internal
+   */
+  invalidateVisualGeometry(
+    items: Iterable<Item>,
+    reason: VisualGeometryInvalidationReason,
+  ): void {
+    const root = this.#rootContainer;
+    if (root && root !== (this as unknown as Container)) {
+      root.invalidateVisualGeometry(items, reason);
+    }
   }
 
   set rootContainer(value: Container | null) {
@@ -1105,6 +1124,7 @@ export class Item extends ElementObject {
         finish: () => {
           item.#clearVisualAnimationOffset();
           targetElement.style.transform = "";
+          item.rootContainer.invalidateVisualGeometry([item], "settle");
         },
       },
     );
@@ -1159,6 +1179,7 @@ export class Item extends ElementObject {
   ) {
     this.#setVisualAnimationOffset(x, y);
     targetElement.style.transform = this.#translateTransform(x, y);
+    this.rootContainer.invalidateVisualGeometry([this], "animation");
   }
 
   /**
@@ -1340,6 +1361,7 @@ export class Item extends ElementObject {
     if (!layoutPosition) {
       if (parentItem) return;
       this.writeTransform();
+      this.rootContainer.invalidateVisualGeometry([this], "drag");
       return;
     }
 
@@ -1369,6 +1391,7 @@ export class Item extends ElementObject {
       groupOffset.y;
 
     this.writeTransform();
+    this.rootContainer.invalidateVisualGeometry([this], "drag");
   }
 
   /**

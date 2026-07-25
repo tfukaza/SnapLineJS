@@ -74,6 +74,10 @@ function sourceFiles(directory) {
   return files;
 }
 
+function hasGlob(value) {
+  return /[*?[{\]}]/.test(value);
+}
+
 for (const entry of packages) {
   const { directory, file, manifest } = entry;
   if (manifest.private) continue;
@@ -94,6 +98,17 @@ for (const entry of packages) {
     }
   }
 
+  for (const includedPath of manifest.files ?? []) {
+    if (hasGlob(includedPath)) continue;
+    const resolved = path.resolve(directory, includedPath);
+    if (
+      !resolved.startsWith(`${directory}${path.sep}`) ||
+      !fs.existsSync(resolved)
+    ) {
+      errors.push(`${file}: declared publish path does not exist: ${includedPath}`);
+    }
+  }
+
   let packedFiles = new Set();
   try {
     const output = execFileSync(
@@ -110,6 +125,22 @@ for (const entry of packages) {
     const packedPath = target.slice(2);
     if (fs.existsSync(path.resolve(directory, target)) && !packedFiles.has(packedPath)) {
       errors.push(`${file}: published tarball omits target: ${target}`);
+    }
+  }
+  for (const includedPath of manifest.files ?? []) {
+    if (hasGlob(includedPath)) continue;
+    const resolved = path.resolve(directory, includedPath);
+    if (!fs.existsSync(resolved)) continue;
+    const normalized = includedPath.replace(/^\.\//, "").replace(/\/$/, "");
+    const included = fs.statSync(resolved).isDirectory()
+      ? [...packedFiles].some((packedPath) =>
+          packedPath.startsWith(`${normalized}/`),
+        )
+      : packedFiles.has(normalized);
+    if (!included) {
+      errors.push(
+        `${file}: published tarball omits declared path: ${includedPath}`,
+      );
     }
   }
 

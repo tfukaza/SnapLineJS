@@ -36,6 +36,44 @@ type DocMetadata = {
   frameworkKey?: string;
 };
 
+export type DocProject = {
+  slug: string;
+  title: string;
+  description: string;
+  href: string;
+  frameworks: readonly string[];
+};
+
+export const docProjects: readonly DocProject[] = [
+  {
+    slug: "snapengine",
+    title: "SnapEngine",
+    description:
+      "Documentation for building draggable, animated, collision-aware web experiences with SnapEngine.",
+    href: "/docs/snapengine/introduction",
+    frameworks: [],
+  },
+  {
+    slug: "snapsort",
+    title: "SnapSort",
+    description:
+      "Documentation for installing, configuring, and building drag-and-drop interfaces with SnapSort.",
+    href: "/docs/snapsort/introduction",
+    frameworks: ["svelte", "react", "vanilla"],
+  },
+  {
+    slug: "snapline",
+    title: "SnapLine",
+    description:
+      "Documentation for building node graphs, connections, selection, groups, and placement workflows with SnapLine.",
+    href: "/docs/snapline/introduction",
+    frameworks: ["svelte", "react", "vanilla"],
+  },
+];
+
+export const findDocProject = (slug: string): DocProject | undefined =>
+  docProjects.find((project) => project.slug === slug);
+
 const modules = import.meta.glob("@docs/**/*.{md,mdx}", {
   eager: true,
 }) as Record<string, { metadata?: DocMetadata }>;
@@ -43,17 +81,13 @@ const modules = import.meta.glob("@docs/**/*.{md,mdx}", {
 const formatTitle = (value: string) =>
   value.charAt(0).toUpperCase() + value.slice(1).replace(/_/g, " ");
 
-const projectTitles: Record<string, string> = {
-  snapengine: "SnapEngine",
-  snapsort: "SnapSort",
-};
+const projectTitles = Object.fromEntries(
+  docProjects.map((project) => [project.slug, project.title]),
+);
 
-export const projectDescriptions: Record<string, string> = {
-  snapengine:
-    "Documentation for building draggable, animated, collision-aware web experiences with SnapEngine.",
-  snapsort:
-    "Documentation for installing, configuring, and building drag-and-drop interfaces with SnapSort.",
-};
+export const projectDescriptions = Object.fromEntries(
+  docProjects.map((project) => [project.slug, project.description]),
+);
 
 export const legacyDocRedirects: Record<string, string> = {
   "snapsort/introduction/01_core_concepts":
@@ -88,12 +122,11 @@ const allEntries = Object.entries(modules)
     const project = metadata.project ?? derivedProject;
     const projectTitle =
       metadata.projectTitle ??
-      metadata.sectionTitle ??
       projectTitles[project] ??
       (project ? formatTitle(project) : "Docs");
     const section = metadata.section ?? derivedSection;
     const frameworkFromPath =
-      project === "snapsort" &&
+      findDocProject(project)?.frameworks.length &&
       section === "reference" &&
       ["svelte", "react", "vanilla", "core"].includes(sourceParts[2])
         ? sourceParts[2]

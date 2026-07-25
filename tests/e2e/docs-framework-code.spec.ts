@@ -189,3 +189,62 @@ test("project llms.txt files expose ordered framework-aware Markdown trees", asy
   );
   expect(snapEngineIndex).not.toContain("/docs/snapsort/");
 });
+
+test("SnapLine docs expose framework switching, live demos, Markdown, and llms index", async ({
+  page,
+  request,
+}) => {
+  const response = await page.goto(
+    "/docs/snapline/introduction/01_setup?framework=svelte",
+  );
+  expect(response?.status()).toBe(200);
+  await page.waitForFunction(
+    () => localStorage.getItem("preferredCodeFramework") === "svelte",
+  );
+  await expect(page.locator("#desktop-doc-framework")).toHaveValue("svelte");
+  await expect(
+    page.locator(".framework-code-block:visible").filter({
+      hasText: "@snap-engine/snapline-svelte",
+    }),
+  ).toHaveCount(2);
+
+  await page.locator("#desktop-doc-framework").selectOption("react");
+  await expect(page.locator(".doc-article")).toHaveAttribute(
+    "data-framework",
+    "react",
+  );
+  await expect(
+    page.locator(".framework-code-block:visible").filter({
+      hasText: "@snap-engine/snapline-react",
+    }),
+  ).toHaveCount(2);
+
+  await page.goto("/docs/snapline/guides/03_groups");
+  await expect(page.locator(".snapline-demo")).toBeVisible();
+  await expect(
+    page.locator("[data-snapline-type='group']"),
+  ).toHaveCount(2);
+  await expect(page.getByText("Outer group", { exact: true })).toBeVisible();
+
+  const markdown = await request.get(
+    "/docs/snapline/guides/03_groups.md?framework=svelte",
+  );
+  expect(markdown.status()).toBe(200);
+  const markdownText = await markdown.text();
+  expect(markdownText).toContain("# Groups and nesting");
+  expect(markdownText).toContain(
+    "This page includes interactive diagrams or demos.",
+  );
+  expect(markdownText).not.toContain("<SnapLineDemo");
+
+  const llms = await request.get("/docs/snapline/llms.txt");
+  expect(llms.status()).toBe(200);
+  const llmsText = await llms.text();
+  expect(llmsText).toContain("# SnapLine Documentation");
+  expect(llmsText).toContain(
+    "/docs/snapline/reference/svelte/group.md?framework=svelte",
+  );
+  expect(llmsText).toContain(
+    "/docs/snapline/reference/react/group.md?framework=react",
+  );
+});

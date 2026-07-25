@@ -1,23 +1,25 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
-import { RectSelectComponent, type SelectRect } from "@snap-engine/snapline";
+import { RectSelectComponent, type SelectCallbacks, type SelectRect } from "@snap-engine/snapline";
 import { useSnapLineEngine } from "./Engine";
 
 export interface SelectProps {
   className?: string;
   id?: string;
   style?: CSSProperties;
+  callbacks?: SelectCallbacks;
 }
 
 export function Select({
   className,
   id = "select-container",
   style,
+  callbacks = {},
 }: SelectProps) {
   const engine = useSnapLineEngine();
   const selectRef = useRef<RectSelectComponent | null>(null);
 
   if (!selectRef.current) {
-    selectRef.current = new RectSelectComponent(engine, null);
+    selectRef.current = new RectSelectComponent(engine, null, { callbacks });
   }
   const select = selectRef.current;
 
@@ -33,7 +35,7 @@ export function Select({
   });
 
   useEffect(() => {
-    select.selectCallback.onRectChange = (r: SelectRect) => setRect(r);
+    select.callbacks.onRectChange = (r: SelectRect) => setRect(r);
     return () => {
       select.destroy();
     };

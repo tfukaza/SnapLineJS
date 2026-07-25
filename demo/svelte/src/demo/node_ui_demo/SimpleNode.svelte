@@ -1,7 +1,7 @@
 <script lang="ts">
     import { Node, Connector, Line } from "@snap-engine/snapline-svelte";
     
-    let { title = "Node", x = 0, y = 0 } = $props();
+    let { title = "Node", x = 0, y = 0, maxIncoming = 1 } = $props();
     let nodeComponent: any = $state(null);
 </script>
 
@@ -12,7 +12,7 @@
     <div class="node-body">
         <div class="input-row">
             <div class="connector-wrapper">
-                <Connector name="input" maxConnectors={1} allowDragOut={false} />
+                <Connector name="input" maxConnectors={maxIncoming} allowDragOut={false} />
             </div>
             <span>Input</span>
         </div>

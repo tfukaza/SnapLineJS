@@ -1,4 +1,4 @@
-import type { CircleCollider } from "@snap-engine/core/collision";
+import type { RectCollider } from "@snap-engine/core/collision";
 import type { NodeComponent } from "./node";
 
 /**
@@ -25,7 +25,7 @@ export interface SnapLineSharedData {
   /** All live groups; notified on any node's drop so membership stays settled. */
   groups?: GroupLike[];
   /** Registered resize hitboxes; input.ts routes pointerdowns over them. */
-  resizeHandles?: CircleCollider[];
+  resizeHandles?: RectCollider[];
   /** The node mid-resize, so an unrelated pointerUp doesn't click-select. */
   resizingNode?: NodeComponent | null;
   /**
@@ -54,7 +54,7 @@ export function getGroups(global: { data: any }): GroupLike[] {
   return data.groups;
 }
 
-export function getResizeHandles(global: { data: any }): CircleCollider[] {
+export function getResizeHandles(global: { data: any }): RectCollider[] {
   const data = snapData(global);
   if (!data.resizeHandles) data.resizeHandles = [];
   return data.resizeHandles;

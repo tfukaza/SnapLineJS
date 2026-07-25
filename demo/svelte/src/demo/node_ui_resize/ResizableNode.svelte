@@ -1,7 +1,7 @@
 <script lang="ts">
     import { Node, Connector, Line } from "@snap-engine/snapline-svelte";
 
-    let { title = "Node", x = 0, y = 0, resizable = false, resizeAnchor = undefined } = $props();
+    let { title = "Node", x = 0, y = 0, resizable = false, resizeHandles = undefined } = $props();
     let nodeComponent: any = $state(null);
 </script>
 
@@ -12,7 +12,7 @@
     {x}
     {y}
     {resizable}
-    {resizeAnchor}
+    {resizeHandles}
     minWidth={140}
     minHeight={90}
 >

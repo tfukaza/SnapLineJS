@@ -29,6 +29,8 @@ export type {
   DropTargetChangeEvent,
   DragItemHoverEvent,
   CanDropEvent,
+  VisualGeometryInvalidationEvent,
+  VisualGeometryInvalidationReason,
 } from "./events";
 export type { LayoutMainAxisAlign } from "./layout";
 export { Item } from "./item";

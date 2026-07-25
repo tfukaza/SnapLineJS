@@ -62,10 +62,14 @@ function SnapLineResizeDemo() {
 }
 
 function SnapLineGroupDemo() {
-  const tagMember = (node) =>
-    node.element?.setAttribute("data-member", "true");
-  const untagMember = (node) =>
-    node.element?.removeAttribute("data-member");
+  const updateMembers = ({ added, removed }) => {
+    for (const node of added) {
+      node.element?.setAttribute("data-member", "true");
+    }
+    for (const node of removed) {
+      node.element?.removeAttribute("data-member");
+    }
+  };
   return (
     <main className="snapline-demo">
       <SnapEngine id="node-ui-group-canvas" className="snapline-canvas">
@@ -82,8 +86,7 @@ function SnapLineGroupDemo() {
               border: "1px solid rgba(120, 160, 255, 0.6)",
               borderRadius: "8px",
             }}
-            onMemberEnter={tagMember}
-            onMemberLeave={untagMember}
+            onMembershipChange={updateMembers}
           />
           <SimpleNode title="Node A" x={100} y={110} />
           <SimpleNode title="Node C" x={100} y={300} />

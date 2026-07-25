@@ -1,0 +1,38 @@
+---
+title: Placement and camera interaction
+description: Build palette placement previews with correct screen-to-world conversion and cancellation.
+order: 4
+sectionTitle: Guides
+sectionOrder: 2
+---
+
+<script>
+  import SnapLineDemo from "$lib/components/docs/SnapLineDemo.svelte";
+</script>
+
+<SnapLineDemo mode="placement" />
+
+`PlacementController<T>` is a framework-neutral state machine. It follows a
+payload and size, calculates an anchored world position, validates previews,
+and reports commit or cancellation. It deliberately does not create nodes.
+
+```ts
+const placement = new PlacementController<NodeTemplate>({
+  screenToWorld(screen) {
+    const camera = engine.camera!.getCameraFromScreen(screen.x, screen.y);
+    const world = engine.camera!.getWorldFromCamera(camera[0], camera[1]);
+    return { x: world[0], y: world[1] };
+  },
+  callbacks: {
+    canPlace: ({ position }) => isInsideWorkspace(position),
+    onCommit: ({ payload, position }) => addNode(payload, position),
+  },
+});
+
+placement.begin(template, { width: 180, height: 96 });
+```
+
+Svelte and React `Placement` adapters feed pointer and Escape events into the
+controller and render an optional preview. Connector and node drags claim their
+pointer so the camera does not pan during the same gesture. Edge pan is enabled
+only when the engine exposes an edge-pan controller and the object permits it.

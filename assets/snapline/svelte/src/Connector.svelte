@@ -2,6 +2,8 @@
   import {
     NodeComponent,
     ConnectorComponent,
+    type ConnectorCallbacks,
+    type SnapLineMetadata,
   } from "@snap-engine/snapline";
   import type { Engine } from "@snap-engine/core";
   import { getContext, onDestroy, onMount } from "svelte";
@@ -10,18 +12,32 @@
     name,
     maxConnectors = 1,
     allowDragOut = true,
+    metadata = {},
+    callbacks = {},
+    edgePan = true,
+    connectorObject = null,
+    data = {},
   }: {
     name: string;
     maxConnectors?: number;
     allowDragOut?: boolean;
+    metadata?: SnapLineMetadata;
+    callbacks?: ConnectorCallbacks;
+    edgePan?: boolean;
+    connectorObject?: ConnectorComponent | null;
+    data?: Record<string, string>;
   } = $props();
 
   let engine: Engine = getContext("engine");
   let nodeObject: NodeComponent = getContext("nodeObject");
-  let connector = new ConnectorComponent(engine, nodeObject, {
+  const ownsConnector = connectorObject == null;
+  let connector = connectorObject ?? new ConnectorComponent(engine, nodeObject, {
     name: name,
     maxConnectors: maxConnectors,
     allowDragOut: allowDragOut,
+    metadata,
+    callbacks,
+    edgePan,
   });
 
   nodeObject.addConnectorObject(connector);
@@ -36,7 +52,7 @@
   });
 
   onDestroy(() => {
-    connector.destroy();
+    if (ownsConnector) connector.destroy();
   });
 </script>
 
@@ -44,6 +60,7 @@
   bind:this={connectorDOM}
   data-snapline-type="connector"
   data-snapline-name={name}
+  {...Object.fromEntries(Object.entries(data).map(([key, value]) => [`data-${key}`, value]))}
   class={`connector ${allowDragOut ? "right" : "left"}`}
 ></div>
 

@@ -5,6 +5,7 @@
   import NodeUiPage from "./demo/node_ui_demo/NodeUIDemo.svelte";
   import NodeUiCameraPage from "./demo/node_ui_camera/NodeUICameraDemo.svelte";
   import NodeUiGroupPage from "./demo/node_ui_group/NodeUIGroupDemo.svelte";
+  import NodeUiNestedGroupPage from "./demo/node_ui_group/NodeUINestedGroupDemo.svelte";
   import NodeUiResizePage from "./demo/node_ui_resize/NodeUIResizeDemo.svelte";
   import DropSnapNestedPage from "./demo/drop_snap_nested/DropSnapNestedDemo.svelte";
   import SnapSortComponentsPage from "./demo/snapsort_components/SnapSortComponentsDemo.svelte";
@@ -67,6 +68,11 @@
       label: "SnapLine Group",
       path: "/snapline-group",
       legacyDemoValues: ["snapline_group"],
+    },
+    {
+      label: "SnapLine Nested Group",
+      path: "/snapline-nested-group",
+      legacyDemoValues: ["snapline_nested_group"],
     },
     {
       label: "SnapLine Resize",
@@ -278,6 +284,8 @@
       <NodeUiCameraPage />
     {:else if selectedPath === "/snapline-group"}
       <NodeUiGroupPage />
+    {:else if selectedPath === "/snapline-nested-group"}
+      <NodeUiNestedGroupPage />
     {:else if selectedPath === "/snapline-resize"}
       <NodeUiResizePage />
     {:else if selectedPath === "/snapsort"}

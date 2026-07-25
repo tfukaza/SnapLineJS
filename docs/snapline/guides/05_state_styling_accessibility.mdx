@@ -1,0 +1,51 @@
+---
+title: State, styling, and accessibility
+description: Persist graph state, style structural hooks, and understand current accessibility boundaries.
+order: 5
+sectionTitle: Guides
+sectionOrder: 2
+---
+
+## Persist application state
+
+Store stable IDs, world positions, dimensions, node-specific parameters, and
+connections in your own document. Recreate core objects from that document and
+write changes back from commit callbacks. High-frequency drag callbacks are for
+preview UI; commit callbacks are the persistence boundary.
+
+SnapLine metadata is intentionally untyped application data. Use it for port
+roles, node IDs, group roles, or validation hints, not as a replacement for the
+canonical document.
+
+## Style the hooks
+
+Adapters expose stable attributes including:
+
+- `data-snapline-type="node|connector|group|selection"`
+- `data-snapline-part="group-header|group-resize|node-resize"`
+- `data-handle="n|ne|e|se|s|sw|w|nw"`
+- `data-selected="true|false"`
+
+SnapLine supplies only structural positioning and pointer requirements. Node
+cards, connector shapes, line strokes, selection fills, focus rings, and group
+headers belong to the application.
+
+## Accessibility status
+
+Version `0.3` is pointer-first. Provide semantic buttons for palette actions,
+text labels for ports, keyboard-accessible property editing, a non-canvas way
+to create/delete connections, visible focus, and announcements for graph
+changes. Full keyboard movement, connection, grouping, and placement are not
+yet library-provided. Key bindings also remain application-owned: use the
+engine queries and component APIs from the application's keyboard handler
+instead of expecting SnapLine to bind Delete, Shift, or platform modifiers.
+
+## Troubleshooting
+
+- A line that starts in the wrong place usually means a Vanilla integration did
+  not call `syncDomGeometry()` after the connector DOM committed.
+- A node that moves twice is usually being moved both from application pointer
+  handlers and SnapLine.
+- Group membership updates only at settle points by design.
+- Keep framework arrays keyed by stable document IDs; never structurally move
+  their DOM from a core callback.

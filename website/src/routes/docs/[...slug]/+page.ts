@@ -4,6 +4,7 @@ import {
   entries,
   getGroupedEntries,
   legacyDocRedirects,
+  findDocProject,
 } from "$lib/docsCatalog";
 
 export const csr = true;
@@ -21,13 +22,8 @@ export async function load({ params }) {
     throw redirect(308, "/docs");
   }
 
-  if (slug === "snapengine") {
-    throw redirect(308, "/docs/snapengine/introduction");
-  }
-
-  if (slug === "snapsort") {
-    throw redirect(308, "/docs/snapsort/introduction");
-  }
+  const project = findDocProject(slug);
+  if (project) throw redirect(308, project.href);
 
   if (legacyDocRedirects[slug]) {
     throw redirect(308, `/docs/${legacyDocRedirects[slug]}`);

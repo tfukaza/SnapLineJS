@@ -4,6 +4,8 @@ import type {
   pointerUpProp,
   mouseWheelProp,
   pinchProp,
+  eventPosition,
+  EdgePanController,
 } from "@snap-engine/core";
 import { ElementObject } from "@snap-engine/core";
 import { Camera } from "@snap-engine/core";
@@ -51,6 +53,15 @@ export type CameraPointerConfig = {
   panLock?: boolean | "touch";
 };
 
+export type CameraEdgePanConfig = {
+  /** Enables edge-panning for consumers that explicitly request it. */
+  enabled?: boolean;
+  /** Screen-pixel width of the activation zone at each viewport edge. */
+  edgeDistance?: number;
+  /** Maximum camera speed in screen pixels per second. */
+  maxSpeed?: number;
+};
+
 export type CameraControlConfig = {
   zoomLock?: boolean;
   panLock?: boolean;
@@ -58,6 +69,8 @@ export type CameraControlConfig = {
   wheel?: CameraWheelConfig;
   /** Pointer behavior, grouped. Wins over the flat deprecated aliases. */
   pointer?: CameraPointerConfig;
+  /** Programmatic edge-pan behavior used by drag owners such as SnapLine. */
+  edgePan?: CameraEdgePanConfig;
   /** @deprecated Use `pointer.panLock` instead. */
   pointerPanLock?: boolean | "touch";
   /** @deprecated Use `wheel.zoomModifier` instead. */
@@ -133,6 +146,13 @@ class CameraControl extends ElementObject {
   #mouseDownY: number;
   #panPointerId: number | null = null;
   #pinchAnchor: PinchAnchor | null = null;
+  #edgePanRequest: {
+    pointerId: number;
+    position: eventPosition;
+    onFrame: (position: eventPosition) => void;
+  } | null = null;
+  #edgePanFrameId: number | null = null;
+  #edgePanTimestamp: number | null = null;
 
   config: CameraControlConfig = {};
 
@@ -144,6 +164,7 @@ class CameraControl extends ElementObject {
     this.#mouseDownX = 0;
     this.#mouseDownY = 0;
     this.#state = "idle";
+    this.engine.edgePanController = this as EdgePanController;
     this.event.global.pointerDown = this.onCursorDown;
     this.event.global.pointerMove = this.onCursorMove;
     this.event.global.pointerUp = this.onCursorUp;
@@ -239,6 +260,128 @@ class CameraControl extends ElementObject {
     });
   }
 
+  startEdgePan(
+    pointerId: number,
+    position: eventPosition,
+    onFrame: (position: eventPosition) => void,
+  ): void {
+    if (!this.config.edgePan?.enabled) {
+      return;
+    }
+    this.#edgePanRequest = { pointerId, position, onFrame };
+    this.#edgePanTimestamp = null;
+    this.#scheduleEdgePanFrame();
+  }
+
+  updateEdgePan(pointerId: number, position: eventPosition): void {
+    if (!this.config.edgePan?.enabled) {
+      this.stopEdgePan(pointerId);
+      return;
+    }
+    if (!this.#edgePanRequest) {
+      return;
+    }
+    if (this.#edgePanRequest.pointerId !== pointerId) {
+      return;
+    }
+    this.#edgePanRequest.position = position;
+    this.#scheduleEdgePanFrame();
+  }
+
+  stopEdgePan(pointerId: number): void {
+    if (
+      this.#edgePanRequest &&
+      this.#edgePanRequest.pointerId !== pointerId
+    ) {
+      return;
+    }
+    this.#edgePanRequest = null;
+    this.#edgePanTimestamp = null;
+    if (this.#edgePanFrameId != null) {
+      cancelAnimationFrame(this.#edgePanFrameId);
+      this.#edgePanFrameId = null;
+    }
+  }
+
+  #scheduleEdgePanFrame(): void {
+    if (this.#edgePanFrameId != null || !this.#edgePanRequest) {
+      return;
+    }
+    this.#edgePanFrameId = requestAnimationFrame(this.#runEdgePanFrame);
+  }
+
+  #runEdgePanFrame = (timestamp: number): void => {
+    this.#edgePanFrameId = null;
+    const request = this.#edgePanRequest;
+    const camera = this.engine.camera;
+    const config = this.config.edgePan;
+    if (!request || !camera || !config?.enabled) {
+      this.#edgePanTimestamp = null;
+      return;
+    }
+
+    const edgeDistance = Math.max(1, config.edgeDistance ?? 48);
+    const maxSpeed = Math.max(0, config.maxSpeed ?? 600);
+    const left = camera.containerOffsetX;
+    const top = camera.containerOffsetY;
+    const right = left + camera.cameraWidth;
+    const bottom = top + camera.cameraHeight;
+    const axisSpeed = (value: number, min: number, max: number): number => {
+      if (value < min + edgeDistance) {
+        return -Math.min(1, (min + edgeDistance - value) / edgeDistance);
+      }
+      if (value > max - edgeDistance) {
+        return Math.min(1, (value - (max - edgeDistance)) / edgeDistance);
+      }
+      return 0;
+    };
+    const velocityX =
+      axisSpeed(request.position.screenX, left, right) * maxSpeed;
+    const velocityY =
+      axisSpeed(request.position.screenY, top, bottom) * maxSpeed;
+    const previousTimestamp = this.#edgePanTimestamp ?? timestamp;
+    const elapsedSeconds =
+      Math.min(32, Math.max(0, timestamp - previousTimestamp)) / 1000;
+    this.#edgePanTimestamp = timestamp;
+
+    if (
+      !this.config.panLock &&
+      (velocityX !== 0 || velocityY !== 0) &&
+      elapsedSeconds > 0
+    ) {
+      camera.handlePan(
+        velocityX * elapsedSeconds,
+        velocityY * elapsedSeconds,
+      );
+      this.paintCamera();
+      request.onFrame(
+        this.#positionFromScreen(
+          request.position.screenX,
+          request.position.screenY,
+        ),
+      );
+    }
+
+    this.#scheduleEdgePanFrame();
+  };
+
+  #positionFromScreen(screenX: number, screenY: number): eventPosition {
+    const camera = this.engine.camera;
+    if (!camera) {
+      return {
+        x: screenX,
+        y: screenY,
+        cameraX: screenX,
+        cameraY: screenY,
+        screenX,
+        screenY,
+      };
+    }
+    const [cameraX, cameraY] = camera.getCameraFromScreen(screenX, screenY);
+    const [x, y] = camera.getWorldFromCamera(cameraX, cameraY);
+    return { x, y, cameraX, cameraY, screenX, screenY };
+  }
+
   // Event Handlers
 
   onCursorDown(prop: pointerDownProp) {
@@ -306,6 +449,7 @@ class CameraControl extends ElementObject {
   }
 
   onCursorUp(prop: pointerUpProp) {
+    this.stopEdgePan(prop.event.pointerId);
     if (this.#state != "panning") {
       return;
     }
@@ -469,6 +613,16 @@ class CameraControl extends ElementObject {
     }
     this.#panPointerId = null;
     this.#pinchAnchor = null;
+  }
+
+  destroy(removeDom: boolean = true) {
+    if (this.#edgePanRequest) {
+      this.stopEdgePan(this.#edgePanRequest.pointerId);
+    }
+    if (this.engine.edgePanController === this) {
+      this.engine.edgePanController = null;
+    }
+    super.destroy(removeDom);
   }
 
   #createPinchAnchor(center: { x: number; y: number }, distance: number) {

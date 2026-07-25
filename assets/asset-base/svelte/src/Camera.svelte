@@ -9,7 +9,11 @@
   } from "svelte";
   import type { HTMLAttributes } from "svelte/elements";
   import { CameraControl as CameraControlObject } from "@snap-engine/asset-base";
-  import type { CameraWheelConfig, CameraPointerConfig } from "@snap-engine/asset-base";
+  import type {
+    CameraEdgePanConfig,
+    CameraWheelConfig,
+    CameraPointerConfig,
+  } from "@snap-engine/asset-base";
   import type { CameraConfig, Engine } from "@snap-engine/core";
 
   type CameraProps = Omit<HTMLAttributes<HTMLDivElement>, "children"> & {
@@ -33,6 +37,8 @@
     wheel?: CameraWheelConfig;
     /** Pointer behavior, grouped. Wins over the flat deprecated props. */
     pointer?: CameraPointerConfig;
+    /** Programmatic edge-pan behavior for drag owners such as SnapLine. */
+    edgePan?: CameraEdgePanConfig;
     /** Options forwarded to the underlying Camera, e.g. zoomBounds and contentBounds. */
     cameraConfig?: CameraConfig;
     cameraControl?: CameraControlObject | null;
@@ -53,6 +59,7 @@
     panButton = "left",
     wheel = undefined,
     pointer = undefined,
+    edgePan = undefined,
     cameraConfig,
     cameraControl = $bindable<CameraControlObject | null>(null),
     style = "",
@@ -76,6 +83,7 @@
     panButton,
     wheel,
     pointer,
+    edgePan,
     camera: cameraConfig,
   }));
   const cameraControlInstance =
@@ -105,6 +113,7 @@
       panButton,
       wheel,
       pointer,
+      edgePan,
     };
   });
 

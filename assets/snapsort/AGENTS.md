@@ -11,7 +11,7 @@ A single `Container`/`Item` class pair (per framework) whose drag/drop behavior 
 - `Container` - The only container class. `new Container(engine, parent, { mode, ... })`.
 - `Item` - The only item class (including ghosts/markers). Never needs a mode.
 - `DragSession` - Owns all per-drag state (pointer, ghost, drop target); lives at `container.dragSession` on the root while a drag is active.
-- Event types: `ItemInsertEvent`, `ItemRemoveEvent`, `ItemMoveEvent`, `ItemSwapEvent`, `GhostCreateEvent`, `GhostInsertEvent`, `GhostRemoveEvent`, `DragStartEvent`, `DragEndEvent`, `DropTargetChangeEvent`, `CanDropEvent`, `DragLocation`.
+- Event types: `ItemInsertEvent`, `ItemRemoveEvent`, `ItemMoveEvent`, `ItemSwapEvent`, `GhostCreateEvent`, `GhostInsertEvent`, `GhostRemoveEvent`, `DragStartEvent`, `DragEndEvent`, `DropTargetChangeEvent`, `CanDropEvent`, `VisualGeometryInvalidationEvent`, `DragLocation`.
 - `ContainerCallbacks`, `ContainerConfig`, `SortMode`, `SortStrategy`, `DropTargetStrategy`, `DragLifecycleStrategy`.
 
 ### @snap-engine/snapsort-svelte
@@ -93,6 +93,10 @@ Every `ContainerCallbacks` invocation goes through one of the `fire*` functions 
 - Semantic: `onItemMove` (preferred — carries `from`/`to` `DragLocation`s).
 - Lifecycle: `onDragStart` (return `false` to veto before any state changes), `onDragEnd`, `onDropTargetChange` (fires only when the prospective container/index actually changes).
 - Validation: `canDrop` — consulted once per container per drop-target resolution (not per candidate slot); must be cheap.
+- Integration: `onVisualGeometryInvalidated` — one root-coalesced notification
+  when drag, ghost, or FLIP transforms may have changed rendered item geometry.
+  Consumers use it to invalidate dependent visuals without SnapSort knowing
+  what those visuals are.
 
 ### Framework adapter ownership
 

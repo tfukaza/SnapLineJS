@@ -2,7 +2,6 @@
   import { onMount, tick } from "svelte";
 
   import { NodeComponent } from "@snap-engine/snapline";
-  import type { ConnectorComponent } from "@snap-engine/snapline";
   import { Connector, Node } from "@snap-engine/snapline-svelte";
 
   import Line from "./Line.svelte";
@@ -69,11 +68,13 @@
   function setUpCallback(id: string) {
     const connector = inputValues[id].connector!.object();
     const inputElement = inputValues[id].input!;
-    connector.connectorCallback.onConnectIncoming = (_: ConnectorComponent) => {
+    connector.callbacks.onConnect = (event) => {
+      if (event.role !== "target") return;
       inputElement.value = "";
       inputValues[id].editable = false;
     };
-    connector.connectorCallback.onDisconnectIncoming = (_: ConnectorComponent) => {
+    connector.callbacks.onDisconnect = (event) => {
+      if (event.role !== "target") return;
       inputElement.value = inputValues[id].value.toString();
       inputValues[id].editable = true;
     };

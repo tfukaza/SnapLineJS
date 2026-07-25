@@ -12,6 +12,7 @@ import {
 } from "react";
 import { CameraControl } from "@snap-engine/asset-base";
 import type {
+  CameraEdgePanConfig,
   CameraWheelConfig,
   CameraPointerConfig,
 } from "@snap-engine/asset-base";
@@ -56,6 +57,8 @@ export interface CameraProps
   wheel?: CameraWheelConfig;
   /** Pointer behavior, grouped. Wins over the flat deprecated props. */
   pointer?: CameraPointerConfig;
+  /** Programmatic edge-pan behavior for drag owners such as SnapLine. */
+  edgePan?: CameraEdgePanConfig;
   zoomLock?: boolean;
 }
 
@@ -87,6 +90,7 @@ export const Camera = forwardRef<CameraControl, CameraProps>(function Camera(
     panButton = "left",
     wheel = undefined,
     pointer = undefined,
+    edgePan = undefined,
     style,
     zoomLock = false,
     ...divProps
@@ -123,6 +127,7 @@ export const Camera = forwardRef<CameraControl, CameraProps>(function Camera(
         panButton,
         wheel,
         pointer,
+        edgePan,
         camera: cameraConfig,
       });
       ownedCameraControlRef.current = cameraControl;
@@ -194,6 +199,7 @@ export const Camera = forwardRef<CameraControl, CameraProps>(function Camera(
       panButton,
       wheel,
       pointer,
+      edgePan,
     };
   }, [
     activeCameraControl,
@@ -207,6 +213,7 @@ export const Camera = forwardRef<CameraControl, CameraProps>(function Camera(
     panButton,
     wheel,
     pointer,
+    edgePan,
   ]);
 
   // Bounds often depend on measured layout, so keep applying them as they change.

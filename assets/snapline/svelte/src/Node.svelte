@@ -1,8 +1,8 @@
 <script lang="ts">
-    import { NodeComponent, LineComponent, DEFAULT_RESIZE_HANDLE_RADIUS, type ResizeAnchor } from "@snap-engine/snapline";
+    import { NodeComponent, LineComponent, DEFAULT_RESIZE_HANDLE_THICKNESS, type NodeCallbacks, type NodeDragCommitEvent, type NodeResizeEvent, type ResizeHandle, type SnapLineMetadata } from "@snap-engine/snapline";
     import type { Engine } from "@snap-engine/core";
     import Line from "./Line.svelte";
-    import { onMount, setContext, getContext, onDestroy } from "svelte";
+    import { onMount, setContext, getContext, onDestroy, tick, untrack } from "svelte";
     import { blur } from "svelte/transition";
 
     let {
@@ -11,11 +11,18 @@
         nodeObject = null,
         x = 0,
         y = 0,
+        width = undefined,
+        height = undefined,
         resizable = false,
         minWidth = undefined,
         minHeight = undefined,
-        resizeHandleRadius = undefined,
-        resizeAnchor = undefined,
+        resizeHandleThickness = undefined,
+        resizeHandles = undefined,
+        resizeCursors = undefined,
+        metadata = {},
+        callbacks = {},
+        edgePan = true,
+        onDragCommit = undefined,
         onResizeCommit = undefined,
         onSizeChange = undefined,
         children,
@@ -25,52 +32,137 @@
         nodeObject?: NodeComponent | null;
         x?: number;
         y?: number;
+        width?: number;
+        height?: number;
         resizable?: boolean;
         minWidth?: number;
         minHeight?: number;
-        resizeHandleRadius?: number;
-        resizeAnchor?: ResizeAnchor;
-        onResizeCommit?: (width: number, height: number) => void;
-        onSizeChange?: (width: number, height: number) => void;
+        resizeHandleThickness?: number;
+        resizeHandles?: true | readonly ResizeHandle[];
+        resizeCursors?: Partial<Record<ResizeHandle, string>>;
+        metadata?: SnapLineMetadata;
+        callbacks?: NodeCallbacks;
+        edgePan?: boolean;
+        onDragCommit?: (event: NodeDragCommitEvent) => void;
+        onResizeCommit?: (event: NodeResizeEvent) => void;
+        onSizeChange?: (event: NodeResizeEvent) => void;
         children: any;
     } = $props();
     let nodeDOM: HTMLDivElement | null = null;
     let engine: Engine = getContext("engine");
     const ownsNode = nodeObject == null;
     if (!nodeObject) {
-         nodeObject = new NodeComponent(engine, null, { resizable, minWidth, minHeight, resizeHandleRadius, resizeAnchor });
+         nodeObject = new NodeComponent(engine, null, { resizable, minWidth, minHeight, resizeHandleThickness, resizeHandles, resizeCursors, metadata, callbacks: {}, edgePan });
     }
     let lineList: LineComponent[] = $state(nodeObject.getAllOutgoingLines());
 
     // The element's width/height are framework-owned: core reports size changes
     // (resize drag) via onSizeChange and this state renders them. Null until the
     // first resize so CSS-declared sizes keep applying to non-resized nodes.
-    let boxW = $state<number | null>(null);
-    let boxH = $state<number | null>(null);
+    let boxW = $state<number | null>(width ?? null);
+    let boxH = $state<number | null>(height ?? null);
+    let mounted = $state(false);
+    let originalCallbacks: NodeCallbacks = {};
+
+    function invoke<Event>(
+        event: Event,
+        ...handlers: Array<((value: Event) => unknown) | undefined>
+    ) {
+        const seen = new Set<Function>();
+        for (const handler of handlers) {
+            if (!handler || seen.has(handler)) continue;
+            seen.add(handler);
+            handler(event);
+        }
+    }
 
     setContext("nodeObject", nodeObject);
 
     onMount(() => {
+        mounted = true;
         nodeObject.worldTransform = { x, y };
         nodeObject.element = nodeDOM as HTMLElement;
         nodeObject.writeTransform();
-        nodeObject.nodeCallback.onResizeCommit = (w: number, h: number) => onResizeCommit?.(w, h);
-        nodeObject.nodeCallback.onSizeChange = (w: number, h: number) => {
-            boxW = w;
-            boxH = h;
-            onSizeChange?.(w, h);
+        originalCallbacks = { ...nodeObject.callbacks };
+        nodeObject.callbacks.canStartDrag = (event) => {
+            const handlers = [originalCallbacks.canStartDrag, callbacks.canStartDrag];
+            const seen = new Set<Function>();
+            for (const handler of handlers) {
+                if (!handler || seen.has(handler)) continue;
+                seen.add(handler);
+                if (handler(event) === false) return false;
+            }
+            return true;
         };
-        nodeObject.nodeCallback.onLinesChanged = (lines: LineComponent[]) => {
-            lineList = lines;
+        nodeObject.callbacks.resolveSelectionMode = (event) =>
+            callbacks.resolveSelectionMode?.(event) ??
+            originalCallbacks.resolveSelectionMode?.(event) ??
+            "replace";
+        nodeObject.callbacks.onDragStart = (event) =>
+            invoke(event, originalCallbacks.onDragStart, callbacks.onDragStart);
+        nodeObject.callbacks.onDrag = (event) =>
+            invoke(event, originalCallbacks.onDrag, callbacks.onDrag);
+        nodeObject.callbacks.onSelectionChange = (event) =>
+            invoke(event, originalCallbacks.onSelectionChange, callbacks.onSelectionChange);
+        nodeObject.callbacks.onResizeHandleChange = (event) =>
+            invoke(event, originalCallbacks.onResizeHandleChange, callbacks.onResizeHandleChange);
+        nodeObject.callbacks.onResizeCommit = (event) =>
+            invoke(event, originalCallbacks.onResizeCommit, callbacks.onResizeCommit, onResizeCommit);
+        nodeObject.callbacks.onDragCommit = (event) =>
+            invoke(event, originalCallbacks.onDragCommit, callbacks.onDragCommit, onDragCommit);
+        nodeObject.callbacks.onSizeChange = (event) => {
+            invoke(event, originalCallbacks.onSizeChange, callbacks.onSizeChange, onSizeChange);
+            boxW = event.width;
+            boxH = event.height;
+        };
+        nodeObject.callbacks.onLinesChanged = (event) => {
+            invoke(event, originalCallbacks.onLinesChanged, callbacks.onLinesChanged);
+            lineList = [...event.lines];
         };
         lineList = nodeObject.getAllOutgoingLines();
+        void tick().then(() => {
+            if (mounted && nodeObject!.element) nodeObject!.syncDomGeometry();
+        });
     });
 
     onDestroy(() => {
-        nodeObject.nodeCallback.onLinesChanged = null;
+        mounted = false;
+        nodeObject.callbacks.canStartDrag = originalCallbacks.canStartDrag;
+        nodeObject.callbacks.resolveSelectionMode = originalCallbacks.resolveSelectionMode;
+        nodeObject.callbacks.onDragStart = originalCallbacks.onDragStart;
+        nodeObject.callbacks.onDrag = originalCallbacks.onDrag;
+        nodeObject.callbacks.onDragCommit = originalCallbacks.onDragCommit;
+        nodeObject.callbacks.onSelectionChange = originalCallbacks.onSelectionChange;
+        nodeObject.callbacks.onResizeHandleChange = originalCallbacks.onResizeHandleChange;
+        nodeObject.callbacks.onLinesChanged = originalCallbacks.onLinesChanged;
+        nodeObject.callbacks.onSizeChange = originalCallbacks.onSizeChange;
+        nodeObject.callbacks.onResizeCommit = originalCallbacks.onResizeCommit;
         if (ownsNode) {
             nodeObject.destroy();
         }
+    });
+
+    $effect(() => {
+        const nextX = x;
+        const nextY = y;
+        if (!mounted) return;
+        untrack(() => {
+            nodeObject!.worldTransform = { x: nextX, y: nextY };
+            nodeObject!.writeTransformAndLines();
+        });
+    });
+
+    $effect(() => {
+        const nextWidth = width;
+        const nextHeight = height;
+        if (!mounted) return;
+        boxW = nextWidth ?? null;
+        boxH = nextHeight ?? null;
+        const object = untrack(() => nodeObject!);
+        void tick().then(() => {
+            if (!mounted || !object.element) return;
+            object.syncDomGeometry();
+        });
     });
 
     export function addSetPropCallback(name: string, callback: (prop: any) => void) {
@@ -96,24 +188,14 @@
     transition:blur|global={{duration: 200}}
 >
     {@render children()}
-    {#if resizable}
-        {@const anchor = resizeAnchor ?? "br"}
-        <!-- Purely visual: the collision hitbox (which straddles the corner and
-             spreads beyond it) does the hitting, so this takes no pointer events.
-             Sized from the same config value as the hitbox radius. -->
+    {#each nodeObject.resizeHandles as handle}
         <div
             class="snapline-node-resize"
             data-snapline-part="node-resize"
-            data-anchor={anchor}
-            style:width={`${resizeHandleRadius ?? DEFAULT_RESIZE_HANDLE_RADIUS}px`}
-            style:height={`${resizeHandleRadius ?? DEFAULT_RESIZE_HANDLE_RADIUS}px`}
-            style:left={anchor === "tl" || anchor === "bl" ? "0" : undefined}
-            style:right={anchor === "tr" || anchor === "br" ? "0" : undefined}
-            style:top={anchor === "tl" || anchor === "tr" ? "0" : undefined}
-            style:bottom={anchor === "bl" || anchor === "br" ? "0" : undefined}
-            style:cursor={anchor === "tr" || anchor === "bl" ? "nesw-resize" : "nwse-resize"}
+            data-handle={handle}
+            style:--snapline-resize-thickness={`${resizeHandleThickness ?? DEFAULT_RESIZE_HANDLE_THICKNESS}px`}
         ></div>
-    {/if}
+    {/each}
 </div>
 
 
@@ -121,5 +203,32 @@
     .snapline-node-resize {
         position: absolute;
         pointer-events: none;
+    }
+    .snapline-node-resize[data-handle="n"],
+    .snapline-node-resize[data-handle="s"] {
+        right: var(--snapline-resize-thickness);
+        left: var(--snapline-resize-thickness);
+        height: var(--snapline-resize-thickness);
+    }
+    .snapline-node-resize[data-handle="e"],
+    .snapline-node-resize[data-handle="w"] {
+        top: var(--snapline-resize-thickness);
+        bottom: var(--snapline-resize-thickness);
+        width: var(--snapline-resize-thickness);
+    }
+    .snapline-node-resize[data-handle="n"],
+    .snapline-node-resize[data-handle^="n"] { top: calc(var(--snapline-resize-thickness) / -2); }
+    .snapline-node-resize[data-handle="s"],
+    .snapline-node-resize[data-handle^="s"] { bottom: calc(var(--snapline-resize-thickness) / -2); }
+    .snapline-node-resize[data-handle="e"],
+    .snapline-node-resize[data-handle$="e"] { right: calc(var(--snapline-resize-thickness) / -2); }
+    .snapline-node-resize[data-handle="w"],
+    .snapline-node-resize[data-handle$="w"] { left: calc(var(--snapline-resize-thickness) / -2); }
+    .snapline-node-resize[data-handle="ne"],
+    .snapline-node-resize[data-handle="se"],
+    .snapline-node-resize[data-handle="sw"],
+    .snapline-node-resize[data-handle="nw"] {
+        width: var(--snapline-resize-thickness);
+        height: var(--snapline-resize-thickness);
     }
 </style>

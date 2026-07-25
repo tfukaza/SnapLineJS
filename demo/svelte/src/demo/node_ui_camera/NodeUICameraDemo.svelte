@@ -22,7 +22,13 @@
   composition question.
 -->
 <Engine id="node-ui-camera-canvas">
-  <Camera id="node-ui-camera" wheelZoomModifier="ctrlOrMeta" {wheelPan} {panButton}>
+  <Camera
+    id="node-ui-camera"
+    wheelZoomModifier="ctrlOrMeta"
+    {wheelPan}
+    {panButton}
+    edgePan={{ enabled: true, edgeDistance: 64, maxSpeed: 720 }}
+  >
     <div id="node-ui-camera-layer">
       <div id="nuc-background"></div>
       <SimpleNode title="Node A" x={120} y={120} />

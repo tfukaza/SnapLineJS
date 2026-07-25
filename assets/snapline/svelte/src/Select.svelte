@@ -1,18 +1,18 @@
 <script lang="ts">
-    import { RectSelectComponent, type SelectRect } from "@snap-engine/snapline";
+    import { RectSelectComponent, type SelectCallbacks, type SelectRect } from "@snap-engine/snapline";
     import type { Engine } from "@snap-engine/core";
     import { onDestroy, getContext } from "svelte";
 
-    let { className = "" }: { className?: string } = $props();
+    let { className = "", callbacks = {} }: { className?: string; callbacks?: SelectCallbacks } = $props();
 
     let engine: Engine = getContext("engine");
-    let select = new RectSelectComponent(engine, null);
+    let select = new RectSelectComponent(engine, null, { callbacks });
 
     // The selection box is framework-rendered: core reports the world-space rect
     // via onRectChange and this state draws it, so consumers can restyle or
     // replace the box entirely (override #select-container / pass a class).
     let rect = $state<SelectRect>({ x: 0, y: 0, width: 0, height: 0, visible: false });
-    select.selectCallback.onRectChange = (r: SelectRect) => {
+    select.callbacks.onRectChange = (r: SelectRect) => {
         rect = r;
     };
 

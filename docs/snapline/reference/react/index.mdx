@@ -1,0 +1,28 @@
+---
+title: React API
+description: React SnapLine components, props, callbacks, contexts, and refs.
+order: 1
+sectionTitle: Reference
+sectionOrder: 3
+framework: react
+frameworkKey: overview
+---
+
+`Engine` creates or accepts a core engine and provides it through context.
+
+| Component | Important props |
+| --- | --- |
+| `Node` | `nodeObject`, geometry, resize configuration, callbacks, `lineComponent` |
+| `Connector` | `connectorObject`, role/capacity configuration, callbacks |
+| `Line` | `line`, SVG presentation |
+| `Select` | callbacks and presentation |
+| `Group` | node geometry, header content, membership policy and callbacks |
+| `Placement` | controller, cancellation behavior, render function |
+
+`Node` and `Group` forward refs to their core objects. `Connector` exposes a
+`ConnectorRef`, and `useNodeHandle()` returns a callback ref for a dedicated
+drag surface.
+
+Changed geometry props resynchronize the core object. Consumer callback objects
+and convenience callback props are composed, deduplicating the same function
+reference rather than overwriting one another.

@@ -1,12 +1,48 @@
-import { EventProxyFactory } from "@snap-engine/core";
-import type { BaseObject, dragStartProp, dragEndProp } from "@snap-engine/core";
+import type {
+  BaseObject,
+  Engine,
+  eventPosition,
+} from "@snap-engine/core";
 import { NodeComponent, mergeConfig, type NodeConfig } from "./node";
 import { getGroups, snapData } from "./snapline-globals";
 
 export interface GroupConfig extends NodeConfig {
   width?: number;
   height?: number;
+  /** Additional eligibility filter applied after geometric containment. */
+  canContain?: (event: GroupContainEvent) => boolean;
+  groupCallbacks?: GroupCallbacks;
 }
+
+export interface GroupContainEvent {
+  group: GroupNodeComponent;
+  node: NodeComponent;
+  centerContained: boolean;
+  boundsContained: boolean;
+}
+
+export interface GroupMembershipEvent {
+  group: GroupNodeComponent;
+  added: readonly NodeComponent[];
+  removed: readonly NodeComponent[];
+  /** Direct members only. Use `group.descendants` for the complete subtree. */
+  members: readonly NodeComponent[];
+}
+
+export interface GroupCallbacks {
+  onMembershipChange?: (event: GroupMembershipEvent) => void;
+}
+
+export interface GroupMembershipResolutionEvent {
+  node: NodeComponent;
+  /** Safe eligible candidates, ordered from innermost to outermost. */
+  candidates: readonly GroupNodeComponent[];
+  defaultParent: GroupNodeComponent | null;
+}
+
+export type GroupMembershipResolver = (
+  event: GroupMembershipResolutionEvent,
+) => GroupNodeComponent | null;
 
 const DEFAULT_GROUP_CONFIG = {
   width: 400,
@@ -15,142 +51,361 @@ const DEFAULT_GROUP_CONFIG = {
   minHeight: 120,
 } satisfies GroupConfig;
 
-interface GroupCallback {
-  // Fired when a node enters/leaves the group's live geometric footprint at a
-  // settle event (resize, move-settle, or another node's drop) — never for a
-  // carried member that merely moved with the group.
-  onMemberEnter: null | ((node: NodeComponent) => void);
-  onMemberLeave: null | ((node: NodeComponent) => void);
-  // Fired at the end of a group drag (after members are detached and their
-  // final world positions are settled) so consumers can persist positions.
-  onDragCommit: null | (() => void);
+const parentGroups = new WeakMap<NodeComponent, GroupNodeComponent>();
+const membershipResolvers = new WeakMap<object, GroupMembershipResolver>();
+const reconcilingEngines = new WeakSet<object>();
+
+type Bounds = ReturnType<
+  NodeComponent["hitBox"]["getWorldBoundsSnapshot"]
+>;
+
+function boundsArea(bounds: Bounds): number {
+  return Math.max(0, bounds.right - bounds.left) *
+    Math.max(0, bounds.bottom - bounds.top);
 }
 
-// A resizable box that carries any node whose center is inside it. Membership is
-// live geometric containment, maintained at settle events; moving the group
-// transform-parents its known members and rides SnapEngine's writeTransform
-// cascade to move them (and their lines) in a single pass.
-//
-// Design limits (v1, by intent): groups are excluded from membership, so groups
-// cannot nest inside groups; and carried members are moved via transform
-// parenting only — they are never added to global.data.select, so a group drag
-// does not alter the user's selection.
+function containsBounds(container: Bounds, child: Bounds): boolean {
+  return (
+    child.left >= container.left &&
+    child.right <= container.right &&
+    child.top >= container.top &&
+    child.bottom <= container.bottom
+  );
+}
+
+function stableGroupOrder(
+  left: GroupNodeComponent,
+  right: GroupNodeComponent,
+): number {
+  const areaDelta =
+    boundsArea(left.hitBox.getWorldBoundsSnapshot()) -
+    boundsArea(right.hitBox.getWorldBoundsSnapshot());
+  return areaDelta || String(left.id).localeCompare(String(right.id));
+}
+
+function groupsForEngine(group: GroupNodeComponent): GroupNodeComponent[] {
+  return getGroups(group.global).filter(
+    (candidate): candidate is GroupNodeComponent =>
+      candidate instanceof GroupNodeComponent &&
+      candidate.engine === group.engine,
+  );
+}
+
+function nodesForEngine(group: GroupNodeComponent): NodeComponent[] {
+  const table = group.global.getEngineObjectTable(group.engine);
+  return Object.values(table).filter(
+    (object): object is NodeComponent => object instanceof NodeComponent,
+  );
+}
+
+function resolveParent(
+  node: NodeComponent,
+  candidates: GroupNodeComponent[],
+  engine: object,
+): GroupNodeComponent | null {
+  candidates.sort(stableGroupOrder);
+  const defaultParent = candidates[0] ?? null;
+  const resolver = membershipResolvers.get(engine);
+  if (!resolver) return defaultParent;
+
+  const resolved = resolver({ node, candidates, defaultParent });
+  if (resolved === null || candidates.includes(resolved)) return resolved;
+
+  console.warn(
+    "SnapLine group membership resolver returned a group outside its eligible candidates; using the default parent.",
+    { node, resolved, candidates },
+  );
+  return defaultParent;
+}
+
+function wouldCreateGroupCycle(
+  node: GroupNodeComponent,
+  parent: GroupNodeComponent,
+  nextParents: Map<NodeComponent, GroupNodeComponent>,
+): boolean {
+  let ancestor: GroupNodeComponent | undefined = parent;
+  const visited = new Set<GroupNodeComponent>();
+  while (ancestor && !visited.has(ancestor)) {
+    if (ancestor === node) return true;
+    visited.add(ancestor);
+    ancestor = nextParents.get(ancestor);
+  }
+  return false;
+}
+
+function reconcileMembership(
+  source: GroupNodeComponent,
+  fireDelta: boolean,
+): void {
+  const engine = source.engine as object;
+  if (reconcilingEngines.has(engine)) return;
+  reconcilingEngines.add(engine);
+
+  try {
+    const groups = groupsForEngine(source);
+    const nextMembers = new Map<
+      GroupNodeComponent,
+      Set<NodeComponent>
+    >(groups.map((group) => [group, new Set()]));
+    const nextParents = new Map<NodeComponent, GroupNodeComponent>();
+
+    const nodes = nodesForEngine(source);
+    const groupNodes = [...groups].sort(stableGroupOrder);
+    const ordinaryNodes = nodes.filter(
+      (node) => !(node instanceof GroupNodeComponent),
+    );
+
+    // Resolve the group forest first. A proposed edge can point at a group that
+    // has already chosen another parent, so walking the partial parent map is
+    // enough to reject the edge that would close any cycle.
+    for (const node of groupNodes) {
+      const candidates = groups.filter(
+        (group) =>
+          group !== node &&
+          group.allowsMembership(node) &&
+          !wouldCreateGroupCycle(node, group, nextParents),
+      );
+      const parent = resolveParent(node, candidates, engine);
+      if (!parent) continue;
+      nextMembers.get(parent)?.add(node);
+      nextParents.set(node, parent);
+    }
+
+    // Ordinary nodes cannot form membership cycles. They choose the innermost
+    // eligible group after the group hierarchy is settled.
+    for (const node of ordinaryNodes) {
+      const candidates = groups.filter((group) =>
+        group.allowsMembership(node)
+      );
+      const parent = resolveParent(node, candidates, engine);
+      if (!parent) continue;
+      nextMembers.get(parent)?.add(node);
+      nextParents.set(node, parent);
+    }
+
+    const deltas = groups.map((group) => {
+      const previous = group.members;
+      const next = nextMembers.get(group) ?? new Set<NodeComponent>();
+      return {
+        group,
+        next,
+        added: [...next].filter((node) => !previous.has(node)),
+        removed: [...previous].filter((node) => !next.has(node)),
+      };
+    });
+
+    for (const node of nodes) {
+      const parent = nextParents.get(node);
+      if (parent) parentGroups.set(node, parent);
+      else parentGroups.delete(node);
+    }
+    for (const { group, next } of deltas) group.setResolvedMembers(next);
+
+    if (fireDelta) {
+      for (const { group, next, added, removed } of deltas) {
+        if (!added.length && !removed.length) continue;
+        group.groupCallbacks.onMembershipChange?.({
+          group,
+          added,
+          removed,
+          members: [...next],
+        });
+      }
+    }
+  } finally {
+    reconcilingEngines.delete(engine);
+  }
+}
+
+/** Return the node's settled, exclusive direct parent group. */
+export function getParentGroup(
+  node: NodeComponent,
+): GroupNodeComponent | null {
+  return parentGroups.get(node) ?? null;
+}
+
+/**
+ * Override automatic innermost-group selection for one engine.
+ * The resolver may return one of `event.candidates` or `null`.
+ */
+export function setGroupMembershipResolver(
+  engine: Engine,
+  resolver: GroupMembershipResolver,
+): () => void {
+  membershipResolvers.set(engine, resolver);
+  const refresh = () => {
+    const global = engine.global;
+    const source = global
+      ? getGroups(global).find(
+        (group): group is GroupNodeComponent =>
+          group instanceof GroupNodeComponent && group.engine === engine,
+      )
+      : undefined;
+    source?.refreshMembership(true);
+  };
+  refresh();
+
+  return () => {
+    if (membershipResolvers.get(engine) !== resolver) return;
+    membershipResolvers.delete(engine);
+    refresh();
+  };
+}
+
+// A resizable box with settled geometric membership. Membership is exclusive:
+// each node has one direct parent, while nested groups form a recursive tree.
 class GroupNodeComponent extends NodeComponent {
   #members: Set<NodeComponent> = new Set();
   #carry: NodeComponent[] = [];
-  #groupCallback: GroupCallback;
+  #carryOrigins = new Map<NodeComponent, { x: number; y: number }>();
+  #carryGroupOrigin = { x: 0, y: 0 };
+  #groupCallbacks: GroupCallbacks;
+  #groupConfig: GroupConfig;
 
   constructor(engine: any, parent: BaseObject | null, config: GroupConfig = {}) {
-    // A group is resizable via the core BR resize hitbox. Group defaults are
-    // merged here (single default site); undefined adapter props never shadow.
-    const merged = mergeConfig<GroupConfig>({ ...DEFAULT_GROUP_CONFIG }, config);
+    const merged = mergeConfig<GroupConfig>(
+      { ...DEFAULT_GROUP_CONFIG },
+      config,
+    );
     super(engine, parent, { ...merged, resizable: true });
-
-    this.#groupCallback = { onMemberEnter: null, onMemberLeave: null, onDragCommit: null };
-    this.#groupCallback = EventProxyFactory(this, this.#groupCallback);
-
-    // Register so any node's drop can notify every group (see NodeComponent.onDragEnd).
+    this.#groupConfig = merged;
+    this.#groupCallbacks = merged.groupCallbacks ?? {};
     getGroups(this.global).push(this);
   }
 
-  get groupCallback(): GroupCallback {
-    return this.#groupCallback;
+  get groupCallbacks(): GroupCallbacks {
+    return this.#groupCallbacks;
   }
 
-  /** Snapshot of the current geometric members (settle-maintained). */
+  /** Direct settled members. */
   get members(): ReadonlySet<NodeComponent> {
     return this.#members;
   }
 
-  // Route the scheduled drag write through the recursive cascade so the group,
-  // its carried members, and their lines all paint in one WRITE_2 pass. The
-  // inherited setDragPosition/setUpPosition already schedule this under
-  // queueId `${id}-transform`, so no drag-loop change is needed.
+  /** Every settled member below this group, recursively and without duplicates. */
+  get descendants(): ReadonlySet<NodeComponent> {
+    const result = new Set<NodeComponent>();
+    const visit = (group: GroupNodeComponent): void => {
+      for (const member of group.#members) {
+        if (result.has(member)) continue;
+        result.add(member);
+        if (member instanceof GroupNodeComponent) visit(member);
+      }
+    };
+    visit(this);
+    return result;
+  }
+
+  get parentGroup(): GroupNodeComponent | null {
+    return getParentGroup(this);
+  }
+
+  /** @internal Used by the engine-wide exclusive-membership reconciliation. */
+  setResolvedMembers(members: Set<NodeComponent>): void {
+    this.#members = members;
+  }
+
   writeTransformAndLines(): void {
     this.writeTransformRecursive();
   }
 
-  #containsCenter(node: NodeComponent): boolean {
+  allowsMembership(node: NodeComponent): boolean {
     const box = this.hitBox.getWorldBoundsSnapshot();
-    const nb = node.hitBox.getWorldBoundsSnapshot();
-    return (
-      nb.centerX >= box.left &&
-      nb.centerX <= box.right &&
-      nb.centerY >= box.top &&
-      nb.centerY <= box.bottom
-    );
-  }
+    const nodeBounds = node.hitBox.getWorldBoundsSnapshot();
+    const centerContained =
+      nodeBounds.centerX >= box.left &&
+      nodeBounds.centerX <= box.right &&
+      nodeBounds.centerY >= box.top &&
+      nodeBounds.centerY <= box.bottom;
+    const boundsContained = containsBounds(box, nodeBounds);
 
-  computeMembers(): NodeComponent[] {
-    const table = this.global.getEngineObjectTable(this.engine);
-    return Object.values(table).filter(
-      (obj: any): obj is NodeComponent =>
-        obj instanceof NodeComponent &&
-        // Groups never join other groups: nested groups are out of scope (v1).
-        !(obj instanceof GroupNodeComponent) &&
-        obj !== this &&
-        this.#containsCenter(obj),
+    // Ordinary nodes use center containment. A nested group must fit completely
+    // so partially overlapping peers cannot become a parent/child pair.
+    if (
+      node instanceof GroupNodeComponent ? !boundsContained : !centerContained
+    ) {
+      return false;
+    }
+
+    return (
+      this.#groupConfig.canContain?.({
+        group: this,
+        node,
+        centerContained,
+        boundsContained,
+      }) ?? true
     );
   }
 
   refreshMembership(fireDelta: boolean): void {
-    const newSet = new Set(this.computeMembers());
-    if (fireDelta) {
-      for (const node of newSet) {
-        if (!this.#members.has(node)) this.#groupCallback?.onMemberEnter?.(node);
-      }
-      for (const node of this.#members) {
-        if (!newSet.has(node)) this.#groupCallback?.onMemberLeave?.(node);
-      }
-    }
-    this.#members = newSet;
+    reconcileMembership(this, fireDelta);
   }
 
-  // Any size change (drag-driven setSize or an adapter's state seed) also
-  // re-evaluates membership: the group's footprint changed. The synchronous
-  // hitbox update inside super means this refresh sees the new bounds.
   setSizeState(width: number, height: number): void {
     super.setSizeState(width, height);
     this.refreshMembership(true);
   }
 
-  onDragStart(prop: dragStartProp): void {
-    super.onDragStart(prop);
-    if (this._resizing) return; // a resize, not a move — don't carry members
-    // Carry the ALREADY-KNOWN set (from the last settle) — no geometric scan here.
-    this.#carry = [...this.#members];
-    for (const member of this.#carry) member.attachTransformToGroup(this);
+  beginSelectionDrag(position: eventPosition): void {
+    super.beginSelectionDrag(position);
+    this.#carryGroupOrigin = {
+      x: this.worldTransform.x,
+      y: this.worldTransform.y,
+    };
+    this.#carry = [...this.descendants];
+    this.#carryOrigins.clear();
+    for (const member of this.#carry) {
+      this.#carryOrigins.set(member, {
+        x: member.worldTransform.x,
+        y: member.worldTransform.y,
+      });
+      member.attachTransformToGroup(this);
+    }
   }
 
-  onDragEnd(prop: dragEndProp): void {
-    const wasResizing = this._resizing;
-    // super sets the group's final world synchronously (and notifies other
-    // groups); members are still parented, so their world is already final. For a
-    // resize, super handles setSize/onResizeCommit and our setSize refreshes
-    // membership, so there is no carry to detach.
-    super.onDragEnd(prop);
-    if (wasResizing) return;
+  containsSelectionDragNode(node: NodeComponent): boolean {
+    return this.descendants.has(node);
+  }
+
+  selectionDragNodes(): NodeComponent[] {
+    return [...new Set([this, ...this.#carry])];
+  }
+
+  finishSelectionDrag(): void {
+    const dx = this.worldTransform.x - this.#carryGroupOrigin.x;
+    const dy = this.worldTransform.y - this.#carryGroupOrigin.y;
     for (const member of this.#carry) {
-      member.detachTransformFromGroup(); // preserveWorld keeps the final position
+      member.detachTransformFromGroup();
+      const origin = this.#carryOrigins.get(member);
+      if (origin) {
+        member.worldTransform = {
+          x: origin.x + dx,
+          y: origin.y + dy,
+        };
+      }
       member.schedule(() => member.writeTransformAndLines(), {
         stage: "WRITE_2",
         queueId: `${member.id}-transform`,
       });
     }
     this.#carry = [];
-    // Re-evaluate at rest: newly-overlapped nodes enter; carried members that
-    // merely moved are in both sets → no callback.
-    this.refreshMembership(true);
-    // Positions (group + members) are now final; let the consumer persist them.
-    this.#groupCallback?.onDragCommit?.();
+    this.#carryOrigins.clear();
   }
 
   destroy(): void {
     snapData(this.global).groups = getGroups(this.global).filter(
-      (g) => g !== (this as unknown),
+      (group) => group !== (this as unknown),
     );
     for (const member of this.#carry) member.detachTransformFromGroup();
     this.#carry = [];
+    this.#carryOrigins.clear();
+    parentGroups.delete(this);
+
+    const remaining = getGroups(this.global).find(
+      (group): group is GroupNodeComponent =>
+        group instanceof GroupNodeComponent && group.engine === this.engine,
+    );
+    remaining?.refreshMembership(true);
     super.destroy();
   }
 }

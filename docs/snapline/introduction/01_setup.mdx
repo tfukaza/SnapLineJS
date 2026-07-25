@@ -1,0 +1,88 @@
+---
+title: Installation and setup
+description: Install SnapLine and render a first node graph in Vanilla, Svelte, or React.
+order: 2
+sectionTitle: Introduction
+sectionOrder: 1
+---
+
+Install the core package plus the adapter you use.
+
+```bash
+npm install @snap-engine/core @snap-engine/snapline
+```
+
+```bash framework=svelte
+npm install @snap-engine/asset-base-svelte @snap-engine/snapline-svelte
+```
+
+```bash framework=react
+npm install react react-dom @snap-engine/snapline-react
+```
+
+## First graph
+
+```svelte framework=svelte
+<script lang="ts">
+  import { Engine } from "@snap-engine/asset-base-svelte";
+  import { Connector, Node, Select } from "@snap-engine/snapline-svelte";
+</script>
+
+<Engine>
+  <Select />
+  <Node x={80} y={90} className="node">
+    <strong>Source</strong>
+    <Connector name="value" maxConnectors={-1} />
+  </Node>
+  <Node x={360} y={180} className="node">
+    <strong>Result</strong>
+    <Connector name="value" maxConnectors={1} allowDragOut={false} />
+  </Node>
+</Engine>
+```
+
+```tsx framework=react
+import { Connector, Engine, Node, Select } from "@snap-engine/snapline-react";
+
+export function Graph() {
+  return (
+    <Engine>
+      <Select />
+      <Node x={80} y={90} className="node">
+        <strong>Source</strong>
+        <Connector name="value" maxConnectors={-1} />
+      </Node>
+      <Node x={360} y={180} className="node">
+        <strong>Result</strong>
+        <Connector name="value" maxConnectors={1} allowDragOut={false} />
+      </Node>
+    </Engine>
+  );
+}
+```
+
+```ts framework=vanilla
+import { Engine } from "@snap-engine/core";
+import { CollisionEngine } from "@snap-engine/core/collision";
+import { ConnectorComponent, NodeComponent } from "@snap-engine/snapline";
+
+const engine = new Engine();
+engine.setCollisionEngine(new CollisionEngine());
+engine.assignDom(document.querySelector("#graph")!);
+
+const source = new NodeComponent(engine, null);
+source.element = document.querySelector("#source")!;
+source.worldTransform = { x: 80, y: 90 };
+source.syncDomGeometry();
+
+const output = new ConnectorComponent(engine, source, {
+  name: "value",
+  maxConnectors: -1,
+  allowDragOut: true,
+});
+source.addConnectorObject(output);
+```
+
+Adapters create and destroy core objects automatically unless you supply an
+existing object. Vanilla integrations assign committed DOM elements and call
+`syncDomGeometry()` after layout.

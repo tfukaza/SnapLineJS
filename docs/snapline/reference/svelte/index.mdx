@@ -1,0 +1,28 @@
+---
+title: Svelte API
+description: Svelte 5 SnapLine components, props, callbacks, and object access.
+order: 1
+sectionTitle: Reference
+sectionOrder: 3
+framework: svelte
+frameworkKey: overview
+---
+
+Wrap components in `Engine` from `@snap-engine/asset-base-svelte`.
+
+| Component | Important props |
+| --- | --- |
+| `Node` | `nodeObject`, `x`, `y`, `width`, `height`, resize configuration, callbacks |
+| `Connector` | `name`, `maxConnectors`, `allowDragOut`, `metadata`, callbacks |
+| `Line` | `line` |
+| `Select` | `callbacks`, `className` |
+| `Group` | Node geometry plus `title`, `headerContent`, `canContain`, membership callbacks |
+| `Placement` | `controller`, cancellation options, `preview` snippet |
+
+`getNodeObject()` exposes the underlying object from `Node` and `Group`;
+`Connector.object()` exposes its connector. Supplied objects are not destroyed
+when the component unmounts.
+
+Changed geometry props are authoritative. During a live pointer gesture the
+adapter renders local updates and reports the final values through commit
+callbacks.

@@ -85,6 +85,77 @@ test("dragging a connector line does not pan the camera", async ({ page }) => {
   await expect(page.locator("[data-snapline-type='connector-line']")).toHaveCount(0);
 });
 
+test("connector drag edge-pans continuously and keeps the line under the pointer", async ({
+  page,
+}) => {
+  const nodeA = page.locator("[data-snapline-type='node']", { hasText: "Node A" });
+  const output = nodeA.locator("[data-snapline-name='output']");
+  const start = await centerOf(output);
+  const camera = page.locator("#node-ui-camera-canvas");
+  const bounds = await camera.boundingBox();
+  expect(bounds).not.toBeNull();
+  const edge = {
+    x: bounds!.x + bounds!.width - 8,
+    y: Math.min(bounds!.y + bounds!.height - 80, start.y + 100),
+  };
+
+  await page.mouse.move(start.x, start.y);
+  await page.mouse.down();
+  await page.mouse.move(edge.x, edge.y, { steps: 12 });
+  const before = await cameraTransform(page);
+  await expect.poll(() => cameraTransform(page)).not.toBe(before);
+
+  const line = page.locator("[data-snapline-type='connector-line']");
+  await expect(line).toHaveCount(1);
+  const endpoint = await line.evaluate((svg) => {
+    const rect = svg.getBoundingClientRect();
+    const path = svg.querySelector("path")?.getAttribute("d") ?? "";
+    const numbers = path.match(/-?\d+(?:\.\d+)?/g)?.map(Number) ?? [];
+    const transform = new DOMMatrixReadOnly(getComputedStyle(svg).transform);
+    const startPoint = new DOMPoint(numbers[0] ?? 0, numbers[1] ?? 0).matrixTransform(transform);
+    const endPoint = new DOMPoint(numbers[6] ?? 0, numbers[7] ?? 0).matrixTransform(transform);
+    const layoutOffsetX = rect.left - startPoint.x;
+    const layoutOffsetY = rect.top - startPoint.y;
+    return {
+      x: endPoint.x + layoutOffsetX,
+      y: endPoint.y + layoutOffsetY,
+    };
+  });
+  expect(Math.abs(endpoint.x - edge.x)).toBeLessThan(8);
+  expect(Math.abs(endpoint.y - edge.y)).toBeLessThan(8);
+
+  await page.mouse.up();
+  await expect(line).toHaveCount(0);
+});
+
+test("node drag edge-pans while the dragged node stays under the pointer", async ({
+  page,
+}) => {
+  const nodeC = page.locator("[data-snapline-type='node']", { hasText: "Node C" });
+  const startBox = await nodeC.boundingBox();
+  const camera = page.locator("#node-ui-camera-canvas");
+  const bounds = await camera.boundingBox();
+  expect(startBox).not.toBeNull();
+  expect(bounds).not.toBeNull();
+  const start = { x: startBox!.x + 40, y: startBox!.y + 24 };
+  const edge = {
+    x: bounds!.x + bounds!.width - 8,
+    y: Math.min(bounds!.y + bounds!.height - 60, start.y + 80),
+  };
+
+  await page.mouse.move(start.x, start.y);
+  await page.mouse.down();
+  await page.mouse.move(edge.x, edge.y, { steps: 12 });
+  const before = await cameraTransform(page);
+  await expect.poll(() => cameraTransform(page)).not.toBe(before);
+  const draggedBox = await nodeC.boundingBox();
+  expect(edge.x - draggedBox!.x).toBeGreaterThan(20);
+  expect(edge.x - draggedBox!.x).toBeLessThan(draggedBox!.width);
+  expect(edge.y - draggedBox!.y).toBeGreaterThan(5);
+  expect(edge.y - draggedBox!.y).toBeLessThan(draggedBox!.height);
+  await page.mouse.up();
+});
+
 test("panButton='middle': middle-drag pans, left-drag does not", async ({ page }) => {
   await page.goto("/snapline-camera?panButton=middle");
   await expect(page.locator("[data-snapline-type='node']")).toHaveCount(3);

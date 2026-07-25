@@ -1,0 +1,22 @@
+---
+title: Placement API
+description: Core PlacementController state, callbacks, anchors, and lifecycle.
+order: 3
+sectionTitle: Reference
+sectionOrder: 3
+framework: vanilla
+frameworkKey: placement
+---
+
+Create `PlacementController<T>` with `screenToWorld`, optional callbacks, and an
+optional normalized anchor.
+
+| Method | Result |
+| --- | --- |
+| `begin(payload, size, options)` | Starts a preview |
+| `update(screen, event?)` | Recalculates position and returns whether it is allowed |
+| `commit(event?)` | Emits a valid commit and ends the session |
+| `cancel(reason, event?)` | Emits cancellation and ends the session |
+| `snapshot` | Current immutable placement state |
+
+Callbacks are `canPlace`, `onPreview`, `onCommit`, `onCancel`, and `onChange`.

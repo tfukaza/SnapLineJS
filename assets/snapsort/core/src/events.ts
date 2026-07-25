@@ -45,6 +45,24 @@ export type GhostRole = "target" | "source" | "pointer";
  */
 export type MutationPhase = "preview" | "commit";
 
+export type VisualGeometryInvalidationReason =
+  | "drag"
+  | "ghost"
+  | "animation"
+  | "settle";
+
+/**
+ * Coalesced notification that SnapSort changed transient visual geometry.
+ * Consumers can use this to invalidate geometry owned by another system
+ * without SnapSort knowing what that system is.
+ */
+export interface VisualGeometryInvalidationEvent {
+  root: Container;
+  session: DragSession | null;
+  items: readonly Item[];
+  reasons: readonly VisualGeometryInvalidationReason[];
+}
+
 export interface ItemRemoveEvent {
   session: DragSession | null;
   item: Item;
@@ -365,6 +383,15 @@ export interface ContainerCallbacks {
   onDragItemMove?: (event: DragItemHoverEvent) => void;
   /** Fired on the container owning `overItem` when the pointer's hitbox stops matching it. */
   onDragItemLeave?: (event: DragItemHoverEvent) => void;
+
+  /**
+   * Fired on the root container at most once per engine frame when transient
+   * item geometry may have changed. Notification only; consumers decide what
+   * external geometry, if any, to invalidate.
+   */
+  onVisualGeometryInvalidated?: (
+    event: VisualGeometryInvalidationEvent,
+  ) => void;
 
   /** Consulted while resolving candidates for `container`; return false to reject it for this drag. */
   canDrop?: (event: CanDropEvent) => boolean;

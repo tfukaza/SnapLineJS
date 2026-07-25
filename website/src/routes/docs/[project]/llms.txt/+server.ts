@@ -2,6 +2,7 @@ import {
   entries,
   getGroupedEntries,
   projectDescriptions,
+  findDocProject,
 } from "$lib/docsCatalog";
 import {
   frameworkLabel,
@@ -11,8 +12,6 @@ import { frameworkLabels, isFramework, type Framework } from "$lib/frameworks";
 import { absoluteUrl } from "$lib/seo";
 import { error } from "@sveltejs/kit";
 import type { RequestHandler } from "./$types";
-
-const supportedProjects = new Set(["snapengine", "snapsort"]);
 
 function linkTitle(title: string, framework: Framework): string {
   const label = frameworkLabels[framework];
@@ -34,7 +33,7 @@ function markdownLink(
 
 export const GET: RequestHandler = ({ params }) => {
   const project = params.project;
-  if (!supportedProjects.has(project)) {
+  if (!findDocProject(project)) {
     throw error(404, `Documentation project not found: ${project}`);
   }
 

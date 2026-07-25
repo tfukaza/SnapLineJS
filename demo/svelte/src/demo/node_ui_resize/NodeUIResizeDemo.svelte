@@ -12,7 +12,7 @@
          the line must stay glued. -->
     <ResizableNode title="Resizable A" x={120} y={140} resizable />
     <SimpleNode title="Fixed B" x={560} y={200} />
-    <ResizableNode title="TL Anchor C" x={340} y={480} resizable resizeAnchor="tl" />
+    <ResizableNode title="TL Anchor C" x={340} y={480} resizable resizeHandles={["nw"]} />
   </div>
 </Engine>
 

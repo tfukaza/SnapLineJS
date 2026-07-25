@@ -2,12 +2,58 @@ import { ElementObject, BaseObject } from "@snap-engine/core";
 import { NodeComponent } from "./node";
 import { LineComponent } from "./line";
 import type { pointerDownProp, dragProp, dragEndProp } from "@snap-engine/core";
+import type { eventPosition } from "@snap-engine/core";
 import {
   Collider,
   CircleCollider,
   PointCollider,
 } from "@snap-engine/core/collision";
-import { EventProxyFactory } from "@snap-engine/core";
+export type SnapLineMetadata = Record<string, unknown>;
+export type ConnectionOrigin = "gesture" | "programmatic";
+export type DisconnectReason =
+  | "gesture"
+  | "replacement"
+  | "programmatic"
+  | "teardown";
+export type ConnectorRole = "source" | "target";
+
+export interface ConnectorPairEvent {
+  source: ConnectorComponent;
+  target: ConnectorComponent;
+}
+
+export interface ConnectorCandidateEvent {
+  source: ConnectorComponent;
+  candidate: ConnectorComponent | null;
+}
+
+export interface ConnectorConnectionEvent extends ConnectorPairEvent {
+  connector: ConnectorComponent;
+  peer: ConnectorComponent;
+  line: LineComponent;
+  role: ConnectorRole;
+  origin: ConnectionOrigin;
+}
+
+export interface ConnectorDisconnectionEvent
+  extends Omit<ConnectorConnectionEvent, "origin"> {
+  reason: DisconnectReason;
+}
+
+export interface ConnectorDragEvent {
+  connector: ConnectorComponent;
+  position: eventPosition;
+  pointerId: number;
+}
+
+export interface ConnectorCallbacks {
+  canConnect?: (event: ConnectorPairEvent) => boolean;
+  onDragStart?: (event: ConnectorDragEvent) => void;
+  onCandidateChange?: (event: ConnectorCandidateEvent) => void;
+  onConnect?: (event: ConnectorConnectionEvent) => void;
+  onDisconnect?: (event: ConnectorDisconnectionEvent) => void;
+  onDragEnd?: (event: ConnectorDragEvent & { connected: boolean }) => void;
+}
 
 enum ConnectorState {
   IDLE,
@@ -20,13 +66,10 @@ export interface ConnectorConfig {
   allowDragOut?: boolean;
   lineClass?: typeof LineComponent;
   colliderRadius?: number;
-}
-
-interface ConnectorCallback {
-  onConnectOutgoing: null | ((connector: ConnectorComponent) => void);
-  onConnectIncoming: null | ((connector: ConnectorComponent) => void);
-  onDisconnectOutgoing: null | ((connector: ConnectorComponent) => void);
-  onDisconnectIncoming: null | ((connector: ConnectorComponent) => void);
+  metadata?: SnapLineMetadata;
+  callbacks?: ConnectorCallbacks;
+  /** Allows this connector gesture to use the engine's configured edge pan. */
+  edgePan?: boolean;
 }
 
 class ConnectorComponent extends ElementObject {
@@ -41,10 +84,11 @@ class ConnectorComponent extends ElementObject {
   #mouseHitBox: PointCollider;
 
   #targetConnector: ConnectorComponent | null = null;
+  #edgePanPointerId: number | null = null;
   #localCenter: { x: number; y: number };
   #hasMeasuredCenter = false;
 
-  #connectorCallback: ConnectorCallback | null = null;
+  #callbacks: ConnectorCallbacks;
 
   get parent(): NodeComponent {
     return super.parent as NodeComponent;
@@ -94,13 +138,7 @@ class ConnectorComponent extends ElementObject {
       );
     };
 
-    this.#connectorCallback = {
-      onConnectOutgoing: null,
-      onConnectIncoming: null,
-      onDisconnectOutgoing: null,
-      onDisconnectIncoming: null,
-    };
-    this.#connectorCallback = EventProxyFactory(this, this.#connectorCallback);
+    this.#callbacks = config.callbacks ?? {};
   }
 
   get name(): string {
@@ -113,6 +151,18 @@ class ConnectorComponent extends ElementObject {
 
   get prop(): { [key: string]: any } {
     return this.#prop;
+  }
+
+  get metadata(): SnapLineMetadata {
+    return this.#config.metadata ?? {};
+  }
+
+  get callbacks(): ConnectorCallbacks {
+    return this.#callbacks;
+  }
+
+  set callbacks(callbacks: ConnectorCallbacks) {
+    this.#callbacks = callbacks;
   }
 
   get outgoingLines(): LineComponent[] {
@@ -128,7 +178,7 @@ class ConnectorComponent extends ElementObject {
   }
 
   set targetConnector(value: ConnectorComponent | null) {
-    this.#targetConnector = value;
+    this.setCandidate(value);
   }
 
   get numIncomingLines(): number {
@@ -137,6 +187,42 @@ class ConnectorComponent extends ElementObject {
 
   get numOutgoingLines(): number {
     return this.#outgoingLines.length;
+  }
+
+  private setCandidate(candidate: ConnectorComponent | null): void {
+    if (candidate === this.#targetConnector) return;
+    this.#targetConnector = candidate;
+    this.#callbacks.onCandidateChange?.({ source: this, candidate });
+  }
+
+  #emitConnect(
+    target: ConnectorComponent,
+    line: LineComponent,
+    origin: ConnectionOrigin,
+  ): void {
+    this.#callbacks.onConnect?.({
+      source: this, target, connector: this, peer: target, line,
+      role: "source", origin,
+    });
+    target.#callbacks.onConnect?.({
+      source: this, target, connector: target, peer: this, line,
+      role: "target", origin,
+    });
+  }
+
+  #emitDisconnect(
+    target: ConnectorComponent,
+    line: LineComponent,
+    reason: DisconnectReason,
+  ): void {
+    this.#callbacks.onDisconnect?.({
+      source: this, target, connector: this, peer: target, line,
+      role: "source", reason,
+    });
+    target.#callbacks.onDisconnect?.({
+      source: this, target, connector: target, peer: this, line,
+      role: "target", reason,
+    });
   }
 
   get center(): { x: number; y: number } {
@@ -208,8 +294,36 @@ class ConnectorComponent extends ElementObject {
     };
   }
 
-  get connectorCallback(): ConnectorCallback {
-    return this.#connectorCallback!;
+  /**
+   * Request a deferred remeasurement after an external system changes this
+   * connector's painted DOM position. Calls coalesce within the engine frame.
+   */
+  requestDomGeometrySync(): boolean {
+    if (!this.element?.isConnected || !this.parent) return false;
+
+    this.schedule(
+      () => {
+        if (!this.element?.isConnected || !this.parent) return;
+        this.measureLocalCenter("READ_1");
+      },
+      {
+        stage: "READ_1",
+        queueId: `${this.id}-dom-geometry`,
+      },
+    );
+    for (const line of [...this.#outgoingLines, ...this.#incomingLines]) {
+      line.schedule(
+        () => {
+          line.moveLineToConnectorTransform();
+          line.writeTransform();
+        },
+        {
+          stage: "WRITE_1",
+          queueId: `${line.id}-dom-geometry`,
+        },
+      );
+    }
+    return true;
   }
 
   onCursorDown(prop: pointerDownProp): void {
@@ -229,7 +343,10 @@ class ConnectorComponent extends ElementObject {
     }
   }
 
-  deleteLine(i: number): LineComponent | null {
+  deleteLine(
+    i: number,
+    reason: DisconnectReason = "programmatic",
+  ): LineComponent | null {
     if (this.#outgoingLines.length == 0 || i < 0) {
       return null;
     }
@@ -243,8 +360,7 @@ class ConnectorComponent extends ElementObject {
       target.#incomingLines = target.#incomingLines.filter(
         (incomingLine) => incomingLine !== line,
       );
-      this.#connectorCallback?.onDisconnectOutgoing?.(target);
-      target.#connectorCallback?.onDisconnectIncoming?.(this);
+      this.#emitDisconnect(target, line, reason);
     }
     line.destroy();
     this.#outgoingLines.splice(i, 1);
@@ -254,12 +370,12 @@ class ConnectorComponent extends ElementObject {
     return line;
   }
 
-  deleteAllLines() {
+  deleteAllLines(reason: DisconnectReason = "programmatic") {
     for (const line of [...this.#outgoingLines]) {
-      this.deleteLine(this.#outgoingLines.indexOf(line));
+      this.deleteLine(this.#outgoingLines.indexOf(line), reason);
     }
     for (const line of [...this.#incomingLines]) {
-      line.start.deleteLine(line.start.outgoingLines.indexOf(line));
+      line.start.deleteLine(line.start.outgoingLines.indexOf(line), reason);
     }
     this.#incomingLines = [];
   }
@@ -278,11 +394,6 @@ class ConnectorComponent extends ElementObject {
         },
       );
     }
-  }
-
-  /** @deprecated Renamed: use `scheduleAllLineWrites` (schedules, does not write now). */
-  updateAllLines() {
-    this.scheduleAllLineWrites();
   }
 
   /** Synchronously writes every line on this connector (call inside a WRITE stage). */
@@ -332,11 +443,16 @@ class ConnectorComponent extends ElementObject {
     this.parent.updateNodeLineList();
 
     this.#state = ConnectorState.DRAGGING;
-    this.#targetConnector = null;
+    this.setCandidate(null);
     // this.event.input.drag = null;
     this.event.input.drag = this.runDragOutLine;
     // this.globalInput.pointerUp = this.endDragOutLine;
     this.event.input.dragEnd = this.endDragOutLine;
+    this.#callbacks.onDragStart?.({
+      connector: this,
+      position: prop.position,
+      pointerId: prop.event.pointerId,
+    });
 
     this.#mouseHitBox.event.collider.onCollide = (
       _: Collider,
@@ -350,7 +466,7 @@ class ConnectorComponent extends ElementObject {
       otherObject: Collider,
     ) => {
       if (this.#targetConnector?.id == otherObject.parent.id) {
-        this.#targetConnector = null;
+        this.setCandidate(null);
       }
     };
 
@@ -387,9 +503,9 @@ class ConnectorComponent extends ElementObject {
         return da - db;
       });
     if (connectors.length > 0) {
-      this.#targetConnector = connectors[0];
+      this.setCandidate(connectors[0] ?? null);
     } else {
-      this.#targetConnector = null;
+      this.setCandidate(null);
     }
   }
 
@@ -430,7 +546,12 @@ class ConnectorComponent extends ElementObject {
     }
 
     const maxConnectors = connector.config.maxConnectors ?? 1;
-    return maxConnectors < 0 || currentIncomingLines.length < maxConnectors;
+    if (maxConnectors === 0) return false;
+    const event = { source: this, target: connector };
+    return (
+      this.#callbacks.canConnect?.(event) !== false &&
+      connector.#callbacks.canConnect?.(event) !== false
+    );
   }
 
   runDragOutLine(prop: dragProp) {
@@ -442,11 +563,36 @@ class ConnectorComponent extends ElementObject {
       console.error(`Error: Outgoing lines is empty`);
       return;
     }
+    if (this.#config.edgePan !== false && typeof prop.pointerId === "number") {
+      const controller = this.engine.edgePanController;
+      if (this.#edgePanPointerId == null) {
+        this.#edgePanPointerId = prop.pointerId;
+        controller?.startEdgePan(
+          prop.pointerId,
+          prop.position,
+          (position) => this.#moveDraggedLine(position),
+        );
+      } else {
+        controller?.updateEdgePan(prop.pointerId, prop.position);
+      }
+    }
+
+    this.#moveDraggedLine(prop.position);
+  }
+
+  #moveDraggedLine(position: eventPosition): void {
+    if (
+      this.#state != ConnectorState.DRAGGING ||
+      this.#outgoingLines.length === 0
+    ) {
+      return;
+    }
+
     this.#mouseHitBox.worldTransform = {
-      x: prop.position.x,
-      y: prop.position.y,
+      x: position.x,
+      y: position.y,
     };
-    this.#targetConnector = this.findClosestConnectorAtPoint(prop.position);
+    this.setCandidate(this.findClosestConnectorAtPoint(position));
 
     let line = this.#outgoingLines[0];
 
@@ -462,7 +608,7 @@ class ConnectorComponent extends ElementObject {
         return;
       }
     }
-    line.setLineEnd(prop.position.x, prop.position.y);
+    line.setLineEnd(position.x, position.y);
     line.setLineStartAtConnector();
     this.parent.scheduleLineWrites();
   }
@@ -485,7 +631,8 @@ class ConnectorComponent extends ElementObject {
   }
 
   endDragOutLine(prop: dragEndProp) {
-    this.#targetConnector = this.findClosestConnectorAtPoint(prop.end);
+    this.setCandidate(this.findClosestConnectorAtPoint(prop.end));
+    let connected = false;
     if (
       this.#targetConnector &&
       this.#targetConnector instanceof ConnectorComponent
@@ -496,31 +643,54 @@ class ConnectorComponent extends ElementObject {
         this._endLineDragCleanup();
         return;
       }
-      if (this.connectToConnector(target, this.#outgoingLines[0]) == false) {
+      if (
+        this.connectToConnector({
+          target,
+          line: this.#outgoingLines[0],
+          origin: "gesture",
+        }) == false
+      ) {
         this._endLineDragCleanup();
-        this.deleteLine(0);
+        this.deleteLine(0, "gesture");
+        this.#callbacks.onDragEnd?.({
+          connector: this,
+          position: prop.end,
+          pointerId: prop.pointerId,
+          connected: false,
+        });
         return;
       }
 
       target.#prop[target.#name] = this.#prop[this.#name];
 
       this.#outgoingLines[0].setLineEndAtConnector();
+      connected = true;
     } else {
-      this.deleteLine(0);
+      this.deleteLine(0, "gesture");
     }
     if (this.parent) {
       this.parent.scheduleLineWrites();
     }
 
+    this.#callbacks.onDragEnd?.({
+      connector: this,
+      position: prop.end,
+      pointerId: prop.pointerId,
+      connected,
+    });
     this._endLineDragCleanup();
   }
 
   _endLineDragCleanup() {
+    if (this.#edgePanPointerId != null) {
+      this.engine.edgePanController?.stopEdgePan(this.#edgePanPointerId);
+      this.#edgePanPointerId = null;
+    }
     this.#state = ConnectorState.IDLE;
     this.event.input.drag = null;
     this.event.input.dragEnd = null;
     this.parent.updateNodeLineList();
-    this.#targetConnector = null;
+    this.setCandidate(null);
     this.#mouseHitBox.event.collider.onCollide = null;
     this.#mouseHitBox.event.collider.onEndContact = null;
     this.#mouseHitBox.localTransform = { x: 0, y: 0 };
@@ -528,19 +698,41 @@ class ConnectorComponent extends ElementObject {
 
   startPickUpLine(line: LineComponent, prop: pointerDownProp) {
     const startConnector = line.start;
-    startConnector.disconnectFromConnector(this);
+    startConnector.disconnectFromConnector(this, "gesture");
     this.engine?.input.setPointerDragOwner(prop.event.pointerId, startConnector);
     startConnector.targetConnector = this;
     startConnector.startDragOutLine(prop);
     this.#state = ConnectorState.DRAGGING;
   }
 
-  connectToConnector(
-    connector: ConnectorComponent,
-    line: LineComponent | null,
-  ): boolean {
-    if (!this.canConnectToConnector(connector)) {
+  connectToConnector({
+    target,
+    line = null,
+    origin = "programmatic",
+  }: {
+    target: ConnectorComponent;
+    line?: LineComponent | null;
+    origin?: ConnectionOrigin;
+  }): boolean {
+    if (!this.canConnectToConnector(target)) {
       return false;
+    }
+
+    const maxConnectors = target.config.maxConnectors ?? 1;
+    if (maxConnectors > 0) {
+      const currentIncomingLines = target.incomingLines.filter(
+        (incomingLine) => !incomingLine.isDeleteRequested,
+      );
+      const removeCount = Math.max(
+        0,
+        currentIncomingLines.length - maxConnectors + 1,
+      );
+      for (const incomingLine of currentIncomingLines.slice(0, removeCount)) {
+        incomingLine.start.deleteLine(
+          incomingLine.start.outgoingLines.indexOf(incomingLine),
+          "replacement",
+        );
+      }
     }
 
     if (line == null) {
@@ -548,33 +740,39 @@ class ConnectorComponent extends ElementObject {
       this.#outgoingLines.unshift(line);
     }
 
-    line.target = connector;
-    if (!connector.incomingLines.includes(line)) {
-      connector.incomingLines.push(line);
+    line.target = target;
+    if (!target.incomingLines.includes(line)) {
+      target.incomingLines.push(line);
     }
     line.setLineStartAtConnector();
     line.setLineEndAtConnector();
 
     this.parent.updateNodeLineList();
 
-    this.#connectorCallback?.onConnectOutgoing?.(connector);
-    connector.#connectorCallback?.onConnectIncoming?.(this);
+    this.#emitConnect(target, line, origin);
     this.parent.setProp(this.#name, this.#prop[this.#name]);
 
     return true;
   }
 
-  disconnectFromConnector(connector: ConnectorComponent) {
+  disconnectFromConnector(
+    connector: ConnectorComponent,
+    reason: DisconnectReason = "programmatic",
+  ) {
     const lineIndex = this.#outgoingLines.findIndex(
       (line) => line.target == connector,
     );
     if (lineIndex !== -1) {
-      this.deleteLine(lineIndex);
+      this.deleteLine(lineIndex, reason);
     }
   }
 
   destroy() {
-    this.deleteAllLines();
+    if (this.#edgePanPointerId != null) {
+      this.engine.edgePanController?.stopEdgePan(this.#edgePanPointerId);
+      this.#edgePanPointerId = null;
+    }
+    this.deleteAllLines("teardown");
     if (this.parent?._connectors[this.#name] === this) {
       delete this.parent._connectors[this.#name];
     }

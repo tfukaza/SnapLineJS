@@ -9,6 +9,9 @@ on:
       - 'snapsort-v*'
       - 'snapsort-svelte-v*'
       - 'snapsort-react-v*'
+      - 'snapline-v*'
+      - 'snapline-svelte-v*'
+      - 'snapline-react-v*'
 
 jobs:
   publish:
@@ -60,6 +63,18 @@ jobs:
             snapsort-react-v*)
               package_dir="assets/snapsort/react"
               tag_version="${GITHUB_REF_NAME#snapsort-react-v}"
+              ;;
+            snapline-v*)
+              package_dir="assets/snapline/core"
+              tag_version="${GITHUB_REF_NAME#snapline-v}"
+              ;;
+            snapline-svelte-v*)
+              package_dir="assets/snapline/svelte"
+              tag_version="${GITHUB_REF_NAME#snapline-svelte-v}"
+              ;;
+            snapline-react-v*)
+              package_dir="assets/snapline/react"
+              tag_version="${GITHUB_REF_NAME#snapline-react-v}"
               ;;
             *)
               echo "Unsupported release tag: $GITHUB_REF_NAME"

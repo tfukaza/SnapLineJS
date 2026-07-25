@@ -1,11 +1,11 @@
-import { BaseObject, ElementObject, EventProxyFactory } from "@snap-engine/core";
+import { BaseObject, ElementObject } from "@snap-engine/core";
 import type {
   pointerDownProp,
   pointerMoveProp,
   pointerUpProp,
 } from "@snap-engine/core";
 import { RectCollider, Collider } from "@snap-engine/core/collision";
-import { NodeComponent } from "./node";
+import { NodeComponent, type SelectionMode } from "./node";
 import { getSelectList, snapData } from "./snapline-globals";
 
 /** World-space rectangle the framework renders as the selection box. */
@@ -17,7 +17,21 @@ export interface SelectRect {
   visible: boolean;
 }
 
-interface SelectCallback {
+export interface SelectStartEvent {
+  select: RectSelectComponent;
+  position: { x: number; y: number };
+  originalEvent: PointerEvent;
+}
+
+export interface SelectChangeEvent {
+  select: RectSelectComponent;
+  selection: readonly NodeComponent[];
+}
+
+export interface SelectCallbacks {
+  canStart?: (event: SelectStartEvent) => boolean;
+  /** Consumer-defined selection policy; SnapLine owns no modifier keys. */
+  resolveSelectionMode?: (event: SelectStartEvent) => SelectionMode;
   /**
    * The rubber-band rectangle changed — the FRAMEWORK renders it (position,
    * size, visibility, and any custom styling). Core keeps only the pointer
@@ -25,7 +39,12 @@ interface SelectCallback {
    * deliberately a plain callback with no flush handshake: the box visual is
    * not paint-atomic, so the framework may flush on its own schedule.
    */
-  onRectChange: null | ((rect: SelectRect) => void);
+  onRectChange?: (rect: SelectRect) => void;
+  onSelectionChange?: (event: SelectChangeEvent) => void;
+}
+
+export interface SelectConfig {
+  callbacks?: SelectCallbacks;
 }
 
 class RectSelectComponent extends ElementObject {
@@ -33,9 +52,15 @@ class RectSelectComponent extends ElementObject {
   _mouseDownX: number;
   _mouseDownY: number;
   _selectHitBox: Collider;
-  #selectCallback: SelectCallback;
+  #callbacks: SelectCallbacks;
+  #selectionMode: SelectionMode = "replace";
+  #baselineSelection = new Set<NodeComponent>();
 
-  constructor(engine: any, parent: BaseObject | null) {
+  constructor(
+    engine: any,
+    parent: BaseObject | null,
+    config: SelectConfig = {},
+  ) {
     super(engine, parent);
 
     this._state = "none";
@@ -54,18 +79,15 @@ class RectSelectComponent extends ElementObject {
 
     snapData(this.global).select = [];
 
-    this.#selectCallback = EventProxyFactory<RectSelectComponent, SelectCallback>(
-      this,
-      { onRectChange: null },
-    );
+    this.#callbacks = config.callbacks ?? {};
   }
 
-  get selectCallback(): SelectCallback {
-    return this.#selectCallback;
+  get callbacks(): SelectCallbacks {
+    return this.#callbacks;
   }
 
   #fireRect(width: number, height: number, visible: boolean): void {
-    this.#selectCallback.onRectChange?.({
+    this.#callbacks.onRectChange?.({
       x: this.worldTransform.x,
       y: this.worldTransform.y,
       width,
@@ -75,25 +97,38 @@ class RectSelectComponent extends ElementObject {
   }
 
   onGlobalCursorDown(prop: pointerDownProp): void {
-    if (
-      prop.event.button !== 0 ||
-      (prop.event.target &&
-        (prop.event.target as HTMLElement).id !== "sl-background")
-    ) {
+    if (prop.event.button !== 0) {
       return;
     }
-    for (let node of [...getSelectList(this.global)]) {
-      node.setSelected(false);
+    const startEvent = {
+      select: this,
+      position: prop.position,
+      originalEvent: prop.event,
+    };
+    if (this.#callbacks.canStart?.(startEvent) === false) return;
+    this.#selectionMode =
+      this.#callbacks.resolveSelectionMode?.(startEvent) ?? "replace";
+    this.#baselineSelection = new Set(getSelectList(this.global));
+    if (this.#selectionMode === "replace") {
+      for (let node of [...getSelectList(this.global)]) {
+        node.setSelected(false);
+      }
+      snapData(this.global).select = [];
     }
 
-    snapData(this.global).select = [];
     // worldTransform positions the selection collider (its transform parent);
     // the visual box is framework-rendered from the callback rect.
     this.worldTransform = { x: prop.position.x, y: prop.position.y };
     this._state = "dragging";
     this._mouseDownX = prop.position.x;
     this._mouseDownY = prop.position.y;
+    this._selectHitBox.width = 0;
+    this._selectHitBox.height = 0;
     this.#fireRect(0, 0, true);
+    this.#callbacks.onSelectionChange?.({
+      select: this,
+      selection: [...getSelectList(this.global)],
+    });
 
     this._selectHitBox.event.collider.onBeginContact = (
       _: Collider,
@@ -101,7 +136,15 @@ class RectSelectComponent extends ElementObject {
     ) => {
       if (otherObject.parent instanceof NodeComponent) {
         let node = otherObject.parent as NodeComponent;
-        node.setSelected(true);
+        node.setSelected(
+          this.#selectionMode === "toggle"
+            ? !this.#baselineSelection.has(node)
+            : true,
+        );
+        this.#callbacks.onSelectionChange?.({
+          select: this,
+          selection: [...getSelectList(this.global)],
+        });
       }
     };
     this._selectHitBox.event.collider.onEndContact = (
@@ -110,7 +153,11 @@ class RectSelectComponent extends ElementObject {
     ) => {
       if (otherObject.parent instanceof NodeComponent) {
         let node = otherObject.parent as NodeComponent;
-        node.setSelected(false);
+        node.setSelected(this.#baselineSelection.has(node));
+        this.#callbacks.onSelectionChange?.({
+          select: this,
+          selection: [...getSelectList(this.global)],
+        });
       }
     };
   }

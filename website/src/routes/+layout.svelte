@@ -61,69 +61,23 @@
   }
 </script>
 
-<svelte:window onpointerdown={handleWindowPointerDown} onkeydown={handleWindowKeyDown} />
-
-<a class="skip-link button primary small" href="#main-content">Skip to content</a>
-
-<nav class="nav-bar" aria-label="Primary navigation" bind:this={navRoot}>
-  <a
-    href="/"
-    class="wordmark"
-    aria-current={isHomePath ? "page" : undefined}
-    onclick={closeNavigation}
-  >
-    SnapEngine
-  </a>
-
-  <button
-    bind:this={mobileNavTrigger}
-    type="button"
-    class="mobile-nav-trigger"
-    aria-label="Toggle navigation"
-    aria-expanded={mobileNavOpen}
-    aria-controls="primary-nav-links"
-    onclick={toggleMobileNav}
-  >
-    <span>Menu</span>
-    <span class="mobile-nav-icon" aria-hidden="true">{mobileNavOpen ? "×" : "≡"}</span>
-  </button>
-
-  <div id="primary-nav-links" class="nav-right" class:is-open={mobileNavOpen}>
-    <div class="nav-menu" class:is-open={activeMenu === "assets"}>
-      <button
-        bind:this={assetsMenuTrigger}
-        type="button"
-        class="nav-link nav-menu-trigger"
-        class:current={isAssetsPath}
-        aria-haspopup="true"
-        aria-expanded={activeMenu === "assets"}
-        aria-controls="assets-nav-menu"
-        onclick={() => toggleMenu("assets")}
-      >
-        Assets
-        <span class="material-symbols-rounded nav-chevron" aria-hidden="true">expand_more</span>
-      </button>
-      <div id="assets-nav-menu" class="nav-dropdown card">
-        {#each exploreEntries as entry}
-          {#if isExploreEntryBrowsable(entry)}
-            <a
-              href={entry.href}
-              aria-current={currentPath === entry.href ||
-                currentPath.startsWith(`${entry.href}/`)
-                ? "page"
-                : undefined}
-              onclick={closeNavigation}
-            >
-              <span>{entry.name}</span>
-              <small>{getExploreStatusLabel(entry)}</small>
-            </a>
-          {:else}
-            <span class="nav-dropdown-disabled">
-              <span>{entry.name}</span>
-              <small>{getExploreStatusLabel(entry)}</small>
-            </span>
-          {/if}
-        {/each}
+<nav class="nav-bar">
+  <div class="nav-left">
+    <a href="/" class="wordmark">SnapEngine</a>
+  </div>
+  <div class="nav-right">
+    <!-- <a href="#assets" class="nav-link">Assets</a> -->
+    <div class="docs-menu">
+      <a href="/docs/snapengine/introduction" class="nav-link docs-menu-trigger" aria-haspopup="true">
+        Docs
+        <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+          <path d="m3 4.5 3 3 3-3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+        </svg>
+      </a>
+      <div class="docs-dropdown card">
+        <a href="/docs/snapengine/introduction">SnapEngine</a>
+        <a href="/docs/snapsort/introduction">SnapSort</a>
+        <a href="/docs/snapline/introduction">SnapLine</a>
       </div>
     </div>
 
@@ -186,11 +140,16 @@
         <nav class="footer-column" aria-labelledby="footer-project">
           <h2 id="footer-project">Project</h2>
           <a href="/about">About</a>
-          <a href="/docs">Docs</a>
-          <a href={repositoryUrl} target="_blank" rel="noopener noreferrer">GitHub</a>
-          <a href={npmOrganizationUrl} target="_blank" rel="noopener noreferrer">NPM</a>
-        </nav>
-        {#if import.meta.env.DEV && $debugLayoutFooterControl}
+          <a href="/docs/snapengine/introduction">Docs</a>
+          <a href="https://github.com/tfukaza/SnapLineJS" target="_blank" rel="noopener noreferrer">GitHub</a>
+        </div>
+        <div class="footer-column">
+          <a href="/#assets"><h4>Assets</h4></a>
+          <span class="footer-link-disabled">SnapZap</span>
+          <a href="/snapsort">SnapSort</a>
+          <a href="/docs/snapline/introduction">SnapLine</a>
+        </div>
+        {#if $debugLayoutFooterControl}
           <div class="footer-column footer-debug-column">
             <h2>Debug</h2>
             <DebugLayoutToolbar

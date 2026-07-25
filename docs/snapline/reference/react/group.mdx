@@ -1,0 +1,21 @@
+---
+title: Group API
+description: React Group props, callbacks, geometry, and forwarded ref.
+order: 2
+sectionTitle: Reference
+sectionOrder: 3
+framework: react
+frameworkKey: group
+---
+
+`GroupProps` combines node geometry and resize props with `title`,
+`headerContent`, `canContain`, `groupCallbacks`, and membership/commit
+convenience callbacks.
+
+The forwarded ref is the `GroupNodeComponent`. The group renders a
+pointer-transparent body, an interactive header, and visual resize cues backed
+by core collision handles.
+
+Geometry changes resynchronize after mount. Callback props remain current
+across renders and are composed with callbacks already present on a supplied
+core object.

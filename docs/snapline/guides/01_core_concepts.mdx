@@ -1,0 +1,41 @@
+---
+title: Core concepts and connections
+description: Understand engines, nodes, connectors, lines, coordinates, and ownership.
+order: 1
+sectionTitle: Guides
+sectionOrder: 2
+---
+
+<script>
+  import SnapLineDemo from "$lib/components/docs/SnapLineDemo.svelte";
+</script>
+
+<SnapLineDemo mode="connections" />
+
+## Object model
+
+- One SnapEngine supplies input dispatch, scheduling, collision data, and the
+  camera coordinate transform.
+- A `NodeComponent` owns connector objects and graph properties.
+- A `ConnectorComponent` describes direction, capacity, metadata, and
+  connection policy.
+- A `LineComponent` joins two connectors and keeps its SVG path attached while
+  either node moves.
+
+`maxConnectors={-1}` permits unlimited incoming connections, `0` makes an
+output-only connector, and a positive number caps incoming connections.
+`allowDragOut` controls whether a connection gesture can begin there.
+
+## Coordinates
+
+Persist node positions in world space. Browser pointer positions begin in
+screen space, pass through camera space, and then become world positions.
+Placement callbacks report all three useful representations instead of making
+applications repeat that conversion.
+
+## Rendering ownership
+
+Core objects never insert, remove, or reparent framework-rendered elements.
+Adapters render collections and dimensions; core updates transforms, SVG
+geometry, and `data-selected`. This rule keeps React and Svelte reconciliation
+authoritative.

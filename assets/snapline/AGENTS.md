@@ -4,8 +4,9 @@
 
 Node-based graph UI system for creating visual programming interfaces, node editors, and flow-based applications.
 
-SnapLine is experimental. Its core, Svelte, and React workspace packages are
-private and are intentionally excluded from npm publish workflows.
+SnapLine is experimental and published as synchronized core, Svelte, and React
+packages. Breaking changes are allowed before 1.0 and should replace obsolete
+APIs directly rather than adding compatibility shims.
 
 ## Packages
 
@@ -15,11 +16,12 @@ private and are intentionally excluded from npm publish workflows.
 **Dependencies:** `@snap-engine/core`
 
 **Exports:**
-- `NodeComponent` - Graph node with connectors (opt-in corner resize via `resizable`)
+- `NodeComponent` - Graph node with connectors (opt-in eight-direction resize)
 - `ConnectorComponent` - Input/output connector
 - `LineComponent` - Visual connection line
 - `GroupNodeComponent` - Resizable box that carries the nodes inside it
 - `RectSelectComponent` - Rectangle selection tool
+- `PlacementController` - Headless pointer-follow placement state machine
 - `snapline-globals` - Typed accessors for the shared `global.data` registries
 
 ### @snap-engine/snapline-svelte
@@ -29,9 +31,19 @@ private and are intentionally excluded from npm publish workflows.
 
 **Exports:**
 - `Node.svelte` - Node component
+- `Group.svelte` - Exclusive nested group component
 - `Connector.svelte` - Connector component
 - `Line.svelte` - Connection line component
 - `Select.svelte` - Rectangle selection component
+- `Placement.svelte` - Placement controller binding and preview
+
+### @snap-engine/snapline-react
+**Location:** `react/src/`
+**Language:** React/TypeScript
+**Dependencies:** `@snap-engine/snapline`, `@snap-engine/core`
+
+Exports `Engine`, `Node`, `Group`, `Connector`, `Line`, `Select`, and
+`Placement`, with forwarded refs to core objects where applicable.
 
 ## File Structure
 
@@ -160,12 +172,15 @@ elements** — frameworks recover fine from property changes.
 Concretely:
 
 - **Node width/height** are framework-rendered: core fires
-  `nodeCallback.onSizeChange(w, h)` during a resize drag and the adapter binds
+  `callbacks.onSizeChange({node, width, height})` during a resize drag and the adapter binds
   the size as state. Core only updates its collision hitboxes synchronously
   (`setSizeState`). The connector/line re-glue closes itself through the
   ResizeObserver after the framework's DOM write reflows.
+- **Initial node geometry** is explicit: after assigning a committed framework
+  element, adapters call `syncDomGeometry()`. ResizeObserver remains the
+  ongoing invalidation path, not the initial-mount handshake.
 - **The rubber-band selection box** is framework-rendered: core fires
-  `selectCallback.onRectChange({x, y, width, height, visible})` and the adapter
+  `callbacks.onRectChange({x, y, width, height, visible})` and the adapter
   draws (and can restyle/replace) the box. Deliberately NO flush handshake —
   the box visual is not paint-atomic.
 - **Node drag transforms, `data-selected` attributes, and line SVG transforms**
@@ -180,11 +195,19 @@ Concretely:
 ### Callback conventions
 
 Domain/lifecycle callbacks live in `EventProxyFactory` dictionaries —
-`nodeCallback` (`onSizeChange`, `onResizeCommit`, `onLinesChanged`),
-`groupCallback` (`onMemberEnter`, `onMemberLeave`, `onDragCommit`),
-`selectCallback` (`onRectChange`), `connectorCallback` (connect/disconnect).
-`setLineListCallback` and `_onResizeCommit` are deprecated shims. Raw input/DOM
-plumbing stays on the `event.*` slots.
+Configuration owns plain callback objects. Node callbacks report drag,
+selection, resize, and line-list events; group callbacks report membership
+deltas; selection callbacks decide whether rubber-band selection may start;
+connector callbacks provide connection policy plus drag/candidate/connect/
+disconnect lifecycle events. Events carry component references, metadata, and
+explicit origins/reasons so consumers never need teardown heuristics.
+
+SnapLine deliberately does not define port types, graph-document mutations,
+palette contents, or node factories. Consumers express those policies through
+metadata and predicates such as `canConnect`, `canContain`, and `canStart`.
+`PlacementController` similarly computes preview/commit coordinates but leaves
+rendering and creation to framework adapters and consumer callbacks.
+Raw input/DOM plumbing stays on the `event.*` slots.
 
 ### Shared global registries
 
@@ -214,10 +237,17 @@ the gesture** (pointer up/cancel) — there is no release call to pair, and a
 destroyed owner cannot strand a claim. The deprecated `allowCameraControl`
 boolean remains readable by the camera for third-party writers only.
 
-### Design limits (v1, by intent)
+### Group invariants
 
-- Groups never join other groups (nested groups are excluded in
-  `computeMembers`).
+- Ordinary nodes use center containment; nested groups require full-bounds
+  containment. `canContain` may reject any otherwise eligible node or group.
+- Each node has at most one resolved direct parent group. `members` and
+  membership callbacks describe that direct relation; `descendants` exposes
+  the recursive tree. Consumers may replace innermost-parent selection through
+  `setGroupMembershipResolver`.
+- Drag carry recursively flattens and deduplicates nested group descendants.
+- Equal-size group candidates use stable IDs as a deterministic tie-breaker;
+  membership cycles are always rejected.
 - Carried group members are moved via transform parenting only — they are never
   added to `global.data.select`, so a group drag does not alter the selection.
 - `attachTransformToGroup`/`detachTransformFromGroup` are the public
@@ -240,6 +270,16 @@ boolean remains readable by the camera for third-party writers only.
 - `-1`: Unlimited connections
 - `0`: No incoming (output only)
 - `N`: Maximum N incoming connections
+- A new connection to a full finite input evicts the oldest live incoming
+  line(s) required to make room. Disconnect callbacks fire before the new
+  connect callbacks.
+
+### Camera edge-pan
+
+When an engine exposes an enabled `edgePanController`, connector-line drags and
+node/group move drags request edge-panning automatically. The controller feeds
+updated world coordinates back into the active drag every frame. Selection and
+resize gestures intentionally do not edge-pan.
 
 ## Dependencies
 

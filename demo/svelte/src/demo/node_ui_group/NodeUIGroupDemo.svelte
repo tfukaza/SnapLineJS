@@ -6,11 +6,16 @@
   // The framework hands the member NodeComponent to these callbacks; a consumer
   // hangs any visual cue off them. Here we tag the member's element so the e2e
   // (and the eye) can see which nodes belong to the group.
-  function onMemberEnter(node: any) {
-    node.element?.setAttribute("data-member", "true");
-  }
-  function onMemberLeave(node: any) {
-    node.element?.removeAttribute("data-member");
+  function onMembershipChange(event: {
+    added: Array<{ element?: HTMLElement | null }>;
+    removed: Array<{ element?: HTMLElement | null }>;
+  }) {
+    for (const node of event.added) {
+      node.element?.setAttribute("data-member", "true");
+    }
+    for (const node of event.removed) {
+      node.element?.removeAttribute("data-member");
+    }
   }
 </script>
 
@@ -23,8 +28,7 @@
       y={60}
       width={520}
       height={460}
-      {onMemberEnter}
-      {onMemberLeave}
+      {onMembershipChange}
     />
     <SimpleNode title="Node A" x={100} y={110} />
     <SimpleNode title="Node C" x={100} y={300} />

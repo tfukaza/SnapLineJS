@@ -6,7 +6,7 @@ import {
   useRef,
   type CSSProperties,
 } from "react";
-import { ConnectorComponent } from "@snap-engine/snapline";
+import { ConnectorComponent, type ConnectorCallbacks, type SnapLineMetadata } from "@snap-engine/snapline";
 import { useSnapLineEngine } from "./Engine";
 import { NodeObjectContext } from "./Node";
 
@@ -16,6 +16,11 @@ export interface ConnectorProps {
   maxConnectors?: number;
   name: string;
   style?: CSSProperties;
+  metadata?: SnapLineMetadata;
+  callbacks?: ConnectorCallbacks;
+  edgePan?: boolean;
+  connectorObject?: ConnectorComponent | null;
+  data?: Record<string, string>;
 }
 
 export interface ConnectorRef {
@@ -30,6 +35,11 @@ export const Connector = forwardRef<ConnectorRef, ConnectorProps>(
       maxConnectors = 1,
       name,
       style,
+      metadata = {},
+      callbacks = {},
+      edgePan = true,
+      connectorObject = null,
+      data = {},
     },
     ref,
   ) => {
@@ -40,12 +50,16 @@ export const Connector = forwardRef<ConnectorRef, ConnectorProps>(
     }
 
     const connectorDomRef = useRef<HTMLDivElement>(null);
-    const connectorRef = useRef<ConnectorComponent | null>(null);
+    const ownsConnectorRef = useRef(connectorObject == null);
+    const connectorRef = useRef<ConnectorComponent | null>(connectorObject);
     if (!connectorRef.current) {
       connectorRef.current = new ConnectorComponent(engine, nodeObject, {
         allowDragOut,
         maxConnectors,
         name,
+        metadata,
+        callbacks,
+        edgePan,
       });
       nodeObject.addConnectorObject(connectorRef.current);
     }
@@ -60,7 +74,7 @@ export const Connector = forwardRef<ConnectorRef, ConnectorProps>(
         connector.element = connectorDomRef.current;
       }
       return () => {
-        connector.destroy();
+        if (ownsConnectorRef.current) connector.destroy();
       };
     }, [connector]);
 
@@ -69,6 +83,9 @@ export const Connector = forwardRef<ConnectorRef, ConnectorProps>(
         ref={connectorDomRef}
         data-snapline-name={name}
         data-snapline-type="connector"
+        {...Object.fromEntries(
+          Object.entries(data).map(([key, value]) => [`data-${key}`, value]),
+        )}
         className={`connector ${allowDragOut ? "right" : "left"} ${className}`.trim()}
         style={{
           background: "#4f46e5",

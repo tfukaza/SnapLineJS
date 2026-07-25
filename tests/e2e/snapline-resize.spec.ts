@@ -79,6 +79,59 @@ test("resize can be grabbed beyond the node's visual edge", async ({ page }) => 
   expect(after!.width - before!.width).toBeGreaterThan(80);
 });
 
+test("all four sides and all four corners resize from the expected fixed edge", async ({ page }) => {
+  const nodeA = page.locator("[data-snapline-type='node']", { hasText: "Resizable A" });
+  const cases = [
+    { handle: "n", dx: 0, dy: -45 },
+    { handle: "ne", dx: 55, dy: -45 },
+    { handle: "e", dx: 55, dy: 0 },
+    { handle: "se", dx: 55, dy: 45 },
+    { handle: "s", dx: 0, dy: 45 },
+    { handle: "sw", dx: -55, dy: 45 },
+    { handle: "w", dx: -55, dy: 0 },
+    { handle: "nw", dx: -55, dy: -45 },
+  ] as const;
+
+  for (const resizeCase of cases) {
+    await page.goto("/snapline-resize");
+    await expect(page.locator("[data-snapline-type='node']")).toHaveCount(3);
+    const before = (await nodeA.boundingBox())!;
+    const west = resizeCase.handle.includes("w");
+    const east = resizeCase.handle.includes("e");
+    const north = resizeCase.handle.includes("n");
+    const south = resizeCase.handle.includes("s");
+    const from = {
+      x: west ? before.x + 2 : east ? before.x + before.width - 2 : before.x + before.width / 2,
+      y: north ? before.y + 2 : south ? before.y + before.height - 2 : before.y + before.height / 2,
+    };
+    await dragFromTo(page, from, {
+      x: from.x + resizeCase.dx,
+      y: from.y + resizeCase.dy,
+    });
+    const after = (await nodeA.boundingBox())!;
+
+    if (west || east) expect(after.width - before.width).toBeGreaterThan(30);
+    else expect(Math.abs(after.width - before.width)).toBeLessThan(5);
+    if (north || south) expect(after.height - before.height).toBeGreaterThan(25);
+    else expect(Math.abs(after.height - before.height)).toBeLessThan(5);
+    if (west) expect(Math.abs(after.x + after.width - (before.x + before.width))).toBeLessThan(5);
+    if (north) expect(Math.abs(after.y + after.height - (before.y + before.height))).toBeLessThan(5);
+    if (east) expect(Math.abs(after.x - before.x)).toBeLessThan(5);
+    if (south) expect(Math.abs(after.y - before.y)).toBeLessThan(5);
+  }
+});
+
+test("hovering virtual resize surfaces applies and restores the CSS cursor", async ({ page }) => {
+  const nodeA = page.locator("[data-snapline-type='node']", { hasText: "Resizable A" });
+  const box = (await nodeA.boundingBox())!;
+  await page.mouse.move(box.x + box.width - 2, box.y + box.height / 2);
+  await expect(nodeA).toHaveAttribute("data-snapline-resize-handle", "e");
+  await expect(nodeA).toHaveCSS("cursor", "ew-resize");
+
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await expect(nodeA).not.toHaveAttribute("data-snapline-resize-handle");
+});
+
 test("a plain (non-resizable) node moves when grabbed at its BR corner", async ({ page }) => {
   const nodeB = page.locator("[data-snapline-type='node']", { hasText: "Fixed B" });
   const before = await nodeB.boundingBox();
