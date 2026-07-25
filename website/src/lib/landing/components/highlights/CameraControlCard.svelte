@@ -1,4 +1,5 @@
 <script lang="ts">
+  import CardDocsLink from "./CardDocsLink.svelte";
   import { onMount } from "svelte";
   import ClientDemoFrame from "$lib/components/ClientDemoFrame.svelte";
   import { Engine, Camera as CameraControlComponent } from "@snap-engine/asset-base-svelte";
@@ -354,6 +355,7 @@
             <h3>Camera<br />Control</h3>
             <p>Built-in camera module manages zoom and pan for any DOM element.<br>
                 Gesture support on mobile devices.</p>
+                <CardDocsLink href="/docs/snapengine/introduction/05_camera" label="Camera docs" />
           </div>
         </div>
       </CameraControlComponent>

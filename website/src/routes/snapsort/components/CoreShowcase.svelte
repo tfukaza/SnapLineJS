@@ -369,71 +369,40 @@
               </article>
             </div>
 
-            <section class="closing-grid" aria-label="Get started with SnapSort">
-              <div class="closing-card get-started-card">
-                <div class="closing-copy">
-                  <h3>Get started</h3>
-                  <p>
-                    Install SnapSort, wrap your markup in a container, and ship drag
-                    and drop in minutes — with the framework you already use.
-                  </p>
-                </div>
-                <ul class="closing-frameworks" aria-label="Framework availability">
-                  <li><img src="/icon/javascript.svg" alt="JavaScript" /></li>
-                  <li><img src="/icon/svelte.svg" alt="Svelte" /></li>
-                  <li><img src="/icon/react.svg" alt="React" /></li>
-                  <li class="framework-wip-logo">
-                    <img src="/icon/vue.svg" alt="Vue" />
-                    <span>WIP</span>
-                  </li>
-                  <li class="framework-wip-logo">
-                    <img src="/icon/angular.svg" alt="Angular" />
-                    <span>WIP</span>
-                  </li>
-                </ul>
-                <a class="button primary closing-button" href="/docs/snapsort/introduction">
-                  Read the docs
-                </a>
-              </div>
-
+            <section class="closing-grid" aria-label="Explore SnapSort examples">
               <div class="closing-card gallery-card">
                 <div class="gallery-kanban" aria-hidden="true">
-                  <div class="gallery-kanban-scale">
-                    <div class="gk-board">
-                      {#each multiContainers as column}
-                        <div class="gk-column">
-                          <div class="gk-column-head">
-                            <h4>{column.title}</h4>
-                            <span class="gk-count">{column.items.length}</span>
-                          </div>
-                          {#each column.items as item}
-                            <div class="gk-card">
-                              <div class="gk-header">
-                                <span class="gk-title">{item.label}</span>
-                                <span class="gk-tag">Demo</span>
-                              </div>
-                              <p class="gk-desc">Static preview content.</p>
-                              <div class="gk-footer">
-                                <span class="gk-avatar" style="--avatar-color: #00a6a6;">S</span>
-                                <span class="gk-due">
-                                  <i class="material-symbols-rounded">event</i>Today
-                                </span>
-                              </div>
-                            </div>
-                          {/each}
-                        </div>
-                      {/each}
+                  <div class="gallery-preview-board">
+                    <div class="gallery-preview-column card">
+                      <div class="gallery-preview-item card shallow"></div>
+                      <div class="gallery-preview-item card shallow"></div>
+                      <div class="gallery-preview-item card shallow"></div>
+                    </div>
+                    <div class="gallery-preview-column card">
+                      <div class="gallery-preview-item card shallow"></div>
+                      <div class="gallery-preview-item card shallow"></div>
+                      <div class="gallery-preview-drop-target"></div>
                     </div>
                   </div>
+                  <div class="gallery-preview-drag-card card"></div>
+                  <img
+                    class="gallery-preview-cursor"
+                    src="/icon/noun-cursor-740125.svg"
+                    alt=""
+                  />
                 </div>
-                <div class="closing-copy">
-                  <h3>Explore the gallery</h3>
-                  <p>
-                    File trees, form builders, sentence puzzles, and more — complete
-                    interactive demos built with SnapSort.
-                  </p>
+                <div class="gallery-copy-panel">
+                  <div class="closing-copy">
+                    <h3>Explore the gallery</h3>
+                    <p>
+                      File trees, form builders, sentence puzzles, and more —
+                      complete interactive demos built with SnapSort.
+                    </p>
+                  </div>
+                  <a class="button closing-button" href="/snapsort/gallery">
+                    Browse the gallery
+                  </a>
                 </div>
-                <a class="button closing-button" href="/snapsort/gallery">Browse the gallery</a>
               </div>
             </section>
           </div>

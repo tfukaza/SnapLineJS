@@ -5,88 +5,17 @@ import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 import { createHighlighter } from "shiki";
 import { remarkAlerts } from "./src/lib/markdown/remarkAlerts.js";
+import { customTheme, shikiLangs } from "./src/lib/markdown/shikiTheme.js";
 import { remarkFrameworkCodeBlocks } from "./src/lib/markdown/remarkFrameworkCodeBlocks.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const mdsvexLayout = join(__dirname, "src/lib/markdown/MdsvexLayout.svelte");
 
-// Custom shiki theme - edit colors here
-const customTheme = {
-  name: "custom-theme",
-  type: "dark",
-  colors: {
-    // "editor.background": "#1f1f2200",
-    "editor.foreground": "#e1e4e8",
-  },
-  tokenColors: [
-    {
-      scope: ["comment", "punctuation.definition.comment"],
-      settings: { foreground: "#6e7681", fontStyle: "italic" },
-    },
-    {
-      scope: ["string", "string.quoted"],
-      settings: { foreground: "#7af16aff" },
-    },
-    {
-      scope: ["constant.numeric", "constant.language"],
-      settings: { foreground: "#79c0ff" },
-    },
-    {
-      scope: ["keyword", "storage.type", "storage.modifier"],
-      settings: { foreground: "#ff7b72" },
-    },
-    {
-      scope: ["entity.name.function", "support.function"],
-      settings: { foreground: "#f4a85cff" },
-    },
-    {
-      scope: ["variable", "variable.other"],
-      settings: { foreground: "#e1e4e8" },
-    },
-    {
-      scope: ["entity.name.type", "entity.name.class", "support.type"],
-      settings: { foreground: "#ffa657" },
-    },
-    {
-      scope: ["punctuation", "meta.brace"],
-      settings: { foreground: "#e1e4e8" },
-    },
-    {
-      scope: ["entity.name.tag"],
-      settings: { foreground: "#7ee787" },
-    },
-    {
-      scope: ["entity.other.attribute-name"],
-      settings: { foreground: "#79c0ff" },
-    },
-    {
-      scope: ["keyword.operator"],
-      settings: { foreground: "#ff7b72" },
-    },
-    {
-      scope: ["constant.other"],
-      settings: { foreground: "#79c0ff" },
-    },
-  ],
-};
 
 // Create shiki highlighter with custom theme
 const highlighter = await createHighlighter({
   themes: [customTheme],
-  langs: [
-    "javascript",
-    "typescript",
-    "svelte",
-    "jsx",
-    "tsx",
-    "html",
-    "css",
-    "json",
-    "bash",
-    "shell",
-    "markdown",
-    "plaintext",
-  ],
+  langs: shikiLangs,
 });
 
 /** @type {import('@sveltejs/kit').Config} */

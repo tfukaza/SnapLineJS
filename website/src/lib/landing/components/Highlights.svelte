@@ -7,10 +7,13 @@
   import "./highlights/highlight-cards.css";
 </script>
 
-<section class="two-column interactivity-explainer">
-  <!-- <div class="interactivity-intro">
-    <h2 class="landing-section-heading">The toolkit for interactive<br />web components</h2>
-  </div> -->
+<section
+  id="capabilities"
+  class="two-column interactivity-explainer landing-section-gap landing-section-gap-wide"
+>
+  <div class="interactivity-intro">
+    <h2 class="landing-section-heading">What’s included:</h2>
+  </div>
 
   <div class="highlight-card-list">
     <InputHandlingCard />
@@ -26,8 +29,6 @@
   @import url("https://fonts.googleapis.com/css2?family=Micro+5&display=swap");
 
   .interactivity-explainer {
-    margin-top: clamp(2.5rem, 5vw, 5rem);
-
     @media (max-width: 900px) {
       grid-template-columns: 1fr !important;
     }
@@ -38,14 +39,9 @@
     flex-direction: column;
     align-items: center;
     grid-column: 1 / -1;
-    gap: var(--size-20);
     text-align: center;
     width: min(100%, 760px);
-    margin: clamp(3rem, 7vw, 6rem) auto clamp(2rem, 4vw, 3.5rem);
-
-    h2 {
-      margin-bottom: var(--size-16);
-    }
+    margin: 0 auto clamp(2rem, 4vw, 3.5rem);
   }
 
   .highlight-card-list {

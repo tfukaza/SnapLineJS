@@ -1,4 +1,5 @@
 <script lang="ts">
+  import CardDocsLink from "./CardDocsLink.svelte";
   import { onDestroy, onMount, tick } from "svelte";
   import { fade } from "svelte/transition";
 
@@ -338,6 +339,7 @@
           drag and pinch. It also handles edge cases like tracking
           drag gestures even while mouse leaves the browser window.
         </p>
+          <CardDocsLink href="/docs/snapengine/introduction/04_input_system" label="Input system docs" />
     </div>
 
     <div class="input-card-body card">
@@ -360,7 +362,7 @@
 
       <div
         class="tap-surface"
-        role="application"
+        role="group"
         aria-label="Input gesture area"
         onpointerdown={handlePointerDown}
         onpointermove={handlePointerMove}

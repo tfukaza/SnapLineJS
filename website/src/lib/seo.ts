@@ -1,11 +1,11 @@
 export const siteUrl = "https://snapengine.dev";
-export const siteName = "SnapEngineJS";
-export const defaultTitle = "SnapEngineJS | Interactivity engine for the web";
+export const siteName = "SnapEngine";
+export const defaultTitle = "SnapEngine | Interaction tools for the web";
 export const defaultDescription =
-  "SnapEngine is an interactivity engine for building draggable, animated, collision-aware web experiences.";
-export const defaultImage = "/images/thumbnail.png";
+  "SnapEngine is a growing family of DOM-first interaction tools, powered by a shared core for input, motion, collision, and animation.";
+export const defaultImage = "/og.png";
 export const defaultImageWidth = "1200";
-export const defaultImageHeight = "627";
+export const defaultImageHeight = "630";
 
 export function absoluteUrl(path: string) {
   if (/^https?:\/\//.test(path)) return path;

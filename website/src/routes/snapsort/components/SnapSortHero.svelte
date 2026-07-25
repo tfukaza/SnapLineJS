@@ -15,14 +15,6 @@
     engine?: SnapEngine | null;
   } = $props();
 
-  function goToDocs() {
-    window.location.href = "/docs/snapsort/introduction";
-  }
-
-  function goToGallery() {
-    window.location.href = "/snapsort/gallery";
-  }
-
   const title = "SnapSort";
   const gripDots = Array.from({ length: 6 }, (_, i) => i);
   let titleChars = $state(title.split("").map((char, i) => ({
@@ -43,6 +35,7 @@
 </script>
 
 <section id="landing">
+  <h1 class="visually-hidden">SnapSort</h1>
   <ClientDemoFrame>
     {#snippet fallback()}
       <div class="hero-section" aria-hidden="true">
@@ -51,7 +44,7 @@
             <div class="hero-stack snapsort-hero-skeleton">
               <div class="hero-stack-item hero-title-item">
                 <div class="hero-row card">
-                  <div class="title-section" aria-label="SnapSort">
+                  <div class="title-section">
                     <span class="title-glyph title-text pixel-font">SnapSort</span>
                   </div>
                 </div>
@@ -59,15 +52,16 @@
               <div class="hero-stack-item hero-copy-item">
                 <div class="hero-row card">
                   <p class="hero-statement large">
-                    Component library for drag and drop UI. Open source and framework agnostic.
+                    Unstyled drag-and-drop primitives for lists, boards, trees,
+                    and custom interfaces.
                   </p>
                 </div>
               </div>
               <div class="hero-stack-item hero-cta-item">
                 <div class="hero-row hero-row-final card">
                   <div class="hero-cta">
-                    <button class="primary" type="button" tabindex="-1">Get Started</button>
-                    <button type="button" tabindex="-1">Gallery</button>
+                    <a class="button primary" href="/docs/snapsort/introduction/01_setup" tabindex="-1">Install SnapSort</a>
+                    <a class="button" href="/snapsort/gallery" tabindex="-1">Gallery</a>
                   </div>
                 </div>
               </div>
@@ -104,7 +98,7 @@
                         {/each}
                       </span>
                     </Handle>
-                    <div class="title-section" aria-label="SnapSort">
+                    <div class="title-section" aria-hidden="true">
                       <SnapSortContextBoundary>
                         <Container
                           config={{
@@ -148,7 +142,8 @@
                       </span>
                     </Handle>
                     <p class="hero-statement large">
-                      Component library for drag and drop UI. Open source and framework agnostic.
+                      Unstyled drag-and-drop primitives for lists, boards, trees,
+                      and custom interfaces.
                     </p>
                   </div>
                 </Item>
@@ -163,8 +158,8 @@
                       </span>
                     </Handle>
                     <div class="hero-cta">
-                      <button class="primary" type="button" onclick={goToDocs}>Get Started</button>
-                      <button type="button" onclick={goToGallery}>Gallery</button>
+                      <a class="button primary" href="/docs/snapsort/introduction/01_setup">Install SnapSort</a>
+                      <a class="button" href="/snapsort/gallery">Gallery</a>
                     </div>
                   </div>
                 </Item>
@@ -178,3 +173,17 @@
   </ClientDemoFrame>
 
 </section>
+
+<style>
+  .visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+</style>

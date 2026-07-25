@@ -49,14 +49,14 @@
   }
 
   a {
-    color: var(--color-primary);
+    color: var(--color-action);
     font-weight: 500;
     text-decoration: underline;
     text-decoration-thickness: 1px;
     text-underline-offset: 0.18em;
 
     &:hover {
-      color: color-mix(in srgb, var(--color-primary) 78%, #000);
+      color: var(--color-action-hover);
     }
   }
 
@@ -384,7 +384,7 @@
   outline-offset: -2px;
 
   span {
-    color: var(--color-primary);
+    color: var(--color-action);
     font-family: "Bitcount Grid Single", monospace;
     font-size: 0.78rem;
     font-weight: 350;
@@ -564,7 +564,7 @@
 .doc-engine-label {
   display: inline-flex;
   margin-bottom: var(--size-12);
-  color: var(--color-primary);
+  color: var(--color-action);
   font-family: "Bitcount Grid Single", monospace;
   font-size: 0.8rem;
   font-weight: 300;

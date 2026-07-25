@@ -219,88 +219,6 @@
     customizableMockupThemeDefinitions.map(createThemeState),
   );
 
-  type GalleryKanbanCard = {
-    id: string;
-    text: string;
-    desc: string;
-    avatar: string;
-    avatarColor: string;
-    due: string;
-    tag: string;
-  };
-
-  type GalleryKanbanColumn = {
-    id: string;
-    title: string;
-    cards: GalleryKanbanCard[];
-  };
-
-  let galleryKanban: GalleryKanbanColumn[] = $state([
-    {
-      id: "gk-todo",
-      title: "To Do",
-      cards: [
-        {
-          id: "gk-1",
-          text: "Fix Bug #12",
-          desc: "Fix the login issue on Safari browser.",
-          avatar: "MC",
-          avatarColor: "#0088ff",
-          due: "Today",
-          tag: "Bug",
-        },
-        {
-          id: "gk-2",
-          text: "Write Tests",
-          desc: "Add unit tests for the new payment module.",
-          avatar: "NK",
-          avatarColor: "#8f3dff",
-          due: "Jun 30",
-          tag: "QA",
-        },
-      ],
-    },
-    {
-      id: "gk-review",
-      title: "Review",
-      cards: [
-        {
-          id: "gk-3",
-          text: "Code Review",
-          desc: "Review the PR for the new feature.",
-          avatar: "AP",
-          avatarColor: "#ff7a00",
-          due: "Jul 1",
-          tag: "Dev",
-        },
-      ],
-    },
-    {
-      id: "gk-done",
-      title: "Done",
-      cards: [
-        {
-          id: "gk-5",
-          text: "Publish Docs",
-          desc: "Update the release notes and component examples.",
-          avatar: "ES",
-          avatarColor: "#14a44d",
-          due: "Done",
-          tag: "Docs",
-        },
-        {
-          id: "gk-6",
-          text: "Deploy to Prod",
-          desc: "Deploy the latest build to production.",
-          avatar: "TI",
-          avatarColor: "#00a9a5",
-          due: "Done",
-          tag: "Ops",
-        },
-      ],
-    },
-  ]);
-
   function updateTheme(
     themeId: string,
     update: (theme: CustomizableThemeState) => CustomizableThemeState,
@@ -380,32 +298,6 @@
     });
   }
 
-  function handleKanbanMove(event: ItemMoveEvent) {
-    const targetColumnId = event.to.containerMetadata.columnId;
-    if (typeof targetColumnId !== "string") return;
-    const ids = (event.itemIds.length > 0 ? event.itemIds : [event.itemId]).map(String);
-    const idsToMove = new Set(ids);
-    const cardsById = new Map(
-      galleryKanban.flatMap((column) => column.cards.map((card) => [card.id, card] as const)),
-    );
-    const moved = ids.flatMap((id) => {
-      const card = cardsById.get(id);
-      return card ? [card] : [];
-    });
-    if (moved.length === 0) return;
-
-    const withoutMoved = galleryKanban.map((column) => ({
-      ...column,
-      cards: column.cards.filter((card) => !idsToMove.has(card.id)),
-    }));
-    galleryKanban = withoutMoved.map((column) => {
-      if (column.id !== targetColumnId) return column;
-      const cards = column.cards.slice();
-      const index = Math.max(0, Math.min(event.to.index, cards.length));
-      cards.splice(index, 0, ...moved);
-      return { ...column, cards };
-    });
-  }
 </script>
 
 <svelte:window onscroll={updateCustomizableProgress} onresize={updateCustomizableProgress} />
@@ -831,105 +723,40 @@
           </article>
           </div>
 
-          <section class="closing-grid" aria-label="Get started with SnapSort">
-            <div class="closing-card get-started-card">
-              <div class="closing-copy">
-                <h3>Get started</h3>
-                <p>
-                  Install SnapSort, wrap your markup in a container, and ship drag
-                  and drop in minutes — with the framework you already use.
-                </p>
-              </div>
-              <ul class="closing-frameworks" aria-label="Framework availability">
-                <li><img src="/icon/javascript.svg" alt="JavaScript" /></li>
-                <li><img src="/icon/svelte.svg" alt="Svelte" /></li>
-                <li><img src="/icon/react.svg" alt="React" /></li>
-                <li class="framework-wip-logo">
-                  <img src="/icon/vue.svg" alt="Vue" />
-                  <span>WIP</span>
-                </li>
-                <li class="framework-wip-logo">
-                  <img src="/icon/angular.svg" alt="Angular" />
-                  <span>WIP</span>
-                </li>
-              </ul>
-              <a class="button primary closing-button" href="/docs/snapsort/introduction">
-                Read the docs
-              </a>
-            </div>
-
+          <section class="closing-grid" aria-label="Explore SnapSort examples">
             <div class="closing-card gallery-card">
               <div class="gallery-kanban" aria-hidden="true">
-                <div class="gallery-kanban-scale">
-                  <Container
-                    className="gk-board"
-                    config={{ direction: "row", name: "gk-root", noDrop: true }}
-                    locked={true}
-                    items={galleryKanban}
-                    getItemId={(column) => column.id}
-                    data-snapsort-demo="closing-kanban"
-                    data-list-id="closing-kanban-root"
-                    data-order={galleryKanban.map((column) => column.id).join(",")}
-                  >
-                    {#snippet entry(column)}
-                      <Container
-                        className="gk-column"
-                        metadata={{ columnId: column.id }}
-                        config={{
-                          direction: "column",
-                          groupID: "closing-kanban",
-                          name: column.id,
-                          callbacks: { onItemMove: handleKanbanMove },
-                        }}
-                        locked={true}
-                        itemId={column.id}
-                        items={column.cards}
-                        getItemId={(card) => card.id}
-                        data-snapsort-demo="closing-kanban"
-                        data-list-id={`closing-kanban-${column.id}`}
-                        data-order={column.cards.map((card) => card.id).join(",")}
-                      >
-                        {#snippet before()}
-                          <div class="gk-column-head">
-                            <h4>{column.title}</h4>
-                            <span class="gk-count">{column.cards.length}</span>
-                          </div>
-                        {/snippet}
-                        {#snippet entry(card)}
-                          <Item itemId={card.id}>
-                            <div class="gk-card">
-                              <div class="gk-header">
-                                <span class="gk-title">{card.text}</span>
-                                <span class="gk-tag">{card.tag}</span>
-                              </div>
-                              <p class="gk-desc">{card.desc}</p>
-                              <div class="gk-footer">
-                                <span
-                                  class="gk-avatar"
-                                  style={`--avatar-color: ${card.avatarColor};`}
-                                >
-                                  {card.avatar}
-                                </span>
-                                <span class="gk-due">
-                                  <i class="material-symbols-rounded">event</i>{card.due}
-                                </span>
-                              </div>
-                            </div>
-                          </Item>
-                        {/snippet}
-                      </Container>
-                    {/snippet}
-                  </Container>
+                <div class="gallery-preview-board">
+                  <div class="gallery-preview-column card">
+                    <div class="gallery-preview-item card shallow"></div>
+                    <div class="gallery-preview-item card shallow"></div>
+                    <div class="gallery-preview-item card shallow"></div>
+                  </div>
+                  <div class="gallery-preview-column card">
+                    <div class="gallery-preview-item card shallow"></div>
+                    <div class="gallery-preview-item card shallow"></div>
+                    <div class="gallery-preview-drop-target"></div>
+                  </div>
                 </div>
+                <div class="gallery-preview-drag-card card"></div>
+                <img
+                  class="gallery-preview-cursor"
+                  src="/icon/noun-cursor-740125.svg"
+                  alt=""
+                />
               </div>
-              <div class="closing-copy">
-                <h3>Explore the gallery</h3>
-                <p>
-                  File trees, form builders, sentence puzzles, and more — complete
-                  interactive demos built with SnapSort.
-                </p>
+              <div class="gallery-copy-panel">
+                <div class="closing-copy">
+                  <h3>Explore the gallery</h3>
+                  <p>
+                    File trees, form builders, sentence puzzles, and more —
+                    complete interactive demos built with SnapSort.
+                  </p>
+                </div>
+                <a class="button closing-button" href="/snapsort/gallery">
+                  Browse the gallery
+                </a>
               </div>
-              <a class="button closing-button" href="/snapsort/gallery">Browse the gallery</a>
             </div>
           </section>
         </div>

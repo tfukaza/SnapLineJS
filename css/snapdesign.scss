@@ -13,17 +13,41 @@ body {
   padding: 0;
   background-color: #ffffff;
   color: var(--color-text);
-  font-family: "Geist", sans-serif;
+  font-family: var(--font-body);
 }
 
 :root {
   --color-primary: #ff5d0f;
+  --color-action: #c94000;
+  --color-action-hover: #a93600;
   --color-secondary-1: #f34336;
   --color-accent: #ff0e56;
   --color-background: #ffffff;
   --color-background-tint: #f6f7f7;
   --color-background-dark: #7f8286;
   --color-text: #333637;
+  --color-text-muted: #5d6266;
+  --color-text-subtle: #697074;
+
+  --font-body: "Geist", sans-serif;
+  --font-display: "Geist Pixel Circle", sans-serif;
+  --font-label: "Bitcount Grid Single", monospace;
+  --font-code: "Geist Mono", monospace;
+
+  --type-page-title: clamp(2.75rem, 6vw, 5rem);
+  --type-section-title: clamp(2rem, 3.5vw, 3.25rem);
+  --type-card-title: clamp(1.5rem, 2.5vw, 2.25rem);
+  --type-lead: clamp(1.125rem, 1.5vw, 1.25rem);
+  --type-body: 1rem;
+  --type-caption: 0.875rem;
+  --type-label: 0.875rem;
+
+  --leading-display: 1;
+  --leading-heading: 1.1;
+  --leading-card: 1.15;
+  --leading-body: 1.6;
+  --leading-caption: 1.4;
+  --leading-label: 1.4;
 
   --size-256: 256px;
   --size-128: 128px;
@@ -33,6 +57,7 @@ body {
   --size-48: 48px;
   --size-32: 32px;
   --size-24: 24px;
+  --size-20: 20px;
   --size-16: 16px;
   --size-12: 12px;
   --size-8: 8px;
@@ -61,60 +86,62 @@ h6 {
   margin: 0;
   font-weight: 500;
   color: #373738;
+  text-wrap: balance;
 }
 
 h1 {
-  font-family: "Geist Pixel Circle", sans-serif;
-  font-size: 72px;
+  font-family: var(--font-display);
+  font-size: var(--type-page-title);
+  line-height: var(--leading-display);
+  letter-spacing: -0.025em;
 }
 
-h2,
+h2 {
+  margin-bottom: var(--size-16);
+  font-family: var(--font-display);
+  font-size: var(--type-section-title);
+  line-height: var(--leading-heading);
+}
+
 h3,
 h4,
 h5,
 h6 {
-  font-family: "Geist", sans-serif;
-}
-
-h2 {
-  font-size: 36px;
-  margin-bottom: var(--size-16);
+  font-family: var(--font-body);
+  line-height: var(--leading-card);
 }
 
 h3 {
-  font-size: 24px;
+  font-size: var(--type-card-title);
   margin-bottom: var(--size-12);
 }
 
 h4 {
-  font-size: 20px;
+  font-size: 1.25rem;
   margin-bottom: var(--size-8);
 }
 
 h5 {
-  font-size: 18px;
+  font-size: 1.125rem;
   margin-bottom: var(--size-8);
 }
 
 h6 {
-  font-size: 16px;
+  font-size: 1rem;
   margin-bottom: var(--size-8);
 }
 
 p,
-a,
 blockquote,
-span,
-label,
 ul,
 ol {
-  font-family: "Geist", sans-serif;
-  font-size: 1rem;
-  font-weight: 300;
+  font-family: var(--font-body);
+  font-size: var(--type-body);
+  font-weight: 400;
   color: var(--color-text);
   margin: 0;
   margin-bottom: 0.1em;
-  line-height: 1.5;
+  line-height: var(--leading-body);
 
   &.light {
     color: var(--color-background-tint);
@@ -129,11 +156,11 @@ p.large {
 
 pre,
 code {
-  font-family: "Geist Mono", monospace;
+  font-family: var(--font-code);
   font-size: 0.8rem;
   > span,
   > span > span {
-    font-family: "Geist Mono", monospace;
+    font-family: var(--font-code);
     font-size: 0.8rem;
   }
 }
@@ -151,7 +178,7 @@ article {
   }
 
   a {
-    color: var(--color-primary);
+    color: var(--color-action);
     text-decoration: underline;
     text-underline-offset: 0.18em;
     text-decoration-thickness: 1px;
@@ -502,6 +529,11 @@ label:has(input[type="radio"]) {
       content: "";
     }
   }
+
+  input:focus-visible + span {
+    outline: 3px solid color-mix(in srgb, var(--color-action) 35%, transparent);
+    outline-offset: 3px;
+  }
 }
 
 label {
@@ -575,7 +607,7 @@ label:has(input[type="checkbox"]) {
       display: flex;
       align-items: center;
       justify-content: center;
-      font-family: "IBM Plex Mono", monospace;
+      font-family: var(--font-code);
       font-size: 11px;
       font-weight: 600;
       letter-spacing: -0.05em;
@@ -827,7 +859,6 @@ input[type="range"].large {
   }
 }
 
-button,
 .button {
   --button-color: #fff;
   --button-highlight-color: hsl(
@@ -841,11 +872,20 @@ button,
   cursor: pointer;
   font-family: inherit;
   font-size: 1rem;
+  font-weight: 500;
+  line-height: 1.25;
   position: relative;
 
   border-radius: var(--ui-radius);
   border: none;
-  padding: var(--size-8) var(--size-12);
+  min-height: 44px;
+  padding: 10px var(--size-16);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--size-8);
+  box-sizing: border-box;
+  text-decoration: none;
 
   background: var(--button-color);
   box-shadow:
@@ -856,22 +896,15 @@ button,
     1.5px 1.5px 3px -2px rgba(13, 34, 68, 0.538),
     3px 3px 6px -3px rgba(6, 29, 57, 0.435);
 
-  transition: all 0.1s ease-in-out;
+  transition:
+    color 100ms ease-in-out,
+    box-shadow 100ms ease-in-out,
+    transform 100ms ease-in-out;
 
   &:active:not(:disabled),
   &.active:not(:disabled),
   &.is-active:not(:disabled) {
-    color: var(--color-primary) !important;
-    text-shadow:
-      0 0 1px var(--color-primary),
-      0 0 4px rgba(255, 117, 58, 0.38);
-
-    * {
-      color: var(--color-primary) !important;
-      text-shadow:
-        0 0 1px var(--color-primary),
-        0 0 4px rgba(255, 117, 58, 0.38);
-    }
+    transform: translateY(1px);
   }
 
   // &::before {
@@ -930,8 +963,7 @@ button,
   }
 
   &:hover:not(:disabled):not(.active) {
-    color: var(--color-primary);
-    text-shadow: 0 0 3px rgba(255, 117, 58, 0.26);
+    color: var(--color-action);
     box-shadow:
       0px 0px 1px 0.5px rgba(1, 11, 38, 0.157) inset,
       1px 1px 1px 0.5px hsl(from var(--button-highlight-color) h s l / 0.7)
@@ -987,7 +1019,6 @@ button,
   }
 }
 
-button,
 .button {
   &.primary {
     --button-color: var(--color-primary);
@@ -995,7 +1026,6 @@ button,
 
     &:hover:not(:disabled):not(.active) {
       color: #fff;
-      text-shadow: 0 0 6px rgba(255, 255, 255, 1);
     }
 
     &:disabled {
@@ -1004,15 +1034,45 @@ button,
   }
 
   &.small {
-    padding: var(--size-2) var(--size-8);
-    font-size: 1rem;
-    line-height: 0.8;
+    min-height: 36px;
+    padding: 6px var(--size-12);
+    font-size: 0.875rem;
+    line-height: 1.25;
   }
+
+  &.secondary {
+    --button-color: var(--color-background);
+  }
+
+  &.quiet {
+    --button-color: transparent;
+    box-shadow: none;
+  }
+
+  &:disabled {
+    --button-color: rgb(31 30 41 / 8%);
+
+    background: var(--button-color);
+    box-shadow: none;
+    color: rgb(31 30 41 / 38%);
+    cursor: not-allowed;
+    pointer-events: none;
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--color-action);
+    outline-offset: 3px;
+  }
+}
+
+:where(a, button, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid var(--color-action);
+  outline-offset: 3px;
 }
 
 input[type="number"],
 input[type="text"] {
-  font-family: "IBM Plex Mono", monospace;
+  font-family: var(--font-code);
   font-size: 1rem;
   user-select: none;
   border: none;
@@ -1041,7 +1101,7 @@ input[type="text"] {
 input[type="date"],
 input[type="datetime-local"],
 input[type="time"] {
-  font-family: "IBM Plex Mono", monospace;
+  font-family: var(--font-code);
   font-size: 1rem;
   user-select: none;
   border: none;
@@ -1274,7 +1334,7 @@ table {
   border-radius: var(--size-4);
   font-size: 11px;
   font-weight: 600;
-  font-family: "IBM Plex Mono", monospace;
+  font-family: var(--font-code);
   background-color: var(--color-background-tint);
   color: var(--color-text);
 

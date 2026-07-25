@@ -8,6 +8,8 @@ export function GET() {
       "",
       `Sitemap: ${siteUrl}/sitemap.xml`,
       "",
+      `# Documentation for coding agents: ${siteUrl}/llms.txt`,
+      "",
     ].join("\n"),
     {
       headers: {

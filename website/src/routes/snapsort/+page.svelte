@@ -1,5 +1,6 @@
 <script lang="ts">
   import SeoHead from "$lib/components/SeoHead.svelte";
+  import GetStarted from "$lib/landing/components/GetStarted.svelte";
   import type { Engine as SnapEngine } from "@snap-engine/core";
   import CoreShowcase from "./components/CoreShowcase.svelte";
   import DebugLayoutOverlay from "./components/DebugLayoutOverlay.svelte";
@@ -9,7 +10,10 @@
     collectDebugRects,
     type DebugOverlayRect,
   } from "./components/debugLayout";
+  import type { PageData } from "./$types";
   import "./components/snapsort-page.scss";
+
+  let { data }: { data: PageData } = $props();
 
   let heroEngine: SnapEngine | null = $state(null);
   let examplesEngine: SnapEngine | null = $state(null);
@@ -64,11 +68,12 @@
 </script>
 
 <SeoHead
-  title="SnapSort | Drag and drop UI components for SnapEngine"
-  description="SnapSort is a styleless drag-and-drop component library for building sortable lists, nested containers, kanban boards, and custom drag interactions."
+  title="SnapSort | Unstyled drag-and-drop primitives"
+  description="Build sortable lists, nested containers, kanban boards, file trees, and custom drag interactions with focused primitives powered by SnapEngine Core."
   path="/snapsort"
   imageAlt="SnapSort drag and drop component preview"
 />
 <DebugLayoutOverlay {debugLayout} rects={debugRects} />
 <SnapSortHero {debugLayout} bind:engine={heroEngine} />
 <CoreShowcase {debugLayout} bind:engine={examplesEngine} />
+<GetStarted highlightedSamples={data.highlightedSamples} />

@@ -1,23 +1,29 @@
 ---
-title: Getting Started
+title: Set Up SnapEngine Core
 order: 1
 project: snapengine
-projectTitle: SnapEngine
+projectTitle: SnapEngine Core
 section: reference
 sectionTitle: Reference
 sectionOrder: 2
 ---
 
+This direct setup is intended for interaction-tool and asset authors, or for
+advanced applications that need custom behavior at the engine level. Most
+application developers should start with
+[SnapSort](/docs/snapsort/introduction).
+
 ## Installation
 
 The SnapEngine project is split into multiple packages, so you only need to install the ones you require. 
-The core engine is available as `@snap-engine/core`:
+SnapEngine Core is available as `@snap-engine/core`:
 
 ```bash
 npm install @snap-engine/core
 ```
 
-SnapEngine and all of its assets are TypeScript-based, so it will install the necessary type definitions automatically.
+SnapEngine Core and its interaction tools are TypeScript-based, so the package
+includes the necessary type definitions.
 
 ## Importing
 
