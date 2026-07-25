@@ -31,5 +31,17 @@ from the package root. Component subpaths are also available as
 
 Geometry props resynchronize after mount while active gestures update locally.
 Consumer callbacks compose with the adapter's rendering callbacks.
+Pass framework-native ARIA attributes or DOM event handlers to the outer node
+element through `Node`'s `elementProps`.
+
+`<Connector virtual>` creates a logical connector without a visible port.
+Combine it with `surfaceStrategies` and independent `capabilities` to make a
+node border or another application-defined shape act as the connection surface.
+Application graph state remains authoritative; an opaque line payload can link
+a custom renderer back to the corresponding domain edge.
+
+Connector policy, metadata, callbacks, strategies, and `virtual` are reactive.
+Switching `virtual` detaches or remounts only the visible port; the logical
+connector and its existing lines remain intact.
 
 Full documentation: https://snapengine.dev/docs/snapline/introduction

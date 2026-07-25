@@ -3,6 +3,7 @@
     import type { Engine } from "@snap-engine/core";
     import Line from "./Line.svelte";
     import { onMount, setContext, getContext, onDestroy, tick, untrack } from "svelte";
+    import type { HTMLAttributes } from "svelte/elements";
     import { blur } from "svelte/transition";
 
     let {
@@ -25,6 +26,7 @@
         onDragCommit = undefined,
         onResizeCommit = undefined,
         onSizeChange = undefined,
+        elementProps = {},
         children,
     }: {
         className?: string;
@@ -46,6 +48,8 @@
         onDragCommit?: (event: NodeDragCommitEvent) => void;
         onResizeCommit?: (event: NodeResizeEvent) => void;
         onSizeChange?: (event: NodeResizeEvent) => void;
+        /** Framework-native attributes and events for the outer node element. */
+        elementProps?: HTMLAttributes<HTMLDivElement>;
         children: any;
     } = $props();
     let nodeDOM: HTMLDivElement | null = null;
@@ -94,6 +98,10 @@
             }
             return true;
         };
+        nodeObject.callbacks.resolveDragPosition = (event) =>
+            callbacks.resolveDragPosition?.(event) ??
+            originalCallbacks.resolveDragPosition?.(event) ??
+            { x: event.x, y: event.y };
         nodeObject.callbacks.resolveSelectionMode = (event) =>
             callbacks.resolveSelectionMode?.(event) ??
             originalCallbacks.resolveSelectionMode?.(event) ??
@@ -128,6 +136,7 @@
     onDestroy(() => {
         mounted = false;
         nodeObject.callbacks.canStartDrag = originalCallbacks.canStartDrag;
+        nodeObject.callbacks.resolveDragPosition = originalCallbacks.resolveDragPosition;
         nodeObject.callbacks.resolveSelectionMode = originalCallbacks.resolveSelectionMode;
         nodeObject.callbacks.onDragStart = originalCallbacks.onDragStart;
         nodeObject.callbacks.onDrag = originalCallbacks.onDrag;
@@ -179,6 +188,7 @@
     <LineSvelteComponent {line} />
 {/each}
 <div
+    {...elementProps}
     bind:this={nodeDOM}
     data-snapline-type="node"
     class={className}

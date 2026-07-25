@@ -142,7 +142,7 @@
           <a href="/about">About</a>
           <a href="/docs/snapengine/introduction">Docs</a>
           <a href="https://github.com/tfukaza/SnapLineJS" target="_blank" rel="noopener noreferrer">GitHub</a>
-        </div>
+        </nav>
         <div class="footer-column">
           <a href="/#assets"><h4>Assets</h4></a>
           <span class="footer-link-disabled">SnapZap</span>

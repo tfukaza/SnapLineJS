@@ -12,3 +12,5 @@ export { Select } from "./Select";
 export type { SelectProps } from "./Select";
 export { Placement } from "./Placement";
 export type { PlacementProps } from "./Placement";
+export { EdgeSync } from "./EdgeSync";
+export type { EdgeSyncProps } from "./EdgeSync";

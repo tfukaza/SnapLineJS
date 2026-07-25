@@ -41,6 +41,24 @@ call `connector.requestDomGeometrySync()` for each affected connector. The
 request is coalesced into the next read/write cycle and updates every connected
 line without coupling SnapLine to the external system.
 
+Surface strategies decouple connection hit testing from visible connector
+elements. They can activate from a node border, rank shape-specific target
+hits, and resolve preview and settled anchors from cached geometry. Independent
+connector capabilities allow the same logical surface to start and accept
+connections. `onPointerDown` runs when a connector claims the primary pointer,
+before the drag threshold, so consumers can preserve click selection or other
+gesture-start UI for headless surfaces.
+
+Call `connector.updateConfig(...)` to change callbacks, metadata, policy,
+surface strategies, collider radius, edge-pan behavior, or the line class
+without replacing the connector or its existing lines. `name` is
+construction-only because it is the connector's key in its parent node.
+
+For a framework-owned graph, use `onConnectionRequest` to create the domain
+edge and return its stable ID as an opaque line payload. Pass that payload
+directly when hydrating with `connectToConnector`; programmatic connections do
+not invoke the creation request.
+
 Groups maintain an exclusive direct parent. Ordinary nodes use center
 containment, nested groups use full-bounds containment, and the smallest safe
 candidate wins unless an engine-level resolver overrides it.

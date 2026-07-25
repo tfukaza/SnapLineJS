@@ -1,5 +1,8 @@
 import { BaseObject, ElementObject } from "@snap-engine/core";
-import { ConnectorComponent } from "./connector";
+import {
+  ConnectorComponent,
+  resolveConnectorSourceAtPoint,
+} from "./connector";
 import { LineComponent } from "./line";
 import type {
   pointerUpProp,
@@ -11,7 +14,7 @@ import type {
   pointerMoveProp,
 } from "@snap-engine/core";
 import { RectCollider } from "@snap-engine/core/collision";
-import { getSelectList, getGroups, getResizeHandles, snapData } from "./snapline-globals";
+import { getSelectList, getGroups, getNodeManager, getResizeHandles, snapData } from "./snapline-globals";
 import type { SnapLineMetadata } from "./connector";
 
 export type ResizeHandle = "n" | "ne" | "e" | "se" | "s" | "sw" | "w" | "nw";
@@ -105,6 +108,20 @@ export interface NodeDragCommitEvent extends NodePointerEvent {
   nodes: NodePosition[];
 }
 
+export interface NodeDragPositionEvent {
+  node: NodeComponent;
+  x: number;
+  y: number;
+  startX: number;
+  startY: number;
+  position: eventPosition;
+}
+
+export interface ResolvedNodeDragPosition {
+  x: number;
+  y: number;
+}
+
 export interface NodeResizeEvent {
   node: NodeComponent;
   handle: ResizeHandle | null;
@@ -142,6 +159,10 @@ export interface NodeLinesEvent {
 
 export interface NodeCallbacks {
   canStartDrag?: (event: NodePointerEvent) => boolean;
+  /** Resolves a proposed live node position before its world transform changes. */
+  resolveDragPosition?: (
+    event: NodeDragPositionEvent,
+  ) => ResolvedNodeDragPosition;
   /** Consumer-defined pointer selection policy; SnapLine owns no modifier keys. */
   resolveSelectionMode?: (event: NodeSelectionModeEvent) => SelectionMode;
   onDragStart?: (event: NodePointerEvent) => void;
@@ -323,6 +344,7 @@ class NodeComponent extends ElementObject {
     super(engine, parent);
     this.#config = mergeConfig(DEFAULT_NODE_CONFIG, config);
     this.#callbacks = this.#config.callbacks;
+    getNodeManager(this.engine).registerNode(this);
     const resizeEnabled = config.resizable === true || config.resizeHandles !== undefined;
     this.#resizeHandles = !resizeEnabled
       ? []
@@ -647,6 +669,20 @@ class NodeComponent extends ElementObject {
     this.#activeResizeHandle = resizeHandle?.handle ?? null;
     if (resizeHandle) {
       this.#resizeHoverController?.activate(resizeHandle, e.event.target);
+    } else {
+      const source = resolveConnectorSourceAtPoint(
+        this.engine,
+        e.position,
+        this,
+      );
+      if (source) {
+        this.engine.input.setPointerDragOwner(
+          e.event.pointerId,
+          source.candidate.connector,
+        );
+        source.candidate.connector.armSurfaceGesture(e, source);
+        return;
+      }
     }
     const target = e.event.target as Node | null;
     const dragAllowed =
@@ -797,11 +833,18 @@ class NodeComponent extends ElementObject {
   setDragPosition(prop: dragProp) {
     const dx = prop.position.x - this._mouseDownX;
     const dy = prop.position.y - this._mouseDownY;
+    const x = this._dragStartX + dx;
+    const y = this._dragStartY + dy;
+    const resolved = this.#callbacks.resolveDragPosition?.({
+      node: this,
+      x,
+      y,
+      startX: this._dragStartX,
+      startY: this._dragStartY,
+      position: prop.position,
+    }) ?? { x, y };
 
-    this.worldTransform = {
-      x: this._dragStartX + dx,
-      y: this._dragStartY + dy,
-    };
+    this.worldTransform = { x: resolved.x, y: resolved.y };
     this.schedule(() => this.writeTransformAndLines(), {
       stage: "WRITE_2",
       queueId: `${this.id}-transform`,
@@ -968,25 +1011,42 @@ class NodeComponent extends ElementObject {
   }
 
   setProp(name: string, value: any) {
-    if (name in this._propSetCallback) {
-      this._propSetCallback[name](value);
-    }
-    this._prop[name] = value;
+    const pending: Array<{ node: NodeComponent; name: string }> = [
+      { node: this, name },
+    ];
+    const visited = new Map<NodeComponent, Set<string>>();
 
-    if (!(name in this._connectors)) {
-      return;
-    }
-    const peers = this._connectors[name].outgoingLines
-      .filter((line) => line.target && !line.isDeleteRequested)
-      .map((line) => line.target);
-    if (!peers) {
-      return;
-    }
-    for (const peer of peers) {
-      if (!peer) continue;
-      if (!peer.parent) continue;
-      let parent = peer.parent as NodeComponent;
-      parent.setProp(peer.name, value);
+    while (pending.length > 0) {
+      const current = pending.pop();
+      if (!current) continue;
+
+      let visitedNames = visited.get(current.node);
+      if (!visitedNames) {
+        visitedNames = new Set();
+        visited.set(current.node, visitedNames);
+      }
+      if (visitedNames.has(current.name)) continue;
+      visitedNames.add(current.name);
+
+      if (current.name in current.node._propSetCallback) {
+        current.node._propSetCallback[current.name](value);
+      }
+      current.node._prop[current.name] = value;
+
+      const connector = current.node._connectors[current.name];
+      if (!connector) continue;
+
+      const peers = connector.outgoingLines
+        .filter((line) => line.target && !line.isDeleteRequested)
+        .map((line) => line.target);
+      for (let index = peers.length - 1; index >= 0; index -= 1) {
+        const peer = peers[index];
+        if (!peer?.parent) continue;
+        pending.push({
+          node: peer.parent as NodeComponent,
+          name: peer.name,
+        });
+      }
     }
   }
 
@@ -1008,8 +1068,11 @@ class NodeComponent extends ElementObject {
       this.#edgePanPointerId = null;
     }
     for (const connector of Object.values(this._connectors)) {
-      connector.deleteAllLines();
+      // A node unmount is a teardown, not a deliberate programmatic
+      // disconnect — keep the reason contract honest for intent consumers.
+      connector.deleteAllLines("teardown");
     }
+    getNodeManager(this.engine).unregisterNode(this);
     this.setSelected(false);
     if (this.#resizeHitBoxes.size > 0) {
       const ownedHandles = new Set(this.#resizeHitBoxes.values());

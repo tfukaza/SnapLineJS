@@ -4,6 +4,7 @@
   import DragInputPage from "./demo/input/Drag.svelte";
   import NodeUiPage from "./demo/node_ui_demo/NodeUIDemo.svelte";
   import NodeUiCameraPage from "./demo/node_ui_camera/NodeUICameraDemo.svelte";
+  import NodeUiEdgesPage from "./demo/node_ui_edges/NodeUIEdgesDemo.svelte";
   import NodeUiGroupPage from "./demo/node_ui_group/NodeUIGroupDemo.svelte";
   import NodeUiNestedGroupPage from "./demo/node_ui_group/NodeUINestedGroupDemo.svelte";
   import NodeUiResizePage from "./demo/node_ui_resize/NodeUIResizeDemo.svelte";
@@ -63,6 +64,11 @@
       label: "SnapLine Camera",
       path: "/snapline-camera",
       legacyDemoValues: ["snapline_camera"],
+    },
+    {
+      label: "SnapLine Edges",
+      path: "/snapline-edges",
+      legacyDemoValues: ["snapline_edges"],
     },
     {
       label: "SnapLine Group",
@@ -282,6 +288,8 @@
       <NodeUiPage />
     {:else if selectedPath === "/snapline-camera"}
       <NodeUiCameraPage />
+    {:else if selectedPath === "/snapline-edges"}
+      <NodeUiEdgesPage />
     {:else if selectedPath === "/snapline-group"}
       <NodeUiGroupPage />
     {:else if selectedPath === "/snapline-nested-group"}

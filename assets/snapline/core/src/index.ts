@@ -8,9 +8,11 @@ export type {
   NodeConfig,
   NodeCallbacks,
   NodeDragCommitEvent,
+  NodeDragPositionEvent,
   NodeLinesEvent,
   NodePointerEvent,
   NodePosition,
+  ResolvedNodeDragPosition,
   NodeResizeEvent,
   NodeResizeHandleEvent,
   NodeSelectionEvent,
@@ -18,17 +20,33 @@ export type {
   ResizeHandle,
   SelectionMode,
 } from "./node";
-export { ConnectorComponent } from "./connector";
+export { ConnectorComponent, resolveConnectorSourceAtPoint } from "./connector";
 export type {
   ConnectionOrigin,
+  ConnectorAnchor,
+  ConnectorAnchorEvent,
   ConnectorCallbacks,
+  ConnectorCapabilities,
   ConnectorCandidateEvent,
+  ConnectorCandidate,
   ConnectorConfig,
+  ConnectorConfigUpdate,
   ConnectorConnectionEvent,
+  ConnectorConnectionRequestEvent,
+  ConnectorConnectionRequestResult,
   ConnectorDisconnectionEvent,
   ConnectorDragEvent,
+  ConnectorGeometrySnapshot,
+  ConnectorHit,
+  ConnectorLinePhase,
+  ConnectorNormal,
   ConnectorPairEvent,
+  ConnectorPoint,
+  ConnectorPointerEvent,
+  ConnectorResolvedHit,
   ConnectorRole,
+  ConnectorSurfaceHitTestEvent,
+  ConnectorSurfaceStrategy,
   DisconnectReason,
   SnapLineMetadata,
 } from "./connector";
@@ -71,3 +89,15 @@ export type {
   PlacementSize,
   PlacementSnapshot,
 } from "./placement";
+export { NodeManager } from "./node-manager";
+export type { EdgeSyncLike } from "./node-manager";
+export { getNodeManager } from "./snapline-globals";
+export { EdgeSyncController } from "./edge-sync";
+export type {
+  EdgeConnectIntentEvent,
+  EdgeDisconnectIntentEvent,
+  EdgeEndpoint,
+  EdgeLike,
+  EdgeSyncCallbacks,
+  EdgeSyncConfig,
+} from "./edge-sync";

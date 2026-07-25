@@ -4,3 +4,4 @@ export { default as Connector } from "./Connector.svelte";
 export { default as Line } from "./Line.svelte";
 export { default as Select } from "./Select.svelte";
 export { default as Placement } from "./Placement.svelte";
+export { default as EdgeSync } from "./EdgeSync.svelte";

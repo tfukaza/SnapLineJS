@@ -531,11 +531,26 @@ class InputControl {
     }
 
     const position = this.#getCoordinates(event.clientX, event.clientY);
+    const domOwner = this.#getTargetOwner(event);
+    // A visible connector is an explicit hit target and takes precedence over
+    // any wider virtual surface beneath it. Other DOM owners (nodes, camera
+    // layers, backgrounds) yield to a matching headless source surface.
+    const visibleConnectorOwner =
+      domOwner &&
+      typeof (domOwner as ElementObject & {
+        resolveSourceHit?: unknown;
+      }).resolveSourceHit === "function"
+        ? domOwner
+        : null;
     // A resize-hitbox hit supersedes the DOM owner under it, and covers the case
     // where the pointer is inside the (virtual) hitbox but outside the node's DOM
     // box (so DOM routing would miss it). Explicit `object` still wins.
     const owner =
-      object ?? this.#resolveResizeOwner(position) ?? this.#getTargetOwner(event);
+      object ??
+      this.#resolveResizeOwner(position) ??
+      visibleConnectorOwner ??
+      this.#resolveSourceSurfaceOwner(position) ??
+      domOwner;
     const isWithinEngine = this.#isCoordinateWithinEngine(
       event.clientX,
       event.clientY,
@@ -990,6 +1005,77 @@ class InputControl {
     return null;
   }
 
+  // Headless connector surfaces can extend beyond their parent node's DOM box.
+  // SnapLine registers them in global.data so pointerdown ownership can be
+  // resolved geometrically before composedPath routing. The registry shape is
+  // declared in snapline-globals.ts (engine core cannot import SnapLine).
+  #resolveSourceSurfaceOwner(
+    position: eventPosition,
+  ): ElementObject | null {
+    const surfaces = this.global?.data?.sourceSurfaces as
+      | Array<{
+          id: string;
+          engine: unknown;
+          isDeleteRequested: boolean;
+          resolveSourceHit(position: eventPosition): {
+            candidate: {
+              hit: {
+                distance: number;
+                priority?: number;
+              };
+            };
+            strategyIndex: number;
+          } | null;
+        }>
+      | undefined;
+    if (!surfaces) return null;
+
+    let winner:
+      | {
+          owner: ElementObject;
+          priority: number;
+          distance: number;
+          strategyIndex: number;
+        }
+      | null = null;
+
+    for (const surface of surfaces) {
+      if (
+        surface.engine !== this.#engine ||
+        surface.isDeleteRequested
+      ) {
+        continue;
+      }
+      const resolved = surface.resolveSourceHit(position);
+      if (!resolved || !Number.isFinite(resolved.candidate.hit.distance)) {
+        continue;
+      }
+      const candidate = {
+        owner: surface as unknown as ElementObject,
+        priority: resolved.candidate.hit.priority ?? 0,
+        distance: resolved.candidate.hit.distance,
+        strategyIndex: resolved.strategyIndex,
+      };
+      if (
+        !winner ||
+        candidate.priority > winner.priority ||
+        (candidate.priority === winner.priority &&
+          candidate.distance < winner.distance) ||
+        (candidate.priority === winner.priority &&
+          candidate.distance === winner.distance &&
+          candidate.owner.id.localeCompare(winner.owner.id) < 0) ||
+        (candidate.priority === winner.priority &&
+          candidate.distance === winner.distance &&
+          candidate.owner.id === winner.owner.id &&
+          candidate.strategyIndex < winner.strategyIndex)
+      ) {
+        winner = candidate;
+      }
+    }
+
+    return winner?.owner ?? null;
+  }
+
   #getTargetOwner(event: Event): ElementObject | null {
     for (const target of this.#getEventPath(event)) {
       if (!(target instanceof HTMLElement)) {
@@ -1026,7 +1112,31 @@ class InputControl {
 
   #isOwnerRegistered(owner: ElementObject) {
     const element = this.#elementByObjectId.get(owner.id);
-    return !!element && this.#objectByElement.get(element) === owner;
+    if (element && this.#objectByElement.get(element) === owner) {
+      return true;
+    }
+
+    // Some interaction owners are deliberately headless. Virtual connectors,
+    // resize handles, and similar surfaces are selected geometrically by a
+    // DOM-backed parent and then explicitly assigned with
+    // setPointerDragOwner(). They still belong to the engine even though they
+    // do not have an element to discover through composedPath().
+    //
+    // Keep DOM hit discovery separate (#getTargetOwner still only walks the
+    // element map), but allow direct dispatch to a live object registered with
+    // this engine. This also prevents a destroyed/replaced object with a reused
+    // id from continuing to receive an in-flight gesture.
+    if (owner.isDeleteRequested || !this.global || !this.#engine) {
+      return false;
+    }
+
+    try {
+      const objectTable = this.global.getEngineObjectTable(this.#engine);
+      return objectTable[owner.id] === owner;
+    } catch {
+      // The engine may already have been unregistered during teardown.
+      return false;
+    }
   }
 
   #isCoordinateWithinEngine(screenX: number, screenY: number) {

@@ -1,40 +1,33 @@
-import { ConnectorComponent } from "./connector";
+import type { ConnectorComponent } from "./connector";
 import { GroupNodeComponent } from "./group";
-import { NodeComponent } from "./node";
-import { getSelectList } from "./snapline-globals";
+import type { NodeComponent } from "./node";
+import { getNodeManager, getSelectList } from "./snapline-globals";
 
 type EngineLike = {
   global: {
-    data: unknown;
-    getEngineObjectTable(engine: unknown): Record<string, unknown>;
+    data: any;
   };
 };
 
-function objects(engine: EngineLike): unknown[] {
-  return Object.values(engine.global.getEngineObjectTable(engine));
-}
+// Enumeration delegates to the per-engine NodeManager registry (components
+// register in their constructors), replacing the old engine-object-table
+// scans. Public signatures unchanged.
 
 export function getNodes(engine: EngineLike): readonly NodeComponent[] {
-  return objects(engine).filter(
-    (object): object is NodeComponent => object instanceof NodeComponent,
-  );
+  return getNodeManager(engine).nodes;
 }
 
 export function getConnectors(
   engine: EngineLike,
 ): readonly ConnectorComponent[] {
-  return objects(engine).filter(
-    (object): object is ConnectorComponent =>
-      object instanceof ConnectorComponent,
-  );
+  return getNodeManager(engine).connectors;
 }
 
 export function getGroupNodes(
   engine: EngineLike,
 ): readonly GroupNodeComponent[] {
-  return objects(engine).filter(
-    (object): object is GroupNodeComponent =>
-      object instanceof GroupNodeComponent,
+  return getNodeManager(engine).nodes.filter(
+    (node): node is GroupNodeComponent => node instanceof GroupNodeComponent,
   );
 }
 

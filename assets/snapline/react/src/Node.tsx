@@ -8,6 +8,7 @@ import {
   useState,
   type ComponentType,
   type CSSProperties,
+  type HTMLAttributes,
   type RefCallback,
   type ReactNode,
 } from "react";
@@ -48,6 +49,8 @@ export interface NodeProps {
   onDragCommit?: (event: NodeDragCommitEvent) => void;
   onResizeCommit?: (event: NodeResizeEvent) => void;
   onSizeChange?: (event: NodeResizeEvent) => void;
+  /** Framework-native attributes and events for the outer node element. */
+  elementProps?: HTMLAttributes<HTMLDivElement>;
 }
 
 export const Node = forwardRef<NodeComponent, NodeProps>(function Node(
@@ -73,6 +76,7 @@ export const Node = forwardRef<NodeComponent, NodeProps>(function Node(
     onDragCommit,
     onResizeCommit,
     onSizeChange,
+    elementProps,
   },
   ref,
 ) {
@@ -146,6 +150,10 @@ export const Node = forwardRef<NodeComponent, NodeProps>(function Node(
       }
       return true;
     };
+    node.callbacks.resolveDragPosition = (event) =>
+      latestRef.current.callbacks.resolveDragPosition?.(event) ??
+      original.resolveDragPosition?.(event) ??
+      { x: event.x, y: event.y };
     node.callbacks.resolveSelectionMode = (event) =>
       latestRef.current.callbacks.resolveSelectionMode?.(event) ??
       original.resolveSelectionMode?.(event) ??
@@ -205,6 +213,7 @@ export const Node = forwardRef<NodeComponent, NodeProps>(function Node(
 
     return () => {
       node.callbacks.canStartDrag = original.canStartDrag;
+      node.callbacks.resolveDragPosition = original.resolveDragPosition;
       node.callbacks.resolveSelectionMode = original.resolveSelectionMode;
       node.callbacks.onDragStart = original.onDragStart;
       node.callbacks.onDrag = original.onDrag;
@@ -247,6 +256,7 @@ export const Node = forwardRef<NodeComponent, NodeProps>(function Node(
         <LineRenderer key={line.id} line={line} />
       ))}
       <div
+        {...elementProps}
         ref={nodeDomRef}
         data-snapline-type="node"
         className={className}

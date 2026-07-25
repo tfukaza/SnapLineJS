@@ -209,6 +209,35 @@ metadata and predicates such as `canConnect`, `canContain`, and `canStart`.
 rendering and creation to framework adapters and consumer callbacks.
 Raw input/DOM plumbing stays on the `event.*` slots.
 
+### NodeManager (engine-scoped registry)
+
+`core/src/node-manager.ts` is the per-engine registry of live SnapLine nodes
+and connectors, lazy-created by `getNodeManager(engine)` the first time any
+component registers (constructors register, `destroy()` unregisters — no
+adapter wiring). `query.ts` enumeration delegates to it, and it hosts
+engine-scoped facilities: the controlled-edges controller today, layout
+helpers that walk `nodes` tomorrow. GlobalManager is application-wide, so the
+managers live in `SnapLineSharedData.nodeManagers` keyed by engine.
+
+### Controlled edges (EdgeSyncController)
+
+`core/src/edge-sync.ts` + the `EdgeSync` adapter components implement the
+controlled-edges contract: the CONSUMER's edge document is the only edge
+authority; SnapLine reconciles rendered lines to it (`sync()`, hydrating
+missing lines with origin `"hydration"`) and translates gestures into
+semantic intents (`onEdgeConnect` for gesture connects, `onEdgeDisconnect`
+for gesture and replacement disconnects). Programmatic, hydration, and
+teardown changes never forward as intents, and sync never forwards its own
+mutations (`#syncing` guard). Edges exist in exactly two representations —
+consumer document and rendered lines; `NodeManager` holds membership only and
+the controller stores no edges (`getEdges()` is consulted fresh). Intents fire
+synchronously inside the drop dispatch; adapters reconcile in a microtask of
+the same task, so accept and reject paths both resolve before the frame
+paints WITHOUT any paint-atomic flush contract (the no-flushMutation rule
+above still holds). Consumers should write their document synchronously
+inside intent handlers; deferred stores degrade to a one-frame pending state,
+never an inconsistent one.
+
 ### Shared global registries
 
 Everything SnapLine stores on the engine's shared `global.data` bag is declared
