@@ -6,7 +6,7 @@ import type {
 } from "@snap-engine/core";
 import { RectCollider, Collider } from "@snap-engine/core/collision";
 import { NodeMirror, type SelectionMode } from "./node";
-import { getSelectList, snapData } from "./snapline-globals";
+import { getGraphMirror } from "./snapline-globals";
 import type { GeometryWriter } from "./geometry";
 
 /** World-space rectangle delivered to the registered geometry writer. */
@@ -84,7 +84,8 @@ class RectSelectController extends ElementObject {
 
     this.addCollider(this._selectHitBox);
 
-    snapData(this.global).select = [];
+    // A fresh selection controller starts its engine from an empty selection.
+    getGraphMirror(this.engine).selection.length = 0;
 
     this.#callbacks = config.callbacks ?? {};
   }
@@ -135,12 +136,12 @@ class RectSelectController extends ElementObject {
     if (this.#callbacks.canStart?.(startEvent) === false) return;
     this.#selectionMode =
       this.#callbacks.resolveSelectionMode?.(startEvent) ?? "replace";
-    this.#baselineSelection = new Set(getSelectList(this.global));
+    this.#baselineSelection = new Set(getGraphMirror(this.engine).selection);
     if (this.#selectionMode === "replace") {
-      for (let node of [...getSelectList(this.global)]) {
+      // setSelected(false) removes each node from the engine's selection.
+      for (let node of [...getGraphMirror(this.engine).selection]) {
         node.setSelected(false);
       }
-      snapData(this.global).select = [];
     }
 
     // worldTransform positions the selection collider (its transform parent);
@@ -154,7 +155,7 @@ class RectSelectController extends ElementObject {
     this.#fireRect(0, 0, true);
     this.#callbacks.onSelectionChange?.({
       select: this,
-      selection: [...getSelectList(this.global)],
+      selection: [...getGraphMirror(this.engine).selection],
     });
 
     this._selectHitBox.event.collider.onBeginContact = (
@@ -170,7 +171,7 @@ class RectSelectController extends ElementObject {
         );
         this.#callbacks.onSelectionChange?.({
           select: this,
-          selection: [...getSelectList(this.global)],
+          selection: [...getGraphMirror(this.engine).selection],
         });
       }
     };
@@ -183,7 +184,7 @@ class RectSelectController extends ElementObject {
         node.setSelected(this.#baselineSelection.has(node));
         this.#callbacks.onSelectionChange?.({
           select: this,
-          selection: [...getSelectList(this.global)],
+          selection: [...getGraphMirror(this.engine).selection],
         });
       }
     };

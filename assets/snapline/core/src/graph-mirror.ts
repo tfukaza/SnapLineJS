@@ -5,6 +5,7 @@ import type {
 } from "./connector";
 import type { NodeMirror } from "./node";
 import type { LineMirror } from "./line";
+import type { GroupNodeMirror, GroupMembershipResolver } from "./group";
 
 /** Stable application-facing identity of a canonical node. */
 export type NodeId = string;
@@ -79,6 +80,23 @@ export class GraphMirror {
   // EdgeSyncController's constructor; the connector emit sites forward
   // connection events through it.
   edgeSync: EdgeSyncLike | null = null;
+
+  // ---- Engine-scoped interaction state (formerly cross-engine arrays on
+  // ---- global.data). Live containers mutated in place by their owners.
+
+  /** Currently-selected nodes (multi-select drag moves all of them). */
+  readonly selection: NodeMirror[] = [];
+  /** Live groups on this engine, in registration order. The type-only group
+   * import keeps node.ts (which reads this) free of any group value import. */
+  readonly groups: GroupNodeMirror[] = [];
+  /** The node mid-resize, so an unrelated pointerUp doesn't click-select. */
+  resizingNode: NodeMirror | null = null;
+  /** Direct parent group per node — settled geometric membership. */
+  readonly parentGroups = new WeakMap<NodeMirror, GroupNodeMirror>();
+  /** Optional membership resolver overriding the smallest-eligible default. */
+  membershipResolver: GroupMembershipResolver | null = null;
+  /** Re-entrancy guard for group membership reconciliation. */
+  reconcilingMembership = false;
 
   constructor(engine: unknown) {
     this.engine = engine;

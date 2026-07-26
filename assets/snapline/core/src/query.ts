@@ -1,7 +1,7 @@
 import type { ConnectorMirror } from "./connector";
-import { GroupNodeMirror } from "./group";
+import type { GroupNodeMirror } from "./group";
 import type { NodeMirror } from "./node";
-import { getGraphMirror, getSelectList } from "./snapline-globals";
+import { getGraphMirror } from "./snapline-globals";
 
 type EngineLike = {
   global: {
@@ -26,13 +26,11 @@ export function getConnectors(
 export function getGroupNodes(
   engine: EngineLike,
 ): readonly GroupNodeMirror[] {
-  return getGraphMirror(engine).nodes.filter(
-    (node): node is GroupNodeMirror => node instanceof GroupNodeMirror,
-  );
+  return [...getGraphMirror(engine).groups];
 }
 
 export function getSelectedNodes(
   engine: EngineLike,
 ): readonly NodeMirror[] {
-  return [...getSelectList(engine.global)];
+  return [...getGraphMirror(engine).selection];
 }

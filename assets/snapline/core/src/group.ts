@@ -4,7 +4,7 @@ import type {
   eventPosition,
 } from "@snap-engine/core";
 import { NodeMirror, mergeConfig, type NodeConfig } from "./node";
-import { getGroups, snapData } from "./snapline-globals";
+import { getGraphMirror } from "./snapline-globals";
 
 export interface GroupConfig extends NodeConfig {
   width?: number;
@@ -51,10 +51,6 @@ const DEFAULT_GROUP_CONFIG = {
   minHeight: 120,
 } satisfies GroupConfig;
 
-const parentGroups = new WeakMap<NodeMirror, GroupNodeMirror>();
-const membershipResolvers = new WeakMap<object, GroupMembershipResolver>();
-const reconcilingEngines = new WeakSet<object>();
-
 type Bounds = ReturnType<
   NodeMirror["hitBox"]["getWorldBoundsSnapshot"]
 >;
@@ -84,28 +80,20 @@ function stableGroupOrder(
 }
 
 function groupsForEngine(group: GroupNodeMirror): GroupNodeMirror[] {
-  return getGroups(group.global).filter(
-    (candidate): candidate is GroupNodeMirror =>
-      candidate instanceof GroupNodeMirror &&
-      candidate.engine === group.engine,
-  );
+  return [...getGraphMirror(group.engine).groups];
 }
 
 function nodesForEngine(group: GroupNodeMirror): NodeMirror[] {
-  const table = group.global.getEngineObjectTable(group.engine);
-  return Object.values(table).filter(
-    (object): object is NodeMirror => object instanceof NodeMirror,
-  );
+  return [...getGraphMirror(group.engine).nodes];
 }
 
 function resolveParent(
   node: NodeMirror,
   candidates: GroupNodeMirror[],
-  engine: object,
+  resolver: GroupMembershipResolver | null,
 ): GroupNodeMirror | null {
   candidates.sort(stableGroupOrder);
   const defaultParent = candidates[0] ?? null;
-  const resolver = membershipResolvers.get(engine);
   if (!resolver) return defaultParent;
 
   const resolved = resolver({ node, candidates, defaultParent });
@@ -137,9 +125,9 @@ function reconcileMembership(
   source: GroupNodeMirror,
   fireDelta: boolean,
 ): void {
-  const engine = source.engine as object;
-  if (reconcilingEngines.has(engine)) return;
-  reconcilingEngines.add(engine);
+  const mirror = getGraphMirror(source.engine);
+  if (mirror.reconcilingMembership) return;
+  mirror.reconcilingMembership = true;
 
   try {
     const groups = groupsForEngine(source);
@@ -165,7 +153,7 @@ function reconcileMembership(
           group.allowsMembership(node) &&
           !wouldCreateGroupCycle(node, group, nextParents),
       );
-      const parent = resolveParent(node, candidates, engine);
+      const parent = resolveParent(node, candidates, mirror.membershipResolver);
       if (!parent) continue;
       nextMembers.get(parent)?.add(node);
       nextParents.set(node, parent);
@@ -177,7 +165,7 @@ function reconcileMembership(
       const candidates = groups.filter((group) =>
         group.allowsMembership(node)
       );
-      const parent = resolveParent(node, candidates, engine);
+      const parent = resolveParent(node, candidates, mirror.membershipResolver);
       if (!parent) continue;
       nextMembers.get(parent)?.add(node);
       nextParents.set(node, parent);
@@ -196,8 +184,8 @@ function reconcileMembership(
 
     for (const node of nodes) {
       const parent = nextParents.get(node);
-      if (parent) parentGroups.set(node, parent);
-      else parentGroups.delete(node);
+      if (parent) mirror.parentGroups.set(node, parent);
+      else mirror.parentGroups.delete(node);
     }
     for (const { group, next } of deltas) group.setResolvedMembers(next);
 
@@ -213,7 +201,7 @@ function reconcileMembership(
       }
     }
   } finally {
-    reconcilingEngines.delete(engine);
+    mirror.reconcilingMembership = false;
   }
 }
 
@@ -221,7 +209,7 @@ function reconcileMembership(
 export function getParentGroup(
   node: NodeMirror,
 ): GroupNodeMirror | null {
-  return parentGroups.get(node) ?? null;
+  return getGraphMirror(node.engine).parentGroups.get(node) ?? null;
 }
 
 /**
@@ -232,22 +220,17 @@ export function setGroupMembershipResolver(
   engine: Engine,
   resolver: GroupMembershipResolver,
 ): () => void {
-  membershipResolvers.set(engine, resolver);
+  const mirror = getGraphMirror(engine);
+  mirror.membershipResolver = resolver;
   const refresh = () => {
-    const global = engine.global;
-    const source = global
-      ? getGroups(global).find(
-        (group): group is GroupNodeMirror =>
-          group instanceof GroupNodeMirror && group.engine === engine,
-      )
-      : undefined;
-    source?.refreshMembership(true);
+    // Any live group re-derives the whole engine's membership forest.
+    mirror.groups[0]?.refreshMembership(true);
   };
   refresh();
 
   return () => {
-    if (membershipResolvers.get(engine) !== resolver) return;
-    membershipResolvers.delete(engine);
+    if (mirror.membershipResolver !== resolver) return;
+    mirror.membershipResolver = null;
     refresh();
   };
 }
@@ -270,7 +253,7 @@ class GroupNodeMirror extends NodeMirror {
     super(engine, parent, { ...merged, resizable: true });
     this.#groupConfig = merged;
     this.#groupCallbacks = merged.groupCallbacks ?? {};
-    getGroups(this.global).push(this);
+    getGraphMirror(this.engine).groups.push(this);
   }
 
   get groupCallbacks(): GroupCallbacks {
@@ -390,19 +373,15 @@ class GroupNodeMirror extends NodeMirror {
   }
 
   destroy(removeElement: boolean = true): void {
-    snapData(this.global).groups = getGroups(this.global).filter(
-      (group) => group !== (this as unknown),
-    );
+    const mirror = getGraphMirror(this.engine);
+    const index = mirror.groups.indexOf(this);
+    if (index >= 0) mirror.groups.splice(index, 1);
     for (const member of this.#carry) member.detachTransformFromGroup();
     this.#carry = [];
     this.#carryOrigins.clear();
-    parentGroups.delete(this);
+    mirror.parentGroups.delete(this);
 
-    const remaining = getGroups(this.global).find(
-      (group): group is GroupNodeMirror =>
-        group instanceof GroupNodeMirror && group.engine === this.engine,
-    );
-    remaining?.refreshMembership(true);
+    mirror.groups[0]?.refreshMembership(true);
     super.destroy(removeElement);
   }
 }

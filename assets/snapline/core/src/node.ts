@@ -14,7 +14,7 @@ import type {
   pointerMoveProp,
 } from "@snap-engine/core";
 import { RectCollider } from "@snap-engine/core/collision";
-import { getSelectList, getGroups, getGraphMirror, getResizeHandles, snapData } from "./snapline-globals";
+import { getGraphMirror, getResizeHandles, snapData } from "./snapline-globals";
 import { mintDomainId } from "./graph-mirror";
 import type { SnapLineMetadata } from "./connector";
 
@@ -418,8 +418,6 @@ class NodeMirror extends ElementObject {
     // element with `position: absolute; transform-origin: top left` (see the
     // ownership note in assets/snapline/AGENTS.md).
 
-    // Initialize global select list if needed
-    getSelectList(this.global);
   }
 
   get config(): Required<Omit<NodeConfig, "id">> {
@@ -468,15 +466,14 @@ class NodeMirror extends ElementObject {
       selected: String(selected),
       "snapline-state": selected ? "focus" : "idle",
     };
-    const selectList = getSelectList(this.global);
+    const selectList = getGraphMirror(this.engine).selection;
     if (selected) {
       if (!selectList.includes(this)) {
         selectList.push(this);
       }
     } else {
-      snapData(this.global).select = selectList.filter(
-        (node) => node.id !== this.id,
-      );
+      const index = selectList.indexOf(this);
+      if (index >= 0) selectList.splice(index, 1);
     }
     this.schedule(() => this.writeDom(), {
       stage: "WRITE_1",
@@ -485,7 +482,7 @@ class NodeMirror extends ElementObject {
     this.#callbacks.onSelectionChange?.({
       node: this,
       selected,
-      selection: [...getSelectList(this.global)],
+      selection: [...getGraphMirror(this.engine).selection],
     });
   }
 
@@ -750,7 +747,7 @@ class NodeMirror extends ElementObject {
     this.engine.input.claimPointer(e.event.pointerId);
 
     this._hasMoved = false;
-    const selection = [...getSelectList(this.global)];
+    const selection = [...getGraphMirror(this.engine).selection];
     this.#selectedAtPointerDown = selection.includes(this);
     this.#pointerSelectionMode =
       this.#callbacks.resolveSelectionMode?.({
@@ -761,7 +758,7 @@ class NodeMirror extends ElementObject {
       }) ?? "replace";
 
     if (this.#pointerSelectionMode === "replace" && !this.#selectedAtPointerDown) {
-      for (const node of [...getSelectList(this.global)]) {
+      for (const node of [...getGraphMirror(this.engine).selection]) {
         node.setSelected(false);
       }
       this.setSelected(true);
@@ -786,7 +783,7 @@ class NodeMirror extends ElementObject {
       this._mouseDownY = prop.start.y;
       this._hasMoved = true;
       // Guard so releasing a resize over another node doesn't click-select it.
-      snapData(this.global).resizingNode = this;
+      getGraphMirror(this.engine).resizingNode = this;
       return;
     }
     if (!this.#config.lockPosition && this.#config.edgePan) {
@@ -797,7 +794,7 @@ class NodeMirror extends ElementObject {
         (position) => this.#moveSelectionToPointer(position),
       );
     }
-    const selected = [...getSelectList(this.global)];
+    const selected = [...getGraphMirror(this.engine).selection];
     this.#dragRoots = selected.filter(
       (node) =>
         !selected.some(
@@ -922,11 +919,11 @@ class NodeMirror extends ElementObject {
       this._resizing = false;
       this.#resizeArmed = false;
       this.#activeResizeHandle = null;
-      snapData(this.global).resizingNode = null;
+      getGraphMirror(this.engine).resizingNode = null;
       this.#dragPointerId = null;
       this.#refreshResizeHover(prop.end);
       // A resized node's center may have moved into/out of a group.
-      for (const group of getGroups(this.global)) {
+      for (const group of getGraphMirror(this.engine).groups) {
         if ((group as unknown) !== this) group.refreshMembership(true);
       }
       return;
@@ -945,9 +942,9 @@ class NodeMirror extends ElementObject {
 
     // A settled node may have entered or left a group; groups re-evaluate
     // membership on settle (never at group-drag-start), so the maintained set is
-    // current before the next group drag. The structural GroupLike type keeps
-    // node.ts free of any group import.
-    for (const group of getGroups(this.global)) {
+    // current before the next group drag. The graph mirror's type-only group
+    // reference keeps node.ts free of any group value import.
+    for (const group of getGraphMirror(this.engine).groups) {
       group.refreshMembership(true);
     }
     this.emitDragCommit(prop);
@@ -973,7 +970,7 @@ class NodeMirror extends ElementObject {
   protected getDragCommitNodes(): NodeMirror[] {
     return this.#dragCommitNodes.length
       ? [...this.#dragCommitNodes]
-      : [...getSelectList(this.global)];
+      : [...getGraphMirror(this.engine).selection];
   }
 
   setUpPosition(prop: dragEndProp) {
@@ -994,7 +991,7 @@ class NodeMirror extends ElementObject {
     // pointerUp is dispatched to whatever is under the release point, which for a
     // resize may be a DIFFERENT node than the one being resized. Skip click-select
     // while any resize is settling so releasing a resize doesn't select this node.
-    if (snapData(this.global).resizingNode) return;
+    if (getGraphMirror(this.engine).resizingNode) return;
     if (this.#resizeArmed) {
       this.#resizeArmed = false;
       this.#activeResizeHandle = null;
@@ -1004,7 +1001,7 @@ class NodeMirror extends ElementObject {
 
     if (this._hasMoved == false) {
       if (this.#pointerSelectionMode === "replace") {
-        for (const node of [...getSelectList(this.global)]) {
+        for (const node of [...getGraphMirror(this.engine).selection]) {
           if (node !== this) node.setSelected(false);
         }
         this.setSelected(true);

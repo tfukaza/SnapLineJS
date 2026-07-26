@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import {
   ConnectorMirror,
+  GroupNodeMirror,
   NodeMirror,
 } from "../../assets/snapline/core/src";
 import { getGraphMirror } from "../../assets/snapline/core/src/snapline-globals";
@@ -126,4 +127,42 @@ test("each engine on a shared GlobalManager gets its own isolated registry", () 
   expect(mirrorB.diagnostics()).toHaveLength(0);
   expect(mirrorA.nodes).not.toContain(nodeB);
   expect(mirrorB.nodes).not.toContain(nodeA);
+});
+
+test("selection is engine-scoped and removal is identity-based", () => {
+  const { engine, global } = createEngineHarness();
+  const sibling = createSiblingEngine(global);
+  const nodeA = new NodeMirror(engine, null, { id: "same" });
+  const nodeB = new NodeMirror(sibling, null, { id: "same" });
+
+  nodeA.setSelected(true);
+  nodeB.setSelected(true);
+  expect(getGraphMirror(engine).selection).toEqual([nodeA]);
+  expect(getGraphMirror(sibling).selection).toEqual([nodeB]);
+
+  // Identity-based removal: deselecting A must not evict the same-id node on
+  // the sibling engine (the old shared list filtered by id).
+  nodeA.setSelected(false);
+  expect(getGraphMirror(engine).selection).toEqual([]);
+  expect(getGraphMirror(sibling).selection).toEqual([nodeB]);
+});
+
+test("group registries are engine-scoped", () => {
+  const restore = installObserverStubs();
+  try {
+    const { engine, global } = createEngineHarness();
+    const sibling = createSiblingEngine(global);
+    const groupA = new GroupNodeMirror(engine, null);
+    const groupB = new GroupNodeMirror(sibling, null);
+
+    expect(getGraphMirror(engine).groups).toEqual([groupA]);
+    expect(getGraphMirror(sibling).groups).toEqual([groupB]);
+
+    groupA.destroy(false);
+    expect(getGraphMirror(engine).groups).toEqual([]);
+    expect(getGraphMirror(sibling).groups).toEqual([groupB]);
+    groupB.destroy(false);
+  } finally {
+    restore();
+  }
 });
