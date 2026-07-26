@@ -12,7 +12,8 @@ npm install react react-dom @snap-engine/core \
 ## Components
 
 The package exports `Engine`, `Node`, `Group`, `Connector`, `Line`, `Select`,
-and `Placement`. Each component is also available from a named subpath.
+`Placement`, and `ControlledGraph`. Each component is also available from a
+named subpath.
 
 ```tsx
 import { Engine, Group, Node, Select } from "@snap-engine/snapline-react";
@@ -37,7 +38,7 @@ through `Node`'s `elementProps`.
 
 Set `virtual` on `Connector` to keep the logical endpoint without rendering a
 port. `surfaceStrategies` can then hit-test and anchor against the parent
-node's shape, while `capabilities` independently enable source and target
+node's shape, while symmetric `rules` limits enable source and target
 behavior. Keep domain edges in React state and use an opaque line payload as
 the stable link from a custom renderer.
 

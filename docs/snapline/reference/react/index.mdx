@@ -12,12 +12,13 @@ frameworkKey: overview
 
 | Component   | Important props                                                                                         |
 | ----------- | ------------------------------------------------------------------------------------------------------- |
-| `Node`      | `nodeObject`, geometry, resize configuration, callbacks, `lineComponent`, `elementProps`                |
-| `Connector` | `connectorObject`, legacy port configuration, `virtual`, `capabilities`, `surfaceStrategies`, callbacks |
+| `Node`      | `id`, `nodeObject`, geometry, resize configuration, callbacks, `onGeometryChanged`, `lineComponent`, `elementProps` |
+| `Connector` | `id`, `connectorObject`, `rules`, `virtual`, `surfaceStrategies`, metadata, callbacks                   |
 | `Line`      | `line`, SVG presentation                                                                                |
 | `Select`    | callbacks and presentation                                                                              |
 | `Group`     | node geometry, header content, membership policy and callbacks                                          |
 | `Placement` | controller, cancellation behavior, render function                                                      |
+| `ControlledGraph` | `lines` (your `LineRecord`s), `onLineChangeRequest`, `onDiagnosticsChanged`                       |
 
 `Node` and `Group` forward refs to their core objects. `Connector` exposes a
 `ConnectorRef`, and `useNodeHandle()` returns a callback ref for a dedicated

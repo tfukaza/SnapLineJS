@@ -16,12 +16,12 @@ as their own ports:
 
 ```svelte
 <Connector
+  id="node-1:surface"
   name="surface"
   virtual
-  capabilities={{
-    source: true,
-    target: true,
-    maxIncoming: -1,
+  rules={{
+    maxOutgoing: "unlimited",
+    maxIncoming: "unlimited",
     reconnect: false,
     allowParallel: true
   }}
@@ -84,39 +84,29 @@ Hit testing and line attachment are separate:
 This separation allows a pointer to activate a wide border band while the
 visible line remains attached to the exact rim of a circle or rectangle.
 
-## Keep application data authoritative
+## Your document stays authoritative
 
-SnapLine owns gesture state and connector topology. Your React or Svelte graph
-should remain the source of truth for node labels, edge styles, persistence,
-and domain behavior.
+Topology is always controlled: your graph document is the single source of
+truth for which lines exist. Mount `ControlledGraph` with your `LineRecord`s
+and apply each gesture's atomic proposal:
 
-For gesture-created connections, a source connector can synchronously accept or
-reject the request and attach an opaque payload:
-
-```ts
-const callbacks: ConnectorCallbacks = {
-  onConnectionRequest({ source, target }) {
-    const edge = addEdgeToApplicationState(source, target);
-    return { payload: edge.id };
-  },
-};
+```svelte
+<ControlledGraph
+  lines={doc.lines}
+  onLineChangeRequest={(request) => applyToDocument(request)}
+/>
 ```
 
-The payload is retained on `LineMirror`. A custom line renderer can use that
-stable ID to read the current edge from framework state. Programmatic hydration
-passes the same payload directly:
+A gesture-created line carries a SnapLine-minted stable id in
+`request.add[0].id`; keeping that id in the record you store settles the
+dragged line in place — no flicker, same mirror. Records carry an optional
+`payload` that lands on `LineMirror.payload` for custom renderers, and
+admission rules can inspect the proposed line through
+`rules.isValidConnection({ line, source, target, phase })` on either
+endpoint.
 
-```ts
-source.connectToConnector({
-  target,
-  origin: "hydration",
-  payload: edge.id,
-});
-```
-
-Programmatic connections do not call `onConnectionRequest`, so restoring a
-saved graph cannot accidentally create a second application edge.
-
-Node and connector `metadata` remain available for small integration hints.
-Treat metadata and line payloads as opaque links, not as a second copy of the
+Restoring a saved graph is just pushing its records — hydration never calls
+your request handler, so a reload cannot create duplicate application edges.
+Node and connector `metadata` remain available for small integration hints;
+treat metadata and payloads as opaque links, not as a second copy of the
 application graph.

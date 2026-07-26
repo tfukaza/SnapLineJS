@@ -12,8 +12,8 @@ frameworkKey: overview
 
 | Class | Responsibility |
 | --- | --- |
-| `NodeMirror` | Position, selection, properties, resize, and connectors |
-| `ConnectorMirror` | Connection capacity, policy, metadata, and gestures |
+| `NodeMirror` | Position, selection, resize, and connectors |
+| `ConnectorMirror` | Connection rules, metadata, and gestures |
 | `LineMirror` | Connection state and SVG geometry |
 | `RectSelectController` | Background rectangle selection |
 | `GroupNodeMirror` | Resizable exclusive membership and recursive carry |
@@ -21,12 +21,17 @@ frameworkKey: overview
 
 Core objects require an engine with collision support. Assign each committed
 element to its object, then call `remeasureDomGeometry()`. Destroy owned objects when
-their records are removed.
+their records are removed. Topology is always controlled: attach a graph owner
+with `attachControlledGraph(engine, { onLineChangeRequest })`, push your
+`LineRecord`s through `setCanonicalGraph`, and apply each gesture's atomic
+proposal to your records.
 
 ## Query helpers
 
 `getNodes`, `getConnectors`, `getGroupNodes`, and `getSelectedNodes` return
-engine-scoped snapshots. `getParentGroup` returns settled ownership.
+engine-scoped snapshots; `query(engine)` exposes the read-only `GraphQuery`
+facade with identity lookups (`node(id)` / `connector(id)` / `line(id)`) and
+`diagnostics()`. `getParentGroup` returns settled ownership.
 
 Callbacks use event objects carrying the relevant component, metadata, pointer
 information, and final geometry. Configuration objects are not graph
