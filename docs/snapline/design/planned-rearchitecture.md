@@ -225,6 +225,8 @@ second vocabulary:
 | Consumer-supplied `canConnect` predicate                   | `isValidConnection`                        | Predicate callback named as a question, per the predicate exemption |
 | Imperative connection predicate                            | `canConnect`                               | Imperative query the caller invokes on a mirror                     |
 | `EdgeId`, `EdgeRecord`, and `edgeId`                       | `LineId`, `LineRecord`, and `lineId`       | Removes the edge/line synonym                                       |
+| `onDragCommit`, `onResizeCommit`                           | `onGeometryChanged` / `onGeometryChangeRequest` | One batched geometry pair; the drag/resize split disappears    |
+| `ConnectorLinePhase`                                       | `LineMirrorPhase`                          | The phase belongs to the line mirror, not the connector             |
 | Framework rendering type                                   | `LineComponent`                            | `Component` remains reserved for React/Svelte/front-end entities    |
 
 This is not a blind global replacement. For example,
@@ -341,10 +343,23 @@ Public types, examples, and method names must make the authority mode visible.
 
 **Resolved:** one engine has exactly one authority mode. Mixed or partitioned
 controlled/uncontrolled graphs within a single engine are not supported for
-1.0: a per-engine mode flag is set at engine or provider construction, and any
-operation belonging to the other mode fails fast with a structured diagnostic.
-Applications that genuinely need both models run two engines; engine scoping
-(Workstream E) makes that safe.
+1.0. Applications that genuinely need both models run two engines; engine
+scoping (Workstream E) makes that safe.
+
+**Resolved — explicit declaration required:** every consumer declares the
+mode before any graph use:
+
+```ts
+setGraphAuthority(engine, "controlled" | "uncontrolled");
+```
+
+- An imperative topology command on an undeclared engine throws a structured
+  error; nothing defaults silently into uncontrolled authority.
+- Attaching the controlled bridge requires a prior (or bundled)
+  `"controlled"` declaration; the controlled adapter component performs the
+  declaration itself.
+- Re-declaring a different mode on the same engine fails fast with a
+  structured diagnostic.
 
 ### D2/D3. Stable graph IDs and soft-link resolution
 
@@ -381,8 +396,13 @@ interface LineRecord {
   link. `ConnectorRecord.nodeId` is denormalized parentage used for
   validation.
 - The `id` prop/record field is **optional**. When omitted, SnapLine mints a
-  stable string ID at mirror creation and reports it through the normal
-  snapshot and request surfaces.
+  stable string ID at mirror creation (format `` `${kind}-${createId()}` ``,
+  for example `node-42`) and reports it through the normal snapshot and
+  request surfaces.
+- Domain identity is stored in **separate readonly fields** —
+  `NodeMirror.nodeId`, `ConnectorMirror.connectorId`, `LineMirror.lineId` —
+  and never overloads the engine-internal `BaseObject.id`, which keys the
+  object table and render-queue identifiers.
 - A minted ID is stable for the lifetime of the mirror, and no longer. Any
   canonical graph that outlives a mirror’s lifetime — persisted documents,
   cross-session reloads, framework remounts — must supply its own IDs, or
@@ -463,11 +483,10 @@ stateDiagram-v2
 - Preserve a `LineMirror` across endpoint changes when its `lineId` remains
   the same.
 
-**Remaining details**
-
-- Define whether an attempted identity change is rejected or handled as an
-  unregister/register transaction. Current leaning: rejected with a structured
-  diagnostic, consistent with ID immutability.
+**Resolved:** an attempted identity change is rejected with an
+`"identity-changed"` structured diagnostic, consistent with ID immutability.
+There is no unregister/register transaction shorthand; a consumer that truly
+needs a new identity destroys the mirror and creates a new one.
 
 ### D4. Canonical hydration reports structured errors
 
@@ -490,6 +509,7 @@ interface ReconciliationError {
     | "missing-connector"
     | "capacity-exceeded"
     | "connection-rejected"
+    | "identity-changed"
     | "unrepresentable-line";
   lineId?: LineId;
   nodeId?: NodeId;
@@ -509,10 +529,13 @@ rules, or canonical records change.
 A valid soft link whose mirror simply has not mounted yet remains latent and is
 not itself an error.
 
-**Remaining details**
-
-- Diagnostic retention and clearing semantics (when a resolved error leaves
-  the array; whether cleared errors are reported once more).
+**Resolved retention/clearing:** diagnostics are derived state. Each
+reconciliation pass recomputes the array from the records it could not
+represent, keyed by record ID; an error whose cause is resolved simply drops
+out on the next pass, with no explicit clearing API and no re-reporting of
+cleared errors. `onDiagnosticsChanged` fires when the recomputed array's
+contents differ from the previous pass (shallow compare by code + record
+IDs).
 
 ### D5/D6. One atomic line-change request callback
 
@@ -603,6 +626,10 @@ interface GraphQuery {
 The facade must not expose registry sets, topology arrays, controller
 attachment, or mutation methods.
 
+**Resolved package location:** the facade ships from the existing
+`@snap-engine/snapline/query` subpath (`core/src/query.ts`), alongside the
+current query helpers.
+
 **Where read-only is enforced:** the facade returns **live mirrors**, not deep
 snapshots. The facade’s read-only guarantee applies to the registry layer — a
 consumer cannot add, remove, or re-attach anything through it. The mirrors it
@@ -646,6 +673,30 @@ asks the canonical owner to act. The previous provisional `"commit"` and
 `"snapline"` mode names are removed: SnapLine-owned geometry is not a
 canonical or framework commit, and a mode value should name the authority
 model, not the library.
+
+**Resolved — consolidated, batched callbacks.** The drag/resize split
+disappears: `onDragCommit` and `onResizeCommit` are removed, replaced by the
+single pair above. The shared payload is batched so a group or multi-select
+drag stays one event:
+
+```ts
+interface NodeGeometry {
+  node: NodeMirror;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+interface GeometryChangeEvent {
+  nodes: readonly NodeGeometry[];
+}
+```
+
+A resize reports one entry; a group drag reports every moved node in one
+event, preserving the batch-persistence pattern consumers already use. The
+adapter prop is `geometry?: "uncontrolled" | "controlled"` (default
+`"uncontrolled"`).
 
 ### D11. The mirror registry owns the engine group registry
 
@@ -776,9 +827,20 @@ interface ConnectorRules {
   maxOutgoing: ConnectionLimit;
   maxIncoming: ConnectionLimit;
   reconnect: boolean;
+  allowParallel: boolean;
+  onFull?: "reject" | "replace-oldest";
   isValidConnection?: (proposal: ConnectionProposal) => boolean;
 }
 ```
+
+`allowParallel` (default `false`, both endpoints must allow) stays a
+declarative rule: parallel-line policy must also be checkable during
+canonical hydration, where a predicate-only expression would be awkward.
+`isValidConnection` can additionally veto. `onFull` (default `"reject"`) is
+the explicit replacement policy that supersedes the current implicit
+oldest-line eviction; `"replace-oldest"` selects the affected stable line IDs
+and produces one atomic operation (one `"replace"` line-change request in
+controlled mode).
 
 The compatibility predicate must receive the actual proposed line in addition
 to its endpoints:
@@ -843,12 +905,14 @@ separate explicit replacement policy that selects affected stable line IDs and
 produces one atomic line-change request. Remove implicit oldest-line eviction
 from `connectToConnector()`.
 
-**Remaining details**
-
-- Decide whether `allowParallel` remains a convenience rule or is expressed
-  entirely through the compatibility predicate.
-- Decide how proposed canonical line-record data is exposed alongside a preview
-  line when admission depends on application-specific line fields.
+**Resolved proposed-line data:** `ProposedLine` carries
+`payload?: unknown`, mirroring the staged `LineMirror.payload`; admission
+rules that depend on application-specific line data read it through
+`proposal.line`. In controlled mode the payload's durable home is the
+canonical `LineRecord`; in uncontrolled mode consumers set it with
+`line.setPayload()` (the legacy `onConnectionRequest` `{ payload }` return
+channel and its own-property `"payload"` distinction are removed with that
+callback).
 
 ## Workstream A: one engine-scoped graph mirror
 
@@ -920,6 +984,12 @@ The legacy `EdgeSyncController` establishes the correct high-level direction,
 but it reuses imperative connector mutation behavior underneath. Hydration
 therefore still runs gesture policy, parallel checks, capacity replacement,
 and callback paths that can conflict with a canonical document.
+
+It also identifies edges only by endpoint-pair string keys, and its
+`KEY_SEPARATOR` constant is silently the empty string (the intended control
+character was stripped at some point), so `{node: "a", port: "bc"}` and
+`{node: "ab", port: "c"}` collide today. Stable `LineId` identity removes
+endpoint-pair keying entirely, resolving this defect by construction.
 
 **Planned separation**
 
@@ -1137,13 +1207,13 @@ deliberately deferred to each API’s owning phase; see “Phase 0 scope.”)
 
 ### Remaining API details
 
-- [ ] Decide identity-change handling: reject with a diagnostic (leaning) or
-      unregister/register transaction.
-- [ ] Finalize D4 diagnostic retention and clearing semantics.
-- [ ] Resolve D13 details: parallel shorthand and proposed line-record data
-      exposure.
-- [ ] Finalize the D7 `GraphQuery` package location.
-- [ ] Finalize D8 prop names for the geometry authority modes.
+All previously open details are settled and folded into their owning
+sections: explicit `setGraphAuthority()` declaration (D1), identity-change
+rejection + separate domain-ID fields + minted-ID format (D2/D3), derived
+diagnostics retention (D4), `allowParallel` rule + `onFull` replacement
+policy + `ProposedLine.payload` (D13), `GraphQuery` at
+`@snap-engine/snapline/query` (D7), and consolidated batched geometry
+callbacks with the `geometry` prop (D8).
 
 ### Core
 
