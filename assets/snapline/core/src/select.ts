@@ -7,8 +7,9 @@ import type {
 import { RectCollider, Collider } from "@snap-engine/core/collision";
 import { NodeComponent, type SelectionMode } from "./node";
 import { getSelectList, snapData } from "./snapline-globals";
+import type { GeometryWriter } from "./geometry";
 
-/** World-space rectangle the framework renders as the selection box. */
+/** World-space rectangle delivered to the registered geometry writer. */
 export interface SelectRect {
   x: number;
   y: number;
@@ -33,11 +34,9 @@ export interface SelectCallbacks {
   /** Consumer-defined selection policy; SnapLine owns no modifier keys. */
   resolveSelectionMode?: (event: SelectStartEvent) => SelectionMode;
   /**
-   * The rubber-band rectangle changed — the FRAMEWORK renders it (position,
-   * size, visibility, and any custom styling). Core keeps only the pointer
-   * math and the selection collider; it never writes the box's DOM. This is
-   * deliberately a plain callback with no flush handshake: the box visual is
-   * not paint-atomic, so the framework may flush on its own schedule.
+   * Observes rubber-band rectangle changes. Adapters render live geometry
+   * through `bindGeometryWriter`; this callback is for application behavior,
+   * logging, and persistence rather than per-frame framework rendering.
    */
   onRectChange?: (rect: SelectRect) => void;
   onSelectionChange?: (event: SelectChangeEvent) => void;
@@ -53,6 +52,14 @@ class RectSelectComponent extends ElementObject {
   _mouseDownY: number;
   _selectHitBox: Collider;
   #callbacks: SelectCallbacks;
+  #geometryWriter: GeometryWriter<SelectRect> | null = null;
+  #rect: SelectRect = {
+    x: 0,
+    y: 0,
+    width: 0,
+    height: 0,
+    visible: false,
+  };
   #selectionMode: SelectionMode = "replace";
   #baselineSelection = new Set<NodeComponent>();
 
@@ -86,14 +93,34 @@ class RectSelectComponent extends ElementObject {
     return this.#callbacks;
   }
 
+  get rect(): Readonly<SelectRect> {
+    return this.#rect;
+  }
+
+  bindGeometryWriter(writer: GeometryWriter<SelectRect>): () => void {
+    this.#geometryWriter = writer;
+    writer({ ...this.#rect });
+    return () => {
+      if (this.#geometryWriter === writer) this.#geometryWriter = null;
+    };
+  }
+
   #fireRect(width: number, height: number, visible: boolean): void {
-    this.#callbacks.onRectChange?.({
+    this.#rect = {
       x: this.worldTransform.x,
       y: this.worldTransform.y,
       width,
       height,
       visible,
-    });
+    };
+    this.#callbacks.onRectChange?.({ ...this.#rect });
+    this.schedule(
+      () => this.#geometryWriter?.({ ...this.#rect }),
+      {
+        stage: "WRITE_2",
+        queueId: `${this.id}-geometry`,
+      },
+    );
   }
 
   onGlobalCursorDown(prop: pointerDownProp): void {
@@ -117,7 +144,7 @@ class RectSelectComponent extends ElementObject {
     }
 
     // worldTransform positions the selection collider (its transform parent);
-    // the visual box is framework-rendered from the callback rect.
+    // the registered writer updates the visual box during WRITE_2.
     this.worldTransform = { x: prop.position.x, y: prop.position.y };
     this._state = "dragging";
     this._mouseDownX = prop.position.x;

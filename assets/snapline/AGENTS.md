@@ -171,26 +171,24 @@ elements** — frameworks recover fine from property changes.
 
 Concretely:
 
-- **Node width/height** are framework-rendered: core fires
-  `callbacks.onSizeChange({node, width, height})` during a resize drag and the adapter binds
-  the size as state. Core only updates its collision hitboxes synchronously
-  (`setSizeState`). The connector/line re-glue closes itself through the
-  ResizeObserver after the framework's DOM write reflows.
+- **Node/group transforms and live width/height** are core-written during a
+  gesture. Resize uses `WRITE_1 → READ_2 → WRITE_2`: paint the box, remeasure
+  connectors, then re-glue lines. `onSizeChange` is observational and
+  `onResizeCommit` is the framework persistence boundary.
 - **Initial node geometry** is explicit: after assigning a committed framework
   element, adapters call `syncDomGeometry()`. ResizeObserver remains the
   ongoing invalidation path, not the initial-mount handshake.
-- **The rubber-band selection box** is framework-rendered: core fires
-  `callbacks.onRectChange({x, y, width, height, visible})` and the adapter
-  draws (and can restyle/replace) the box. Deliberately NO flush handshake —
-  the box visual is not paint-atomic.
-- **Node drag transforms, `data-selected` attributes, and line SVG transforms**
-  stay engine-written (property writes on existing elements).
+- **Line, selection, and placement geometry** use
+  `bindGeometryWriter(...)`. Adapters mount static structure once; the writer
+  mutates retained SVG/DOM/graphics refs without framework state. Custom line
+  components must bind a geometry writer and clean it up on unmount.
+- **Semantic state stays separate:** line phase/payload/target changes use
+  `onStateChange`; geometry never requests a framework render.
 - **Adapters must render node/group elements with
   `position: absolute; transform-origin: top left`** (and ideally
   `will-change: transform`) — core no longer seeds base styles.
-- SnapLine has **no `flushMutation`/`settleMutation` equivalent and must not
-  grow one**: unlike SnapSort's FLIP pipeline, none of SnapLine's delegated
-  visuals are paint-atomic.
+- Adapter cleanup must detach elements or destroy objects with
+  `removeElement: false`; React/Svelte remain the sole structural DOM owners.
 
 ### Callback conventions
 

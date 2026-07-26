@@ -101,10 +101,6 @@ export const Node = forwardRef<NodeComponent, NodeProps>(function Node(
   const [lineList, setLineList] = useState<LineComponent[]>(
     node.getAllOutgoingLines(),
   );
-  // The element's width/height are framework-owned: core reports size changes
-  // (resize drag) via onSizeChange and this state renders them. Null until the
-  // first resize so CSS-declared sizes keep applying to non-resized nodes.
-  const [box, setBox] = useState<{ w: number; h: number } | null>(null);
   const latestRef = useRef({
     callbacks,
     onDragCommit,
@@ -193,7 +189,6 @@ export const Node = forwardRef<NodeComponent, NodeProps>(function Node(
         latestRef.current.callbacks.onSizeChange,
         latestRef.current.onSizeChange,
       );
-      setBox({ w: event.width, h: event.height });
     };
     node.callbacks.onResizeCommit = (event) =>
       invoke(
@@ -210,6 +205,7 @@ export const Node = forwardRef<NodeComponent, NodeProps>(function Node(
         latestRef.current.onDragCommit,
       );
     setLineList([...node.getAllOutgoingLines()]);
+    const boundElement = nodeDomRef.current;
 
     return () => {
       node.callbacks.canStartDrag = original.canStartDrag;
@@ -224,7 +220,9 @@ export const Node = forwardRef<NodeComponent, NodeProps>(function Node(
       node.callbacks.onSizeChange = original.onSizeChange;
       node.callbacks.onResizeCommit = original.onResizeCommit;
       if (ownsNodeRef.current) {
-        node.destroy();
+        node.destroy(false);
+      } else if (boundElement) {
+        node.detachElement(boundElement);
       }
     };
   }, [node]);
@@ -235,18 +233,14 @@ export const Node = forwardRef<NodeComponent, NodeProps>(function Node(
   }, [node, x, y]);
 
   useLayoutEffect(() => {
-    setBox(
-      width == null && height == null
-        ? null
-        : { w: width ?? node.hitBox.width, h: height ?? node.hitBox.height },
-    );
-  }, [node, width, height]);
-
-  useLayoutEffect(() => {
-    if (!node.element || !box) return;
-    node.setSizeState(box.w, box.h);
+    if (!node.element || (width == null && height == null)) return;
+    const nextWidth = width ?? node.hitBox.width;
+    const nextHeight = height ?? node.hitBox.height;
+    if (width != null) node.element.style.width = `${width}px`;
+    if (height != null) node.element.style.height = `${height}px`;
+    node.setSizeState(nextWidth, nextHeight);
     node.syncDomGeometry();
-  }, [node, box]);
+  }, [node, width, height]);
 
   const handleSize =
     resizeHandleThickness ?? DEFAULT_RESIZE_HANDLE_THICKNESS;
@@ -264,7 +258,8 @@ export const Node = forwardRef<NodeComponent, NodeProps>(function Node(
           position: "absolute",
           transformOrigin: "top left",
           willChange: "transform",
-          ...(box ? { width: `${box.w}px`, height: `${box.h}px` } : null),
+          ...(width != null ? { width: `${width}px` } : null),
+          ...(height != null ? { height: `${height}px` } : null),
           ...style,
         }}
       >

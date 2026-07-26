@@ -1323,25 +1323,43 @@ export class ElementObject extends BaseObject {
   }
 
   destroyDom(removeElement: boolean = true) {
+    const element = this.#element;
+    this.detachElement();
+    if (removeElement) {
+      element?.remove();
+    }
+    super.destroyDom();
+  }
+
+  /**
+   * Stop observing and routing input through the currently assigned element
+   * without removing framework-owned DOM.
+   *
+   * When `expectedElement` is supplied, a stale cleanup is ignored after a
+   * newer element has already been assigned.
+   */
+  detachElement(expectedElement?: HTMLElement): boolean {
+    if (expectedElement && this.#element !== expectedElement) {
+      return false;
+    }
     this.#resizeObserver?.disconnect();
+    this.#resizeObserver = null;
     this.#mutationObserver?.disconnect();
+    this.#mutationObserver = null;
     if (this.#inputAlias) {
       this.engine?.input.unregisterObjectElement(this, this.#inputAlias);
       this.#inputAlias = null;
     }
     if (this.#element) {
       this.engine?.input.unregisterObjectElement(this, this.#element);
-      if (removeElement) {
-        this.#element.remove();
-      }
     }
     this.#element = null;
-    super.destroyDom();
+    return true;
   }
 
   #assignElement(element: HTMLElement) {
     if (this.#element) {
-      this.destroyDom();
+      this.detachElement();
     }
 
     this.#element = element;

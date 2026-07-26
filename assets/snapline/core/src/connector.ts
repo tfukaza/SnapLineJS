@@ -1009,7 +1009,7 @@ class ConnectorComponent extends ElementObject {
     return cloneAnchor(this.center);
   }
 
-  destroy(): void {
+  destroy(removeElement: boolean = true): void {
     if (this.#edgePanPointerId != null) {
       this.engine.edgePanController?.stopEdgePan(this.#edgePanPointerId);
       this.#edgePanPointerId = null;
@@ -1022,7 +1022,7 @@ class ConnectorComponent extends ElementObject {
     }
     this.#removeSourceSurfaceRegistration();
     this.globalInput.pointerUp = null;
-    super.destroy();
+    super.destroy(removeElement);
   }
 
   #resolveOwnSourceHit(

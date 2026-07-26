@@ -8,6 +8,20 @@ import type {
   ConnectorPoint,
   ConnectorSurfaceStrategy,
 } from "./connector";
+import type { GeometryWriter } from "./geometry";
+
+export interface LineGeometrySnapshot {
+  readonly start: ConnectorAnchor;
+  readonly end: ConnectorAnchor;
+  readonly delta: Readonly<{ x: number; y: number }>;
+}
+
+export interface LineStateSnapshot {
+  readonly phase: ConnectorLinePhase;
+  readonly target: ConnectorComponent | null;
+  readonly candidate: ConnectorComponent | null;
+  readonly payload: unknown;
+}
 
 class LineComponent extends ElementObject {
   endWorldX: number;
@@ -21,7 +35,8 @@ class LineComponent extends ElementObject {
   phase: ConnectorLinePhase;
   candidate: ConnectorCandidate | null;
 
-  #renderCallbacks: Set<(line: LineComponent) => void>;
+  #geometryWriter: GeometryWriter<LineGeometrySnapshot> | null = null;
+  #stateCallbacks = new Set<(state: LineStateSnapshot) => void>();
   #sourceStrategy: ConnectorSurfaceStrategy | null = null;
   #sourceHit: ConnectorHit | null = null;
   #targetStrategy: ConnectorSurfaceStrategy | null = null;
@@ -41,22 +56,47 @@ class LineComponent extends ElementObject {
     this.endAnchor = { x: 0, y: 0 };
     this.phase = "source-start";
     this.candidate = null;
-    this.#renderCallbacks = new Set();
-
     this.transformMode = "direct";
   }
 
-  onRender(callback: (line: LineComponent) => void): () => void {
-    this.#renderCallbacks.add(callback);
+  bindGeometryWriter(
+    writer: GeometryWriter<LineGeometrySnapshot>,
+  ): () => void {
+    this.#geometryWriter = writer;
+    writer(this.geometrySnapshot());
     return () => {
-      this.#renderCallbacks.delete(callback);
+      if (this.#geometryWriter === writer) this.#geometryWriter = null;
     };
   }
 
-  requestRender(): void {
-    for (const callback of this.#renderCallbacks) {
-      callback(this);
-    }
+  onStateChange(callback: (state: LineStateSnapshot) => void): () => void {
+    this.#stateCallbacks.add(callback);
+    callback(this.stateSnapshot());
+    return () => this.#stateCallbacks.delete(callback);
+  }
+
+  geometrySnapshot(): LineGeometrySnapshot {
+    const start = cloneAnchor(this.startAnchor);
+    const end = cloneAnchor(this.endAnchor);
+    return {
+      start,
+      end,
+      delta: { x: end.x - start.x, y: end.y - start.y },
+    };
+  }
+
+  stateSnapshot(): LineStateSnapshot {
+    return {
+      phase: this.phase,
+      target: this.target,
+      candidate: this.candidate?.connector ?? null,
+      payload: this.payload,
+    };
+  }
+
+  #emitStateChange(): void {
+    const state = this.stateSnapshot();
+    for (const callback of this.#stateCallbacks) callback(state);
   }
 
   setSourceSurfaceContext(
@@ -71,31 +111,30 @@ class LineComponent extends ElementObject {
     candidate: ConnectorCandidate | null,
     strategy: ConnectorSurfaceStrategy | null = null,
   ): void {
+    const previousConnector = this.candidate?.connector ?? null;
     this.candidate = candidate;
     this.#targetStrategy = strategy;
     this.#targetHit = candidate?.hit ?? null;
-    this.requestRender();
+    if (previousConnector !== (candidate?.connector ?? null)) {
+      this.#emitStateChange();
+    }
   }
 
   setPhase(phase: ConnectorLinePhase): void {
     if (this.phase === phase) return;
     this.phase = phase;
-    this.requestRender();
+    this.#emitStateChange();
   }
 
   setPayload(payload: unknown): void {
+    if (Object.is(this.payload, payload)) return;
     this.payload = payload;
-    this.requestRender();
+    this.#emitStateChange();
   }
 
   setPreviewPosition(position: ConnectorPoint): void {
     this.#previewPosition = position;
-    // Pointer and edge-pan updates are committed through the engine's write
-    // phase by ConnectorComponent. Updating the model here but deferring the
-    // render callback keeps the line and camera transform in the same frame;
-    // rendering immediately leaves the preview one camera frame behind during
-    // continuous edge-pan.
-    this.updateAnchors(false);
+    this.updateAnchors();
   }
 
   connectTarget(
@@ -109,15 +148,20 @@ class LineComponent extends ElementObject {
     this.candidate = null;
     this.phase = "connected";
     this.updateAnchors();
+    this.#emitStateChange();
   }
 
   clearTarget(): void {
+    const changed =
+      this.target !== null ||
+      this.candidate !== null ||
+      this.phase !== "preview-free";
     this.target = null;
     this.candidate = null;
     this.#targetStrategy = null;
     this.#targetHit = null;
     this.phase = "preview-free";
-    this.requestRender();
+    if (changed) this.#emitStateChange();
   }
 
   setLineStartAtConnector(): void {
@@ -181,7 +225,7 @@ class LineComponent extends ElementObject {
     this.setLineEnd(endWorldX, endWorldY);
   }
 
-  updateAnchors(requestRender = true): void {
+  updateAnchors(): void {
     const target = this.target ?? this.candidate?.connector ?? null;
     if (!target) {
       const preview = this.#previewPosition ?? this.endAnchor;
@@ -196,7 +240,6 @@ class LineComponent extends ElementObject {
       });
       this.setLineStartAnchor(startAnchor);
       this.setLineEndAnchor(preview);
-      if (requestRender) this.requestRender();
       return;
     }
 
@@ -222,7 +265,6 @@ class LineComponent extends ElementObject {
     });
     this.setLineStartAnchor(sourceAnchor);
     this.setLineEndAnchor(targetAnchor);
-    if (requestRender) this.requestRender();
   }
 
   moveLineToConnectorTransform(): void {
@@ -230,9 +272,7 @@ class LineComponent extends ElementObject {
   }
 
   writeTransform(): void {
-    // A logical/headless line can exist before a framework mounts its SVG.
-    if (this.element) super.writeTransform();
-    this.requestRender();
+    this.#geometryWriter?.(this.geometrySnapshot());
   }
 }
 

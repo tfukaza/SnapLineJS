@@ -100,15 +100,7 @@
           {#if placement}
             <Placement controller={placement} cancelOnOutside={false}>
               {#snippet preview(snapshot)}
-                {#if snapshot.position}
-                  <div
-                    class="placement-preview"
-                    class:blocked={!snapshot.allowed}
-                    style:transform={`translate3d(${snapshot.position.x}px, ${snapshot.position.y}px, 0)`}
-                  >
-                    Node
-                  </div>
-                {/if}
+                <div class="placement-preview">Node</div>
               {/snippet}
             </Placement>
           {/if}
@@ -263,7 +255,7 @@
     pointer-events: none;
   }
 
-  .placement-preview.blocked {
+  :global([data-snapline-type="placement-preview"][data-allowed="false"]) .placement-preview {
     border-color: #b14f4f;
     color: #8b3030;
   }

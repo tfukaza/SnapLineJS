@@ -27,12 +27,14 @@ A virtual connector renders no port element. Its source and target surfaces are
 resolved against the parent node, which is useful for whole-border diagram
 connections. Connection-request payloads stay opaque to the adapter and are
 available to custom `LineSvelteComponent` renderers through `LineComponent`.
+Custom renderers register `line.bindGeometryWriter(...)` on mount and mutate
+retained SVG, Canvas, or graphics refs directly.
 
 Connector callbacks, metadata, policy, surface strategies, collider radius,
 edge-pan behavior, and line class are reactive. `virtual` can also be toggled
 without replacing the logical connector or its lines. `name` and
 `connectorObject` are construction-time identities.
 
-Changed geometry props are authoritative. During a live pointer gesture the
-adapter renders local updates and reports the final values through commit
-callbacks.
+Changed geometry props are authoritative. During a live pointer gesture core
+writes retained element geometry directly; commit callbacks report final values
+for application persistence.

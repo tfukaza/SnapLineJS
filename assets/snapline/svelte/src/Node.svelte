@@ -60,11 +60,6 @@
     }
     let lineList: LineComponent[] = $state(nodeObject.getAllOutgoingLines());
 
-    // The element's width/height are framework-owned: core reports size changes
-    // (resize drag) via onSizeChange and this state renders them. Null until the
-    // first resize so CSS-declared sizes keep applying to non-resized nodes.
-    let boxW = $state<number | null>(width ?? null);
-    let boxH = $state<number | null>(height ?? null);
     let mounted = $state(false);
     let originalCallbacks: NodeCallbacks = {};
 
@@ -120,8 +115,6 @@
             invoke(event, originalCallbacks.onDragCommit, callbacks.onDragCommit, onDragCommit);
         nodeObject.callbacks.onSizeChange = (event) => {
             invoke(event, originalCallbacks.onSizeChange, callbacks.onSizeChange, onSizeChange);
-            boxW = event.width;
-            boxH = event.height;
         };
         nodeObject.callbacks.onLinesChanged = (event) => {
             invoke(event, originalCallbacks.onLinesChanged, callbacks.onLinesChanged);
@@ -147,7 +140,9 @@
         nodeObject.callbacks.onSizeChange = originalCallbacks.onSizeChange;
         nodeObject.callbacks.onResizeCommit = originalCallbacks.onResizeCommit;
         if (ownsNode) {
-            nodeObject.destroy();
+            nodeObject.destroy(false);
+        } else if (nodeDOM) {
+            nodeObject.detachElement(nodeDOM);
         }
     });
 
@@ -165,11 +160,17 @@
         const nextWidth = width;
         const nextHeight = height;
         if (!mounted) return;
-        boxW = nextWidth ?? null;
-        boxH = nextHeight ?? null;
         const object = untrack(() => nodeObject!);
         void tick().then(() => {
             if (!mounted || !object.element) return;
+            if (nextWidth != null) object.element.style.width = `${nextWidth}px`;
+            if (nextHeight != null) object.element.style.height = `${nextHeight}px`;
+            if (nextWidth != null || nextHeight != null) {
+                object.setSizeState(
+                    nextWidth ?? object.hitBox.width,
+                    nextHeight ?? object.hitBox.height,
+                );
+            }
             object.syncDomGeometry();
         });
     });
@@ -193,8 +194,8 @@
     data-snapline-type="node"
     class={className}
     style="position: absolute; transform-origin: top left; will-change: transform;"
-    style:width={boxW != null ? `${boxW}px` : undefined}
-    style:height={boxH != null ? `${boxH}px` : undefined}
+    style:width={width != null ? `${width}px` : undefined}
+    style:height={height != null ? `${height}px` : undefined}
     transition:blur|global={{duration: 200}}
 >
     {@render children()}

@@ -125,7 +125,7 @@ export const Connector = forwardRef<ConnectorRef, ConnectorProps>(
 
     useEffect(() => {
       return () => {
-        if (ownsConnectorRef.current) connector.destroy();
+        if (ownsConnectorRef.current) connector.destroy(false);
       };
     }, [connector]);
 

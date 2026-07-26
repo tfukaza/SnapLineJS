@@ -1,47 +1,33 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import type { LineComponent } from "@snap-engine/snapline";
+  import type { LineComponent, LineGeometrySnapshot } from "@snap-engine/snapline";
   import {blur} from "svelte/transition";
 
   let { line }: { line: LineComponent } = $props();
 
-  let shadowOffset = 6;
-  let style = $state(
-    "position: absolute; overflow: visible; pointer-events: none; will-change: transform;"
-  );
-  let shadowStyle = $state(
-    "position: absolute; overflow: visible; pointer-events: none; will-change: transform; transform: translate3d(0px, 0px, 0);"
-  );
-  let endX = $state(0);
-  let endY = $state(0);
-  let path = $state("");
+  const radius = 10;
+  let svgDOM: SVGSVGElement;
+  let pathDOM: SVGPathElement;
+  let endRectDOM: SVGRectElement;
+  let endCircleDOM: SVGCircleElement;
 
-  let radius = 10;
-
-  function renderLine() {
-    // For now, assume the line starts heading to the right
-    const thisLine: LineComponent = line;
-    const x0 = thisLine.worldTransform.x;
-    const y0 = thisLine.worldTransform.y;
-    style = `position: absolute; overflow: visible; pointer-events: none; will-change: transform;`;
-    shadowStyle = `position: absolute; overflow: visible; pointer-events: none; will-change: transform; transform: translate3d(${x0 + shadowOffset}px, ${y0 + shadowOffset}px, 0);`;
-    const dx = thisLine.endWorldX - thisLine.worldTransform.x;
-    const dy = thisLine.endWorldY - thisLine.worldTransform.y;
+  function pathForGeometry(geometry: LineGeometrySnapshot): string {
+    const { x: dx, y: dy } = geometry.delta;
     const x1 = dx > 0 ? Math.abs(dx / 2) : radius;
-    const x3 = dx;
-    const y3 = dy;
     const arc_1 = `A ${radius} ${radius} 0 0 ${dy > 0 ? 1 : 0} ${x1} ${dy > 0 ? radius : -radius}`;
-    const arc_2 = `A ${radius} ${radius} 0 0 ${dy > 0 ? (dx > 0 ? 0 : 1) : dx > 0 ? 1 : 0} ${x1 + (dx > 0 ? radius : -radius)} ${y3}`;
-    path = `M 0,0 h ${x1 - radius} ${arc_1} v ${y3 - 2 * (dy > 0 ? radius : -radius)} ${arc_2} h ${dx > 0 ? x3 / 2 - radius : x3 - radius} `;
-    endX = x3;
-    endY = y3;
+    const arc_2 = `A ${radius} ${radius} 0 0 ${dy > 0 ? (dx > 0 ? 0 : 1) : dx > 0 ? 1 : 0} ${x1 + (dx > 0 ? radius : -radius)} ${dy}`;
+    return `M 0,0 h ${x1 - radius} ${arc_1} v ${dy - 2 * (dy > 0 ? radius : -radius)} ${arc_2} h ${dx > 0 ? dx / 2 - radius : dx - radius} `;
   }
 
   onMount(() => {
-    renderLine();
-    line.writeTransform();
-    line.callback.afterWrite1 = renderLine;
-    line.callback.afterWrite2 = renderLine;
+    return line.bindGeometryWriter((geometry) => {
+      svgDOM.style.transform = `translate3d(${geometry.start.x}px, ${geometry.start.y}px, 0)`;
+      pathDOM.setAttribute("d", pathForGeometry(geometry));
+      endRectDOM.setAttribute("x", String(geometry.delta.x - 16));
+      endRectDOM.setAttribute("y", String(geometry.delta.y - 1.5));
+      endCircleDOM.setAttribute("cx", String(geometry.delta.x));
+      endCircleDOM.setAttribute("cy", String(geometry.delta.y));
+    });
   });
 </script>
 
@@ -49,8 +35,8 @@
   data-snapline-type="connector-line"
   width="4"
   height="4"
-  {style}
-  bind:this={line.element as any}
+  style="position: absolute; overflow: visible; pointer-events: none; will-change: transform;"
+  bind:this={svgDOM}
   transition:blur|global={{ duration: 200 }}
 >
   <defs>
@@ -63,17 +49,18 @@
       <stop offset="100%" stop-color="#c34421" />
     </linearGradient>
   </defs>
-  <path class="sl-connector-line" d={path} />
+  <path bind:this={pathDOM} class="sl-connector-line" />
   <rect x={-1} y={-1} width={16} height={3} fill="url(#line-start-gradient)" />
   <rect
-    x={endX - 16}
-    y={endY - 1.5}
+    bind:this={endRectDOM}
+    x="-16"
+    y="-1.5"
     width={16}
     height={3}
     fill="url(#line-end-gradient)"
   />
   <circle cx={0} cy={0} r="6" />
-  <circle cx={endX} cy={endY} r="6" />
+  <circle bind:this={endCircleDOM} cx="0" cy="0" r="6" />
 </svg>
 
 <!-- <svg

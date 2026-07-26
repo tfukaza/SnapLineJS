@@ -61,10 +61,6 @@
         groupObject = new GroupNodeComponent(engine, null, { width, height, minWidth, minHeight, resizeHandleThickness, resizeHandles, resizeCursors, metadata, callbacks: {}, groupCallbacks: {}, canContain, edgePan });
     }
 
-    // The box's width/height are framework-owned: seeded from props in the first
-    // markup pass, updated live by core's onSizeChange during a resize drag.
-    let boxW = $state(width);
-    let boxH = $state(height);
     let mounted = $state(false);
     let unregisterHeader: (() => void) | null = null;
     let originalCallbacks: import("@snap-engine/snapline").NodeCallbacks = {};
@@ -113,12 +109,10 @@
             invoke(event, originalCallbacks.onResizeHandleChange, callbacks.onResizeHandleChange);
         groupObject!.groupCallbacks.onMembershipChange = (event) =>
             invoke(event, originalGroupCallbacks.onMembershipChange, groupCallbacks.onMembershipChange, onMembershipChange);
-        // Resize is handled by the core edge/corner hitboxes; the framework renders
-        // the live size, and the consumer persists the committed size.
+        // Resize is handled by the core edge/corner hitboxes and writes live size
+        // directly; the consumer persists the committed size.
         groupObject!.callbacks.onSizeChange = (event) => {
             invoke(event, originalCallbacks.onSizeChange, callbacks.onSizeChange);
-            boxW = event.width;
-            boxH = event.height;
         };
         groupObject!.callbacks.onResizeCommit = (event) =>
             invoke(event, originalCallbacks.onResizeCommit, callbacks.onResizeCommit, onResizeCommit);
@@ -130,7 +124,7 @@
         void tick().then(() => {
             if (!mounted || !groupObject!.element) return;
             if (headerEl) unregisterHeader = groupObject!.registerDragHandle(headerEl);
-            groupObject!.setSizeState(boxW, boxH);
+            groupObject!.setSizeState(width, height);
             groupObject!.syncDomGeometry();
             // Seed membership once siblings have mounted, positioned, and had their
             // hit boxes measured (a WRITE stage runs after READ_1's measure).
@@ -155,7 +149,8 @@
         groupObject!.callbacks.onSizeChange = originalCallbacks.onSizeChange;
         groupObject!.callbacks.onResizeCommit = originalCallbacks.onResizeCommit;
         groupObject!.groupCallbacks.onMembershipChange = originalGroupCallbacks.onMembershipChange;
-        if (ownsGroup) groupObject!.destroy();
+        if (ownsGroup) groupObject!.destroy(false);
+        else if (boxDOM) groupObject!.detachElement(boxDOM);
     });
 
     $effect(() => {
@@ -174,11 +169,11 @@
         const nextWidth = width;
         const nextHeight = height;
         if (!mounted) return;
-        boxW = nextWidth;
-        boxH = nextHeight;
         const object = untrack(() => groupObject!);
         void tick().then(() => {
             if (!mounted || !object.element) return;
+            object.element.style.width = `${nextWidth}px`;
+            object.element.style.height = `${nextHeight}px`;
             object.setSizeState(nextWidth, nextHeight);
             object.syncDomGeometry();
         });
@@ -194,8 +189,8 @@
     data-snapline-type="group"
     class={`snapline-group ${className}`}
     style="position: absolute; transform-origin: top left; will-change: transform;"
-    style:width={`${boxW}px`}
-    style:height={`${boxH}px`}
+    style:width={`${width}px`}
+    style:height={`${height}px`}
 >
     <header bind:this={headerEl} class="snapline-group-header" data-snapline-part="group-header">
         {#if headerContent}

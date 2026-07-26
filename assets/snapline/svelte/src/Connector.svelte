@@ -88,7 +88,7 @@
   });
 
   onDestroy(() => {
-    if (ownsConnector) connector.destroy();
+    if (ownsConnector) connector.destroy(false);
   });
 </script>
 

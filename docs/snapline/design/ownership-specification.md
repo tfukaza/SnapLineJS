@@ -144,7 +144,7 @@ Core MAY update existing-element properties that are interaction outputs:
 - transforms;
 - `data-*` state attributes;
 - cursor and other transient property-level hints;
-- line-render subscription state.
+- high-frequency geometry through registered imperative writers.
 
 Core MUST NOT structurally move framework-owned node elements when groups
 carry them. Transform parenting is allowed.
@@ -424,24 +424,28 @@ Multiple same-task triggers SHOULD coalesce.
 ## Gesture requirements
 
 ```mermaid
-flowchart TB
-  BEGIN["User: begin connector drag"]
-  PREVIEW["SnapLine: create ephemeral preview"]
-  DROP["User: drop on candidate"]
-  INTENT["SnapLine: emit semantic connect intent"]
-  DECISION{"Application decision"}
-  ACCEPT["Accept / normalize:<br/>update canonical document"]
-  REJECT["Reject:<br/>leave document unchanged"]
-  DEFER["Defer:<br/>keep explicitly pending"]
-  READ["SnapLine: reconcile latest document"]
-  SETTLE["Preserve or create settled line mirror"]
-  REMOVE["Remove optimistic preview / mirror"]
-  LATER["Application: apply later decision"]
+sequenceDiagram
+  actor User
+  participant SL as SnapLine
+  participant App as Application + canonical document
 
-  BEGIN --> PREVIEW --> DROP --> INTENT --> DECISION
-  DECISION -->|"accepted"| ACCEPT --> READ --> SETTLE
-  DECISION -->|"rejected"| REJECT --> REMOVE
-  DECISION -->|"deferred"| DEFER --> LATER --> READ
+  User->>SL: Begin connector drag
+  SL->>SL: Create ephemeral preview
+  User->>SL: Drop on candidate
+  SL->>App: Emit semantic connect intent
+  alt Accepted or normalized
+    App->>App: Update canonical edge document
+    SL->>App: Read latest document
+    SL->>SL: Preserve or create settled line mirror
+  else Rejected
+    App->>App: Leave document unchanged
+    SL->>App: Read latest document
+    SL->>SL: Remove optimistic preview / mirror
+  else Deferred
+    App-->>SL: Keep result explicitly pending
+    App->>App: Apply later decision
+    SL->>App: Reconcile final document
+  end
 ```
 
 ### G1. Preview

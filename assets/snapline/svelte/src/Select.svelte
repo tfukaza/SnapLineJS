@@ -1,23 +1,29 @@
 <script lang="ts">
-    import { RectSelectComponent, type SelectCallbacks, type SelectRect } from "@snap-engine/snapline";
+    import { RectSelectComponent, type SelectCallbacks } from "@snap-engine/snapline";
     import type { Engine } from "@snap-engine/core";
-    import { onDestroy, getContext } from "svelte";
+    import { onDestroy, onMount, getContext } from "svelte";
 
     let { className = "", callbacks = {} }: { className?: string; callbacks?: SelectCallbacks } = $props();
 
     let engine: Engine = getContext("engine");
     let select = new RectSelectComponent(engine, null, { callbacks });
 
-    // The selection box is framework-rendered: core reports the world-space rect
-    // via onRectChange and this state draws it, so consumers can restyle or
-    // replace the box entirely (override #select-container / pass a class).
-    let rect = $state<SelectRect>({ x: 0, y: 0, width: 0, height: 0, visible: false });
-    select.callbacks.onRectChange = (r: SelectRect) => {
-        rect = r;
-    };
+    let selectDOM: HTMLDivElement | null = null;
+    let unbindGeometry: (() => void) | null = null;
+
+    onMount(() => {
+        unbindGeometry = select.bindGeometryWriter((rect) => {
+            if (!selectDOM) return;
+            selectDOM.style.display = rect.visible ? "block" : "none";
+            selectDOM.style.width = `${rect.width}px`;
+            selectDOM.style.height = `${rect.height}px`;
+            selectDOM.style.transform = `translate3d(${rect.x}px, ${rect.y}px, 0)`;
+        });
+    });
 
     onDestroy(() => {
-        select.destroy();
+        unbindGeometry?.();
+        select.destroy(false);
     });
 
     export function getSelectObject() {
@@ -27,12 +33,13 @@
 
 <div
     id="select-container"
+    bind:this={selectDOM}
     data-snapline-type="selection"
     class={className}
-    style:display={rect.visible ? "block" : "none"}
-    style:width={`${rect.width}px`}
-    style:height={`${rect.height}px`}
-    style:transform={`translate3d(${rect.x}px, ${rect.y}px, 0)`}
+    style:display="none"
+    style:width="0px"
+    style:height="0px"
+    style:transform="translate3d(0px, 0px, 0)"
 ></div>
 
 <style>

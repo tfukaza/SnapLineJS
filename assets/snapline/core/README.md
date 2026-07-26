@@ -36,6 +36,13 @@ import {
 After assigning a Vanilla-rendered element, call `syncDomGeometry()`. Svelte
 and React adapters perform that synchronization automatically.
 
+Live gesture geometry stays outside framework state. Nodes and groups write
+their retained element transforms and resize dimensions directly. Line,
+selection, and placement renderers register one imperative
+`bindGeometryWriter(...)`; semantic observers and commit callbacks remain
+separate. A custom line renderer should mount its SVG/Canvas structure once,
+bind a writer, and call the returned cleanup function when it unmounts.
+
 When another interaction system applies transient transforms inside a node,
 call `connector.requestDomGeometrySync()` for each affected connector. The
 request is coalesced into the next read/write cycle and updates every connected

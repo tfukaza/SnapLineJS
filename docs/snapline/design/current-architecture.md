@@ -66,23 +66,25 @@ follow the application records when the controlled model is in use.
 ## Entity lifecycle
 
 ```mermaid
-flowchart TB
-  RECORD["Application: render node / connector record"]
-  CREATE["Framework: construct or attach core object"]
-  REGISTER["SnapLine: register live mirror in NodeManager"]
-  COMMIT["Framework: commit and bind DOM element"]
-  SYNC["Framework → SnapLine: syncDomGeometry()"]
-  INTERACT["SnapLine: apply transient interaction state"]
-  REPORT["SnapLine → application: emit commit callbacks"]
-  PERSIST["Application: persist props or collection update"]
-  RESYNC["Framework: resynchronize mirror"]
-  REMOVE["Application: remove record"]
-  DESTROY["Framework: destroy adapter-owned object and DOM"]
-  UNREGISTER["SnapLine: unregister mirror"]
+sequenceDiagram
+  autonumber
+  participant App as Application
+  participant FW as Framework adapter
+  participant SL as SnapLine
 
-  RECORD --> CREATE --> REGISTER --> COMMIT --> SYNC
-  SYNC --> INTERACT --> REPORT --> PERSIST --> RESYNC
-  RESYNC --> REMOVE --> DESTROY --> UNREGISTER
+  App->>FW: Render node / connector record
+  FW->>SL: Construct or attach core object
+  SL->>SL: Register mirror in NodeManager
+  FW->>FW: Commit framework-owned DOM
+  FW->>SL: Bind element and syncDomGeometry()
+  SL-->>FW: Write transient transform / state properties
+  SL-->>App: Emit commit and lifecycle callbacks
+  App->>FW: Persist props or update collection
+  FW->>SL: Resynchronize mirror
+  App->>FW: Remove record
+  FW->>SL: Destroy adapter-owned object
+  SL->>SL: Unregister mirror
+  FW->>FW: Remove DOM
 ```
 
 ### Nodes
@@ -95,8 +97,9 @@ flowchart TB
    and calls `syncDomGeometry()`.
 5. During a drag, core mutates `worldTransform` immediately and writes the DOM
    transform. `onDragCommit` reports final positions for persistence.
-6. During resize, core updates collision state and fires `onSizeChange`; the
-   adapter renders width and height. `onResizeCommit` reports the settled box.
+6. During resize, core updates collision state, writes width/height, remeasures
+   connectors, and re-glues lines in staged frame writes. `onSizeChange` is
+   observational; `onResizeCommit` reports the settled box for persistence.
 7. On unmount, an adapter-owned node is destroyed and unregistered.
 
 The framework controls whether a node is mounted, but live position is locally
@@ -124,6 +127,50 @@ configuration is copied into the core mirror. The connector’s `name` is a
 construction-time key; metadata is currently the common place to carry domain
 node/port identity.
 
+### Connector connection rules
+
+The current capability model is asymmetric:
+
+```ts
+interface ConnectorCapabilities {
+  source: boolean;
+  target: boolean;
+  maxIncoming: number;
+  reconnect: boolean;
+  allowParallel: boolean;
+}
+```
+
+- `source` and `target` independently enable the two connector roles.
+- `maxIncoming === 0` prevents incoming connections.
+- A positive `maxIncoming` is a finite capacity.
+- A negative `maxIncoming` means unlimited.
+- There is no corresponding `maxOutgoing`; a source connector’s outgoing
+  collection is currently unbounded.
+- The deprecated `maxConnectors` option feeds the `maxIncoming` default.
+
+When a new connection would exceed finite incoming capacity,
+`connectToConnector()` deletes the oldest required incoming lines before
+attaching the new line. That replacement behavior is implicit rather than a
+separate policy.
+
+Both source and target connectors may provide `canConnect`. SnapLine accepts a
+candidate only if both callbacks accept:
+
+```ts
+canConnect?: (event: {
+  source: ConnectorComponent;
+  target: ConnectorComponent;
+}) => boolean;
+```
+
+This already supports endpoint-pair compatibility rules based on connector
+configuration or metadata. It does not receive the proposed `LineComponent`,
+line payload, gesture phase, or connection origin, so it cannot directly
+express line-specific admission rules. It is also currently reused by
+programmatic and hydration connections rather than being cleanly separated
+from canonical-document validation.
+
 ### Lines
 
 Lines are not registered in `NodeManager`. They are organized as topology on
@@ -140,30 +187,67 @@ The source node adapter renders one framework `Line` component per outgoing
 Svelte state, so framework reconciliation owns the SVG DOM while SnapLine owns
 the list being mirrored.
 
+Preview creation does not synchronously flush that framework update. React or
+Svelte may mount the SVG according to its normal scheduler while core
+continues updating the targetless `LineComponent`. This does not lose
+geometry:
+
+- anchors and preview position remain current on the line model;
+- `writeTransform()` is harmless while no geometry writer is bound;
+- the line view reads `geometrySnapshot()` when it renders;
+- `bindGeometryWriter()` immediately replays the latest geometry when the view
+  mounts.
+
+The preview SVG is therefore not a prerequisite for hit testing or gesture
+progress. A very short rejected drag may be created and removed from framework
+state before an SVG ever commits, which is valid.
+
+This is separate from `syncDomGeometry()`. Node and connector DOM sometimes
+must be measured after a framework commit; a line preview does not depend on
+measuring its own SVG. It is also separate from EdgeSync’s queued
+acceptance/rejection reconciliation, whose pre-paint timing prevents a
+controlled-edge flicker rather than forcing line DOM to mount synchronously.
+
 A line also carries transient rendering state: anchors, phase, candidate,
 preview position, optional payload, and render subscriptions.
 
 ```mermaid
-flowchart TB
-  SN["Source NodeComponent"]
-  SC["Source ConnectorComponent"]
-  LINE["One shared LineComponent"]
-  TC["Target ConnectorComponent"]
-  TN["Target NodeComponent"]
-  LIST["Source node outgoing-line snapshot"]
-  VIEW["React / Svelte Line component"]
-  SVG["Framework-owned SVG"]
+classDiagram
+  direction TB
 
-  SN -->|"name-keyed connector map"| SC
-  SC -->|"outgoingLines contains"| LINE
-  LINE -->|"start"| SC
-  LINE -->|"target"| TC
-  TC -->|"incomingLines contains same object"| LINE
-  TC --> TN
-  SN -->|"getAllOutgoingLines()"| LIST
-  LIST -->|"onLinesChanged"| VIEW
-  VIEW --> SVG
-  LINE -->|"onRender()"| VIEW
+  class NodeComponent {
+    +connectorsByName
+    +getAllOutgoingLines()
+  }
+
+  class ConnectorComponent {
+    +outgoingLines
+    +incomingLines
+  }
+
+  class LineComponent {
+    +start
+    +target
+    +bindGeometryWriter()
+    +onStateChange()
+  }
+
+  class NodeAdapter {
+    +lineList
+    +onLinesChanged()
+  }
+
+  class LineView {
+    +frameworkOwnedSVG
+  }
+
+  NodeComponent "1" *-- "0..*" ConnectorComponent : name-keyed map
+  ConnectorComponent "1 source" o-- "0..*" LineComponent : outgoingLines
+  ConnectorComponent "0..1 target" o-- "0..*" LineComponent : incomingLines
+  LineComponent --> ConnectorComponent : start / target references
+  NodeComponent --> NodeAdapter : outgoing snapshot
+  NodeAdapter "1" *-- "0..*" LineView : renders
+  LineComponent --> LineView : render callbacks
 ```
 
 ### Groups
@@ -188,10 +272,14 @@ framework graph-document relation in the current design.
 Selection is stored in `global.data.select`. `NodeComponent.setSelected()`
 updates that list, writes `data-selected`/`data-snapline-state`, and emits a
 selection callback. `RectSelectComponent` owns the selection gesture and
-collision box, while the framework adapter renders the visible rubber-band
-rectangle from `onRectChange`.
+collision box. The adapter mounts the rubber-band element once and binds an
+imperative geometry writer; `onRectChange` remains an observer callback.
 
-Selection is not currently a controlled framework prop.
+SnapLine is the logical owner of selection because core behaviors such as
+multi-node dragging need the selected set synchronously. The framework remains
+the visual owner: it may use the emitted callback and state attributes to
+highlight a node, render another selection treatment, or render none.
+Selection is not a controlled framework prop.
 
 ## Controlled edge reconciliation
 
@@ -212,11 +300,246 @@ interface EdgeSyncConfig {
 }
 ```
 
-`identity()` maps a live connector mirror to `{ node, port }`. Returning
-`null` makes that connector and its lines unmanaged by the controller.
+### How `identity()`, `getEdges()`, and callbacks divide responsibility
 
-`getEdges()` is consulted fresh for every `sync()`. The controller does not
-store a second edge document.
+These three seams connect runtime connector objects to the application’s
+canonical edge document:
+
+| Seam                                 | Direction                               | Current responsibility                                                                        |
+| ------------------------------------ | --------------------------------------- | --------------------------------------------------------------------------------------------- |
+| `identity(connector)`                | SnapLine runtime → application identity | Maps a live `ConnectorComponent` to `{ node, port }`, or returns `null` to leave it unmanaged |
+| `getEdges()`                         | Application state → SnapLine sync       | Returns the latest canonical edge snapshot whenever `sync()` runs                             |
+| `onEdgeConnect` / `onEdgeDisconnect` | SnapLine gesture → application          | Reports semantic gesture intents so the application can replace its edge state                |
+
+```mermaid
+flowchart TB
+  CONNECTORS["NodeManager.connectors<br/><b>live runtime objects</b>"]
+  IDENTITY["identity(connector)"]
+  INDEX["Endpoint index<br/><b>{ node, port } → ConnectorComponent</b>"]
+  APPSTATE["Application edges[]<br/><b>canonical document</b>"]
+  GETEDGES["getEdges()"]
+  SNAPSHOT["Current EdgeLike[] snapshot"]
+  SYNC["EdgeSyncController.sync()"]
+  LINES["Connector line topology mirror"]
+  GESTURE["User connection gesture"]
+  INTENT["Gesture connect / disconnect intent"]
+
+  CONNECTORS --> IDENTITY --> INDEX
+  APPSTATE --> GETEDGES --> SNAPSHOT
+  INDEX --> SYNC
+  SNAPSHOT --> SYNC
+  SYNC --> LINES
+  GESTURE -.-> INTENT
+  INTENT -.->|"application updates edges[]"| APPSTATE
+```
+
+#### `identity(connector)`
+
+`identity()` is not a node or connector registry. It is a translation function
+called by `EdgeSyncController`:
+
+- at least once for each registered connector while building a sync-time
+  endpoint index;
+- again when a line endpoint needs a fallback lookup;
+- again for the source and target when translating a gesture connect or
+  disconnect into an application intent.
+
+The returned `{ node, port }` pair is the connector’s semantic identity in the
+application document. Both values are strings. Returning `null` means:
+
+- the connector is excluded from the endpoint index;
+- its lines are not added or removed by `sync()`;
+- gesture events involving it do not produce controlled-edge intents.
+
+The function should therefore be deterministic for the duration of a sync.
+The controller does not retain the result between sync passes.
+
+The current implementation silently lets the last connector win if two live
+connectors resolve to the same endpoint key. It also identifies an edge only
+by its endpoint pair, not by a stable edge ID.
+
+#### `getEdges()`
+
+`getEdges()` is a pull API, not a subscription. It is called once near the
+start of every `sync()` and must return the application’s latest edge
+collection.
+
+`EdgeSyncController` does not:
+
+- store its own canonical edge list;
+- mutate the returned list;
+- subscribe to an application store;
+- automatically know that an edge document changed.
+
+React and Svelte keep the function live through a ref or prop getter, then
+explicitly call `sync()` when their `edges` prop changes. A vanilla integration
+must arrange the equivalent notification itself.
+
+#### Why the apparent loop does not recurse
+
+The data-flow diagram describes an event loop:
+
+1. A gesture emits an intent.
+2. The application updates `edges[]`.
+3. A later `sync()` reads the new snapshot.
+4. `sync()` converges the line mirror.
+
+It is not a direct call cycle from `sync()` back into `getEdges()` and then
+into `sync()` again.
+
+The current implementation has four protections:
+
+1. `getEdges()` is only a synchronous data read. Calling it does not schedule
+   another sync.
+2. `EdgeSyncController.#syncing` is a re-entrancy guard. A nested call to
+   `sync()` returns immediately while a pass is active.
+3. Lines created by reconciliation use `origin: "hydration"`.
+   `notifyConnect()` forwards only `origin: "gesture"`.
+4. Lines removed by reconciliation use `reason: "programmatic"`, and
+   `notifyDisconnect()` suppresses all notifications while `#syncing` is true.
+
+Because the controlled `onEdgeConnect`/`onEdgeDisconnect` callbacks do not fire
+for sync’s own mutations, the adapter callbacks that queue post-intent
+microtasks are not re-entered.
+
+Several independent triggers can still request redundant passes—for example,
+an application edge update and the post-intent microtask. Those passes run
+sequentially and `sync()` is intended to be idempotent, so the later pass
+finds the mirror already converged and performs no mutation.
+
+An integration should keep `getEdges()` and `identity()` free of side effects.
+The re-entrancy guard prevents a direct nested `sync()`, but it cannot make an
+application callback that continually mutates its own edge document converge.
+
+#### Controlled-edge callbacks
+
+`onEdgeConnect` and `onEdgeDisconnect` are intent callbacks, not general
+topology lifecycle callbacks.
+
+They are forwarded only for:
+
+- gesture connections;
+- gesture disconnections;
+- disconnections labeled `"replacement"`.
+
+Replacement events do not carry their own connection origin. A programmatic
+`connectToConnector()` call made outside `sync()` can therefore also cause a
+controlled `onEdgeDisconnect` intent if it evicts an existing line. During
+`sync()`, replacement forwarding is suppressed and a warning is logged.
+
+They are not forwarded for:
+
+- hydration;
+- programmatic reconciliation;
+- connector or node teardown;
+- controller-driven removal of a rejected optimistic line.
+
+Low-level connector `onConnect`/`onDisconnect` callbacks are broader and still
+observe those local topology changes with an explicit `origin` or `reason`.
+
+| Local topology cause             | Node/connector callbacks                                                                                | Controlled-edge intent                     |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------- | ------------------------------------------ |
+| New drag preview                 | Node `onLinesChanged`, then source `onDragStart`                                                        | None                                       |
+| Successful gesture connection    | Node `onLinesChanged`, then source and target `onConnect`, `origin: "gesture"`                          | `onEdgeConnect`                            |
+| Document hydration               | Node `onLinesChanged`, then source and target `onConnect`, `origin: "hydration"`                        | None                                       |
+| Gesture disconnect               | Source and target `onDisconnect`, `reason: "gesture"`, then source-node `onLinesChanged`                | `onEdgeDisconnect`                         |
+| Capacity replacement             | Source and target `onDisconnect`, `reason: "replacement"`, then old source-node `onLinesChanged`        | `onEdgeDisconnect` unless a sync is active |
+| Rejected optimistic line cleanup | Source and target `onDisconnect`, `reason: "programmatic"`, then source-node `onLinesChanged`           | None                                       |
+| Connector/node teardown          | Source and target `onDisconnect`, `reason: "teardown"`, then the surviving source-node `onLinesChanged` | None                                       |
+
+### Controller lifetime and sync triggers
+
+Only one `EdgeSyncController` is attached to a `NodeManager` at a time.
+Constructing another controller replaces the manager reference with a warning.
+
+```mermaid
+sequenceDiagram
+  participant Adapter as EdgeSync adapter
+  participant Controller as EdgeSyncController
+  participant Manager as NodeManager
+  participant App as Application
+
+  Adapter->>Controller: construct({ identity, getEdges, callbacks })
+  Controller->>Manager: manager.edgeSync = controller
+  Adapter->>Controller: initial sync()
+
+  loop Each later connector mount
+    Manager->>Manager: registerConnector()
+    Manager->>Controller: connectorRegistered()
+    Controller->>Controller: coalesce microtask and start sync()
+    Controller->>App: getEdges()
+  end
+
+  App->>Adapter: edges prop changes
+  Adapter->>Controller: sync()
+  Controller->>App: getEdges()
+
+  Controller->>App: gesture intent callback
+  App->>App: synchronously update edges[]
+  Controller->>Controller: queued microtask sync()
+  Controller->>App: getEdges()
+
+  Adapter->>Controller: dispose()
+  Controller->>Manager: clear manager.edgeSync if still current
+```
+
+Current sync triggers are:
+
+1. Controller/adapter mount.
+2. An `edges` prop change.
+3. Registration of a connector after the controller exists.
+4. The microtask queued after a controlled connect/disconnect intent.
+5. An explicit vanilla call to `controller.sync()`.
+
+Connector registration is coalesced so a batch of newly mounted endpoints
+causes one sync. Connector unregistration does not request a sync: connector
+teardown directly removes its incident line mirrors while the application edge
+remains canonical and latent.
+
+#### Bulk registration behavior
+
+Node registration does not trigger edge reconciliation. Connector registration
+does, because a newly available endpoint may make a canonical edge
+representable. Each call to `registerConnector()` reaches
+`connectorRegistered()`, but the controller uses a `#syncQueued` flag and one
+microtask:
+
+```mermaid
+sequenceDiagram
+  participant Framework
+  participant Manager as NodeManager
+  participant Sync as EdgeSyncController
+
+  loop All connectors mounted in the same JavaScript turn
+    Framework->>Manager: registerConnector(connector)
+    Manager->>Sync: connectorRegistered()
+    Sync->>Sync: queue only if #syncQueued is false
+  end
+
+  Note over Framework,Sync: Current synchronous mount/commit finishes
+  Sync->>Sync: one microtask sync()
+```
+
+Consequently, loading 100 nodes in one synchronous framework batch does not
+normally run one reconciliation per node or connector. It runs at most one
+connector-registration reconciliation for that microtask window. If the
+controller is created only after the connectors mount, its initial `sync()`
+provides the single pass instead.
+
+The batching boundary is scheduling-based, not an explicit graph transaction:
+
+- registrations spread across separate tasks or framework commits can produce
+  one sync per commit;
+- an adapter edge-prop effect and the connector-registration microtask can both
+  request a pass;
+- React and Svelte have different effect timing, so the exact redundant-pass
+  pattern is adapter-dependent;
+- no API currently says “the full saved graph has finished mounting.”
+
+The redundant passes are intended to be idempotent, but each pass snapshots and
+indexes all connectors, scans settled lines, and walks all canonical edges.
+Repeated partial-load passes can therefore become materially more expensive
+than one final pass on a large graph, even though they remain correct.
 
 ### Reconciliation algorithm
 
@@ -266,35 +589,179 @@ ask the application to delete its edge record.
 
 ### Gesture connect
 
-1. Pointer-down arms a connector.
-2. Crossing the drag threshold creates a preview `LineComponent` and adds it
-   to the source’s outgoing list.
-3. Dropping on a candidate calls the legacy `onConnectionRequest` seam.
-4. If allowed, `connectToConnector({ origin: "gesture" })` commits the local
-   topology.
-5. Connector callbacks fire.
-6. The active `EdgeSyncController` emits `onEdgeConnect`.
-7. The application is expected to update its edge document synchronously.
-8. The adapter queues `sync()` in a microtask. Accepted lines remain; rejected
-   lines are removed before the next paint when state updates synchronously.
+The line exists as a preview before the application is asked to create a
+canonical edge. A successful drop does **not** delete that preview and create a
+replacement. `endDragOutLine()` passes the active `#dragLine` into
+`connectToConnector()`, and `connectTarget()` settles that same object by
+assigning its target, connected phase, and final anchors. The preview is
+destroyed only when the drag is cancelled, rejected, or dropped without a
+valid target.
+
+The current callback lifetime is:
 
 ```mermaid
-flowchart TB
-  DRAG["User: drag source to target"]
-  PREVIEW["Connector: create preview LineComponent"]
-  DROP["User: drop on candidate"]
-  SETTLE["Connector: optimistically settle local topology"]
-  INTENT["EdgeSync: emit onEdgeConnect intent"]
-  DECIDE["Application: accept, reject, or normalize edges[]"]
-  SYNC["EdgeSync: read latest edges[] in queued microtask"]
-  ACCEPT{"Matching canonical edge exists?"}
-  KEEP["Preserve line mirror<br/>and render framework SVG"]
-  DELETE["Delete unmatched mirror<br/>and remove framework SVG"]
+sequenceDiagram
+  actor Input as User / input
+  participant Source as Source connector
+  participant View as Node + line adapter
+  participant Target as Target connector
+  participant Sync as EdgeSync + application
 
-  DRAG --> PREVIEW --> DROP --> SETTLE --> INTENT --> DECIDE --> SYNC --> ACCEPT
-  ACCEPT -->|"yes"| KEEP
-  ACCEPT -->|"no"| DELETE
+  Input->>Source: pointerDown
+  Source->>Source: callbacks.onPointerDown
+
+  Input->>Source: dragStart threshold crossed
+  Source->>Source: createLine() and add to outgoingLines
+  Source-->>View: node.callbacks.onLinesChanged requests line render
+  Source->>Source: callbacks.onDragStart
+  View->>View: framework commits retained Line structure
+  View->>Source: bindGeometryWriter(writer)
+
+  loop Pointer drag
+    Source->>Source: resolve candidate and update preview
+    Source->>Source: callbacks.onCandidateChange
+    Source->>View: invoke geometry writer in WRITE_2
+  end
+
+  Input->>Source: drop on target
+  Source->>Source: callbacks.onConnectionRequest
+
+  alt Request returns false or local connection fails
+    Source->>Source: destroy the preview LineComponent
+    Source->>View: node.callbacks.onLinesChanged removes preview
+    Source->>Source: callbacks.onDragEnd({ connected: false })
+  else Local connection succeeds
+    Source->>Target: attach same preview LineComponent
+    Source->>Source: connectTarget() mutates target, phase, and anchors
+    Source->>View: node.callbacks.onLinesChanged
+    Source->>Source: callbacks.onConnect({ role: source })
+    Source->>Target: callbacks.onConnect({ role: target })
+    Source->>Sync: onEdgeConnect intent
+    Sync->>Sync: application updates edges[] and queues sync()
+    Source->>Source: callbacks.onDragEnd({ connected: true })
+    Sync->>Sync: read getEdges() in microtask
+    alt Canonical edge exists
+      Sync->>Source: preserve settled line mirror
+    else Canonical edge is absent
+      Sync->>Source: delete line with reason programmatic
+      Source->>Source: callbacks.onDisconnect({ role: source })
+      Source->>Target: callbacks.onDisconnect({ role: target })
+      Source->>View: node.callbacks.onLinesChanged removes line
+    end
+  end
 ```
+
+#### Line phase lifetime
+
+The line’s `phase` is semantic state, separate from connector lifecycle
+callbacks:
+
+```mermaid
+stateDiagram-v2
+  direction TB
+  [*] --> SourceStart: createLine()
+  SourceStart --> PreviewFree: drag start initialized
+  PreviewFree --> PreviewTarget: candidate found
+  PreviewTarget --> PreviewFree: candidate lost
+  PreviewFree --> Drop: pointer released
+  PreviewTarget --> Drop: pointer released
+  Drop --> Connected: local connection succeeds
+  Drop --> Destroyed: empty / rejected / failed drop
+  Connected --> PreviewFree: pickup clears existing target
+  PreviewFree --> SourceStart: reconnect drag initializes
+  Connected --> Destroyed: disconnected or teardown
+  Destroyed --> [*]
+```
+
+`setPhase()`, `setCandidate()`, and payload changes notify
+`line.onStateChange()` subscribers. Anchor updates remain local model changes;
+the scheduled transform write invokes the single registered geometry writer.
+Neither path calls connector `onConnect`/`onDisconnect`.
+
+#### Preview creation
+
+Pointer-down only arms the source and calls
+`source.callbacks.onPointerDown`. A new `LineComponent` is not created until
+the engine’s drag threshold is crossed.
+
+At drag start, the source:
+
+1. Creates the targetless line.
+2. Adds it to `source.outgoingLines`.
+3. Calls `node.callbacks.onLinesChanged`.
+4. Calls `source.callbacks.onDragStart`.
+5. Changes the line phase from `"source-start"` to `"preview-free"`.
+
+The node adapter responds to `onLinesChanged` by rendering a line component.
+That component mounts its static SVG structure and calls
+`line.bindGeometryWriter()`. Binding immediately supplies the current geometry,
+so a line created before the framework commit still mounts correctly. During
+the drag, scheduled core writes mutate the retained SVG through that writer;
+they do not enqueue framework state updates. Custom renderers use the same
+contract for their own retained SVG, canvas, or other imperative surface.
+
+#### Candidate callbacks
+
+While the pointer moves, the source resolves eligible targets. A changed
+candidate updates the line first and then calls
+`source.callbacks.onCandidateChange`.
+
+`canConnect` is a policy predicate rather than a lifecycle callback. It may be
+consulted repeatedly during candidate discovery and again before the final
+local connection.
+
+#### Drop policy
+
+Dropping on a candidate first calls the source-only
+`onConnectionRequest`. This is the legacy application-model seam:
+
+- returning `false` rejects the local connection;
+- returning nothing accepts it;
+- returning `{ payload }` accepts it and attaches opaque payload to the line.
+
+If it rejects, or if the drop has no candidate, the preview is removed,
+`node.onLinesChanged` fires, and `source.onDragEnd` reports
+`connected: false`. No connector `onConnect` callback and no controlled
+`onEdgeConnect` intent fires.
+
+#### Successful local connection
+
+When the local connection succeeds, the current order is:
+
+1. Enforce target capacity, potentially disconnecting replacement lines.
+2. Attach the line to the target’s `incomingLines`.
+3. Update anchors and render state.
+4. Fire `node.callbacks.onLinesChanged`.
+5. Fire source `onConnect` with `role: "source"`.
+6. Fire target `onConnect` with `role: "target"`.
+7. Notify `EdgeSyncController`, which synchronously calls `onEdgeConnect`.
+8. The adapter invokes the application handler and queues `sync()` in a
+   microtask.
+9. Fire source `onDragEnd({ connected: true })`.
+10. Clear the active candidate, which may emit a final
+    `onCandidateChange` with `candidate: null`.
+
+`connected: true` means the gesture produced a successful **local** connector
+attachment. It does not prove that the application accepted a canonical edge.
+
+#### Acceptance versus rejection by the application
+
+The application is expected to update `edges[]` synchronously inside
+`onEdgeConnect`. The queued microtask then calls `getEdges()`:
+
+- If the endpoint pair exists, `sync()` preserves the line object.
+- If it does not exist, `sync()` deletes the optimistic line with reason
+  `"programmatic"`.
+
+That rejection cleanup fires the low-level source and target `onDisconnect`
+callbacks and `node.onLinesChanged`. It does **not** fire controlled
+`onEdgeDisconnect`, because programmatic reconciliation is not a user
+disconnect intent.
+
+This distinction explains why an application can observe
+`onDragEnd({ connected: true })` and then see the line disappear during the
+same task: the first event describes local gesture completion, while the
+canonical edge document decides whether the settled mirror survives.
 
 ### Gesture disconnect and replacement
 
@@ -321,9 +788,9 @@ atomic application transaction.
 | Node/connector/line DOM       | React/Svelte adapter                     | Core never structurally inserts, removes, or reparents framework DOM      |
 | Node live transform           | SnapLine during interaction              | Framework geometry props can resynchronize it                             |
 | Node persisted transform      | Application by convention                | Reported through drag commit callbacks                                    |
-| Node size DOM                 | Framework adapter                        | Core keeps collision size and emits size callbacks                        |
+| Node size DOM                 | SnapLine during interaction              | Framework persists the committed size and may issue later prop updates    |
 | Connector geometry            | SnapLine                                 | Measured/cached from node and optional connector DOM                      |
-| Line geometry and anchors     | SnapLine                                 | Adapter subscribes through `line.onRender()`                              |
+| Line geometry and anchors     | SnapLine                                 | Adapter binds an imperative geometry writer                               |
 | Selection                     | SnapLine shared state                    | Framework receives callbacks; not controlled                              |
 | Group membership              | SnapLine derived state                   | Framework receives deltas                                                 |
 | Connector policy              | Application config copied into core      | `canConnect`, capabilities, strategies, metadata                          |
@@ -377,18 +844,39 @@ must be filtered by engine at their use sites. Selection currently has no
 engine-keyed container.
 
 ```mermaid
-flowchart TB
-  GLOBAL["GlobalManager.data"]
-  TABLE["SnapEngine object table"]
-  MAP["nodeManagers: Map&lt;Engine, NodeManager&gt;"]
-  MANAGER["NodeManager for one engine<br/>• Set&lt;NodeComponent&gt;<br/>• Set&lt;ConnectorComponent&gt;<br/>• optional edgeSync controller"]
-  SHARED["Shared arrays:<br/>select, groups, resizeHandles,<br/>sourceSurfaces"]
-  LINES["Line topology on connector arrays"]
+classDiagram
+  direction TB
 
-  GLOBAL --> MAP --> MANAGER
-  MANAGER --> LINES
-  GLOBAL --> SHARED
-  TABLE -->|"still scanned by candidate discovery<br/>and group membership"| MANAGER
+  class GlobalData {
+    +nodeManagers
+    +select
+    +groups
+    +resizeHandles
+    +sourceSurfaces
+  }
+
+  class EngineNodeManagerMap
+
+  class NodeManager {
+    +nodes
+    +connectors
+    +edgeSync
+  }
+
+  class NodeComponent
+  class ConnectorComponent
+  class LineComponent
+  class EdgeSyncController
+  class SnapEngineObjectTable
+
+  GlobalData *-- EngineNodeManagerMap : engine-keyed map
+  EngineNodeManagerMap *-- NodeManager : one per engine
+  NodeManager o-- NodeComponent : live set
+  NodeManager o-- ConnectorComponent : live set
+  NodeManager o-- EdgeSyncController : optional
+  ConnectorComponent o-- LineComponent : topology arrays
+  SnapEngineObjectTable ..> NodeComponent : group scans
+  SnapEngineObjectTable ..> ConnectorComponent : candidate scans
 ```
 
 ## Public API surface
@@ -575,12 +1063,13 @@ package subpath maps do not expose `./EdgeSync`. The core root exports
 `EdgeSyncController`, `NodeManager`, and `getNodeManager`, while its documented
 subpath map does not include `./edge-sync` or `./node-manager`.
 
-### 11. Callback composition is not uniform
+### 11. Geometry writers are single-owner bindings
 
-Node and group adapters compose caller callbacks with adapter callbacks.
-Selection adapters directly replace `onRectChange`, which can hide a caller’s
-original handler. This is an adapter API consistency issue rather than a graph
-ownership issue, but it affects how safely applications observe the mirror.
+Line, selection, and placement geometry use `bindGeometryWriter`. The newest
+binding replaces the previous writer, and its cleanup is identity-guarded so a
+stale framework cleanup cannot detach a newer renderer. Observer callbacks such
+as `onRectChange`, `onSizeChange`, and `onStateChange` remain separate and are
+not used by the adapters to drive per-frame framework renders.
 
 ## Source map
 

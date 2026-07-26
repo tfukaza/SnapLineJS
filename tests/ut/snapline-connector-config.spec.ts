@@ -4,6 +4,7 @@ import {
   ConnectorComponent,
   LineComponent,
   NodeComponent,
+  PlacementController,
   type ConnectorSurfaceStrategy,
 } from "../../assets/snapline/core/src";
 
@@ -86,6 +87,124 @@ function installObserverStubs(): () => void {
     }
   };
 }
+
+test("line geometry writers are imperative, replaceable, and separate from state", () => {
+  const { engine } = createEngineHarness();
+  const sourceNode = new NodeComponent(engine, null);
+  const source = new ConnectorComponent(engine, sourceNode, {
+    name: "source",
+    capabilities: { source: true, target: false },
+  });
+  sourceNode.addConnectorObject(source);
+  const line = source.createLine();
+  const firstWrites: number[] = [];
+  const secondWrites: number[] = [];
+  const states: string[] = [];
+
+  const unbindFirst = line.bindGeometryWriter((geometry) => {
+    firstWrites.push(geometry.delta.x);
+  });
+  const unbindSecond = line.bindGeometryWriter((geometry) => {
+    secondWrites.push(geometry.delta.x);
+  });
+  const unsubscribeState = line.onStateChange((state) => {
+    states.push(state.phase);
+  });
+
+  // A stale framework cleanup must not detach the newer renderer.
+  unbindFirst();
+  line.setLinePosition(10, 20, 35, 45);
+  expect(firstWrites).toEqual([0]);
+  expect(secondWrites).toEqual([0]);
+  expect(states).toEqual(["source-start"]);
+
+  line.writeTransform();
+  expect(secondWrites).toEqual([0, 25]);
+  expect(states).toEqual(["source-start"]);
+
+  line.setPhase("preview-free");
+  expect(states).toEqual(["source-start", "preview-free"]);
+  expect(secondWrites).toEqual([0, 25]);
+
+  unbindSecond();
+  unsubscribeState();
+  line.destroy(false);
+  source.destroy();
+  sourceNode.destroy();
+});
+
+test("placement geometry writes do not require framework state updates", () => {
+  const controller = new PlacementController<{ id: string }>({
+    screenToWorld: ({ x, y }) => ({ x: x + 10, y: y + 20 }),
+  });
+  const firstWrites: Array<{ visible: boolean; x: number | null }> = [];
+  const secondWrites: Array<{ visible: boolean; x: number | null }> = [];
+  const states: boolean[] = [];
+
+  const unbindFirst = controller.bindGeometryWriter((geometry) => {
+    firstWrites.push({
+      visible: geometry.visible,
+      x: geometry.position?.x ?? null,
+    });
+  });
+  const unbindSecond = controller.bindGeometryWriter((geometry) => {
+    secondWrites.push({
+      visible: geometry.visible,
+      x: geometry.position?.x ?? null,
+    });
+  });
+  const unsubscribeState = controller.onStateChange((snapshot) => {
+    states.push(snapshot.active);
+  });
+
+  unbindFirst();
+  controller.begin({ id: "new-node" }, { width: 20, height: 10 });
+  controller.update({ x: 50, y: 40 });
+
+  expect(firstWrites).toEqual([{ visible: false, x: null }]);
+  expect(secondWrites).toEqual([
+    { visible: false, x: null },
+    { visible: false, x: null },
+    { visible: true, x: 50 },
+  ]);
+  expect(states).toEqual([false, true, true]);
+
+  unbindSecond();
+  unsubscribeState();
+});
+
+test("framework cleanup detaches elements without removing owned DOM", () => {
+  const restoreObservers = installObserverStubs();
+  const { engine } = createEngineHarness();
+  const node = new NodeComponent(engine, null);
+  let firstRemovals = 0;
+  let secondRemovals = 0;
+  const firstElement = {
+    remove: () => {
+      firstRemovals++;
+    },
+  } as unknown as HTMLElement;
+  const secondElement = {
+    remove: () => {
+      secondRemovals++;
+    },
+  } as unknown as HTMLElement;
+
+  try {
+    node.element = firstElement;
+    node.element = secondElement;
+
+    expect(node.detachElement(firstElement)).toBe(false);
+    expect(node.element).toBe(secondElement);
+
+    node.destroy(false);
+    expect(node.element).toBeNull();
+    expect(firstRemovals).toBe(0);
+    expect(secondRemovals).toBe(0);
+  } finally {
+    restoreObservers();
+  }
+});
 
 test("connector config updates stay live without replacing topology", () => {
   const { engine, global } = createEngineHarness();

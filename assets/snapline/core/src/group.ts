@@ -306,7 +306,7 @@ class GroupNodeComponent extends NodeComponent {
   }
 
   writeTransformAndLines(): void {
-    this.writeTransformRecursive();
+    super.writeTransformAndLines();
   }
 
   allowsMembership(node: NodeComponent): boolean {
@@ -383,16 +383,13 @@ class GroupNodeComponent extends NodeComponent {
           y: origin.y + dy,
         };
       }
-      member.schedule(() => member.writeTransformAndLines(), {
-        stage: "WRITE_2",
-        queueId: `${member.id}-transform`,
-      });
+      member.scheduleTransformAndLines();
     }
     this.#carry = [];
     this.#carryOrigins.clear();
   }
 
-  destroy(): void {
+  destroy(removeElement: boolean = true): void {
     snapData(this.global).groups = getGroups(this.global).filter(
       (group) => group !== (this as unknown),
     );
@@ -406,7 +403,7 @@ class GroupNodeComponent extends NodeComponent {
         group instanceof GroupNodeComponent && group.engine === this.engine,
     );
     remaining?.refreshMembership(true);
-    super.destroy();
+    super.destroy(removeElement);
   }
 }
 

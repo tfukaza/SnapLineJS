@@ -1,3 +1,5 @@
+import type { GeometryWriter } from "./geometry";
+
 export interface PlacementPoint {
   x: number;
   y: number;
@@ -22,6 +24,16 @@ export interface PlacementSnapshot<T> {
   size: PlacementSize | null;
   anchor: PlacementAnchor;
   allowed: boolean;
+}
+
+export interface PlacementGeometrySnapshot {
+  readonly active: boolean;
+  readonly visible: boolean;
+  readonly screen: PlacementPoint | null;
+  readonly world: PlacementPoint | null;
+  readonly position: PlacementPoint | null;
+  readonly size: PlacementSize | null;
+  readonly allowed: boolean;
 }
 
 export interface PlacementEvent<T> extends PlacementSnapshot<T> {
@@ -61,10 +73,16 @@ export interface PlacementConfig<T> {
  */
 export class PlacementController<T> {
   #config: PlacementConfig<T>;
+  #callbacks: PlacementCallbacks<T>;
   #snapshot: PlacementSnapshot<T>;
+  #geometryWriter: GeometryWriter<PlacementGeometrySnapshot> | null = null;
+  #stateCallbacks = new Set<
+    (snapshot: PlacementSnapshot<T>) => void
+  >();
 
   constructor(config: PlacementConfig<T>) {
     this.#config = config;
+    this.#callbacks = config.callbacks ?? {};
     this.#snapshot = {
       active: false,
       payload: null,
@@ -82,7 +100,25 @@ export class PlacementController<T> {
   }
 
   get callbacks(): PlacementCallbacks<T> {
-    return this.#config.callbacks ?? {};
+    return this.#callbacks;
+  }
+
+  bindGeometryWriter(
+    writer: GeometryWriter<PlacementGeometrySnapshot>,
+  ): () => void {
+    this.#geometryWriter = writer;
+    writer(this.#geometrySnapshot());
+    return () => {
+      if (this.#geometryWriter === writer) this.#geometryWriter = null;
+    };
+  }
+
+  onStateChange(
+    callback: (snapshot: PlacementSnapshot<T>) => void,
+  ): () => void {
+    this.#stateCallbacks.add(callback);
+    callback(this.#snapshot);
+    return () => this.#stateCallbacks.delete(callback);
   }
 
   begin(
@@ -185,5 +221,20 @@ export class PlacementController<T> {
 
   #emitChange(): void {
     this.callbacks.onChange?.(this.#snapshot);
+    for (const callback of this.#stateCallbacks) callback(this.#snapshot);
+    this.#geometryWriter?.(this.#geometrySnapshot());
+  }
+
+  #geometrySnapshot(): PlacementGeometrySnapshot {
+    const snapshot = this.#snapshot;
+    return {
+      active: snapshot.active,
+      visible: snapshot.active && snapshot.position !== null,
+      screen: snapshot.screen ? { ...snapshot.screen } : null,
+      world: snapshot.world ? { ...snapshot.world } : null,
+      position: snapshot.position ? { ...snapshot.position } : null,
+      size: snapshot.size ? { ...snapshot.size } : null,
+      allowed: snapshot.allowed,
+    };
   }
 }

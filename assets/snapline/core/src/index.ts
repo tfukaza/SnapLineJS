@@ -51,6 +51,11 @@ export type {
   SnapLineMetadata,
 } from "./connector";
 export { LineComponent } from "./line";
+export type {
+  LineGeometrySnapshot,
+  LineStateSnapshot,
+} from "./line";
+export type { GeometryWriter } from "./geometry";
 export {
   GroupNodeComponent,
   getParentGroup,
@@ -85,6 +90,7 @@ export type {
   PlacementCancelEvent,
   PlacementConfig,
   PlacementEvent,
+  PlacementGeometrySnapshot,
   PlacementPoint,
   PlacementSize,
   PlacementSnapshot,

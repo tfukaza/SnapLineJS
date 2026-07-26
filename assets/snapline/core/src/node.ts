@@ -169,7 +169,7 @@ export interface NodeCallbacks {
   onDrag?: (event: NodePointerEvent) => void;
   onDragCommit?: (event: NodeDragCommitEvent) => void;
   onSelectionChange?: (event: NodeSelectionEvent) => void;
-  /** Live size updates during a resize drag — the adapter renders width/height. */
+  /** Observes live size updates; core writes the retained element geometry. */
   onSizeChange?: (event: NodeResizeEvent) => void;
   /** Final size at resize-drag end — the consumer persists it. */
   onResizeCommit?: (event: NodeResizeEvent) => void;
@@ -494,13 +494,38 @@ class NodeComponent extends ElementObject {
 
   /** Synchronously writes every line on every connector (call inside a WRITE stage). */
   writeLinesNow(): void {
-    for (const connector of Object.values(this._connectors)) {
-      connector.writeAllLinesNow();
+    const lines = new Set([
+      ...this.getAllOutgoingLines(),
+      ...this.getAllIncomingLines(),
+    ]);
+    for (const line of lines) {
+      line.moveLineToConnectorTransform();
+      line.writeTransform();
     }
   }
 
+  #transformNodeTree(): NodeComponent[] {
+    const nodes: NodeComponent[] = [];
+    const visit = (node: NodeComponent) => {
+      nodes.push(node);
+      for (const child of node.transformChildren) {
+        if (child instanceof NodeComponent) visit(child);
+      }
+    };
+    visit(this);
+    return nodes;
+  }
+
+  scheduleTransformAndLines(): void {
+    this.schedule(() => this.writeTransformRecursive(), {
+      stage: "WRITE_2",
+      queueId: `${this.id}-transform`,
+    });
+    for (const node of this.#transformNodeTree()) node.scheduleLineWrites();
+  }
+
   // Re-measure the node box + each connector's local center (READ_1) and re-glue
-  // every incoming/outgoing line (WRITE_1). This is the "same handling as a move
+  // every incoming/outgoing line (WRITE_2). This is the "same handling as a move
   // plus a size re-measure": moving a node keeps connector local centers valid,
   // but resizing invalidates them, so they must be re-read. Shared by the
   // ResizeObserver and the JS-driven setSize; stable queueIds collapse a
@@ -521,26 +546,13 @@ class NodeComponent extends ElementObject {
       },
       { stage: "READ_1", queueId: `${this.id}-remeasure` },
     );
-    for (const line of [
-      ...this.getAllOutgoingLines(),
-      ...this.getAllIncomingLines(),
-    ]) {
-      line.schedule(
-        () => {
-          line.moveLineToConnectorTransform();
-          line.setLineEndAtConnector();
-          line.writeDom();
-          line.writeTransform();
-        },
-        { stage: "WRITE_1", queueId: `${line.id}-reglue` },
-      );
-    }
+    this.scheduleLineWrites();
   }
 
   // State-only half of a size change: clamps to min and synchronously updates
-  // the collision footprint + resize hitbox so the hit test and group
-  // containment stay correct mid-drag. Never touches the DOM — the element's
-  // width/height are framework-owned (rendered by the adapter).
+  // the collision footprint + resize hitbox so hit testing and group
+  // containment stay correct mid-drag. `setSize` adds the scheduled DOM write;
+  // adapters can use this method alone when seeding external dimensions.
   setSizeState(width: number, height: number): void {
     const w = Math.max(this.#config.minWidth, width);
     const h = Math.max(this.#config.minHeight, height);
@@ -549,13 +561,11 @@ class NodeComponent extends ElementObject {
     this.#positionResizeHitBoxes(w, h);
   }
 
-  // Drives the node's size from JS (resize handle): updates state, then asks the
-  // framework to render the new width/height via onSizeChange. The connector/line
-  // re-glue closes itself — the adapter's DOM write triggers the ResizeObserver,
-  // which runs syncDomGeometry AFTER the browser reflows (no handshake needed:
-  // the box repaint is not paint-atomic).
+  // Drives live resize geometry directly. The framework observes and persists
+  // the result, but it is not part of the pointer-move paint path.
   setSize(width: number, height: number, handle: ResizeHandle | null = null): void {
     this.setSizeState(width, height);
+    this.#scheduleSizeGeometryWrite();
     this.#callbacks.onSizeChange?.({
       node: this,
       handle,
@@ -564,6 +574,35 @@ class NodeComponent extends ElementObject {
       width: this.#hitBox.width,
       height: this.#hitBox.height,
     });
+  }
+
+  #scheduleSizeGeometryWrite(): void {
+    this.schedule(
+      () => this.#writeSizeGeometry(),
+      { stage: "WRITE_1", queueId: `${this.id}-size` },
+    );
+    this.schedule(
+      () => {
+        if (!this.element) return;
+        const property = this.readDom({ unapplyTransform: false }, "READ_2");
+        this.#hitBox.width = property.width;
+        this.#hitBox.height = property.height;
+        this.#positionResizeHitBoxes(property.width, property.height);
+        for (const connector of Object.values(this._connectors)) {
+          connector.measureLocalCenter("READ_2");
+        }
+      },
+      { stage: "READ_2", queueId: `${this.id}-size-measure` },
+    );
+    this.scheduleLineWrites();
+  }
+
+  #writeSizeGeometry(): void {
+    if (this.element) {
+      this.element.style.width = `${this.#hitBox.width}px`;
+      this.element.style.height = `${this.#hitBox.height}px`;
+    }
+    this.writeTransformRecursive();
   }
 
   #positionResizeHitBoxes(width: number, height: number): void {
@@ -617,12 +656,6 @@ class NodeComponent extends ElementObject {
       : this.#resizeStartY;
     this.worldTransform = { x, y };
     this.setSize(width, height, handle);
-    if (west || north) {
-      this.schedule(() => this.writeTransformAndLines(), {
-        stage: "WRITE_2",
-        queueId: `${this.id}-transform`,
-      });
-    }
   }
 
   writeTransformAndLines(): void {
@@ -636,7 +669,6 @@ class NodeComponent extends ElementObject {
   // line's two ends live on two different nodes).
   writeTransformRecursive(): void {
     super.writeTransformRecursive();
-    this.writeLinesNow();
   }
 
   // Transform-only (re)parenting used by group carry: the public/DOM graph is
@@ -845,10 +877,7 @@ class NodeComponent extends ElementObject {
     }) ?? { x, y };
 
     this.worldTransform = { x: resolved.x, y: resolved.y };
-    this.schedule(() => this.writeTransformAndLines(), {
-      stage: "WRITE_2",
-      queueId: `${this.id}-transform`,
-    });
+    this.scheduleTransformAndLines();
   }
 
   onDragEnd(prop: dragEndProp) {
@@ -865,6 +894,10 @@ class NodeComponent extends ElementObject {
         prop.end.x - this._mouseDownX,
         prop.end.y - this._mouseDownY,
       );
+      // Pointer-up is a synchronization boundary for consumers that immediately
+      // query the committed handle/box. Keep the coalesced frame write for the
+      // hot path, but make the final retained geometry observable now.
+      this.#writeSizeGeometry();
       this.#callbacks.onResizeCommit?.({
         node: this,
         handle: this.#activeResizeHandle,
@@ -894,10 +927,7 @@ class NodeComponent extends ElementObject {
     }
     for (const node of this.#dragRoots) {
       node.finishSelectionDrag();
-      node.schedule(() => node.writeTransformAndLines(), {
-        stage: "WRITE_2",
-        queueId: `${node.id}-transform`,
-      });
+      node.scheduleTransformAndLines();
     }
 
     // A settled node may have entered or left a group; groups re-evaluate
@@ -942,10 +972,7 @@ class NodeComponent extends ElementObject {
       x: this._dragStartX + dx,
       y: this._dragStartY + dy,
     };
-    this.schedule(() => this.writeTransformAndLines(), {
-      stage: "WRITE_2",
-      queueId: `${this.id}-transform`,
-    });
+    this.scheduleTransformAndLines();
   }
 
   onUp(prop: pointerUpProp) {
@@ -1062,7 +1089,7 @@ class NodeComponent extends ElementObject {
     if (handle) this.#resizeHoverController?.activate(handle, target);
   }
 
-  destroy() {
+  destroy(removeElement: boolean = true) {
     if (this.#edgePanPointerId != null) {
       this.engine.edgePanController?.stopEdgePan(this.#edgePanPointerId);
       this.#edgePanPointerId = null;
@@ -1084,7 +1111,7 @@ class NodeComponent extends ElementObject {
       this.#resizeHitBoxes.clear();
     }
     this._connectors = {};
-    super.destroy();
+    super.destroy(removeElement);
   }
 }
 

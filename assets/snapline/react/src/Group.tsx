@@ -3,7 +3,6 @@ import {
   useLayoutEffect,
   useImperativeHandle,
   useRef,
-  useState,
   type CSSProperties,
   type ReactNode,
 } from "react";
@@ -99,9 +98,6 @@ export const Group = forwardRef<GroupNodeComponent, GroupProps>(function Group(
   }
   const group = groupRef.current;
 
-  // The box's width/height are framework-owned: seeded from props, updated
-  // live by core's onSizeChange during a resize drag.
-  const [box, setBox] = useState<{ w: number; h: number }>({ w: width, h: height });
   const latestRef = useRef({
     callbacks,
     groupCallbacks,
@@ -198,7 +194,6 @@ export const Group = forwardRef<GroupNodeComponent, GroupProps>(function Group(
         originalCallbacks.onSizeChange,
         latestRef.current.callbacks.onSizeChange,
       );
-      setBox({ w: event.width, h: event.height });
     };
     group.callbacks.onResizeCommit = (event) =>
       invoke(
@@ -208,7 +203,7 @@ export const Group = forwardRef<GroupNodeComponent, GroupProps>(function Group(
         latestRef.current.onResizeCommit,
       );
     // Header is the only move surface. setSizeState seeds the collision
-    // footprint (the DOM size is rendered from state above).
+    // footprint; core writes live resize geometry directly to this element.
     const unregisterHandle = headerRef.current
       ? group.registerDragHandle(headerRef.current)
       : undefined;
@@ -217,6 +212,7 @@ export const Group = forwardRef<GroupNodeComponent, GroupProps>(function Group(
       stage: "WRITE_3",
       queueId: `${group.id}-seed`,
     });
+    const boundElement = boxDomRef.current;
 
     return () => {
       unregisterHandle?.();
@@ -235,7 +231,9 @@ export const Group = forwardRef<GroupNodeComponent, GroupProps>(function Group(
       group.groupCallbacks.onMembershipChange =
         originalGroupCallbacks.onMembershipChange;
       if (ownsGroupRef.current) {
-        group.destroy();
+        group.destroy(false);
+      } else if (boundElement) {
+        group.detachElement(boundElement);
       }
     };
   }, [group]);
@@ -249,14 +247,12 @@ export const Group = forwardRef<GroupNodeComponent, GroupProps>(function Group(
   }, [group, x, y]);
 
   useLayoutEffect(() => {
-    setBox({ w: width, h: height });
-  }, [width, height]);
-
-  useLayoutEffect(() => {
     if (!group.element) return;
-    group.setSizeState(box.w, box.h);
+    group.element.style.width = `${width}px`;
+    group.element.style.height = `${height}px`;
+    group.setSizeState(width, height);
     group.syncDomGeometry();
-  }, [group, box]);
+  }, [group, width, height]);
 
   const handleSize =
     resizeHandleThickness ?? DEFAULT_RESIZE_HANDLE_THICKNESS;
@@ -271,8 +267,8 @@ export const Group = forwardRef<GroupNodeComponent, GroupProps>(function Group(
         willChange: "transform",
         boxSizing: "border-box",
         pointerEvents: "none",
-        width: `${box.w}px`,
-        height: `${box.h}px`,
+        width: `${width}px`,
+        height: `${height}px`,
         ...style,
       }}
     >
