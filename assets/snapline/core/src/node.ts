@@ -100,10 +100,19 @@ export function mergeConfig<T extends object>(defaults: T, config: Partial<T>): 
 
 /** Consumer policy and lifecycle surfaces. Callbacks receive event objects so
  * new context can be added without growing positional signatures. */
-export interface NodePosition {
+/** One node's settled geometry — the app persists what it wants. */
+export interface NodeGeometry {
   node: NodeMirror;
   x: number;
   y: number;
+  width: number;
+  height: number;
+}
+
+/** Batched geometry observation: a group/multi-select drag stays one event
+ * (every moved node in `nodes`); a resize reports a single entry. */
+export interface GeometryChangeEvent {
+  nodes: readonly NodeGeometry[];
 }
 
 export interface NodePointerEvent {
@@ -111,10 +120,6 @@ export interface NodePointerEvent {
   pointerId: number;
   position: eventPosition;
   originalEvent?: PointerEvent;
-}
-
-export interface NodeDragCommitEvent extends NodePointerEvent {
-  nodes: NodePosition[];
 }
 
 export interface NodeDragPositionEvent {
@@ -176,12 +181,13 @@ export interface NodeCallbacks {
   resolveSelectionMode?: (event: NodeSelectionModeEvent) => SelectionMode;
   onDragStart?: (event: NodePointerEvent) => void;
   onDrag?: (event: NodePointerEvent) => void;
-  onDragCommit?: (event: NodeDragCommitEvent) => void;
+  /** Settled geometry after a drag or resize — SnapLine owns live and
+   * settled position/size; the consumer may persist this observation, and
+   * ignoring it does not revert the mirror. */
+  onGeometryChanged?: (event: GeometryChangeEvent) => void;
   onSelectionChange?: (event: NodeSelectionEvent) => void;
   /** Observes live size updates; core writes the retained element geometry. */
   onSizeChange?: (event: NodeResizeEvent) => void;
-  /** Final size at resize-drag end — the consumer persists it. */
-  onResizeCommit?: (event: NodeResizeEvent) => void;
   /** The resize handle currently hovered, or null after leaving it. */
   onResizeHandleChange?: (event: NodeResizeHandleEvent) => void;
   /** The set of outgoing lines changed — the adapter re-renders its line list. */
@@ -893,13 +899,8 @@ class NodeMirror extends ElementObject {
       // query the committed handle/box. Keep the coalesced frame write for the
       // hot path, but make the final retained geometry observable now.
       this.#writeSizeGeometry();
-      this.#callbacks.onResizeCommit?.({
-        node: this,
-        handle: this.#activeResizeHandle,
-        x: this.worldTransform.x,
-        y: this.worldTransform.y,
-        width: this.#hitBox.width,
-        height: this.#hitBox.height,
+      this.#callbacks.onGeometryChanged?.({
+        nodes: [this.#geometryOf(this)],
       });
       this._resizing = false;
       this.#resizeArmed = false;
@@ -932,24 +933,27 @@ class NodeMirror extends ElementObject {
     for (const group of getGraphMirror(this.engine).groups) {
       group.refreshMembership(true);
     }
-    this.emitDragCommit(prop);
+    this.emitGeometryChange();
     this.#dragRoots = [];
     this.#dragCommitNodes = [];
     this.#lastDragPosition = null;
     this.#dragPointerId = null;
   }
 
-  protected emitDragCommit(prop: dragEndProp): void {
-    this.#callbacks.onDragCommit?.({
-      node: this,
-      pointerId: prop.pointerId,
-      position: prop.end,
-      nodes: this.getDragCommitNodes().map((node) => ({
-        node,
-        x: node.worldTransform.x,
-        y: node.worldTransform.y,
-      })),
+  protected emitGeometryChange(): void {
+    this.#callbacks.onGeometryChanged?.({
+      nodes: this.getDragCommitNodes().map((node) => this.#geometryOf(node)),
     });
+  }
+
+  #geometryOf(node: NodeMirror): NodeGeometry {
+    return {
+      node,
+      x: node.worldTransform.x,
+      y: node.worldTransform.y,
+      width: node.hitBox.width,
+      height: node.hitBox.height,
+    };
   }
 
   protected getDragCommitNodes(): NodeMirror[] {

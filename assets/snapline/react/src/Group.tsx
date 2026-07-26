@@ -13,7 +13,7 @@ import {
   type GroupContainEvent,
   type GroupMembershipEvent,
   type NodeCallbacks,
-  type NodeDragCommitEvent,
+  type GeometryChangeEvent,
   type NodeResizeEvent,
   type ResizeHandle,
   type SnapLineMetadata,
@@ -43,8 +43,7 @@ export interface GroupProps {
   canContain?: (event: GroupContainEvent) => boolean;
   edgePan?: boolean;
   onMembershipChange?: (event: GroupMembershipEvent) => void;
-  onResizeCommit?: (event: NodeResizeEvent) => void;
-  onDragCommit?: (event: NodeDragCommitEvent) => void;
+  onGeometryChanged?: (event: GeometryChangeEvent) => void;
 }
 
 export const Group = forwardRef<GroupNodeMirror, GroupProps>(function Group(
@@ -70,8 +69,7 @@ export const Group = forwardRef<GroupNodeMirror, GroupProps>(function Group(
     canContain,
     edgePan = true,
     onMembershipChange,
-    onResizeCommit,
-    onDragCommit,
+    onGeometryChanged,
   },
   ref,
 ) {
@@ -102,15 +100,13 @@ export const Group = forwardRef<GroupNodeMirror, GroupProps>(function Group(
     callbacks,
     groupCallbacks,
     onMembershipChange,
-    onResizeCommit,
-    onDragCommit,
+    onGeometryChanged,
   });
   latestRef.current = {
     callbacks,
     groupCallbacks,
     onMembershipChange,
-    onResizeCommit,
-    onDragCommit,
+    onGeometryChanged,
   };
 
   useImperativeHandle(ref, () => group, [group]);
@@ -181,12 +177,12 @@ export const Group = forwardRef<GroupNodeMirror, GroupProps>(function Group(
         latestRef.current.groupCallbacks.onMembershipChange,
         latestRef.current.onMembershipChange,
       );
-    group.callbacks.onDragCommit = (event) =>
+    group.callbacks.onGeometryChanged = (event) =>
       invoke(
         event,
-        originalCallbacks.onDragCommit,
-        latestRef.current.callbacks.onDragCommit,
-        latestRef.current.onDragCommit,
+        originalCallbacks.onGeometryChanged,
+        latestRef.current.callbacks.onGeometryChanged,
+        latestRef.current.onGeometryChanged,
       );
     group.callbacks.onSizeChange = (event) => {
       invoke(
@@ -195,13 +191,6 @@ export const Group = forwardRef<GroupNodeMirror, GroupProps>(function Group(
         latestRef.current.callbacks.onSizeChange,
       );
     };
-    group.callbacks.onResizeCommit = (event) =>
-      invoke(
-        event,
-        originalCallbacks.onResizeCommit,
-        latestRef.current.callbacks.onResizeCommit,
-        latestRef.current.onResizeCommit,
-      );
     // Header is the only move surface. setSizeState seeds the collision
     // footprint; core writes live resize geometry directly to this element.
     const unregisterHandle = headerRef.current
@@ -221,13 +210,12 @@ export const Group = forwardRef<GroupNodeMirror, GroupProps>(function Group(
         originalCallbacks.resolveSelectionMode;
       group.callbacks.onDragStart = originalCallbacks.onDragStart;
       group.callbacks.onDrag = originalCallbacks.onDrag;
-      group.callbacks.onDragCommit = originalCallbacks.onDragCommit;
+      group.callbacks.onGeometryChanged = originalCallbacks.onGeometryChanged;
       group.callbacks.onSelectionChange =
         originalCallbacks.onSelectionChange;
       group.callbacks.onResizeHandleChange =
         originalCallbacks.onResizeHandleChange;
       group.callbacks.onSizeChange = originalCallbacks.onSizeChange;
-      group.callbacks.onResizeCommit = originalCallbacks.onResizeCommit;
       group.groupCallbacks.onMembershipChange =
         originalGroupCallbacks.onMembershipChange;
       if (ownsGroupRef.current) {

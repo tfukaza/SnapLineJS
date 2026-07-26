@@ -18,7 +18,7 @@ import {
   NodeMirror,
   type ResizeHandle,
   type NodeCallbacks,
-  type NodeDragCommitEvent,
+  type GeometryChangeEvent,
   type NodeResizeEvent,
   type SnapLineMetadata,
 } from "@snap-engine/snapline";
@@ -46,8 +46,7 @@ export interface NodeProps {
   metadata?: SnapLineMetadata;
   callbacks?: NodeCallbacks;
   edgePan?: boolean;
-  onDragCommit?: (event: NodeDragCommitEvent) => void;
-  onResizeCommit?: (event: NodeResizeEvent) => void;
+  onGeometryChanged?: (event: GeometryChangeEvent) => void;
   onSizeChange?: (event: NodeResizeEvent) => void;
   /** Framework-native attributes and events for the outer node element. */
   elementProps?: HTMLAttributes<HTMLDivElement>;
@@ -73,8 +72,7 @@ export const Node = forwardRef<NodeMirror, NodeProps>(function Node(
     metadata = {},
     callbacks = {},
     edgePan = true,
-    onDragCommit,
-    onResizeCommit,
+    onGeometryChanged,
     onSizeChange,
     elementProps,
   },
@@ -103,14 +101,12 @@ export const Node = forwardRef<NodeMirror, NodeProps>(function Node(
   );
   const latestRef = useRef({
     callbacks,
-    onDragCommit,
-    onResizeCommit,
+    onGeometryChanged,
     onSizeChange,
   });
   latestRef.current = {
     callbacks,
-    onDragCommit,
-    onResizeCommit,
+    onGeometryChanged,
     onSizeChange,
   };
 
@@ -190,19 +186,12 @@ export const Node = forwardRef<NodeMirror, NodeProps>(function Node(
         latestRef.current.onSizeChange,
       );
     };
-    node.callbacks.onResizeCommit = (event) =>
+    node.callbacks.onGeometryChanged = (event) =>
       invoke(
         event,
-        original.onResizeCommit,
-        latestRef.current.callbacks.onResizeCommit,
-        latestRef.current.onResizeCommit,
-      );
-    node.callbacks.onDragCommit = (event) =>
-      invoke(
-        event,
-        original.onDragCommit,
-        latestRef.current.callbacks.onDragCommit,
-        latestRef.current.onDragCommit,
+        original.onGeometryChanged,
+        latestRef.current.callbacks.onGeometryChanged,
+        latestRef.current.onGeometryChanged,
       );
     setLineList([...node.getAllOutgoingLines()]);
     const boundElement = nodeDomRef.current;
@@ -213,12 +202,11 @@ export const Node = forwardRef<NodeMirror, NodeProps>(function Node(
       node.callbacks.resolveSelectionMode = original.resolveSelectionMode;
       node.callbacks.onDragStart = original.onDragStart;
       node.callbacks.onDrag = original.onDrag;
-      node.callbacks.onDragCommit = original.onDragCommit;
+      node.callbacks.onGeometryChanged = original.onGeometryChanged;
       node.callbacks.onSelectionChange = original.onSelectionChange;
       node.callbacks.onResizeHandleChange = original.onResizeHandleChange;
       node.callbacks.onLinesChanged = original.onLinesChanged;
       node.callbacks.onSizeChange = original.onSizeChange;
-      node.callbacks.onResizeCommit = original.onResizeCommit;
       if (ownsNodeRef.current) {
         node.destroy(false);
       } else if (boundElement) {

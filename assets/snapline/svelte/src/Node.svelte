@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { NodeMirror, LineMirror, DEFAULT_RESIZE_HANDLE_THICKNESS, type NodeCallbacks, type NodeDragCommitEvent, type NodeResizeEvent, type ResizeHandle, type SnapLineMetadata } from "@snap-engine/snapline";
+    import { NodeMirror, LineMirror, DEFAULT_RESIZE_HANDLE_THICKNESS, type NodeCallbacks, type GeometryChangeEvent, type NodeResizeEvent, type ResizeHandle, type SnapLineMetadata } from "@snap-engine/snapline";
     import type { Engine } from "@snap-engine/core";
     import Line from "./Line.svelte";
     import { onMount, setContext, getContext, onDestroy, tick, untrack } from "svelte";
@@ -23,8 +23,7 @@
         metadata = {},
         callbacks = {},
         edgePan = true,
-        onDragCommit = undefined,
-        onResizeCommit = undefined,
+        onGeometryChanged = undefined,
         onSizeChange = undefined,
         elementProps = {},
         children,
@@ -45,8 +44,7 @@
         metadata?: SnapLineMetadata;
         callbacks?: NodeCallbacks;
         edgePan?: boolean;
-        onDragCommit?: (event: NodeDragCommitEvent) => void;
-        onResizeCommit?: (event: NodeResizeEvent) => void;
+        onGeometryChanged?: (event: GeometryChangeEvent) => void;
         onSizeChange?: (event: NodeResizeEvent) => void;
         /** Framework-native attributes and events for the outer node element. */
         elementProps?: HTMLAttributes<HTMLDivElement>;
@@ -109,10 +107,8 @@
             invoke(event, originalCallbacks.onSelectionChange, callbacks.onSelectionChange);
         nodeObject.callbacks.onResizeHandleChange = (event) =>
             invoke(event, originalCallbacks.onResizeHandleChange, callbacks.onResizeHandleChange);
-        nodeObject.callbacks.onResizeCommit = (event) =>
-            invoke(event, originalCallbacks.onResizeCommit, callbacks.onResizeCommit, onResizeCommit);
-        nodeObject.callbacks.onDragCommit = (event) =>
-            invoke(event, originalCallbacks.onDragCommit, callbacks.onDragCommit, onDragCommit);
+        nodeObject.callbacks.onGeometryChanged = (event) =>
+            invoke(event, originalCallbacks.onGeometryChanged, callbacks.onGeometryChanged, onGeometryChanged);
         nodeObject.callbacks.onSizeChange = (event) => {
             invoke(event, originalCallbacks.onSizeChange, callbacks.onSizeChange, onSizeChange);
         };
@@ -133,12 +129,11 @@
         nodeObject.callbacks.resolveSelectionMode = originalCallbacks.resolveSelectionMode;
         nodeObject.callbacks.onDragStart = originalCallbacks.onDragStart;
         nodeObject.callbacks.onDrag = originalCallbacks.onDrag;
-        nodeObject.callbacks.onDragCommit = originalCallbacks.onDragCommit;
+        nodeObject.callbacks.onGeometryChanged = originalCallbacks.onGeometryChanged;
         nodeObject.callbacks.onSelectionChange = originalCallbacks.onSelectionChange;
         nodeObject.callbacks.onResizeHandleChange = originalCallbacks.onResizeHandleChange;
         nodeObject.callbacks.onLinesChanged = originalCallbacks.onLinesChanged;
         nodeObject.callbacks.onSizeChange = originalCallbacks.onSizeChange;
-        nodeObject.callbacks.onResizeCommit = originalCallbacks.onResizeCommit;
         if (ownsNode) {
             nodeObject.destroy(false);
         } else if (nodeDOM) {

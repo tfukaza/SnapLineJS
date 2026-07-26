@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { GroupNodeMirror, DEFAULT_RESIZE_HANDLE_THICKNESS, type GroupCallbacks, type GroupContainEvent, type GroupMembershipEvent, type NodeDragCommitEvent, type NodeResizeEvent, type ResizeHandle, type SnapLineMetadata } from "@snap-engine/snapline";
+    import { GroupNodeMirror, DEFAULT_RESIZE_HANDLE_THICKNESS, type GroupCallbacks, type GroupContainEvent, type GroupMembershipEvent, type GeometryChangeEvent, type ResizeHandle, type SnapLineMetadata } from "@snap-engine/snapline";
     import type { Engine } from "@snap-engine/core";
     import { onMount, onDestroy, getContext, tick, untrack, type Snippet } from "svelte";
 
@@ -24,8 +24,7 @@
         canContain = undefined,
         edgePan = true,
         onMembershipChange = undefined,
-        onResizeCommit = undefined,
-        onDragCommit = undefined,
+        onGeometryChanged = undefined,
         children = undefined,
     }: {
         className?: string;
@@ -48,8 +47,7 @@
         canContain?: (event: GroupContainEvent) => boolean;
         edgePan?: boolean;
         onMembershipChange?: (event: GroupMembershipEvent) => void;
-        onResizeCommit?: (event: NodeResizeEvent) => void;
-        onDragCommit?: (event: NodeDragCommitEvent) => void;
+        onGeometryChanged?: (event: GeometryChangeEvent) => void;
         children?: any;
     } = $props();
 
@@ -114,10 +112,8 @@
         groupObject!.callbacks.onSizeChange = (event) => {
             invoke(event, originalCallbacks.onSizeChange, callbacks.onSizeChange);
         };
-        groupObject!.callbacks.onResizeCommit = (event) =>
-            invoke(event, originalCallbacks.onResizeCommit, callbacks.onResizeCommit, onResizeCommit);
-        groupObject!.callbacks.onDragCommit = (event) =>
-            invoke(event, originalCallbacks.onDragCommit, callbacks.onDragCommit, onDragCommit);
+        groupObject!.callbacks.onGeometryChanged = (event) =>
+            invoke(event, originalCallbacks.onGeometryChanged, callbacks.onGeometryChanged, onGeometryChanged);
         // Header is the only move surface; wait a tick so the alias wins over the
         // element registration. setSizeState seeds the collision footprint (the
         // DOM size is already rendered from props above).
@@ -143,11 +139,10 @@
         groupObject!.callbacks.resolveSelectionMode = originalCallbacks.resolveSelectionMode;
         groupObject!.callbacks.onDragStart = originalCallbacks.onDragStart;
         groupObject!.callbacks.onDrag = originalCallbacks.onDrag;
-        groupObject!.callbacks.onDragCommit = originalCallbacks.onDragCommit;
+        groupObject!.callbacks.onGeometryChanged = originalCallbacks.onGeometryChanged;
         groupObject!.callbacks.onSelectionChange = originalCallbacks.onSelectionChange;
         groupObject!.callbacks.onResizeHandleChange = originalCallbacks.onResizeHandleChange;
         groupObject!.callbacks.onSizeChange = originalCallbacks.onSizeChange;
-        groupObject!.callbacks.onResizeCommit = originalCallbacks.onResizeCommit;
         groupObject!.groupCallbacks.onMembershipChange = originalGroupCallbacks.onMembershipChange;
         if (ownsGroup) groupObject!.destroy(false);
         else if (boxDOM) groupObject!.detachElement(boxDOM);

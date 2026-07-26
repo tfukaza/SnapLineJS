@@ -7,11 +7,11 @@ export {
 export type {
   NodeConfig,
   NodeCallbacks,
-  NodeDragCommitEvent,
+  GeometryChangeEvent,
   NodeDragPositionEvent,
   NodeLinesEvent,
   NodePointerEvent,
-  NodePosition,
+  NodeGeometry,
   ResolvedNodeDragPosition,
   NodeResizeEvent,
   NodeResizeHandleEvent,
