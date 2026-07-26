@@ -9,7 +9,7 @@ import type {
 } from "@snap-engine/core";
 import { CircleCollider } from "@snap-engine/core/collision";
 import type { NodeMirror } from "./node";
-import { LineMirror } from "./line";
+import { LineMirror, type LineMirrorPhase } from "./line";
 import { getGraphMirror } from "./snapline-globals";
 import { getSourceSurfaces } from "./snapline-globals";
 import { mintDomainId } from "./graph-mirror";
@@ -22,12 +22,6 @@ export type DisconnectReason =
   | "programmatic"
   | "teardown";
 export type ConnectorRole = "source" | "target";
-export type ConnectorLinePhase =
-  | "source-start"
-  | "preview-free"
-  | "preview-target"
-  | "drop"
-  | "connected";
 
 export interface ConnectorPoint {
   x: number;
@@ -76,7 +70,7 @@ export interface ConnectorSurfaceHitTestEvent {
   connector: ConnectorMirror;
   position: eventPosition;
   geometry: ConnectorGeometrySnapshot;
-  phase: ConnectorLinePhase;
+  phase: LineMirrorPhase;
 }
 
 export interface ConnectorAnchorEvent {
@@ -84,7 +78,7 @@ export interface ConnectorAnchorEvent {
   peer: ConnectorMirror | null;
   line: LineMirror;
   role: ConnectorRole;
-  phase: ConnectorLinePhase;
+  phase: LineMirrorPhase;
   position: ConnectorPoint;
   geometry: ConnectorGeometrySnapshot;
   peerGeometry: ConnectorGeometrySnapshot | null;
@@ -637,12 +631,11 @@ class ConnectorMirror extends ElementObject {
   }
 
   deleteLine(
-    i: number,
+    line: LineMirror,
     reason: DisconnectReason = "programmatic",
   ): LineMirror | null {
-    if (this.#outgoingLines.length === 0 || i < 0) return null;
-    const line = this.#outgoingLines[i];
-    if (!line) return null;
+    const index = this.#outgoingLines.indexOf(line);
+    if (index === -1) return null;
 
     const target = line.target;
     if (target) {
@@ -652,17 +645,17 @@ class ConnectorMirror extends ElementObject {
       this.#emitDisconnect(target, line, reason);
     }
     line.destroy(false);
-    this.#outgoingLines.splice(i, 1);
+    this.#outgoingLines.splice(index, 1);
     this.parent?.updateNodeLineList();
     return line;
   }
 
   deleteAllLines(reason: DisconnectReason = "programmatic"): void {
     for (const line of [...this.#outgoingLines]) {
-      this.deleteLine(this.#outgoingLines.indexOf(line), reason);
+      this.deleteLine(line, reason);
     }
     for (const line of [...this.#incomingLines]) {
-      line.start.deleteLine(line.start.outgoingLines.indexOf(line), reason);
+      line.start.deleteLine(line, reason);
     }
     this.#incomingLines = [];
   }
@@ -702,10 +695,10 @@ class ConnectorMirror extends ElementObject {
     }
   }
 
-  createLine(): LineMirror {
+  createLine(config: { id?: string } = {}): LineMirror {
     const line = this.#config.lineClass
-      ? new this.#config.lineClass(this.engine, this)
-      : new LineMirror(this.engine, this);
+      ? new this.#config.lineClass(this.engine, this, config)
+      : new LineMirror(this.engine, this, config);
     line.setSourceSurfaceContext(this.#defaultAnchorStrategy(), null);
     return line;
   }
@@ -990,23 +983,41 @@ class ConnectorMirror extends ElementObject {
       return false;
     }
 
-    // Explicit replacement policy: a full target admitted us only because it
-    // evicts its oldest incoming lines ("replace-oldest").
+    if (!alreadyOurs) {
+      this.#outgoingLines.unshift(line);
+    }
+    this.#settlePreviewLine(
+      line,
+      target,
+      candidate,
+      origin,
+      hasPayload ? { value: options.payload } : null,
+    );
+    return true;
+  }
+
+  /**
+   * Settle a line that already sits in this connector's outgoing list onto
+   * its target: run the explicit replacement policy, detach any previous
+   * target, glue anchors, and emit. Validation happened before this point.
+   */
+  #settlePreviewLine(
+    line: LineMirror,
+    target: ConnectorMirror,
+    candidate: ConnectorResolvedHit | null,
+    origin: ConnectionOrigin,
+    payload: { value: unknown } | null,
+  ): void {
+    // Explicit replacement policy: a full target admitted this line only
+    // because it evicts its oldest incoming lines ("replace-oldest").
     const incoming = target
       .#liveIncomingLines()
       .filter((incomingLine) => incomingLine !== line);
     const overflow = incoming.length - target.#rules.maxIncoming + 1;
     if (overflow > 0) {
       for (const incomingLine of incoming.slice(0, overflow)) {
-        incomingLine.start.deleteLine(
-          incomingLine.start.outgoingLines.indexOf(incomingLine),
-          "replacement",
-        );
+        incomingLine.start.deleteLine(incomingLine, "replacement");
       }
-    }
-
-    if (!alreadyOurs) {
-      this.#outgoingLines.unshift(line);
     }
 
     const previousTarget = line.target;
@@ -1019,7 +1030,7 @@ class ConnectorMirror extends ElementObject {
     }
 
     // Payload and anchors are authoritative before render/connect callbacks.
-    if (hasPayload) line.setPayload(options.payload);
+    if (payload) line.setPayload(payload.value);
     line.connectTarget(
       target,
       candidate?.candidate ?? null,
@@ -1033,17 +1044,16 @@ class ConnectorMirror extends ElementObject {
     this.parent.updateNodeLineList();
     this.#emitConnect(target, line, origin);
     this.parent.setProp(this.#name, this.#prop[this.#name]);
-    return true;
   }
 
   disconnectFromConnector(
     connector: ConnectorMirror,
     reason: DisconnectReason = "programmatic",
   ): void {
-    const lineIndex = this.#outgoingLines.findIndex(
-      (line) => line.target === connector,
+    const line = this.#outgoingLines.find(
+      (outgoingLine) => outgoingLine.target === connector,
     );
-    if (lineIndex !== -1) this.deleteLine(lineIndex, reason);
+    if (line) this.deleteLine(line, reason);
   }
 
   resolveAnchor({
@@ -1057,7 +1067,7 @@ class ConnectorMirror extends ElementObject {
   }: {
     line: LineMirror;
     role: ConnectorRole;
-    phase: ConnectorLinePhase;
+    phase: LineMirrorPhase;
     peer: ConnectorMirror | null;
     position: ConnectorPoint;
     hit: ConnectorHit | null;
@@ -1107,7 +1117,7 @@ class ConnectorMirror extends ElementObject {
 
   #resolveOwnSourceHit(
     position: eventPosition,
-    phase: ConnectorLinePhase,
+    phase: LineMirrorPhase,
   ): ConnectorResolvedHit | null {
     const hits: ConnectorResolvedHit[] = [];
     for (const [strategyIndex, strategy] of this.surfaceStrategies.entries()) {
@@ -1218,7 +1228,7 @@ class ConnectorMirror extends ElementObject {
     target.#incomingLines = target.#incomingLines.filter(
       (incomingLine) => incomingLine !== line,
     );
-    line.target = null;
+    line.detachTarget();
     this.#emitDisconnect(target, line, "gesture");
   }
 
@@ -1227,8 +1237,7 @@ class ConnectorMirror extends ElementObject {
     prop: dragEndProp,
     connected: boolean,
   ): void {
-    const index = this.#outgoingLines.indexOf(line);
-    if (index !== -1) this.deleteLine(index, "gesture");
+    if (this.#outgoingLines.includes(line)) this.deleteLine(line, "gesture");
     this.#callbacks.onDragEnd?.({
       connector: this,
       position: prop.end,

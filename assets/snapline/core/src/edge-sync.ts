@@ -150,8 +150,7 @@ export class EdgeSyncController {
           const toEndpoint = identities.get(target) ?? identity(target);
           if (!toEndpoint) continue; // foreign line — not ours to manage
           if (!edgeKeys.has(edgeKey(fromEndpoint, toEndpoint))) {
-            const index = connector.outgoingLines.indexOf(line);
-            if (index !== -1) connector.deleteLine(index, "programmatic");
+            connector.deleteLine(line, "programmatic");
           }
         }
       }

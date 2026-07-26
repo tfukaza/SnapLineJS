@@ -39,7 +39,6 @@ export type {
   ConnectorDragEvent,
   ConnectorGeometrySnapshot,
   ConnectorHit,
-  ConnectorLinePhase,
   ConnectorNormal,
   ConnectorPairEvent,
   ConnectorPoint,
@@ -56,6 +55,7 @@ export type {
 export { LineMirror } from "./line";
 export type {
   LineGeometrySnapshot,
+  LineMirrorPhase,
   LineStateSnapshot,
 } from "./line";
 export type { GeometryWriter } from "./geometry";
