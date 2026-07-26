@@ -18,7 +18,8 @@
     "./Connector": "./src/Connector.tsx",
     "./Line": "./src/Line.tsx",
     "./Select": "./src/Select.tsx",
-    "./Placement": "./src/Placement.tsx"
+    "./Placement": "./src/Placement.tsx",
+    "./ControlledGraph": "./src/ControlledGraph.tsx"
   },
   "keywords": [
     "node-graph",

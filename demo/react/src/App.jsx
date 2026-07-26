@@ -203,7 +203,7 @@ export default function App() {
   return <SnapLineDemo />;
 }
 
-function EdgeSyncNode({ nodeId, title, x, y, maxIncoming = 1 }) {
+function GraphNode({ nodeId, title, x, y, maxIncoming = 1 }) {
   return (
     <Node className="card node" x={x} y={y}>
       <div className="node-header">
@@ -319,9 +319,9 @@ function SnapLineEdgesDemo() {
           <div id="sl-background" />
           <Select />
           <ControlledGraph lines={lines} onLineChangeRequest={handleRequest} />
-          <EdgeSyncNode nodeId="a" title="Node A" x={120} y={120} />
-          <EdgeSyncNode nodeId="b" title="Node B" x={440} y={170} maxIncoming={1} />
-          <EdgeSyncNode nodeId="c" title="Node C" x={280} y={380} />
+          <GraphNode nodeId="a" title="Node A" x={120} y={120} />
+          <GraphNode nodeId="b" title="Node B" x={440} y={170} maxIncoming={1} />
+          <GraphNode nodeId="c" title="Node C" x={280} y={380} />
         </div>
       </SnapEngine>
     </main>

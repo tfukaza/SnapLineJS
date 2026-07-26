@@ -43,6 +43,7 @@
 
 <svg
   data-snapline-type="connector-line"
+    data-line-id={line.lineId}
   class={className}
   {...Object.fromEntries(Object.entries(data).map(([key, value]) => [`data-${key}`, value]))}
   width="4"
@@ -55,10 +56,10 @@
     class={pathClassName}
     style={pathStyle}
     d={pathForGeometry(initialGeometry)}
-    marker-end={showArrow ? `url(#arrow-${line.id})` : undefined}
+    marker-end={showArrow ? `url(#arrow-${line.lineId})` : undefined}
   />
   {#if showArrow}
-    <marker id={`arrow-${line.id}`} viewBox="0 0 24 24" refX="0" refY="12" orient="auto">
+    <marker id={`arrow-${line.lineId}`} viewBox="0 0 24 24" refX="0" refY="12" orient="auto">
       <polygon points="4,4 20,12 4,22" fill="#545454"/>
     </marker>
   {/if}

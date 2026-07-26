@@ -7,6 +7,7 @@
     import { blur } from "svelte/transition";
 
     let {
+        id = undefined,
         className = "",
         LineSvelteComponent = Line,
         nodeObject = null,
@@ -28,6 +29,8 @@
         elementProps = {},
         children,
     }: {
+        /** Stable domain identity; minted when omitted (supply for persistence). */
+        id?: string;
         className?: string;
         LineSvelteComponent?: typeof Line;
         nodeObject?: NodeMirror | null;
@@ -54,7 +57,7 @@
     let engine: Engine = getContext("engine");
     const ownsNode = nodeObject == null;
     if (!nodeObject) {
-         nodeObject = new NodeMirror(engine, null, { resizable, minWidth, minHeight, resizeHandleThickness, resizeHandles, resizeCursors, metadata, callbacks: {}, edgePan });
+         nodeObject = new NodeMirror(engine, null, { id, resizable, minWidth, minHeight, resizeHandleThickness, resizeHandles, resizeCursors, metadata, callbacks: {}, edgePan });
     }
     let lineList: LineMirror[] = $state(nodeObject.getAllOutgoingLines());
 
@@ -176,7 +179,7 @@
 </script>
 
 
-{#each lineList as line (line.id)}
+{#each lineList as line (line.lineId)}
     <LineSvelteComponent {line} />
 {/each}
 <div

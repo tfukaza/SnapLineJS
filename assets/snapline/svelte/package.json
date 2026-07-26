@@ -20,7 +20,8 @@
     "./Connector.svelte": "./src/Connector.svelte",
     "./Line.svelte": "./src/Line.svelte",
     "./Select.svelte": "./src/Select.svelte",
-    "./Placement.svelte": "./src/Placement.svelte"
+    "./Placement.svelte": "./src/Placement.svelte",
+    "./ControlledGraph.svelte": "./src/ControlledGraph.svelte"
   },
   "keywords": [
     "node-graph",

@@ -4,6 +4,7 @@
     import { onMount, onDestroy, getContext, tick, untrack, type Snippet } from "svelte";
 
     let {
+        id = undefined,
         className = "",
         groupObject = null,
         x = 0,
@@ -27,6 +28,8 @@
         onGeometryChanged = undefined,
         children = undefined,
     }: {
+        /** Stable domain identity; minted when omitted (supply for persistence). */
+        id?: string;
         className?: string;
         groupObject?: GroupNodeMirror | null;
         x?: number;
@@ -56,7 +59,7 @@
     let engine: Engine = getContext("engine");
     const ownsGroup = groupObject == null;
     if (!groupObject) {
-        groupObject = new GroupNodeMirror(engine, null, { width, height, minWidth, minHeight, resizeHandleThickness, resizeHandles, resizeCursors, metadata, callbacks: {}, groupCallbacks: {}, canContain, edgePan });
+        groupObject = new GroupNodeMirror(engine, null, { id, width, height, minWidth, minHeight, resizeHandleThickness, resizeHandles, resizeCursors, metadata, callbacks: {}, groupCallbacks: {}, canContain, edgePan });
     }
 
     let mounted = $state(false);

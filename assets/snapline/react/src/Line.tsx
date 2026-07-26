@@ -45,6 +45,7 @@ export function Line({
   return (
     <svg
       data-snapline-type="connector-line"
+      data-line-id={line.lineId}
       className={className}
       {...Object.fromEntries(
         Object.entries(data).map(([key, value]) => [`data-${key}`, value]),
@@ -65,7 +66,7 @@ export function Line({
         ref={pathRef}
         className={pathClassName}
         d={pathForGeometry(initialGeometry)}
-        markerEnd={showArrow ? `url(#arrow-${line.id})` : undefined}
+        markerEnd={showArrow ? `url(#arrow-${line.lineId})` : undefined}
         style={{
           fill: "none",
           stroke: "#545454",
@@ -76,7 +77,7 @@ export function Line({
         }}
       />
       {showArrow ? (
-        <marker id={`arrow-${line.id}`} viewBox="0 0 24 24" refX="0" refY="12" orient="auto">
+        <marker id={`arrow-${line.lineId}`} viewBox="0 0 24 24" refX="0" refY="12" orient="auto">
           <polygon points="4,4 20,12 4,22" fill="#545454" />
         </marker>
       ) : null}

@@ -28,6 +28,8 @@ import { Line } from "./Line";
 export const NodeMirrorContext = createContext<NodeMirror | null>(null);
 
 export interface NodeProps {
+  /** Stable domain identity; minted when omitted (supply for persistence). */
+  id?: string;
   children: ReactNode;
   className?: string;
   lineComponent?: ComponentType<{ line: LineMirror }>;
@@ -54,6 +56,7 @@ export interface NodeProps {
 
 export const Node = forwardRef<NodeMirror, NodeProps>(function Node(
   {
+    id,
     children,
     className = "",
     lineComponent: LineRenderer = Line,
@@ -84,6 +87,7 @@ export const Node = forwardRef<NodeMirror, NodeProps>(function Node(
   const nodeRef = useRef<NodeMirror | null>(nodeObject);
   if (!nodeRef.current) {
     nodeRef.current = new NodeMirror(engine, null, {
+      id,
       resizable,
       minWidth,
       minHeight,
@@ -235,7 +239,7 @@ export const Node = forwardRef<NodeMirror, NodeProps>(function Node(
   return (
     <NodeMirrorContext.Provider value={node}>
       {lineList.map((line) => (
-        <LineRenderer key={line.id} line={line} />
+        <LineRenderer key={line.lineId} line={line} />
       ))}
       <div
         {...elementProps}

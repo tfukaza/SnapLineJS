@@ -21,6 +21,8 @@ import {
 import { useSnapLineEngine } from "./Engine";
 
 export interface GroupProps {
+  /** Stable domain identity; minted when omitted (supply for persistence). */
+  id?: string;
   children?: ReactNode;
   className?: string;
   groupObject?: GroupNodeMirror | null;
@@ -48,6 +50,7 @@ export interface GroupProps {
 
 export const Group = forwardRef<GroupNodeMirror, GroupProps>(function Group(
   {
+    id,
     children,
     className = "",
     groupObject = null,
@@ -80,6 +83,7 @@ export const Group = forwardRef<GroupNodeMirror, GroupProps>(function Group(
   const groupRef = useRef<GroupNodeMirror | null>(groupObject);
   if (!groupRef.current) {
     groupRef.current = new GroupNodeMirror(engine, null, {
+      id,
       width,
       height,
       minWidth,
