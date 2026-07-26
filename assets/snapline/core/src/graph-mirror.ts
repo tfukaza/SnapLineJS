@@ -41,9 +41,21 @@ export interface ReconciliationError {
 export interface EdgeSyncLike {
   notifyConnect(event: ConnectorConnectionEvent): void;
   notifyDisconnect(event: ConnectorDisconnectionEvent): void;
-  /** Connector membership changed — reconcile so document lines whose
-   * endpoints just mounted (or unmounted) converge. */
-  connectorRegistered?(): void;
+  /** Run one reconciliation pass against the latest canonical state. Invoked
+   * by the mirror's coalescing, batch-aware scheduler. */
+  reconcile?(): void;
+}
+
+/** One authority model per engine, declared explicitly before any graph use. */
+export type GraphAuthority = "controlled" | "uncontrolled";
+
+/** Thrown when a topology command runs on an undeclared engine or against
+ * the other authority mode. */
+export class SnapLineAuthorityError extends Error {}
+
+/** A batch token from `beginBatch()`; `end()` is idempotent. */
+export interface GraphBatch {
+  end(): void;
 }
 
 /** Mint a domain ID for a mirror created without an application-supplied id. */
@@ -81,6 +93,75 @@ export class GraphMirror {
   // connection events through it.
   edgeSync: EdgeSyncLike | null = null;
 
+  /** Declared authority mode; null until `setGraphAuthority()` runs. */
+  authority: GraphAuthority | null = null;
+
+  /** @internal True while a reconciler pass mutates topology on the
+   * canonical document's behalf — those mutations bypass the authority gate
+   * on imperative commands. */
+  reconcilerActive = false;
+
+  #reconciliationQueued = false;
+  #batchDepth = 0;
+  #batchDirty = false;
+
+  /**
+   * Coalescing, batch-aware reconciliation trigger: registrations, canonical
+   * snapshot changes, and dispatched requests all funnel here. One microtask
+   * pass per burst; open batches defer the pass to the outermost `end()`.
+   */
+  scheduleReconciliation(): void {
+    if (this.#batchDepth > 0) {
+      this.#batchDirty = true;
+      return;
+    }
+    if (this.#reconciliationQueued) return;
+    this.#reconciliationQueued = true;
+    queueMicrotask(() => {
+      if (!this.#reconciliationQueued) return; // flushed synchronously
+      this.#reconciliationQueued = false;
+      this.edgeSync?.reconcile?.();
+    });
+  }
+
+  /** Run any pending (or batch-deferred) reconciliation synchronously. */
+  flush(): void {
+    this.#reconciliationQueued = false;
+    this.#batchDirty = false;
+    this.edgeSync?.reconcile?.();
+  }
+
+  /**
+   * Open a bulk boundary: no partial reconciliation runs until the outermost
+   * `end()`, which schedules one final pass if anything went dirty. Batches
+   * nest; `end()` is idempotent.
+   */
+  beginBatch(): GraphBatch {
+    this.#batchDepth += 1;
+    let closed = false;
+    return {
+      end: () => {
+        if (closed) return;
+        closed = true;
+        this.#batchDepth -= 1;
+        if (this.#batchDepth === 0 && this.#batchDirty) {
+          this.#batchDirty = false;
+          this.scheduleReconciliation();
+        }
+      },
+    };
+  }
+
+  /** Scoped batch — exception-safe by construction. */
+  async runBatch<T>(fn: () => T | Promise<T>): Promise<T> {
+    const batch = this.beginBatch();
+    try {
+      return await fn();
+    } finally {
+      batch.end();
+    }
+  }
+
   // ---- Engine-scoped interaction state (formerly cross-engine arrays on
   // ---- global.data). Live containers mutated in place by their owners.
 
@@ -117,7 +198,7 @@ export class GraphMirror {
     this.#index(this.#connectorsById, connector.connectorId, connector, {
       connectorId: connector.connectorId,
     });
-    this.edgeSync?.connectorRegistered?.();
+    this.scheduleReconciliation();
   }
 
   unregisterConnector(connector: ConnectorMirror): void {
@@ -131,7 +212,7 @@ export class GraphMirror {
     );
     // A departed endpoint can make canonical lines latent; let the reconciler
     // converge (idempotent — teardown already removed the mirror's lines).
-    this.edgeSync?.connectorRegistered?.();
+    this.scheduleReconciliation();
   }
 
   /** Every line starts life as a preview until it settles against a target. */

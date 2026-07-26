@@ -105,7 +105,11 @@ export type {
   ConnectorId,
   LineId,
   ReconciliationError,
+  GraphAuthority,
+  GraphBatch,
 } from "./graph-mirror";
+export { SnapLineAuthorityError } from "./graph-mirror";
+export { setGraphAuthority } from "./snapline-globals";
 export { EdgeSyncController } from "./edge-sync";
 export type {
   EdgeConnectIntentEvent,

@@ -4,7 +4,7 @@ import type {
   ConnectorDisconnectionEvent,
 } from "./connector";
 import type { LineMirror } from "./line";
-import { getGraphMirror } from "./snapline-globals";
+import { getGraphMirror, setGraphAuthority } from "./snapline-globals";
 
 export interface EdgeEndpoint {
   node: string;
@@ -79,11 +79,12 @@ function edgeKey(from: EdgeEndpoint, to: EdgeEndpoint): string {
 export class EdgeSyncController {
   #config: EdgeSyncConfig;
   #reconciling = false;
-  #reconciliationQueued = false;
   #disposed = false;
 
   constructor(config: EdgeSyncConfig) {
     this.#config = config;
+    // The controlled bridge IS the "controlled" declaration.
+    setGraphAuthority(config.engine, "controlled");
     const manager = getGraphMirror(config.engine);
     if (manager.edgeSync && manager.edgeSync !== this) {
       console.warn(
@@ -103,16 +104,10 @@ export class EdgeSyncController {
     if (manager.edgeSync === this) manager.edgeSync = null;
   }
 
-  // @internal Called by the GraphMirror registry when a connector registers after this
-  // controller exists (a node mounted). Coalesced into one microtask so a
-  // mounting batch reconciles once, before the frame paints.
-  connectorRegistered(): void {
-    if (this.#reconciliationQueued) return;
-    this.#reconciliationQueued = true;
-    queueMicrotask(() => {
-      this.#reconciliationQueued = false;
-      if (!this.#disposed) this.sync();
-    });
+  // @internal Scheduler slot: the GraphMirror's coalescing, batch-aware
+  // scheduler invokes this for registration bursts and explicit flushes.
+  reconcile(): void {
+    if (!this.#disposed) this.sync();
   }
 
   // Reconcile rendered lines to the consumer's edge list. Safe to call at any
@@ -122,8 +117,9 @@ export class EdgeSyncController {
   sync(): void {
     if (this.#reconciling) return;
     this.#reconciling = true;
+    const manager = getGraphMirror(this.#config.engine);
+    manager.reconcilerActive = true;
     try {
-      const manager = getGraphMirror(this.#config.engine);
       const identity = this.#config.identity;
       const connectors = manager.connectors;
 
@@ -170,6 +166,7 @@ export class EdgeSyncController {
       }
     } finally {
       this.#reconciling = false;
+      manager.reconcilerActive = false;
     }
   }
 

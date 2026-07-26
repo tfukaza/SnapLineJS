@@ -1,6 +1,10 @@
 import type { RectCollider } from "@snap-engine/core/collision";
 import type { eventPosition } from "@snap-engine/core";
-import { GraphMirror } from "./graph-mirror";
+import {
+  GraphMirror,
+  SnapLineAuthorityError,
+  type GraphAuthority,
+} from "./graph-mirror";
 
 /**
  * Structural source-surface contract shared with engine input. Keeping this
@@ -90,4 +94,22 @@ export function getGraphMirror(engine: {
     data.graphMirrors.set(key, mirror);
   }
   return mirror;
+}
+
+/**
+ * Declare the engine's authority model. Required before any imperative
+ * topology command; the controlled bridge declares "controlled" itself.
+ * Re-declaring the same mode is a no-op; a different mode fails fast.
+ */
+export function setGraphAuthority(
+  engine: { global: { data: any } | null },
+  authority: GraphAuthority,
+): void {
+  const mirror = getGraphMirror(engine);
+  if (mirror.authority && mirror.authority !== authority) {
+    throw new SnapLineAuthorityError(
+      `SnapLine: this engine's graph authority is already "${mirror.authority}"; one engine has exactly one authority mode. Run a second engine for the other model.`,
+    );
+  }
+  mirror.authority = authority;
 }

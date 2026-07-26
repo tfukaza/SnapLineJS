@@ -5,6 +5,7 @@ import {
   LineMirror,
   NodeMirror,
   PlacementController,
+  setGraphAuthority,
   type ConnectorSurfaceStrategy,
 } from "../../assets/snapline/core/src";
 
@@ -133,6 +134,7 @@ test("framework cleanup detaches elements without removing owned DOM", () => {
 
 test("connector config updates stay live without replacing topology", () => {
   const { engine, global } = createEngineHarness();
+  setGraphAuthority(engine, "uncontrolled");
   const sourceNode = new NodeMirror(engine, null);
   const targetNode = new NodeMirror(engine, null);
   const source = new ConnectorMirror(engine, sourceNode, {
@@ -241,6 +243,7 @@ test("connector config updates stay live without replacing topology", () => {
 test("visible port binding can toggle while preserving connector lines", () => {
   const restoreObservers = installObserverStubs();
   const { engine } = createEngineHarness();
+  setGraphAuthority(engine, "uncontrolled");
   const sourceNode = new NodeMirror(engine, null);
   const targetNode = new NodeMirror(engine, null);
   const source = new ConnectorMirror(engine, sourceNode, {
@@ -283,6 +286,7 @@ test("visible port binding can toggle while preserving connector lines", () => {
 
 test("bidirectional connector graphs propagate props without recursing forever", () => {
   const { engine } = createEngineHarness();
+  setGraphAuthority(engine, "uncontrolled");
   const firstNode = new NodeMirror(engine, null);
   const secondNode = new NodeMirror(engine, null);
   const first = new ConnectorMirror(engine, firstNode, {

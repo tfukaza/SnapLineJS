@@ -12,7 +12,7 @@ import type { NodeMirror } from "./node";
 import { LineMirror, type LineMirrorPhase } from "./line";
 import { getGraphMirror } from "./snapline-globals";
 import { getSourceSurfaces } from "./snapline-globals";
-import { mintDomainId } from "./graph-mirror";
+import { mintDomainId, SnapLineAuthorityError } from "./graph-mirror";
 
 export type SnapLineMetadata = Record<string, unknown>;
 export type ConnectionOrigin = "gesture" | "programmatic" | "hydration";
@@ -634,6 +634,9 @@ class ConnectorMirror extends ElementObject {
     line: LineMirror,
     reason: DisconnectReason = "programmatic",
   ): LineMirror | null {
+    if (reason === "programmatic") {
+      this.#assertImperativeAllowed("deleteLine()");
+    }
     const index = this.#outgoingLines.indexOf(line);
     if (index === -1) return null;
 
@@ -651,6 +654,9 @@ class ConnectorMirror extends ElementObject {
   }
 
   deleteAllLines(reason: DisconnectReason = "programmatic"): void {
+    if (reason === "programmatic") {
+      this.#assertImperativeAllowed("deleteAllLines()");
+    }
     for (const line of [...this.#outgoingLines]) {
       this.deleteLine(line, reason);
     }
@@ -949,6 +955,9 @@ class ConnectorMirror extends ElementObject {
     } = options;
     let line = requestedLine;
     const hasPayload = Object.prototype.hasOwnProperty.call(options, "payload");
+    if (origin === "programmatic") {
+      this.#assertImperativeAllowed("connectToConnector()");
+    }
     if (line && line.start !== this) return false;
 
     const alreadyConnected =
@@ -1050,6 +1059,9 @@ class ConnectorMirror extends ElementObject {
     connector: ConnectorMirror,
     reason: DisconnectReason = "programmatic",
   ): void {
+    if (reason === "programmatic") {
+      this.#assertImperativeAllowed("disconnectFromConnector()");
+    }
     const line = this.#outgoingLines.find(
       (outgoingLine) => outgoingLine.target === connector,
     );
@@ -1290,6 +1302,24 @@ class ConnectorMirror extends ElementObject {
 
   #hasOrdinaryPortGeometry(): boolean {
     return this.element != null || this.#hasMeasuredCenter;
+  }
+
+  /**
+   * Imperative topology commands require a declared "uncontrolled" engine;
+   * a reconciler pass acting for the canonical document bypasses the gate.
+   */
+  #assertImperativeAllowed(op: string): void {
+    const mirror = getGraphMirror(this.engine);
+    if (mirror.reconcilerActive) return;
+    if (mirror.authority === "uncontrolled") return;
+    if (mirror.authority === "controlled") {
+      throw new SnapLineAuthorityError(
+        `SnapLine: ${op} is an uncontrolled command, but this engine's graph is controlled — change the canonical document instead.`,
+      );
+    }
+    throw new SnapLineAuthorityError(
+      `SnapLine: declare setGraphAuthority(engine, "controlled" | "uncontrolled") before calling ${op}.`,
+    );
   }
 
   #liveIncomingLines(): LineMirror[] {

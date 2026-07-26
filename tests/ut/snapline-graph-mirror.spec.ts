@@ -3,6 +3,8 @@ import {
   ConnectorMirror,
   GroupNodeMirror,
   NodeMirror,
+  SnapLineAuthorityError,
+  setGraphAuthority,
 } from "../../assets/snapline/core/src";
 import { getGraphMirror } from "../../assets/snapline/core/src/snapline-globals";
 import {
@@ -78,6 +80,7 @@ test("lines move preview -> settled -> preview and unregister on destroy", () =>
   const restore = installObserverStubs();
   try {
     const { engine } = createEngineHarness();
+    setGraphAuthority(engine, "uncontrolled");
     const mirror = getGraphMirror(engine);
     const sourceNode = new NodeMirror(engine, null);
     const targetNode = new NodeMirror(engine, null);
@@ -165,4 +168,90 @@ test("group registries are engine-scoped", () => {
   } finally {
     restore();
   }
+});
+
+test("imperative topology commands require a declared uncontrolled authority", () => {
+  const { engine } = createEngineHarness();
+  const sourceNode = new NodeMirror(engine, null);
+  const targetNode = new NodeMirror(engine, null);
+  const source = new ConnectorMirror(engine, sourceNode, {
+    name: "out",
+    rules: { maxIncoming: 0 },
+  });
+  const target = new ConnectorMirror(engine, targetNode, {
+    name: "in",
+    rules: { maxOutgoing: 0 },
+  });
+
+  // Undeclared: fail fast, nothing defaults into uncontrolled authority.
+  expect(() => source.connectToConnector({ target })).toThrow(
+    SnapLineAuthorityError,
+  );
+  expect(source.outgoingLines).toEqual([]);
+
+  setGraphAuthority(engine, "uncontrolled");
+  expect(source.connectToConnector({ target })).toBe(true);
+
+  // Re-declaring the same mode is a no-op; the other mode fails fast.
+  setGraphAuthority(engine, "uncontrolled");
+  expect(() => setGraphAuthority(engine, "controlled")).toThrow(
+    SnapLineAuthorityError,
+  );
+});
+
+test("the scheduler coalesces bursts and defers passes to the outermost batch end", async () => {
+  const { engine } = createEngineHarness();
+  const mirror = getGraphMirror(engine);
+  let passes = 0;
+  mirror.edgeSync = {
+    notifyConnect() {},
+    notifyDisconnect() {},
+    reconcile: () => {
+      passes += 1;
+    },
+  };
+
+  // A burst of registrations coalesces into one microtask pass.
+  const node = new NodeMirror(engine, null);
+  new ConnectorMirror(engine, node, { name: "a" });
+  new ConnectorMirror(engine, node, { name: "b" });
+  new ConnectorMirror(engine, node, { name: "c" });
+  expect(passes).toBe(0);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(passes).toBe(1);
+
+  // Open batches swallow triggers; only the outermost end schedules, once.
+  const outer = mirror.beginBatch();
+  const inner = mirror.beginBatch();
+  new ConnectorMirror(engine, node, { name: "d" });
+  new ConnectorMirror(engine, node, { name: "e" });
+  inner.end();
+  inner.end(); // idempotent
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(passes).toBe(1);
+  outer.end();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(passes).toBe(2);
+
+  // A batch with no relevant changes schedules nothing.
+  await mirror.runBatch(async () => {});
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(passes).toBe(2);
+
+  // runBatch is exception-safe: the boundary closes and the dirty pass runs.
+  await mirror
+    .runBatch(async () => {
+      new ConnectorMirror(engine, node, { name: "f" });
+      throw new Error("boom");
+    })
+    .catch(() => {});
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(passes).toBe(3);
+
+  // flush() runs synchronously and cancels the queued microtask pass.
+  new ConnectorMirror(engine, node, { name: "g" });
+  mirror.flush();
+  expect(passes).toBe(4);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(passes).toBe(4);
 });
