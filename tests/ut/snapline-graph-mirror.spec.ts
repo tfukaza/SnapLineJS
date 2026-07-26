@@ -199,8 +199,6 @@ test("the scheduler coalesces bursts and defers passes to the outermost batch en
   const mirror = getGraphMirror(engine);
   let passes = 0;
   mirror.reconciler = {
-    notifyConnect() {},
-    notifyDisconnect() {},
     reconcile: () => {
       passes += 1;
     },

@@ -47,10 +47,10 @@ export interface SelectConfig {
 }
 
 class RectSelectController extends ElementObject {
-  _state: "none" | "dragging";
-  _mouseDownX: number;
-  _mouseDownY: number;
-  _selectHitBox: Collider;
+  #state: "none" | "dragging";
+  #mouseDownX: number;
+  #mouseDownY: number;
+  #selectHitBox: Collider;
   #callbacks: SelectCallbacks;
   #geometryWriter: GeometryWriter<SelectRect> | null = null;
   #rect: SelectRect = {
@@ -70,19 +70,19 @@ class RectSelectController extends ElementObject {
   ) {
     super(engine, parent);
 
-    this._state = "none";
-    this._mouseDownX = 0;
-    this._mouseDownY = 0;
+    this.#state = "none";
+    this.#mouseDownX = 0;
+    this.#mouseDownY = 0;
 
     this.event.global.pointerDown = this.onGlobalCursorDown;
     this.event.global.pointerMove = this.onGlobalCursorMove;
     this.event.global.pointerUp = this.onGlobalCursorUp;
 
-    this._selectHitBox = new RectCollider(engine, this, 0, 0, 0, 0);
-    this._selectHitBox.localTransform = { x: 0, y: 0 };
-    this._selectHitBox.event.collider.onCollide = this.onCollideNode;
+    this.#selectHitBox = new RectCollider(engine, this, 0, 0, 0, 0);
+    this.#selectHitBox.localTransform = { x: 0, y: 0 };
+    this.#selectHitBox.event.collider.onCollide = this.onCollideNode;
 
-    this.addCollider(this._selectHitBox);
+    this.addCollider(this.#selectHitBox);
 
     // A fresh selection controller starts its engine from an empty selection.
     getGraphMirror(this.engine).selection.length = 0;
@@ -147,18 +147,18 @@ class RectSelectController extends ElementObject {
     // worldTransform positions the selection collider (its transform parent);
     // the registered writer updates the visual box during WRITE_2.
     this.worldTransform = { x: prop.position.x, y: prop.position.y };
-    this._state = "dragging";
-    this._mouseDownX = prop.position.x;
-    this._mouseDownY = prop.position.y;
-    this._selectHitBox.width = 0;
-    this._selectHitBox.height = 0;
+    this.#state = "dragging";
+    this.#mouseDownX = prop.position.x;
+    this.#mouseDownY = prop.position.y;
+    this.#selectHitBox.width = 0;
+    this.#selectHitBox.height = 0;
     this.#fireRect(0, 0, true);
     this.#callbacks.onSelectionChange?.({
       select: this,
       selection: [...getGraphMirror(this.engine).selection],
     });
 
-    this._selectHitBox.event.collider.onBeginContact = (
+    this.#selectHitBox.event.collider.onBeginContact = (
       _: Collider,
       otherObject: Collider,
     ) => {
@@ -175,7 +175,7 @@ class RectSelectController extends ElementObject {
         });
       }
     };
-    this._selectHitBox.event.collider.onEndContact = (
+    this.#selectHitBox.event.collider.onEndContact = (
       _thisObject: Collider,
       otherObject: Collider,
     ) => {
@@ -191,29 +191,29 @@ class RectSelectController extends ElementObject {
   }
 
   onGlobalCursorMove(prop: pointerMoveProp): void {
-    if (this._state === "dragging") {
+    if (this.#state === "dragging") {
       let [boxOriginX, boxOriginY] = [
-        Math.min(this._mouseDownX, prop.position.x),
-        Math.min(this._mouseDownY, prop.position.y),
+        Math.min(this.#mouseDownX, prop.position.x),
+        Math.min(this.#mouseDownY, prop.position.y),
       ];
       let [boxWidth, boxHeight] = [
-        Math.abs(prop.position.x - this._mouseDownX),
-        Math.abs(prop.position.y - this._mouseDownY),
+        Math.abs(prop.position.x - this.#mouseDownX),
+        Math.abs(prop.position.y - this.#mouseDownY),
       ];
       this.worldTransform = { x: boxOriginX, y: boxOriginY };
-      this._selectHitBox.localTransform = { x: 0, y: 0 };
-      this._selectHitBox.width = boxWidth;
-      this._selectHitBox.height = boxHeight;
+      this.#selectHitBox.localTransform = { x: 0, y: 0 };
+      this.#selectHitBox.width = boxWidth;
+      this.#selectHitBox.height = boxHeight;
       this.#fireRect(boxWidth, boxHeight, true);
     }
   }
 
   onGlobalCursorUp(_prop: pointerUpProp): void {
-    const wasDragging = this._state === "dragging";
-    this._state = "none";
+    const wasDragging = this.#state === "dragging";
+    this.#state = "none";
 
-    this._selectHitBox.event.collider.onBeginContact = null;
-    this._selectHitBox.event.collider.onEndContact = null;
+    this.#selectHitBox.event.collider.onBeginContact = null;
+    this.#selectHitBox.event.collider.onEndContact = null;
     if (wasDragging) this.#fireRect(0, 0, false);
   }
 

@@ -1,7 +1,6 @@
 # SnapLine planned re-architecture
 
-Status: living planning document — **implementation complete through the
-adapter/consumer phases**; only the final simplification review remains.  
+Status: complete — retained as the decision record for the re-architecture.  
 Started: 2026-07-25  
 Related:
 [current architecture](./current-architecture.md) ·
@@ -36,54 +35,18 @@ Two decisions were amended from the original plan (both user-directed):
    `onGeometryChanged` observation replaces `onDragCommit` +
    `onResizeCommit`.
 
-## Final phase: post-rearchitecture simplification review
+## Status: complete
 
-After the re-architecture has settled, review the result as a new codebase
-rather than assuming every intermediate abstraction must survive. This phase
-may simplify aggressively, but must preserve the ownership model, public
-behavior, and verified performance.
+The final simplification review has landed: the gesture and record admission
+checks share one structural check plus one predicate check, the settle path's
+redundant eviction block and the reconciler's unused local-topology notify
+forwarding are gone, remaining single-class `_`-prefixed fields moved to `#`
+privates (with `_connectors` documented as the one deliberate cross-class
+field), and an informational perf benchmark
+(`tests/ut/snapline-perf.spec.ts`) guards the reconcile / candidate-discovery
+/ bulk-load hot paths. The complete verification matrix — unit suites, all
+six SnapLine e2e suites, package validation, and the docs e2e — passes.
 
-### Review method
-
-- Trace every major lifecycle (connect, reconnect, disconnect, hydration,
-  bulk load, selection, teardown) from public entry point to final state.
-- Remove redundant adapters, forwarding callbacks, snapshots, indexes,
-  schedulers, wrappers, and migration-only internals.
-- Known consolidation candidates from the migration itself:
-  - unify the gesture admission check with the strict record admission
-    check (`#admitsConnection` / `#admitsRecordEndpoints`);
-  - the settle path's replacement-eviction block should be dead now that
-    accepted replaces prune first — verify and remove;
-  - the reconciler slot's local-topology notify forwarding
-    (`notifyConnect`/`notifyDisconnect`) has no consumer — drop it from the
-    emit sites if nothing needs it;
-  - evaluate whether `pendingGestureRequest` still earns its keep;
-  - remaining `_`-prefixed cross-class fields → `#` or documented
-    internals; delete `_endLineDragCleanup` if unused;
-  - a shared adapter callback-merge helper to replace the duplicated
-    monkey-patch blocks in the four Node/Group adapters.
-- Profile before retaining or adding non-obvious optimization: an
-  informational (non-asserting) unit benchmark over a ~200-node/300-line
-  synthetic graph timing the reconcile pass, per-pointer-move candidate
-  discovery, and a bulk load.
-- Repeat the vocabulary audit: one concept, one name; `on*` for
-  observations/requests, `is*`/`can*` for predicates.
-- Finish with the complete verification matrix: all SnapLine unit and e2e
-  suites, `validate:packages`, the docs e2e, and the lab consumer checks.
-
-### Exit criteria
-
-- Each major lifecycle has one obvious path through the code.
-- No layer, registry, callback, or snapshot merely duplicates another.
-- Public APIs expose the smallest surface the ownership model requires.
-- All tests, type checks, adapter suites, browser tests, and relevant
-  benchmarks pass after the simplification.
-
-## Remaining task board
-
-- [ ] Trace every major lifecycle through the completed architecture.
-- [ ] Apply the consolidation candidates above (verify each is truly
-      redundant before removing).
-- [ ] Add the informational profiling benchmark.
-- [ ] Repeat the naming and public-surface audits.
-- [ ] Run the complete verification matrix again.
+This document is retained as the record of the re-architecture's decisions
+and amendments; the implementation is described in
+[current architecture](./current-architecture.md).

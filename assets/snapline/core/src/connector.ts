@@ -736,24 +736,37 @@ class ConnectorMirror extends ElementObject {
     line: LineMirror | null,
     phase: "candidate" | "drop",
   ): boolean {
-    if (target.id === this.id || !this.isSource || !target.isTarget) {
-      return false;
-    }
+    // Gestures admit an over-capacity target when its policy replaces
+    // (the evictions ride the atomic proposal); records never do.
+    if (this.#admitsEndpoints(target, line, true) !== true) return false;
+    return line ? this.#predicatesAdmit(target, line, phase) : true;
+  }
 
-    // The in-flight line never counts against capacity or parallel checks
-    // (it may still be attached during an idempotent re-connect).
+  /**
+   * The one structural admission check: roles, capacity (the in-flight
+   * line never counts against itself), and the parallel rule.
+   */
+  #admitsEndpoints(
+    target: ConnectorMirror,
+    line: LineMirror | null,
+    allowReplacement: boolean,
+  ): true | "capacity-exceeded" | "connection-rejected" {
+    if (target.id === this.id || !this.isSource || !target.isTarget) {
+      return "connection-rejected";
+    }
     const incoming = target
       .#liveIncomingLines()
       .filter((incomingLine) => incomingLine !== line);
-
-    // A full target only admits when its policy makes room.
+    const outgoing = this.#liveOutgoingLines().filter(
+      (outgoingLine) => outgoingLine !== line,
+    );
     if (
-      incoming.length >= target.#rules.maxIncoming &&
-      target.#rules.onFull === "reject"
+      (incoming.length >= target.#rules.maxIncoming &&
+        !(allowReplacement && target.#rules.onFull === "replace-oldest")) ||
+      outgoing.length >= this.#rules.maxOutgoing
     ) {
-      return false;
+      return "capacity-exceeded";
     }
-
     const hasParallel = incoming.some(
       (incomingLine) => incomingLine.start === this,
     );
@@ -761,20 +774,22 @@ class ConnectorMirror extends ElementObject {
       hasParallel &&
       !(this.#rules.allowParallel && target.#rules.allowParallel)
     ) {
-      return false;
-    }
-
-    if (line) {
-      const proposal: ConnectionProposal = {
-        line,
-        source: this,
-        target,
-        phase,
-      };
-      if (this.#rules.isValidConnection?.(proposal) === false) return false;
-      if (target.#rules.isValidConnection?.(proposal) === false) return false;
+      return "connection-rejected";
     }
     return true;
+  }
+
+  /** Both endpoints' line-aware predicates may veto. */
+  #predicatesAdmit(
+    target: ConnectorMirror,
+    line: LineMirror,
+    phase: "candidate" | "drop",
+  ): boolean {
+    const proposal: ConnectionProposal = { line, source: this, target, phase };
+    return (
+      this.#rules.isValidConnection?.(proposal) !== false &&
+      target.#rules.isValidConnection?.(proposal) !== false
+    );
   }
 
   runDragOutLine(prop: dragProp): void {
@@ -977,18 +992,9 @@ class ConnectorMirror extends ElementObject {
     line: LineMirror,
     target: ConnectorMirror,
   ): true | "capacity-exceeded" | "connection-rejected" {
-    const structural = this.#admitsRecordEndpoints(target, line);
+    const structural = this.#admitsEndpoints(target, line, false);
     if (structural !== true) return structural;
-    const proposal: ConnectionProposal = {
-      line,
-      source: this,
-      target,
-      phase: "drop",
-    };
-    if (
-      this.#rules.isValidConnection?.(proposal) === false ||
-      target.#rules.isValidConnection?.(proposal) === false
-    ) {
+    if (!this.#predicatesAdmit(target, line, "drop")) {
       return "connection-rejected";
     }
     this.#settlePreviewLine(line, target, null, "gesture", null);
@@ -1003,10 +1009,6 @@ class ConnectorMirror extends ElementObject {
     this.#outgoingLines.splice(index, 1);
     line.destroy(false);
     this.parent?.updateNodeLineList();
-  }
-
-  _endLineDragCleanup(): void {
-    this.#resetGesture();
   }
 
   startPickUpLine(line: LineMirror, prop: pointerDownProp): void {
@@ -1030,18 +1032,9 @@ class ConnectorMirror extends ElementObject {
     origin: ConnectionOrigin,
     payload: { value: unknown } | null,
   ): void {
-    // Explicit replacement policy: a full target admitted this line only
-    // because it evicts its oldest incoming lines ("replace-oldest").
-    const incoming = target
-      .#liveIncomingLines()
-      .filter((incomingLine) => incomingLine !== line);
-    const overflow = incoming.length - target.#rules.maxIncoming + 1;
-    if (overflow > 0) {
-      for (const incomingLine of incoming.slice(0, overflow)) {
-        incomingLine.start.deleteLine(incomingLine, "replacement");
-      }
-    }
-
+    // No local eviction here: replace-oldest evictions ride the atomic
+    // request, and the reconciler prunes accepted removals before settling —
+    // by the time a line settles, its target has room by construction.
     const previousTarget = line.target;
     if (previousTarget) {
       previousTarget.#incomingLines = previousTarget.#incomingLines.filter(
@@ -1324,20 +1317,11 @@ class ConnectorMirror extends ElementObject {
     target: ConnectorMirror,
     record: { id: string; payload?: unknown },
   ): LineMirror | "capacity-exceeded" | "connection-rejected" {
-    const structural = this.#admitsRecordEndpoints(target, null);
+    const structural = this.#admitsEndpoints(target, null, false);
     if (structural !== true) return structural;
 
     const line = this.createLine({ id: record.id });
-    const proposal: ConnectionProposal = {
-      line,
-      source: this,
-      target,
-      phase: "drop",
-    };
-    if (
-      this.#rules.isValidConnection?.(proposal) === false ||
-      target.#rules.isValidConnection?.(proposal) === false
-    ) {
+    if (!this.#predicatesAdmit(target, line, "drop")) {
       line.destroy(false);
       return "connection-rejected";
     }
@@ -1356,18 +1340,9 @@ class ConnectorMirror extends ElementObject {
     line: LineMirror,
     target: ConnectorMirror,
   ): true | "capacity-exceeded" | "connection-rejected" {
-    const structural = this.#admitsRecordEndpoints(target, line);
+    const structural = this.#admitsEndpoints(target, line, false);
     if (structural !== true) return structural;
-    const proposal: ConnectionProposal = {
-      line,
-      source: this,
-      target,
-      phase: "drop",
-    };
-    if (
-      this.#rules.isValidConnection?.(proposal) === false ||
-      target.#rules.isValidConnection?.(proposal) === false
-    ) {
+    if (!this.#predicatesAdmit(target, line, "drop")) {
       return "connection-rejected";
     }
     this.#settlePreviewLine(line, target, null, "hydration", null);
@@ -1376,36 +1351,6 @@ class ConnectorMirror extends ElementObject {
 
   /** Strict structural admission for canonical records: roles, capacity
    * without replacement, and the parallel rule. */
-  #admitsRecordEndpoints(
-    target: ConnectorMirror,
-    line: LineMirror | null,
-  ): true | "capacity-exceeded" | "connection-rejected" {
-    if (target.id === this.id || !this.isSource || !target.isTarget) {
-      return "connection-rejected";
-    }
-    const incoming = target
-      .#liveIncomingLines()
-      .filter((incomingLine) => incomingLine !== line);
-    const outgoing = this.#liveOutgoingLines().filter(
-      (outgoingLine) => outgoingLine !== line,
-    );
-    if (
-      incoming.length >= target.#rules.maxIncoming ||
-      outgoing.length >= this.#rules.maxOutgoing
-    ) {
-      return "capacity-exceeded";
-    }
-    const hasParallel = incoming.some(
-      (incomingLine) => incomingLine.start === this,
-    );
-    if (
-      hasParallel &&
-      !(this.#rules.allowParallel && target.#rules.allowParallel)
-    ) {
-      return "connection-rejected";
-    }
-    return true;
-  }
 
   #liveIncomingLines(): LineMirror[] {
     return this.#incomingLines.filter((line) => !line.isDeleteRequested);
@@ -1438,15 +1383,6 @@ class ConnectorMirror extends ElementObject {
       role: "target",
       origin,
     });
-    getGraphMirror(this.engine).reconciler?.notifyConnect?.({
-      source: this,
-      target,
-      connector: this,
-      peer: target,
-      line,
-      role: "source",
-      origin,
-    });
   }
 
   #emitDisconnect(
@@ -1470,15 +1406,6 @@ class ConnectorMirror extends ElementObject {
       peer: this,
       line,
       role: "target",
-      reason,
-    });
-    getGraphMirror(this.engine).reconciler?.notifyDisconnect?.({
-      source: this,
-      target,
-      connector: this,
-      peer: target,
-      line,
-      role: "source",
       reason,
     });
   }

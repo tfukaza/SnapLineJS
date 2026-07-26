@@ -1,8 +1,4 @@
-import type {
-  ConnectorMirror,
-  ConnectorConnectionEvent,
-  ConnectorDisconnectionEvent,
-} from "./connector";
+import type { ConnectorMirror } from "./connector";
 import type { NodeMirror } from "./node";
 import type { LineMirror } from "./line";
 import type { GroupNodeMirror, GroupMembershipResolver } from "./group";
@@ -39,9 +35,6 @@ export interface ReconciliationError {
 // sites that reach it) never value-import the reconciler module — it imports
 // the registry accessor, not the reverse.
 export interface GraphReconcilerLike {
-  /** Local-topology observations; the controlled reconciler ignores them. */
-  notifyConnect?(event: ConnectorConnectionEvent): void;
-  notifyDisconnect?(event: ConnectorDisconnectionEvent): void;
   /** Run one reconciliation pass against the latest canonical state. Invoked
    * by the mirror's coalescing, batch-aware scheduler. */
   reconcile?(): void;

@@ -324,14 +324,15 @@ class NodeMirror extends ElementObject {
    * the engine-internal `BaseObject.id`. */
   readonly nodeId: string;
   #config: Required<Omit<NodeConfig, "id">>;
+  /** @internal Name-keyed live connectors; written by ConnectorMirror's
+   * assignToNode/destroy — the one deliberate cross-class field. */
   _connectors: { [key: string]: ConnectorMirror };
-  _dragStartX = 0;
-  _dragStartY = 0;
+  #dragStartX = 0;
+  #dragStartY = 0;
   _nodeStyle: any;
   #hitBox: RectCollider;
-  _selected: boolean;
-  _mouseDownX: number;
-  _mouseDownY: number;
+  #mouseDownX: number;
+  #mouseDownY: number;
   _hasMoved: boolean;
   #resizeHitBoxes = new Map<ResizeHandle, ResizeHandleCollider>();
   #resizeHandles: readonly ResizeHandle[];
@@ -339,7 +340,7 @@ class NodeMirror extends ElementObject {
   #resizeHoverController: ResizeHoverController | null = null;
   #activeResizeHandle: ResizeHandle | null = null;
   /** Read by GroupNodeMirror to distinguish a resize from a move drag. */
-  protected _resizing = false;
+  #resizing = false;
   #resizeArmed = false;
   #resizeStartW = 0;
   #resizeStartH = 0;
@@ -374,10 +375,10 @@ class NodeMirror extends ElementObject {
       DEFAULT_RESIZE_HANDLE_THICKNESS;
 
     this._connectors = {};
-    this._dragStartX = this.worldTransform.x;
-    this._dragStartY = this.worldTransform.y;
-    this._mouseDownX = 0;
-    this._mouseDownY = 0;
+    this.#dragStartX = this.worldTransform.x;
+    this.#dragStartY = this.worldTransform.y;
+    this.#mouseDownX = 0;
+    this.#mouseDownY = 0;
     this.transformMode = "direct";
 
     this.event.input.pointerDown = this.onCursorDown;
@@ -408,7 +409,6 @@ class NodeMirror extends ElementObject {
       this.#positionResizeHitBoxes(0, 0);
     }
 
-    this._selected = false;
     this._hasMoved = false;
 
     // Whenever the DOM box changes size (ResizeObserver) re-measure + re-glue.
@@ -456,12 +456,11 @@ class NodeMirror extends ElementObject {
   }
 
   setStartPositions() {
-    this._dragStartX = this.worldTransform.x;
-    this._dragStartY = this.worldTransform.y;
+    this.#dragStartX = this.worldTransform.x;
+    this.#dragStartY = this.worldTransform.y;
   }
 
   setSelected(selected: boolean) {
-    this._selected = selected;
     this.dataAttribute = {
       selected: String(selected),
       "snapline-state": selected ? "focus" : "idle",
@@ -765,13 +764,13 @@ class NodeMirror extends ElementObject {
   onDragStart(prop: dragStartProp): void {
     if (this.#dragPointerId !== prop.pointerId) return;
     if (this.#resizeArmed) {
-      this._resizing = true;
+      this.#resizing = true;
       this.#resizeStartW = this.#hitBox.width;
       this.#resizeStartH = this.#hitBox.height;
       this.#resizeStartX = this.worldTransform.x;
       this.#resizeStartY = this.worldTransform.y;
-      this._mouseDownX = prop.start.x;
-      this._mouseDownY = prop.start.y;
+      this.#mouseDownX = prop.start.x;
+      this.#mouseDownY = prop.start.y;
       this._hasMoved = true;
       // Guard so releasing a resize over another node doesn't click-select it.
       getGraphMirror(this.engine).resizingNode = this;
@@ -814,10 +813,10 @@ class NodeMirror extends ElementObject {
       console.error("Global stats is null");
       return;
     }
-    if (this._resizing) {
+    if (this.#resizing) {
       this.#applyResizeDrag(
-        prop.position.x - this._mouseDownX,
-        prop.position.y - this._mouseDownY,
+        prop.position.x - this.#mouseDownX,
+        prop.position.y - this.#mouseDownY,
       );
       return;
     }
@@ -846,8 +845,8 @@ class NodeMirror extends ElementObject {
   /** @internal Hook used to build one deduplicated multi-selection drag session. */
   beginSelectionDrag(position: eventPosition): void {
     this.setStartPositions();
-    this._mouseDownX = position.x;
-    this._mouseDownY = position.y;
+    this.#mouseDownX = position.x;
+    this.#mouseDownY = position.y;
   }
 
   /** @internal Whether this node's drag behavior already carries `node`. */
@@ -864,16 +863,16 @@ class NodeMirror extends ElementObject {
   finishSelectionDrag(): void {}
 
   setDragPosition(prop: dragProp) {
-    const dx = prop.position.x - this._mouseDownX;
-    const dy = prop.position.y - this._mouseDownY;
-    const x = this._dragStartX + dx;
-    const y = this._dragStartY + dy;
+    const dx = prop.position.x - this.#mouseDownX;
+    const dy = prop.position.y - this.#mouseDownY;
+    const x = this.#dragStartX + dx;
+    const y = this.#dragStartY + dy;
     const resolved = this.#callbacks.resolveDragPosition?.({
       node: this,
       x,
       y,
-      startX: this._dragStartX,
-      startY: this._dragStartY,
+      startX: this.#dragStartX,
+      startY: this.#dragStartY,
       position: prop.position,
     }) ?? { x, y };
 
@@ -890,10 +889,10 @@ class NodeMirror extends ElementObject {
       this.engine.edgePanController?.stopEdgePan(this.#edgePanPointerId);
       this.#edgePanPointerId = null;
     }
-    if (this._resizing) {
+    if (this.#resizing) {
       this.#applyResizeDrag(
-        prop.end.x - this._mouseDownX,
-        prop.end.y - this._mouseDownY,
+        prop.end.x - this.#mouseDownX,
+        prop.end.y - this.#mouseDownY,
       );
       // Pointer-up is a synchronization boundary for consumers that immediately
       // query the committed handle/box. Keep the coalesced frame write for the
@@ -902,7 +901,7 @@ class NodeMirror extends ElementObject {
       this.#callbacks.onGeometryChanged?.({
         nodes: [this.#geometryOf(this)],
       });
-      this._resizing = false;
+      this.#resizing = false;
       this.#resizeArmed = false;
       this.#activeResizeHandle = null;
       getGraphMirror(this.engine).resizingNode = null;
@@ -964,12 +963,12 @@ class NodeMirror extends ElementObject {
 
   setUpPosition(prop: dragEndProp) {
     const [dx, dy] = [
-      prop.end.x - this._mouseDownX,
-      prop.end.y - this._mouseDownY,
+      prop.end.x - this.#mouseDownX,
+      prop.end.y - this.#mouseDownY,
     ];
     this.worldTransform = {
-      x: this._dragStartX + dx,
-      y: this._dragStartY + dy,
+      x: this.#dragStartX + dx,
+      y: this.#dragStartY + dy,
     };
     this.scheduleTransformAndLines();
   }
