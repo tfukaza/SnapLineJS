@@ -1,11 +1,11 @@
 import { useLayoutEffect, useRef, type CSSProperties } from "react";
 import type {
-  LineComponent,
+  LineMirror,
   LineGeometrySnapshot,
 } from "@snap-engine/snapline";
 
 export interface LineProps {
-  line: LineComponent;
+  line: LineMirror;
   className?: string;
   pathClassName?: string;
   pathStyle?: CSSProperties;

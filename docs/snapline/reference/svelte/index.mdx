@@ -26,7 +26,7 @@ when the component unmounts.
 A virtual connector renders no port element. Its source and target surfaces are
 resolved against the parent node, which is useful for whole-border diagram
 connections. Connection-request payloads stay opaque to the adapter and are
-available to custom `LineSvelteComponent` renderers through `LineComponent`.
+available to custom `LineSvelteComponent` renderers through `LineMirror`.
 Custom renderers register `line.bindGeometryWriter(...)` on mount and mutate
 retained SVG, Canvas, or graphics refs directly.
 

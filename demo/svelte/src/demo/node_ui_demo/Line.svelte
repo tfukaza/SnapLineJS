@@ -1,9 +1,9 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import type { LineComponent, LineGeometrySnapshot } from "@snap-engine/snapline";
+  import type { LineMirror, LineGeometrySnapshot } from "@snap-engine/snapline";
   import {blur} from "svelte/transition";
 
-  let { line }: { line: LineComponent } = $props();
+  let { line }: { line: LineMirror } = $props();
 
   const radius = 10;
   let svgDOM: SVGSVGElement;

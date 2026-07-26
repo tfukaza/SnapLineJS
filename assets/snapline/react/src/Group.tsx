@@ -8,7 +8,7 @@ import {
 } from "react";
 import {
   DEFAULT_RESIZE_HANDLE_THICKNESS,
-  GroupNodeComponent,
+  GroupNodeMirror,
   type GroupCallbacks,
   type GroupContainEvent,
   type GroupMembershipEvent,
@@ -23,7 +23,7 @@ import { useSnapLineEngine } from "./Engine";
 export interface GroupProps {
   children?: ReactNode;
   className?: string;
-  groupObject?: GroupNodeComponent | null;
+  groupObject?: GroupNodeMirror | null;
   style?: CSSProperties;
   title?: string;
   /** Consumer-rendered header contents. `title` remains the fallback. */
@@ -47,7 +47,7 @@ export interface GroupProps {
   onDragCommit?: (event: NodeDragCommitEvent) => void;
 }
 
-export const Group = forwardRef<GroupNodeComponent, GroupProps>(function Group(
+export const Group = forwardRef<GroupNodeMirror, GroupProps>(function Group(
   {
     children,
     className = "",
@@ -79,9 +79,9 @@ export const Group = forwardRef<GroupNodeComponent, GroupProps>(function Group(
   const boxDomRef = useRef<HTMLDivElement>(null);
   const headerRef = useRef<HTMLElement>(null);
   const ownsGroupRef = useRef(groupObject == null);
-  const groupRef = useRef<GroupNodeComponent | null>(groupObject);
+  const groupRef = useRef<GroupNodeMirror | null>(groupObject);
   if (!groupRef.current) {
-    groupRef.current = new GroupNodeComponent(engine, null, {
+    groupRef.current = new GroupNodeMirror(engine, null, {
       width,
       height,
       minWidth,
@@ -118,7 +118,7 @@ export const Group = forwardRef<GroupNodeComponent, GroupProps>(function Group(
   useLayoutEffect(() => {
     if (boxDomRef.current) {
       group.element = boxDomRef.current;
-      group.syncDomGeometry();
+      group.remeasureDomGeometry();
     }
     const originalCallbacks = { ...group.callbacks };
     const originalGroupCallbacks = { ...group.groupCallbacks };
@@ -251,7 +251,7 @@ export const Group = forwardRef<GroupNodeComponent, GroupProps>(function Group(
     group.element.style.width = `${width}px`;
     group.element.style.height = `${height}px`;
     group.setSizeState(width, height);
-    group.syncDomGeometry();
+    group.remeasureDomGeometry();
   }, [group, width, height]);
 
   const handleSize =

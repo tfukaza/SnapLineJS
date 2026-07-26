@@ -5,7 +5,7 @@ import type {
   pointerUpProp,
 } from "@snap-engine/core";
 import { RectCollider, Collider } from "@snap-engine/core/collision";
-import { NodeComponent, type SelectionMode } from "./node";
+import { NodeMirror, type SelectionMode } from "./node";
 import { getSelectList, snapData } from "./snapline-globals";
 import type { GeometryWriter } from "./geometry";
 
@@ -19,14 +19,14 @@ export interface SelectRect {
 }
 
 export interface SelectStartEvent {
-  select: RectSelectComponent;
+  select: RectSelectController;
   position: { x: number; y: number };
   originalEvent: PointerEvent;
 }
 
 export interface SelectChangeEvent {
-  select: RectSelectComponent;
-  selection: readonly NodeComponent[];
+  select: RectSelectController;
+  selection: readonly NodeMirror[];
 }
 
 export interface SelectCallbacks {
@@ -46,7 +46,7 @@ export interface SelectConfig {
   callbacks?: SelectCallbacks;
 }
 
-class RectSelectComponent extends ElementObject {
+class RectSelectController extends ElementObject {
   _state: "none" | "dragging";
   _mouseDownX: number;
   _mouseDownY: number;
@@ -61,7 +61,7 @@ class RectSelectComponent extends ElementObject {
     visible: false,
   };
   #selectionMode: SelectionMode = "replace";
-  #baselineSelection = new Set<NodeComponent>();
+  #baselineSelection = new Set<NodeMirror>();
 
   constructor(
     engine: any,
@@ -161,8 +161,8 @@ class RectSelectComponent extends ElementObject {
       _: Collider,
       otherObject: Collider,
     ) => {
-      if (otherObject.parent instanceof NodeComponent) {
-        let node = otherObject.parent as NodeComponent;
+      if (otherObject.parent instanceof NodeMirror) {
+        let node = otherObject.parent as NodeMirror;
         node.setSelected(
           this.#selectionMode === "toggle"
             ? !this.#baselineSelection.has(node)
@@ -178,8 +178,8 @@ class RectSelectComponent extends ElementObject {
       _thisObject: Collider,
       otherObject: Collider,
     ) => {
-      if (otherObject.parent instanceof NodeComponent) {
-        let node = otherObject.parent as NodeComponent;
+      if (otherObject.parent instanceof NodeMirror) {
+        let node = otherObject.parent as NodeMirror;
         node.setSelected(this.#baselineSelection.has(node));
         this.#callbacks.onSelectionChange?.({
           select: this,
@@ -219,4 +219,4 @@ class RectSelectComponent extends ElementObject {
   onCollideNode(_hitBox: Collider, _node: Collider): void {}
 }
 
-export { RectSelectComponent };
+export { RectSelectController };

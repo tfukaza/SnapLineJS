@@ -8,15 +8,15 @@ import {
   type CSSProperties,
 } from "react";
 import {
-  ConnectorComponent,
-  LineComponent,
+  ConnectorMirror,
+  LineMirror,
   type ConnectorCapabilities,
   type ConnectorCallbacks,
   type ConnectorSurfaceStrategy,
   type SnapLineMetadata,
 } from "@snap-engine/snapline";
 import { useSnapLineEngine } from "./Engine";
-import { NodeObjectContext } from "./Node";
+import { NodeMirrorContext } from "./Node";
 
 export interface ConnectorProps {
   allowDragOut?: boolean;
@@ -32,13 +32,13 @@ export interface ConnectorProps {
   /** Keep the logical connector without rendering a visible port element. */
   virtual?: boolean;
   colliderRadius?: number;
-  lineClass?: typeof LineComponent;
-  connectorObject?: ConnectorComponent | null;
+  lineClass?: typeof LineMirror;
+  connectorObject?: ConnectorMirror | null;
   data?: Record<string, string>;
 }
 
 export interface ConnectorRef {
-  object(): ConnectorComponent;
+  object(): ConnectorMirror;
 }
 
 export const Connector = forwardRef<ConnectorRef, ConnectorProps>(
@@ -63,15 +63,15 @@ export const Connector = forwardRef<ConnectorRef, ConnectorProps>(
     ref,
   ) => {
     const engine = useSnapLineEngine();
-    const nodeObject = useContext(NodeObjectContext);
+    const nodeObject = useContext(NodeMirrorContext);
     if (!nodeObject) {
       throw new Error("<Connector> must be rendered inside <Node>.");
     }
 
     const ownsConnectorRef = useRef(connectorObject == null);
-    const connectorRef = useRef<ConnectorComponent | null>(connectorObject);
+    const connectorRef = useRef<ConnectorMirror | null>(connectorObject);
     if (!connectorRef.current) {
-      connectorRef.current = new ConnectorComponent(engine, nodeObject, {
+      connectorRef.current = new ConnectorMirror(engine, nodeObject, {
         allowDragOut,
         maxConnectors,
         name,

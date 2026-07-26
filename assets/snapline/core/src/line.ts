@@ -2,7 +2,7 @@ import { ElementObject, BaseObject } from "@snap-engine/core";
 import type {
   ConnectorAnchor,
   ConnectorCandidate,
-  ConnectorComponent,
+  ConnectorMirror,
   ConnectorHit,
   ConnectorLinePhase,
   ConnectorPoint,
@@ -18,17 +18,17 @@ export interface LineGeometrySnapshot {
 
 export interface LineStateSnapshot {
   readonly phase: ConnectorLinePhase;
-  readonly target: ConnectorComponent | null;
-  readonly candidate: ConnectorComponent | null;
+  readonly target: ConnectorMirror | null;
+  readonly candidate: ConnectorMirror | null;
   readonly payload: unknown;
 }
 
-class LineComponent extends ElementObject {
+class LineMirror extends ElementObject {
   endWorldX: number;
   endWorldY: number;
 
-  start: ConnectorComponent;
-  target: ConnectorComponent | null;
+  start: ConnectorMirror;
+  target: ConnectorMirror | null;
   payload: unknown;
   startAnchor: ConnectorAnchor;
   endAnchor: ConnectorAnchor;
@@ -49,7 +49,7 @@ class LineComponent extends ElementObject {
     this.endWorldX = 0;
     this.endWorldY = 0;
 
-    this.start = parent as unknown as ConnectorComponent;
+    this.start = parent as unknown as ConnectorMirror;
     this.target = null;
     this.payload = undefined;
     this.startAnchor = { x: 0, y: 0 };
@@ -138,7 +138,7 @@ class LineComponent extends ElementObject {
   }
 
   connectTarget(
-    target: ConnectorComponent,
+    target: ConnectorMirror,
     candidate: ConnectorCandidate | null = this.candidate,
     strategy: ConnectorSurfaceStrategy | null = this.#targetStrategy,
   ): void {
@@ -286,4 +286,4 @@ function cloneAnchor(anchor: ConnectorAnchor): ConnectorAnchor {
   };
 }
 
-export { LineComponent };
+export { LineMirror };

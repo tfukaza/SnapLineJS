@@ -1,13 +1,13 @@
 <script lang="ts">
   import { onMount, tick } from "svelte";
 
-  import { NodeComponent } from "@snap-engine/snapline";
+  import { NodeMirror } from "@snap-engine/snapline";
   import { Connector, Node } from "@snap-engine/snapline-svelte";
 
   import Line from "./Line.svelte";
   import "./../../node_ui.scss";
 
-  let {nodeObject}: { nodeObject?: NodeComponent | null } = $props();
+  let {nodeObject}: { nodeObject?: NodeMirror | null } = $props();
 
   interface input {
     value: number;

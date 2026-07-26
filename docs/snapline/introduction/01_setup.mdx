@@ -64,18 +64,18 @@ export function Graph() {
 ```ts framework=vanilla
 import { Engine } from "@snap-engine/core";
 import { CollisionEngine } from "@snap-engine/core/collision";
-import { ConnectorComponent, NodeComponent } from "@snap-engine/snapline";
+import { ConnectorMirror, NodeMirror } from "@snap-engine/snapline";
 
 const engine = new Engine();
 engine.setCollisionEngine(new CollisionEngine());
 engine.assignDom(document.querySelector("#graph")!);
 
-const source = new NodeComponent(engine, null);
+const source = new NodeMirror(engine, null);
 source.element = document.querySelector("#source")!;
 source.worldTransform = { x: 80, y: 90 };
-source.syncDomGeometry();
+source.remeasureDomGeometry();
 
-const output = new ConnectorComponent(engine, source, {
+const output = new ConnectorMirror(engine, source, {
   name: "value",
   maxConnectors: -1,
   allowDragOut: true,
@@ -85,4 +85,4 @@ source.addConnectorObject(output);
 
 Adapters create and destroy core objects automatically unless you supply an
 existing object. Vanilla integrations assign committed DOM elements and call
-`syncDomGeometry()` after layout.
+`remeasureDomGeometry()` after layout.

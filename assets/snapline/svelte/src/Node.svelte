@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { NodeComponent, LineComponent, DEFAULT_RESIZE_HANDLE_THICKNESS, type NodeCallbacks, type NodeDragCommitEvent, type NodeResizeEvent, type ResizeHandle, type SnapLineMetadata } from "@snap-engine/snapline";
+    import { NodeMirror, LineMirror, DEFAULT_RESIZE_HANDLE_THICKNESS, type NodeCallbacks, type NodeDragCommitEvent, type NodeResizeEvent, type ResizeHandle, type SnapLineMetadata } from "@snap-engine/snapline";
     import type { Engine } from "@snap-engine/core";
     import Line from "./Line.svelte";
     import { onMount, setContext, getContext, onDestroy, tick, untrack } from "svelte";
@@ -31,7 +31,7 @@
     }: {
         className?: string;
         LineSvelteComponent?: typeof Line;
-        nodeObject?: NodeComponent | null;
+        nodeObject?: NodeMirror | null;
         x?: number;
         y?: number;
         width?: number;
@@ -56,9 +56,9 @@
     let engine: Engine = getContext("engine");
     const ownsNode = nodeObject == null;
     if (!nodeObject) {
-         nodeObject = new NodeComponent(engine, null, { resizable, minWidth, minHeight, resizeHandleThickness, resizeHandles, resizeCursors, metadata, callbacks: {}, edgePan });
+         nodeObject = new NodeMirror(engine, null, { resizable, minWidth, minHeight, resizeHandleThickness, resizeHandles, resizeCursors, metadata, callbacks: {}, edgePan });
     }
-    let lineList: LineComponent[] = $state(nodeObject.getAllOutgoingLines());
+    let lineList: LineMirror[] = $state(nodeObject.getAllOutgoingLines());
 
     let mounted = $state(false);
     let originalCallbacks: NodeCallbacks = {};
@@ -122,7 +122,7 @@
         };
         lineList = nodeObject.getAllOutgoingLines();
         void tick().then(() => {
-            if (mounted && nodeObject!.element) nodeObject!.syncDomGeometry();
+            if (mounted && nodeObject!.element) nodeObject!.remeasureDomGeometry();
         });
     });
 
@@ -171,7 +171,7 @@
                     nextHeight ?? object.hitBox.height,
                 );
             }
-            object.syncDomGeometry();
+            object.remeasureDomGeometry();
         });
     });
 

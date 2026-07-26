@@ -1,5 +1,5 @@
 <script lang="ts">
-    import type { LineComponent, LineGeometrySnapshot } from "@snap-engine/snapline";
+    import type { LineMirror, LineGeometrySnapshot } from "@snap-engine/snapline";
     import { onDestroy, onMount } from "svelte";
     let {
       line,
@@ -9,7 +9,7 @@
       showArrow = true,
       data = {},
     }: {
-      line: LineComponent;
+      line: LineMirror;
       className?: string;
       pathClassName?: string;
       pathStyle?: string;

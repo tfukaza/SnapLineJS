@@ -72,9 +72,9 @@ answer:
 
 A SnapLine runtime object associated with a domain entity:
 
-- `NodeComponent`;
-- `ConnectorComponent`;
-- settled `LineComponent`.
+- `NodeMirror`;
+- `ConnectorMirror`;
+- settled `LineMirror`.
 
 A mirror may contain interaction state and geometry that is absent from the
 domain document.
@@ -120,7 +120,7 @@ The application/framework MUST be the sole authority for committed node,
 connector, and edge existence.
 
 SnapLine MUST NOT treat a committed gesture result, registry entry, DOM
-element, connector array, or `LineComponent` as proof that a domain entity
+element, connector array, or `LineMirror` as proof that a domain entity
 exists.
 
 ### O2. Runtime mirrors
@@ -177,10 +177,10 @@ copies of complete domain records.
 
 | Concern                      | Required authority                   | Allowed SnapLine mirror                                          |
 | ---------------------------- | ------------------------------------ | ---------------------------------------------------------------- |
-| Node existence               | Domain/framework collection          | `NodeComponent` while mounted                                    |
-| Connector existence          | Domain/framework node/port rendering | `ConnectorComponent` while mounted                               |
-| Edge existence               | Domain edge collection               | Settled `LineComponent` while resolvable                         |
-| Preview connection           | SnapLine gesture                     | Targetless preview `LineComponent`                               |
+| Node existence               | Domain/framework collection          | `NodeMirror` while mounted                                    |
+| Connector existence          | Domain/framework node/port rendering | `ConnectorMirror` while mounted                               |
+| Edge existence               | Domain edge collection               | Settled `LineMirror` while resolvable                         |
+| Preview connection           | SnapLine gesture                     | Targetless preview `LineMirror`                               |
 | Node persisted position/size | Domain/application                   | Live transform and collision box                                 |
 | Node live drag/resize        | SnapLine                             | Transient local geometry                                         |
 | Connector policy             | Application configuration            | Normalized core capabilities                                     |
@@ -291,7 +291,7 @@ When a framework node mounts, its mirror MUST register exactly once.
 When an adapter-owned node unmounts, its mirror MUST unregister and destroy
 exactly once.
 
-Supplying an externally owned `NodeComponent` MUST transfer neither domain
+Supplying an externally owned `NodeMirror` MUST transfer neither domain
 ownership nor destruction responsibility to the adapter.
 
 ### L2. Connector mount and unmount
@@ -531,7 +531,7 @@ Adapters MUST render node/group width and height.
 Core MAY update collision state synchronously and request a rendered size
 through callbacks.
 
-Adapters MUST call `syncDomGeometry()` after the committed element and
+Adapters MUST call `remeasureDomGeometry()` after the committed element and
 dimensions are available.
 
 ### A4. Callback composition
@@ -687,7 +687,7 @@ flowchart TB
 
 | Requirement area                    | Current status     | Comment                                                   |
 | ----------------------------------- | ------------------ | --------------------------------------------------------- |
-| Framework-owned node existence      | Mostly conforms    | Mount/unmount controls adapter-owned `NodeComponent`      |
+| Framework-owned node existence      | Mostly conforms    | Mount/unmount controls adapter-owned `NodeMirror`      |
 | Framework-owned connector existence | Mostly conforms    | Mount/unmount controls adapter-owned connector            |
 | Framework-owned structural DOM      | Conforms by design | Core performs property/transform writes only              |
 | Canonical application edges         | Partial            | Available only through optional `EdgeSync`                |

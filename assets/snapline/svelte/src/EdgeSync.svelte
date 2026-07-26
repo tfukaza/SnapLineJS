@@ -1,7 +1,7 @@
 <script lang="ts">
   import {
     EdgeSyncController,
-    type ConnectorComponent,
+    type ConnectorMirror,
     type EdgeConnectIntentEvent,
     type EdgeDisconnectIntentEvent,
     type EdgeEndpoint,
@@ -19,7 +19,7 @@
     /** The consumer's edge document — the single source of truth. */
     edges: readonly EdgeLike[];
     /** Maps a connector to its semantic endpoint, or null for unmanaged connectors. */
-    identity: (connector: ConnectorComponent) => EdgeEndpoint | null;
+    identity: (connector: ConnectorMirror) => EdgeEndpoint | null;
     onEdgeConnect?: ((event: EdgeConnectIntentEvent) => void) | undefined;
     onEdgeDisconnect?: ((event: EdgeDisconnectIntentEvent) => void) | undefined;
   } = $props();

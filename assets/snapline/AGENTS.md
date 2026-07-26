@@ -16,11 +16,11 @@ APIs directly rather than adding compatibility shims.
 **Dependencies:** `@snap-engine/core`
 
 **Exports:**
-- `NodeComponent` - Graph node with connectors (opt-in eight-direction resize)
-- `ConnectorComponent` - Input/output connector
-- `LineComponent` - Visual connection line
-- `GroupNodeComponent` - Resizable box that carries the nodes inside it
-- `RectSelectComponent` - Rectangle selection tool
+- `NodeMirror` - Graph node with connectors (opt-in eight-direction resize)
+- `ConnectorMirror` - Input/output connector
+- `LineMirror` - Visual connection line
+- `GroupNodeMirror` - Resizable box that carries the nodes inside it
+- `RectSelectController` - Rectangle selection tool
 - `PlacementController` - Headless pointer-follow placement state machine
 - `snapline-globals` - Typed accessors for the shared `global.data` registries
 
@@ -54,10 +54,10 @@ snapline/
 │   ├── tsconfig.json
 │   └── src/
 │       ├── index.ts
-│       ├── node.ts          # NodeComponent
-│       ├── connector.ts     # ConnectorComponent
-│       ├── line.ts          # LineComponent
-│       └── select.ts        # RectSelectComponent
+│       ├── node.ts          # NodeMirror
+│       ├── connector.ts     # ConnectorMirror
+│       ├── line.ts          # LineMirror
+│       └── select.ts        # RectSelectController
 └── svelte/
     ├── package.json
     ├── tsconfig.json
@@ -71,7 +71,7 @@ snapline/
 
 ## Core Classes
 
-### NodeComponent
+### NodeMirror
 **Extends:** `ElementObject`
 **Purpose:** Draggable graph node with input/output connectors
 
@@ -87,7 +87,7 @@ snapline/
 - `getProp(name)` - Get property value
 - `addSetPropCallback(callback, propName)` - React to property changes
 
-### ConnectorComponent
+### ConnectorMirror
 **Extends:** `BaseObject`
 **Purpose:** Connection point on a node
 
@@ -102,7 +102,7 @@ snapline/
 - Drag permissions
 - Connection callbacks
 
-### LineComponent
+### LineMirror
 **Extends:** `ElementObject`
 **Purpose:** Visual connection between connectors
 
@@ -112,7 +112,7 @@ snapline/
 - Start/end world coordinates
 - Callback-based rendering
 
-### RectSelectComponent
+### RectSelectController
 **Extends:** `ElementObject`
 **Purpose:** Rectangle selection tool
 
@@ -129,7 +129,7 @@ snapline/
 **Props:**
 - `className?: string` - CSS class
 - `LineSvelteComponent?: Component` - Custom line component
-- `nodeObject?: NodeComponent` (bindable) - Node instance
+- `nodeObject?: NodeMirror` (bindable) - Node instance
 
 **Slots:**
 - Default: Node content and connectors
@@ -143,13 +143,13 @@ snapline/
 - `allowDragOut: boolean` - Allow drag out
 
 **Methods:**
-- `object(): ConnectorComponent` - Get underlying connector
+- `object(): ConnectorMirror` - Get underlying connector
 
 ### Line.svelte
 **Purpose:** Renders connection path
 
 **Props:**
-- `line: LineComponent` - Line instance
+- `line: LineMirror` - Line instance
 
 **Features:**
 - SVG path rendering
@@ -176,7 +176,7 @@ Concretely:
   connectors, then re-glue lines. `onSizeChange` is observational and
   `onResizeCommit` is the framework persistence boundary.
 - **Initial node geometry** is explicit: after assigning a committed framework
-  element, adapters call `syncDomGeometry()`. ResizeObserver remains the
+  element, adapters call `remeasureDomGeometry()`. ResizeObserver remains the
   ongoing invalidation path, not the initial-mount handshake.
 - **Line, selection, and placement geometry** use
   `bindGeometryWriter(...)`. Adapters mount static structure once; the writer
@@ -226,7 +226,7 @@ missing lines with origin `"hydration"`) and translates gestures into
 semantic intents (`onEdgeConnect` for gesture connects, `onEdgeDisconnect`
 for gesture and replacement disconnects). Programmatic, hydration, and
 teardown changes never forward as intents, and sync never forwards its own
-mutations (`#syncing` guard). Edges exist in exactly two representations —
+mutations (`#reconciling` guard). Edges exist in exactly two representations —
 consumer document and rendered lines; `NodeManager` holds membership only and
 the controller stores no edges (`getEdges()` is consulted fresh). Intents fire
 synchronously inside the drop dispatch; adapters reconcile in a microtask of

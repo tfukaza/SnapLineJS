@@ -3,7 +3,7 @@ import type {
   Engine,
   eventPosition,
 } from "@snap-engine/core";
-import { NodeComponent, mergeConfig, type NodeConfig } from "./node";
+import { NodeMirror, mergeConfig, type NodeConfig } from "./node";
 import { getGroups, snapData } from "./snapline-globals";
 
 export interface GroupConfig extends NodeConfig {
@@ -15,18 +15,18 @@ export interface GroupConfig extends NodeConfig {
 }
 
 export interface GroupContainEvent {
-  group: GroupNodeComponent;
-  node: NodeComponent;
+  group: GroupNodeMirror;
+  node: NodeMirror;
   centerContained: boolean;
   boundsContained: boolean;
 }
 
 export interface GroupMembershipEvent {
-  group: GroupNodeComponent;
-  added: readonly NodeComponent[];
-  removed: readonly NodeComponent[];
+  group: GroupNodeMirror;
+  added: readonly NodeMirror[];
+  removed: readonly NodeMirror[];
   /** Direct members only. Use `group.descendants` for the complete subtree. */
-  members: readonly NodeComponent[];
+  members: readonly NodeMirror[];
 }
 
 export interface GroupCallbacks {
@@ -34,15 +34,15 @@ export interface GroupCallbacks {
 }
 
 export interface GroupMembershipResolutionEvent {
-  node: NodeComponent;
+  node: NodeMirror;
   /** Safe eligible candidates, ordered from innermost to outermost. */
-  candidates: readonly GroupNodeComponent[];
-  defaultParent: GroupNodeComponent | null;
+  candidates: readonly GroupNodeMirror[];
+  defaultParent: GroupNodeMirror | null;
 }
 
 export type GroupMembershipResolver = (
   event: GroupMembershipResolutionEvent,
-) => GroupNodeComponent | null;
+) => GroupNodeMirror | null;
 
 const DEFAULT_GROUP_CONFIG = {
   width: 400,
@@ -51,12 +51,12 @@ const DEFAULT_GROUP_CONFIG = {
   minHeight: 120,
 } satisfies GroupConfig;
 
-const parentGroups = new WeakMap<NodeComponent, GroupNodeComponent>();
+const parentGroups = new WeakMap<NodeMirror, GroupNodeMirror>();
 const membershipResolvers = new WeakMap<object, GroupMembershipResolver>();
 const reconcilingEngines = new WeakSet<object>();
 
 type Bounds = ReturnType<
-  NodeComponent["hitBox"]["getWorldBoundsSnapshot"]
+  NodeMirror["hitBox"]["getWorldBoundsSnapshot"]
 >;
 
 function boundsArea(bounds: Bounds): number {
@@ -74,8 +74,8 @@ function containsBounds(container: Bounds, child: Bounds): boolean {
 }
 
 function stableGroupOrder(
-  left: GroupNodeComponent,
-  right: GroupNodeComponent,
+  left: GroupNodeMirror,
+  right: GroupNodeMirror,
 ): number {
   const areaDelta =
     boundsArea(left.hitBox.getWorldBoundsSnapshot()) -
@@ -83,26 +83,26 @@ function stableGroupOrder(
   return areaDelta || String(left.id).localeCompare(String(right.id));
 }
 
-function groupsForEngine(group: GroupNodeComponent): GroupNodeComponent[] {
+function groupsForEngine(group: GroupNodeMirror): GroupNodeMirror[] {
   return getGroups(group.global).filter(
-    (candidate): candidate is GroupNodeComponent =>
-      candidate instanceof GroupNodeComponent &&
+    (candidate): candidate is GroupNodeMirror =>
+      candidate instanceof GroupNodeMirror &&
       candidate.engine === group.engine,
   );
 }
 
-function nodesForEngine(group: GroupNodeComponent): NodeComponent[] {
+function nodesForEngine(group: GroupNodeMirror): NodeMirror[] {
   const table = group.global.getEngineObjectTable(group.engine);
   return Object.values(table).filter(
-    (object): object is NodeComponent => object instanceof NodeComponent,
+    (object): object is NodeMirror => object instanceof NodeMirror,
   );
 }
 
 function resolveParent(
-  node: NodeComponent,
-  candidates: GroupNodeComponent[],
+  node: NodeMirror,
+  candidates: GroupNodeMirror[],
   engine: object,
-): GroupNodeComponent | null {
+): GroupNodeMirror | null {
   candidates.sort(stableGroupOrder);
   const defaultParent = candidates[0] ?? null;
   const resolver = membershipResolvers.get(engine);
@@ -119,12 +119,12 @@ function resolveParent(
 }
 
 function wouldCreateGroupCycle(
-  node: GroupNodeComponent,
-  parent: GroupNodeComponent,
-  nextParents: Map<NodeComponent, GroupNodeComponent>,
+  node: GroupNodeMirror,
+  parent: GroupNodeMirror,
+  nextParents: Map<NodeMirror, GroupNodeMirror>,
 ): boolean {
-  let ancestor: GroupNodeComponent | undefined = parent;
-  const visited = new Set<GroupNodeComponent>();
+  let ancestor: GroupNodeMirror | undefined = parent;
+  const visited = new Set<GroupNodeMirror>();
   while (ancestor && !visited.has(ancestor)) {
     if (ancestor === node) return true;
     visited.add(ancestor);
@@ -134,7 +134,7 @@ function wouldCreateGroupCycle(
 }
 
 function reconcileMembership(
-  source: GroupNodeComponent,
+  source: GroupNodeMirror,
   fireDelta: boolean,
 ): void {
   const engine = source.engine as object;
@@ -144,15 +144,15 @@ function reconcileMembership(
   try {
     const groups = groupsForEngine(source);
     const nextMembers = new Map<
-      GroupNodeComponent,
-      Set<NodeComponent>
+      GroupNodeMirror,
+      Set<NodeMirror>
     >(groups.map((group) => [group, new Set()]));
-    const nextParents = new Map<NodeComponent, GroupNodeComponent>();
+    const nextParents = new Map<NodeMirror, GroupNodeMirror>();
 
     const nodes = nodesForEngine(source);
     const groupNodes = [...groups].sort(stableGroupOrder);
     const ordinaryNodes = nodes.filter(
-      (node) => !(node instanceof GroupNodeComponent),
+      (node) => !(node instanceof GroupNodeMirror),
     );
 
     // Resolve the group forest first. A proposed edge can point at a group that
@@ -185,7 +185,7 @@ function reconcileMembership(
 
     const deltas = groups.map((group) => {
       const previous = group.members;
-      const next = nextMembers.get(group) ?? new Set<NodeComponent>();
+      const next = nextMembers.get(group) ?? new Set<NodeMirror>();
       return {
         group,
         next,
@@ -219,8 +219,8 @@ function reconcileMembership(
 
 /** Return the node's settled, exclusive direct parent group. */
 export function getParentGroup(
-  node: NodeComponent,
-): GroupNodeComponent | null {
+  node: NodeMirror,
+): GroupNodeMirror | null {
   return parentGroups.get(node) ?? null;
 }
 
@@ -237,8 +237,8 @@ export function setGroupMembershipResolver(
     const global = engine.global;
     const source = global
       ? getGroups(global).find(
-        (group): group is GroupNodeComponent =>
-          group instanceof GroupNodeComponent && group.engine === engine,
+        (group): group is GroupNodeMirror =>
+          group instanceof GroupNodeMirror && group.engine === engine,
       )
       : undefined;
     source?.refreshMembership(true);
@@ -254,10 +254,10 @@ export function setGroupMembershipResolver(
 
 // A resizable box with settled geometric membership. Membership is exclusive:
 // each node has one direct parent, while nested groups form a recursive tree.
-class GroupNodeComponent extends NodeComponent {
-  #members: Set<NodeComponent> = new Set();
-  #carry: NodeComponent[] = [];
-  #carryOrigins = new Map<NodeComponent, { x: number; y: number }>();
+class GroupNodeMirror extends NodeMirror {
+  #members: Set<NodeMirror> = new Set();
+  #carry: NodeMirror[] = [];
+  #carryOrigins = new Map<NodeMirror, { x: number; y: number }>();
   #carryGroupOrigin = { x: 0, y: 0 };
   #groupCallbacks: GroupCallbacks;
   #groupConfig: GroupConfig;
@@ -278,30 +278,30 @@ class GroupNodeComponent extends NodeComponent {
   }
 
   /** Direct settled members. */
-  get members(): ReadonlySet<NodeComponent> {
+  get members(): ReadonlySet<NodeMirror> {
     return this.#members;
   }
 
   /** Every settled member below this group, recursively and without duplicates. */
-  get descendants(): ReadonlySet<NodeComponent> {
-    const result = new Set<NodeComponent>();
-    const visit = (group: GroupNodeComponent): void => {
+  get descendants(): ReadonlySet<NodeMirror> {
+    const result = new Set<NodeMirror>();
+    const visit = (group: GroupNodeMirror): void => {
       for (const member of group.#members) {
         if (result.has(member)) continue;
         result.add(member);
-        if (member instanceof GroupNodeComponent) visit(member);
+        if (member instanceof GroupNodeMirror) visit(member);
       }
     };
     visit(this);
     return result;
   }
 
-  get parentGroup(): GroupNodeComponent | null {
+  get parentGroup(): GroupNodeMirror | null {
     return getParentGroup(this);
   }
 
   /** @internal Used by the engine-wide exclusive-membership reconciliation. */
-  setResolvedMembers(members: Set<NodeComponent>): void {
+  setResolvedMembers(members: Set<NodeMirror>): void {
     this.#members = members;
   }
 
@@ -309,7 +309,7 @@ class GroupNodeComponent extends NodeComponent {
     super.writeTransformAndLines();
   }
 
-  allowsMembership(node: NodeComponent): boolean {
+  allowsMembership(node: NodeMirror): boolean {
     const box = this.hitBox.getWorldBoundsSnapshot();
     const nodeBounds = node.hitBox.getWorldBoundsSnapshot();
     const centerContained =
@@ -322,7 +322,7 @@ class GroupNodeComponent extends NodeComponent {
     // Ordinary nodes use center containment. A nested group must fit completely
     // so partially overlapping peers cannot become a parent/child pair.
     if (
-      node instanceof GroupNodeComponent ? !boundsContained : !centerContained
+      node instanceof GroupNodeMirror ? !boundsContained : !centerContained
     ) {
       return false;
     }
@@ -363,11 +363,11 @@ class GroupNodeComponent extends NodeComponent {
     }
   }
 
-  containsSelectionDragNode(node: NodeComponent): boolean {
+  containsSelectionDragNode(node: NodeMirror): boolean {
     return this.descendants.has(node);
   }
 
-  selectionDragNodes(): NodeComponent[] {
+  selectionDragNodes(): NodeMirror[] {
     return [...new Set([this, ...this.#carry])];
   }
 
@@ -399,12 +399,12 @@ class GroupNodeComponent extends NodeComponent {
     parentGroups.delete(this);
 
     const remaining = getGroups(this.global).find(
-      (group): group is GroupNodeComponent =>
-        group instanceof GroupNodeComponent && group.engine === this.engine,
+      (group): group is GroupNodeMirror =>
+        group instanceof GroupNodeMirror && group.engine === this.engine,
     );
     remaining?.refreshMembership(true);
     super.destroy(removeElement);
   }
 }
 
-export { GroupNodeComponent };
+export { GroupNodeMirror };

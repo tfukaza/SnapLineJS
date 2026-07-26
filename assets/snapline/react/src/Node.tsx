@@ -14,8 +14,8 @@ import {
 } from "react";
 import {
   DEFAULT_RESIZE_HANDLE_THICKNESS,
-  LineComponent,
-  NodeComponent,
+  LineMirror,
+  NodeMirror,
   type ResizeHandle,
   type NodeCallbacks,
   type NodeDragCommitEvent,
@@ -25,13 +25,13 @@ import {
 import { useSnapLineEngine } from "./Engine";
 import { Line } from "./Line";
 
-export const NodeObjectContext = createContext<NodeComponent | null>(null);
+export const NodeMirrorContext = createContext<NodeMirror | null>(null);
 
 export interface NodeProps {
   children: ReactNode;
   className?: string;
-  lineComponent?: ComponentType<{ line: LineComponent }>;
-  nodeObject?: NodeComponent | null;
+  lineComponent?: ComponentType<{ line: LineMirror }>;
+  nodeObject?: NodeMirror | null;
   style?: CSSProperties;
   x?: number;
   y?: number;
@@ -53,7 +53,7 @@ export interface NodeProps {
   elementProps?: HTMLAttributes<HTMLDivElement>;
 }
 
-export const Node = forwardRef<NodeComponent, NodeProps>(function Node(
+export const Node = forwardRef<NodeMirror, NodeProps>(function Node(
   {
     children,
     className = "",
@@ -83,9 +83,9 @@ export const Node = forwardRef<NodeComponent, NodeProps>(function Node(
   const engine = useSnapLineEngine();
   const nodeDomRef = useRef<HTMLDivElement>(null);
   const ownsNodeRef = useRef(nodeObject == null);
-  const nodeRef = useRef<NodeComponent | null>(nodeObject);
+  const nodeRef = useRef<NodeMirror | null>(nodeObject);
   if (!nodeRef.current) {
-    nodeRef.current = new NodeComponent(engine, null, {
+    nodeRef.current = new NodeMirror(engine, null, {
       resizable,
       minWidth,
       minHeight,
@@ -98,7 +98,7 @@ export const Node = forwardRef<NodeComponent, NodeProps>(function Node(
     });
   }
   const node = nodeRef.current;
-  const [lineList, setLineList] = useState<LineComponent[]>(
+  const [lineList, setLineList] = useState<LineMirror[]>(
     node.getAllOutgoingLines(),
   );
   const latestRef = useRef({
@@ -119,7 +119,7 @@ export const Node = forwardRef<NodeComponent, NodeProps>(function Node(
   useLayoutEffect(() => {
     if (nodeDomRef.current) {
       node.element = nodeDomRef.current;
-      node.syncDomGeometry();
+      node.remeasureDomGeometry();
     }
     const original = { ...node.callbacks };
     const invoke = <Event,>(
@@ -239,13 +239,13 @@ export const Node = forwardRef<NodeComponent, NodeProps>(function Node(
     if (width != null) node.element.style.width = `${width}px`;
     if (height != null) node.element.style.height = `${height}px`;
     node.setSizeState(nextWidth, nextHeight);
-    node.syncDomGeometry();
+    node.remeasureDomGeometry();
   }, [node, width, height]);
 
   const handleSize =
     resizeHandleThickness ?? DEFAULT_RESIZE_HANDLE_THICKNESS;
   return (
-    <NodeObjectContext.Provider value={node}>
+    <NodeMirrorContext.Provider value={node}>
       {lineList.map((line) => (
         <LineRenderer key={line.id} line={line} />
       ))}
@@ -289,13 +289,13 @@ export const Node = forwardRef<NodeComponent, NodeProps>(function Node(
           />
         ))}
       </div>
-    </NodeObjectContext.Provider>
+    </NodeMirrorContext.Provider>
   );
 });
 
 /** Callback ref for declaring any descendant as a node drag surface. */
 export function useNodeHandle(): RefCallback<HTMLElement> {
-  const node = useContext(NodeObjectContext);
+  const node = useContext(NodeMirrorContext);
   const cleanup = useRef<(() => void) | null>(null);
   return (element) => {
     cleanup.current?.();

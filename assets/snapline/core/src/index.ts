@@ -1,5 +1,5 @@
 export {
-  NodeComponent,
+  NodeMirror,
   DEFAULT_RESIZE_CURSORS,
   DEFAULT_RESIZE_HANDLE_THICKNESS,
   RESIZE_HANDLES,
@@ -20,7 +20,7 @@ export type {
   ResizeHandle,
   SelectionMode,
 } from "./node";
-export { ConnectorComponent, resolveConnectorSourceAtPoint } from "./connector";
+export { ConnectorMirror, resolveConnectorSourceAtPoint } from "./connector";
 export type {
   ConnectionOrigin,
   ConnectorAnchor,
@@ -50,14 +50,14 @@ export type {
   DisconnectReason,
   SnapLineMetadata,
 } from "./connector";
-export { LineComponent } from "./line";
+export { LineMirror } from "./line";
 export type {
   LineGeometrySnapshot,
   LineStateSnapshot,
 } from "./line";
 export type { GeometryWriter } from "./geometry";
 export {
-  GroupNodeComponent,
+  GroupNodeMirror,
   getParentGroup,
   setGroupMembershipResolver,
 } from "./group";
@@ -69,7 +69,7 @@ export type {
   GroupMembershipResolutionEvent,
   GroupMembershipResolver,
 } from "./group";
-export { RectSelectComponent } from "./select";
+export { RectSelectController } from "./select";
 export type {
   SelectCallbacks,
   SelectChangeEvent,

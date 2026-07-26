@@ -1,7 +1,7 @@
 <script lang="ts">
   import { Engine } from "@snap-engine/asset-base-svelte";
   import { EdgeSync, Select } from "@snap-engine/snapline-svelte";
-  import type { ConnectorComponent, EdgeLike } from "@snap-engine/snapline";
+  import type { ConnectorMirror, EdgeLike } from "@snap-engine/snapline";
   import EdgeNode from "./EdgeNode.svelte";
 
   // The application-owned edge document: the single source of truth.
@@ -12,7 +12,7 @@
   let rejectConnects = $state(false);
   let showNodeC = $state(true);
 
-  function identity(connector: ConnectorComponent) {
+  function identity(connector: ConnectorMirror) {
     const metadata = connector.metadata as { node?: string; port?: string };
     return typeof metadata.node === "string" && typeof metadata.port === "string"
       ? { node: metadata.node, port: metadata.port }

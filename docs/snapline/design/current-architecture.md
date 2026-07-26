@@ -28,10 +28,10 @@ edge reconciliation.
 Line ownership is transitional:
 
 - Without `EdgeSyncController`, connector topology is authoritative.
-  `ConnectorComponent.connectToConnector()`, connection gestures, and
-  `deleteLine()` directly create and destroy `LineComponent` objects.
+  `ConnectorMirror.connectToConnector()`, connection gestures, and
+  `deleteLine()` directly create and destroy `LineMirror` objects.
 - With `EdgeSyncController`, an application `EdgeLike[]` is treated as
-  canonical. SnapLine still creates and owns the `LineComponent` instances,
+  canonical. SnapLine still creates and owns the `LineMirror` instances,
   but `sync()` reconciles them to the application edge list and gesture
   mutations are reported as application intents.
 
@@ -45,7 +45,7 @@ from the overlap between those modes.
 flowchart TB
   APP["Application / framework<br/><b>canonical nodes, connectors, and edges</b>"]
   ADAPTER["React / Svelte adapters<br/><b>component lifecycle and ownership bridge</b>"]
-  MIRRORS["SnapLine runtime mirrors<br/><b>NodeComponent, ConnectorComponent, LineComponent</b>"]
+  MIRRORS["SnapLine runtime mirrors<br/><b>NodeMirror, ConnectorMirror, LineMirror</b>"]
   STATE["SnapLine interaction state<br/><b>gestures, geometry, selection, and groups</b>"]
   ENGINE["SnapEngine mechanics<br/><b>input, collision, transforms, and scheduling</b>"]
   DOM["Framework-owned DOM"]
@@ -76,7 +76,7 @@ sequenceDiagram
   FW->>SL: Construct or attach core object
   SL->>SL: Register mirror in NodeManager
   FW->>FW: Commit framework-owned DOM
-  FW->>SL: Bind element and syncDomGeometry()
+  FW->>SL: Bind element and remeasureDomGeometry()
   SL-->>FW: Write transient transform / state properties
   SL-->>App: Emit commit and lifecycle callbacks
   App->>FW: Persist props or update collection
@@ -90,11 +90,11 @@ sequenceDiagram
 ### Nodes
 
 1. A React or Svelte `Node` adapter is rendered from application state.
-2. The adapter either accepts a supplied `NodeComponent` or constructs one.
+2. The adapter either accepts a supplied `NodeMirror` or constructs one.
 3. The constructor registers the node with SnapEngine and the per-engine
    `NodeManager`.
 4. The adapter assigns the committed DOM element, sets the world transform,
-   and calls `syncDomGeometry()`.
+   and calls `remeasureDomGeometry()`.
 5. During a drag, core mutates `worldTransform` immediately and writes the DOM
    transform. `onDragCommit` reports final positions for persistence.
 6. During resize, core updates collision state, writes width/height, remeasures
@@ -110,8 +110,8 @@ revert a completed local drag.
 ### Connectors
 
 1. A connector is rendered inside a node.
-2. The adapter constructs or accepts a `ConnectorComponent`.
-3. `NodeComponent.addConnectorObject()` calls `assignToNode()`, which stores
+2. The adapter constructs or accepts a `ConnectorMirror`.
+3. `NodeMirror.addConnectorObject()` calls `assignToNode()`, which stores
    the connector in the node’s name-keyed `_connectors` map and shares the
    node property bag.
 4. The constructor also registers the connector in `NodeManager`.
@@ -159,13 +159,13 @@ candidate only if both callbacks accept:
 
 ```ts
 canConnect?: (event: {
-  source: ConnectorComponent;
-  target: ConnectorComponent;
+  source: ConnectorMirror;
+  target: ConnectorMirror;
 }) => boolean;
 ```
 
 This already supports endpoint-pair compatibility rules based on connector
-configuration or metadata. It does not receive the proposed `LineComponent`,
+configuration or metadata. It does not receive the proposed `LineMirror`,
 line payload, gesture phase, or connection origin, so it cannot directly
 express line-specific admission rules. It is also currently reused by
 programmatic and hydration connections rather than being cleanly separated
@@ -178,18 +178,18 @@ connectors:
 
 - the source connector holds the line in `outgoingLines`;
 - the target connector holds the same object in `incomingLines`;
-- `LineComponent.start` points to the source;
-- `LineComponent.target` points to the target, or is `null` for a preview;
+- `LineMirror.start` points to the source;
+- `LineMirror.target` points to the target, or is `null` for a preview;
 - the source node exposes the flattened outgoing list to its adapter.
 
 The source node adapter renders one framework `Line` component per outgoing
-`LineComponent`. `onLinesChanged` copies the latest source list into React or
+`LineMirror`. `onLinesChanged` copies the latest source list into React or
 Svelte state, so framework reconciliation owns the SVG DOM while SnapLine owns
 the list being mirrored.
 
 Preview creation does not synchronously flush that framework update. React or
 Svelte may mount the SVG according to its normal scheduler while core
-continues updating the targetless `LineComponent`. This does not lose
+continues updating the targetless `LineMirror`. This does not lose
 geometry:
 
 - anchors and preview position remain current on the line model;
@@ -202,7 +202,7 @@ The preview SVG is therefore not a prerequisite for hit testing or gesture
 progress. A very short rejected drag may be created and removed from framework
 state before an SVG ever commits, which is valid.
 
-This is separate from `syncDomGeometry()`. Node and connector DOM sometimes
+This is separate from `remeasureDomGeometry()`. Node and connector DOM sometimes
 must be measured after a framework commit; a line preview does not depend on
 measuring its own SVG. It is also separate from EdgeSync’s queued
 acceptance/rejection reconciliation, whose pre-paint timing prevents a
@@ -215,17 +215,17 @@ preview position, optional payload, and render subscriptions.
 classDiagram
   direction TB
 
-  class NodeComponent {
+  class NodeMirror {
     +connectorsByName
     +getAllOutgoingLines()
   }
 
-  class ConnectorComponent {
+  class ConnectorMirror {
     +outgoingLines
     +incomingLines
   }
 
-  class LineComponent {
+  class LineMirror {
     +start
     +target
     +bindGeometryWriter()
@@ -241,18 +241,18 @@ classDiagram
     +frameworkOwnedSVG
   }
 
-  NodeComponent "1" *-- "0..*" ConnectorComponent : name-keyed map
-  ConnectorComponent "1 source" o-- "0..*" LineComponent : outgoingLines
-  ConnectorComponent "0..1 target" o-- "0..*" LineComponent : incomingLines
-  LineComponent --> ConnectorComponent : start / target references
-  NodeComponent --> NodeAdapter : outgoing snapshot
+  NodeMirror "1" *-- "0..*" ConnectorMirror : name-keyed map
+  ConnectorMirror "1 source" o-- "0..*" LineMirror : outgoingLines
+  ConnectorMirror "0..1 target" o-- "0..*" LineMirror : incomingLines
+  LineMirror --> ConnectorMirror : start / target references
+  NodeMirror --> NodeAdapter : outgoing snapshot
   NodeAdapter "1" *-- "0..*" LineView : renders
-  LineComponent --> LineView : render callbacks
+  LineMirror --> LineView : render callbacks
 ```
 
 ### Groups
 
-`GroupNodeComponent` extends `NodeComponent`. Groups are also kept in the
+`GroupNodeMirror` extends `NodeMirror`. Groups are also kept in the
 shared `global.data.groups` list.
 
 Membership is derived from measured geometry:
@@ -269,9 +269,9 @@ framework graph-document relation in the current design.
 
 ### Selection
 
-Selection is stored in `global.data.select`. `NodeComponent.setSelected()`
+Selection is stored in `global.data.select`. `NodeMirror.setSelected()`
 updates that list, writes `data-selected`/`data-snapline-state`, and emits a
-selection callback. `RectSelectComponent` owns the selection gesture and
+selection callback. `RectSelectController` owns the selection gesture and
 collision box. The adapter mounts the rubber-band element once and binds an
 imperative geometry writer; `onRectChange` remains an observer callback.
 
@@ -291,7 +291,7 @@ existence.
 ```ts
 interface EdgeSyncConfig {
   engine: EngineLike;
-  identity(connector: ConnectorComponent): EdgeEndpoint | null;
+  identity(connector: ConnectorMirror): EdgeEndpoint | null;
   getEdges(): readonly EdgeLike[];
   callbacks?: {
     onEdgeConnect?(event: EdgeConnectIntentEvent): void;
@@ -307,7 +307,7 @@ canonical edge document:
 
 | Seam                                 | Direction                               | Current responsibility                                                                        |
 | ------------------------------------ | --------------------------------------- | --------------------------------------------------------------------------------------------- |
-| `identity(connector)`                | SnapLine runtime → application identity | Maps a live `ConnectorComponent` to `{ node, port }`, or returns `null` to leave it unmanaged |
+| `identity(connector)`                | SnapLine runtime → application identity | Maps a live `ConnectorMirror` to `{ node, port }`, or returns `null` to leave it unmanaged |
 | `getEdges()`                         | Application state → SnapLine sync       | Returns the latest canonical edge snapshot whenever `sync()` runs                             |
 | `onEdgeConnect` / `onEdgeDisconnect` | SnapLine gesture → application          | Reports semantic gesture intents so the application can replace its edge state                |
 
@@ -315,7 +315,7 @@ canonical edge document:
 flowchart TB
   CONNECTORS["NodeManager.connectors<br/><b>live runtime objects</b>"]
   IDENTITY["identity(connector)"]
-  INDEX["Endpoint index<br/><b>{ node, port } → ConnectorComponent</b>"]
+  INDEX["Endpoint index<br/><b>{ node, port } → ConnectorMirror</b>"]
   APPSTATE["Application edges[]<br/><b>canonical document</b>"]
   GETEDGES["getEdges()"]
   SNAPSHOT["Current EdgeLike[] snapshot"]
@@ -391,12 +391,12 @@ The current implementation has four protections:
 
 1. `getEdges()` is only a synchronous data read. Calling it does not schedule
    another sync.
-2. `EdgeSyncController.#syncing` is a re-entrancy guard. A nested call to
+2. `EdgeSyncController.#reconciling` is a re-entrancy guard. A nested call to
    `sync()` returns immediately while a pass is active.
 3. Lines created by reconciliation use `origin: "hydration"`.
    `notifyConnect()` forwards only `origin: "gesture"`.
 4. Lines removed by reconciliation use `reason: "programmatic"`, and
-   `notifyDisconnect()` suppresses all notifications while `#syncing` is true.
+   `notifyDisconnect()` suppresses all notifications while `#reconciling` is true.
 
 Because the controlled `onEdgeConnect`/`onEdgeDisconnect` callbacks do not fire
 for sync’s own mutations, the adapter callbacks that queue post-intent
@@ -501,7 +501,7 @@ remains canonical and latent.
 Node registration does not trigger edge reconciliation. Connector registration
 does, because a newly available endpoint may make a canonical edge
 representable. Each call to `registerConnector()` reaches
-`connectorRegistered()`, but the controller uses a `#syncQueued` flag and one
+`connectorRegistered()`, but the controller uses a `#reconciliationQueued` flag and one
 microtask:
 
 ```mermaid
@@ -513,7 +513,7 @@ sequenceDiagram
   loop All connectors mounted in the same JavaScript turn
     Framework->>Manager: registerConnector(connector)
     Manager->>Sync: connectorRegistered()
-    Sync->>Sync: queue only if #syncQueued is false
+    Sync->>Sync: queue only if #reconciliationQueued is false
   end
 
   Note over Framework,Sync: Current synchronous mount/commit finishes
@@ -567,7 +567,7 @@ flowchart TD
   MOUNTED{"Both endpoints mounted?"}
   EXISTS{"Matching settled line exists?"}
   LATENT["Keep edge latent in application document"]
-  CREATELINE["Hydrate LineComponent<br/>without user intent"]
+  CREATELINE["Hydrate LineMirror<br/>without user intent"]
   DONE["Mirror reconciled"]
 
   START --> SNAP --> WALKLINES --> LINECHECK
@@ -627,11 +627,11 @@ sequenceDiagram
   Source->>Source: callbacks.onConnectionRequest
 
   alt Request returns false or local connection fails
-    Source->>Source: destroy the preview LineComponent
+    Source->>Source: destroy the preview LineMirror
     Source->>View: node.callbacks.onLinesChanged removes preview
     Source->>Source: callbacks.onDragEnd({ connected: false })
   else Local connection succeeds
-    Source->>Target: attach same preview LineComponent
+    Source->>Target: attach same preview LineMirror
     Source->>Source: connectTarget() mutates target, phase, and anchors
     Source->>View: node.callbacks.onLinesChanged
     Source->>Source: callbacks.onConnect({ role: source })
@@ -681,7 +681,7 @@ Neither path calls connector `onConnect`/`onDisconnect`.
 #### Preview creation
 
 Pointer-down only arms the source and calls
-`source.callbacks.onPointerDown`. A new `LineComponent` is not created until
+`source.callbacks.onPointerDown`. A new `LineMirror` is not created until
 the engine’s drag threshold is crossed.
 
 At drag start, the source:
@@ -779,7 +779,7 @@ atomic application transaction.
 | Data or resource              | Current owner                            | Notes                                                                     |
 | ----------------------------- | ---------------------------------------- | ------------------------------------------------------------------------- |
 | Domain node records           | Application/framework                    | SnapLine does not define node factories or node types                     |
-| Mounted node instances        | Framework lifecycle + core mirror        | Adapter creates/destroys `NodeComponent`                                  |
+| Mounted node instances        | Framework lifecycle + core mirror        | Adapter creates/destroys `NodeMirror`                                  |
 | Domain connector/port records | Application/framework                    | Usually expressed by connector children                                   |
 | Mounted connector instances   | Framework lifecycle + core mirror        | Stored in `NodeManager` and the parent node map                           |
 | Domain edges                  | Application only when `EdgeSync` is used | Otherwise no separate domain edge source is required                      |
@@ -810,8 +810,8 @@ general object table. Some SnapLine code still scans that table:
 
 `NodeManager` is lazy and per engine. It contains:
 
-- a `Set<NodeComponent>`;
-- a `Set<ConnectorComponent>`;
+- a `Set<NodeMirror>`;
+- a `Set<ConnectorMirror>`;
 - the optional active `edgeSync` controller.
 
 The public `getNodes()`, `getConnectors()`, and `getGroupNodes()` helpers now
@@ -863,20 +863,20 @@ classDiagram
     +edgeSync
   }
 
-  class NodeComponent
-  class ConnectorComponent
-  class LineComponent
+  class NodeMirror
+  class ConnectorMirror
+  class LineMirror
   class EdgeSyncController
   class SnapEngineObjectTable
 
   GlobalData *-- EngineNodeManagerMap : engine-keyed map
   EngineNodeManagerMap *-- NodeManager : one per engine
-  NodeManager o-- NodeComponent : live set
-  NodeManager o-- ConnectorComponent : live set
+  NodeManager o-- NodeMirror : live set
+  NodeManager o-- ConnectorMirror : live set
   NodeManager o-- EdgeSyncController : optional
-  ConnectorComponent o-- LineComponent : topology arrays
-  SnapEngineObjectTable ..> NodeComponent : group scans
-  SnapEngineObjectTable ..> ConnectorComponent : candidate scans
+  ConnectorMirror o-- LineMirror : topology arrays
+  SnapEngineObjectTable ..> NodeMirror : group scans
+  SnapEngineObjectTable ..> ConnectorMirror : candidate scans
 ```
 
 ## Public API surface
@@ -888,11 +888,11 @@ point currently exports the following API families.
 
 | Export                   | Main public role                                                         |
 | ------------------------ | ------------------------------------------------------------------------ |
-| `NodeComponent`          | Node geometry, selection, resize, connector lookup, property propagation |
-| `ConnectorComponent`     | Port policy, hit testing, gestures, topology mutation, geometry          |
-| `LineComponent`          | Line endpoints, phase, anchors, payload, render subscription             |
-| `GroupNodeComponent`     | Derived membership and recursive group carry                             |
-| `RectSelectComponent`    | Rectangle selection state machine                                        |
+| `NodeMirror`          | Node geometry, selection, resize, connector lookup, property propagation |
+| `ConnectorMirror`     | Port policy, hit testing, gestures, topology mutation, geometry          |
+| `LineMirror`          | Line endpoints, phase, anchors, payload, render subscription             |
+| `GroupNodeMirror`     | Derived membership and recursive group carry                             |
+| `RectSelectController`    | Rectangle selection state machine                                        |
 | `PlacementController<T>` | Headless placement preview/commit state machine                          |
 | `NodeManager`            | Live node/connector registry and edge-sync attachment                    |
 | `EdgeSyncController`     | Reconciles connector line mirrors to application edges                   |
@@ -923,7 +923,7 @@ metadata, callbacks, and edge-pan behavior.
 - outgoing line-list changes.
 
 Notable callable methods include `setSelected()`, `registerDragHandle()`,
-`syncDomGeometry()`, `setSizeState()`, `setSize()`, connector lookup,
+`remeasureDomGeometry()`, `setSizeState()`, `setSize()`, connector lookup,
 incoming/outgoing line queries, property propagation, and `destroy()`.
 
 ### Important connector configuration and callbacks
@@ -965,7 +965,7 @@ The Svelte package exports:
 The React package exports the same component families plus:
 
 - the asset-base `Engine` and engine context helpers;
-- `NodeObjectContext`;
+- `NodeMirrorContext`;
 - `useNodeHandle()`;
 - prop/ref types.
 
@@ -986,7 +986,7 @@ callers must understand which authority model is active.
 
 ```mermaid
 flowchart TB
-  API["Same ConnectorComponent mutation API"]
+  API["Same ConnectorMirror mutation API"]
   IMP["Imperative mode"]
   CTRL["Controlled EdgeSync mode"]
   TOPO["Connector arrays are canonical"]
@@ -1027,8 +1027,8 @@ gesture policy, document validity, or both?
 ### 5. Topology internals are publicly mutable
 
 The connector returns its actual mutable incoming/outgoing arrays.
-`LineComponent.start`, `target`, `payload`, anchors, phase, and candidate are
-also public writable fields. `NodeComponent` retains several underscore-named
+`LineMirror.start`, `target`, `payload`, anchors, phase, and candidate are
+also public writable fields. `NodeMirror` retains several underscore-named
 members that are TypeScript-public. Consumers can bypass lifecycle callbacks
 and reconciliation invariants.
 

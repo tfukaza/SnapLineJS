@@ -12,15 +12,15 @@ frameworkKey: overview
 
 | Class | Responsibility |
 | --- | --- |
-| `NodeComponent` | Position, selection, properties, resize, and connectors |
-| `ConnectorComponent` | Connection capacity, policy, metadata, and gestures |
-| `LineComponent` | Connection state and SVG geometry |
-| `RectSelectComponent` | Background rectangle selection |
-| `GroupNodeComponent` | Resizable exclusive membership and recursive carry |
+| `NodeMirror` | Position, selection, properties, resize, and connectors |
+| `ConnectorMirror` | Connection capacity, policy, metadata, and gestures |
+| `LineMirror` | Connection state and SVG geometry |
+| `RectSelectController` | Background rectangle selection |
+| `GroupNodeMirror` | Resizable exclusive membership and recursive carry |
 | `PlacementController<T>` | Preview, validation, commit, and cancellation state |
 
 Core objects require an engine with collision support. Assign each committed
-element to its object, then call `syncDomGeometry()`. Destroy owned objects when
+element to its object, then call `remeasureDomGeometry()`. Destroy owned objects when
 their records are removed.
 
 ## Query helpers

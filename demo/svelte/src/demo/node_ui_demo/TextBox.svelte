@@ -1,11 +1,11 @@
 <script lang="ts">
   import { Connector, Node } from "@snap-engine/snapline-svelte";
   import DemoLine from "./Line.svelte";
-  import { NodeComponent } from "@snap-engine/snapline";
+  import { NodeMirror } from "@snap-engine/snapline";
   import { onMount } from "svelte";
 
   let node: any = $state(null);
-  let { nodeObject, text }: { nodeObject?: NodeComponent | null, text?: string | null } = $props();
+  let { nodeObject, text }: { nodeObject?: NodeMirror | null, text?: string | null } = $props();
   let input: HTMLInputElement | null = null;
 
   onMount(() => {

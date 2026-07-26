@@ -6,7 +6,7 @@ export { Group } from "./Group";
 export type { GroupProps } from "./Group";
 export { Line } from "./Line";
 export type { LineProps } from "./Line";
-export { Node, NodeObjectContext, useNodeHandle } from "./Node";
+export { Node, NodeMirrorContext, useNodeHandle } from "./Node";
 export type { NodeProps } from "./Node";
 export { Select } from "./Select";
 export type { SelectProps } from "./Select";

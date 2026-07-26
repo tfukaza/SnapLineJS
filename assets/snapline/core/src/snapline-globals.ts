@@ -1,10 +1,10 @@
 import type { RectCollider } from "@snap-engine/core/collision";
 import type { eventPosition } from "@snap-engine/core";
-import type { NodeComponent } from "./node";
+import type { NodeMirror } from "./node";
 import { NodeManager } from "./node-manager";
 
 /**
- * Structural stand-in for GroupNodeComponent so node.ts can notify groups on
+ * Structural stand-in for GroupNodeMirror so node.ts can notify groups on
  * settle without importing the group module (no group→node import cycle).
  */
 export interface GroupLike {
@@ -44,7 +44,7 @@ export interface SourceSurfaceOwner {
  */
 export interface SnapLineSharedData {
   /** Currently-selected nodes (multi-select drag moves all of them). */
-  select?: NodeComponent[];
+  select?: NodeMirror[];
   /** All live groups; notified on any node's drop so membership stays settled. */
   groups?: GroupLike[];
   /** Registered resize hitboxes; input.ts routes pointerdowns over them. */
@@ -52,7 +52,7 @@ export interface SnapLineSharedData {
   /** Registered headless source surfaces; input.ts routes pointerdowns to them. */
   sourceSurfaces?: SourceSurfaceOwner[];
   /** The node mid-resize, so an unrelated pointerUp doesn't click-select. */
-  resizingNode?: NodeComponent | null;
+  resizingNode?: NodeMirror | null;
   /**
    * @deprecated Legacy camera-control boolean (last-writer-wins), read by the
    * camera for third-party writers only. In-repo gesture owners block the
@@ -73,7 +73,7 @@ export function snapData(global: { data: any }): SnapLineSharedData {
   return global.data as SnapLineSharedData;
 }
 
-export function getSelectList(global: { data: any }): NodeComponent[] {
+export function getSelectList(global: { data: any }): NodeMirror[] {
   const data = snapData(global);
   if (!data.select) data.select = [];
   return data.select;

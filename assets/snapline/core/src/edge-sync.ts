@@ -1,9 +1,9 @@
 import type {
-  ConnectorComponent,
+  ConnectorMirror,
   ConnectorConnectionEvent,
   ConnectorDisconnectionEvent,
 } from "./connector";
-import type { LineComponent } from "./line";
+import type { LineMirror } from "./line";
 import { getNodeManager } from "./snapline-globals";
 
 export interface EdgeEndpoint {
@@ -19,18 +19,18 @@ export interface EdgeLike {
 export interface EdgeConnectIntentEvent {
   from: EdgeEndpoint;
   to: EdgeEndpoint;
-  source: ConnectorComponent;
-  target: ConnectorComponent;
-  line: LineComponent;
+  source: ConnectorMirror;
+  target: ConnectorMirror;
+  line: LineMirror;
   origin: "gesture";
 }
 
 export interface EdgeDisconnectIntentEvent {
   from: EdgeEndpoint;
   to: EdgeEndpoint;
-  source: ConnectorComponent;
-  target: ConnectorComponent;
-  line: LineComponent;
+  source: ConnectorMirror;
+  target: ConnectorMirror;
+  line: LineMirror;
   reason: "gesture" | "replacement";
 }
 
@@ -46,7 +46,7 @@ export interface EdgeSyncConfig {
   // Maps a connector to its semantic endpoint, or null for connectors that
   // are not part of the consumer's edge document (their lines are left
   // untouched by sync and never produce intents).
-  identity: (connector: ConnectorComponent) => EdgeEndpoint | null;
+  identity: (connector: ConnectorMirror) => EdgeEndpoint | null;
   // The consumer's current edge list — the single source of truth. Consulted
   // fresh on every sync; the controller never stores edges.
   getEdges: () => readonly EdgeLike[];
@@ -78,8 +78,8 @@ function edgeKey(from: EdgeEndpoint, to: EdgeEndpoint): string {
 // own mutations.
 export class EdgeSyncController {
   #config: EdgeSyncConfig;
-  #syncing = false;
-  #syncQueued = false;
+  #reconciling = false;
+  #reconciliationQueued = false;
   #disposed = false;
 
   constructor(config: EdgeSyncConfig) {
@@ -107,10 +107,10 @@ export class EdgeSyncController {
   // controller exists (a node mounted). Coalesced into one microtask so a
   // mounting batch reconciles once, before the frame paints.
   connectorRegistered(): void {
-    if (this.#syncQueued) return;
-    this.#syncQueued = true;
+    if (this.#reconciliationQueued) return;
+    this.#reconciliationQueued = true;
     queueMicrotask(() => {
-      this.#syncQueued = false;
+      this.#reconciliationQueued = false;
       if (!this.#disposed) this.sync();
     });
   }
@@ -120,15 +120,15 @@ export class EdgeSyncController {
   // endpoint without identity) are left alone, and mutations made here never
   // forward as intents.
   sync(): void {
-    if (this.#syncing) return;
-    this.#syncing = true;
+    if (this.#reconciling) return;
+    this.#reconciling = true;
     try {
       const manager = getNodeManager(this.#config.engine);
       const identity = this.#config.identity;
       const connectors = manager.connectors;
 
-      const identities = new Map<ConnectorComponent, EdgeEndpoint | null>();
-      const byKey = new Map<string, ConnectorComponent>();
+      const identities = new Map<ConnectorMirror, EdgeEndpoint | null>();
+      const byKey = new Map<string, ConnectorMirror>();
       for (const connector of connectors) {
         const endpoint = identity(connector);
         identities.set(connector, endpoint);
@@ -170,13 +170,13 @@ export class EdgeSyncController {
         from.connectToConnector({ target: to, origin: "hydration" });
       }
     } finally {
-      this.#syncing = false;
+      this.#reconciling = false;
     }
   }
 
-  // @internal Called from ConnectorComponent's emit sites.
+  // @internal Called from ConnectorMirror's emit sites.
   notifyConnect(event: ConnectorConnectionEvent): void {
-    if (this.#syncing || event.origin !== "gesture") return;
+    if (this.#reconciling || event.origin !== "gesture") return;
     const endpoints = this.#endpoints(event.source, event.target);
     if (!endpoints) return;
     this.callbacks.onEdgeConnect?.({
@@ -186,9 +186,9 @@ export class EdgeSyncController {
     });
   }
 
-  // @internal Called from ConnectorComponent's emit sites.
+  // @internal Called from ConnectorMirror's emit sites.
   notifyDisconnect(event: ConnectorDisconnectionEvent): void {
-    if (this.#syncing) {
+    if (this.#reconciling) {
       if (event.reason === "replacement") {
         console.warn(
           "SnapLine EdgeSync: sync evicted a live line via replacement — " +
@@ -208,13 +208,13 @@ export class EdgeSyncController {
   }
 
   #endpoints(
-    source: ConnectorComponent,
-    target: ConnectorComponent,
+    source: ConnectorMirror,
+    target: ConnectorMirror,
   ): {
     from: EdgeEndpoint;
     to: EdgeEndpoint;
-    source: ConnectorComponent;
-    target: ConnectorComponent;
+    source: ConnectorMirror;
+    target: ConnectorMirror;
   } | null {
     // ConnectorPairEvent's source/target are already in wire direction.
     const from = this.#config.identity(source);

@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { GroupNodeComponent, DEFAULT_RESIZE_HANDLE_THICKNESS, type GroupCallbacks, type GroupContainEvent, type GroupMembershipEvent, type NodeDragCommitEvent, type NodeResizeEvent, type ResizeHandle, type SnapLineMetadata } from "@snap-engine/snapline";
+    import { GroupNodeMirror, DEFAULT_RESIZE_HANDLE_THICKNESS, type GroupCallbacks, type GroupContainEvent, type GroupMembershipEvent, type NodeDragCommitEvent, type NodeResizeEvent, type ResizeHandle, type SnapLineMetadata } from "@snap-engine/snapline";
     import type { Engine } from "@snap-engine/core";
     import { onMount, onDestroy, getContext, tick, untrack, type Snippet } from "svelte";
 
@@ -29,7 +29,7 @@
         children = undefined,
     }: {
         className?: string;
-        groupObject?: GroupNodeComponent | null;
+        groupObject?: GroupNodeMirror | null;
         x?: number;
         y?: number;
         width?: number;
@@ -58,7 +58,7 @@
     let engine: Engine = getContext("engine");
     const ownsGroup = groupObject == null;
     if (!groupObject) {
-        groupObject = new GroupNodeComponent(engine, null, { width, height, minWidth, minHeight, resizeHandleThickness, resizeHandles, resizeCursors, metadata, callbacks: {}, groupCallbacks: {}, canContain, edgePan });
+        groupObject = new GroupNodeMirror(engine, null, { width, height, minWidth, minHeight, resizeHandleThickness, resizeHandles, resizeCursors, metadata, callbacks: {}, groupCallbacks: {}, canContain, edgePan });
     }
 
     let mounted = $state(false);
@@ -125,7 +125,7 @@
             if (!mounted || !groupObject!.element) return;
             if (headerEl) unregisterHeader = groupObject!.registerDragHandle(headerEl);
             groupObject!.setSizeState(width, height);
-            groupObject!.syncDomGeometry();
+            groupObject!.remeasureDomGeometry();
             // Seed membership once siblings have mounted, positioned, and had their
             // hit boxes measured (a WRITE stage runs after READ_1's measure).
             groupObject!.schedule(() => groupObject!.refreshMembership(true), {
@@ -175,7 +175,7 @@
             object.element.style.width = `${nextWidth}px`;
             object.element.style.height = `${nextHeight}px`;
             object.setSizeState(nextWidth, nextHeight);
-            object.syncDomGeometry();
+            object.remeasureDomGeometry();
         });
     });
 

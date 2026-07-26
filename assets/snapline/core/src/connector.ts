@@ -8,8 +8,8 @@ import type {
   pointerUpProp,
 } from "@snap-engine/core";
 import { CircleCollider } from "@snap-engine/core/collision";
-import type { NodeComponent } from "./node";
-import { LineComponent } from "./line";
+import type { NodeMirror } from "./node";
+import { LineMirror } from "./line";
 import { getNodeManager } from "./snapline-globals";
 import { getSourceSurfaces } from "./snapline-globals";
 
@@ -44,8 +44,8 @@ export interface ConnectorAnchor extends ConnectorPoint {
 
 /** Cached world-space bounds derived from the parent node's collision box. */
 export interface ConnectorGeometrySnapshot {
-  connector: ConnectorComponent;
-  node: NodeComponent;
+  connector: ConnectorMirror;
+  node: NodeMirror;
   x: number;
   y: number;
   width: number;
@@ -67,21 +67,21 @@ export interface ConnectorHit {
 }
 
 export interface ConnectorCandidate {
-  connector: ConnectorComponent;
+  connector: ConnectorMirror;
   hit: ConnectorHit;
 }
 
 export interface ConnectorSurfaceHitTestEvent {
-  connector: ConnectorComponent;
+  connector: ConnectorMirror;
   position: eventPosition;
   geometry: ConnectorGeometrySnapshot;
   phase: ConnectorLinePhase;
 }
 
 export interface ConnectorAnchorEvent {
-  connector: ConnectorComponent;
-  peer: ConnectorComponent | null;
-  line: LineComponent;
+  connector: ConnectorMirror;
+  peer: ConnectorMirror | null;
+  line: LineMirror;
   role: ConnectorRole;
   phase: ConnectorLinePhase;
   position: ConnectorPoint;
@@ -111,22 +111,22 @@ export interface ConnectorCapabilities {
 }
 
 export interface ConnectorPairEvent {
-  source: ConnectorComponent;
-  target: ConnectorComponent;
+  source: ConnectorMirror;
+  target: ConnectorMirror;
 }
 
 export interface ConnectorCandidateEvent {
-  source: ConnectorComponent;
+  source: ConnectorMirror;
   /** Legacy convenience reference. */
-  candidate: ConnectorComponent | null;
+  candidate: ConnectorMirror | null;
   resolvedCandidate: ConnectorCandidate | null;
-  line: LineComponent | null;
+  line: LineMirror | null;
 }
 
 export interface ConnectorConnectionEvent extends ConnectorPairEvent {
-  connector: ConnectorComponent;
-  peer: ConnectorComponent;
-  line: LineComponent;
+  connector: ConnectorMirror;
+  peer: ConnectorMirror;
+  line: LineMirror;
   role: ConnectorRole;
   origin: ConnectionOrigin;
 }
@@ -137,7 +137,7 @@ export interface ConnectorDisconnectionEvent
 }
 
 export interface ConnectorDragEvent {
-  connector: ConnectorComponent;
+  connector: ConnectorMirror;
   position: eventPosition;
   pointerId: number;
 }
@@ -147,7 +147,7 @@ export interface ConnectorPointerEvent extends ConnectorDragEvent {
 }
 
 export interface ConnectorConnectionRequestEvent extends ConnectorPairEvent {
-  line: LineComponent;
+  line: LineMirror;
   candidate: ConnectorCandidate;
   position: eventPosition;
 }
@@ -186,7 +186,7 @@ export interface ConnectorConfig {
   allowDragOut?: boolean;
   capabilities?: Partial<ConnectorCapabilities>;
   surfaceStrategies?: readonly ConnectorSurfaceStrategy[];
-  lineClass?: typeof LineComponent;
+  lineClass?: typeof LineMirror;
   colliderRadius?: number;
   metadata?: SnapLineMetadata;
   callbacks?: ConnectorCallbacks;
@@ -206,22 +206,22 @@ interface ArmedConnection {
   pointerId: number;
   sourceHit: ConnectorHit | null;
   sourceStrategy: ConnectorSurfaceStrategy | null;
-  reconnectLine: LineComponent | null;
+  reconnectLine: LineMirror | null;
 }
 
-class ConnectorComponent extends ElementObject {
+class ConnectorMirror extends ElementObject {
   #config: ConnectorConfig;
   #capabilities: Readonly<ConnectorCapabilities>;
   #name: string;
   #prop: { [key: string]: any };
-  #outgoingLines: LineComponent[];
-  #incomingLines: LineComponent[];
+  #outgoingLines: LineMirror[];
+  #incomingLines: LineMirror[];
   #state: ConnectorState = ConnectorState.IDLE;
 
   #hitCircle: CircleCollider;
-  #targetConnector: ConnectorComponent | null = null;
+  #targetConnector: ConnectorMirror | null = null;
   #candidate: ConnectorResolvedHit | null = null;
-  #dragLine: LineComponent | null = null;
+  #dragLine: LineMirror | null = null;
   #edgePanPointerId: number | null = null;
   #localCenter: ConnectorPoint;
   #hasMeasuredCenter = false;
@@ -229,8 +229,8 @@ class ConnectorComponent extends ElementObject {
   #cancelledPointers = new Set<number>();
   #callbacks: ConnectorCallbacks;
 
-  get parent(): NodeComponent {
-    return super.parent as NodeComponent;
+  get parent(): NodeMirror {
+    return super.parent as NodeMirror;
   }
 
   set parent(parent: BaseObject | null) {
@@ -239,7 +239,7 @@ class ConnectorComponent extends ElementObject {
 
   constructor(
     engine: any,
-    parent: NodeComponent,
+    parent: NodeMirror,
     config: ConnectorConfig = {},
   ) {
     super(engine, parent as unknown as BaseObject);
@@ -314,19 +314,19 @@ class ConnectorComponent extends ElementObject {
     this.updateConfig({ callbacks });
   }
 
-  get outgoingLines(): LineComponent[] {
+  get outgoingLines(): LineMirror[] {
     return this.#outgoingLines;
   }
 
-  get incomingLines(): LineComponent[] {
+  get incomingLines(): LineMirror[] {
     return this.#incomingLines;
   }
 
-  get targetConnector(): ConnectorComponent | null {
+  get targetConnector(): ConnectorMirror | null {
     return this.#targetConnector;
   }
 
-  set targetConnector(value: ConnectorComponent | null) {
+  set targetConnector(value: ConnectorMirror | null) {
     const resolved = value
       ? {
           candidate: {
@@ -587,7 +587,7 @@ class ConnectorComponent extends ElementObject {
   deleteLine(
     i: number,
     reason: DisconnectReason = "programmatic",
-  ): LineComponent | null {
+  ): LineMirror | null {
     if (this.#outgoingLines.length === 0 || i < 0) return null;
     const line = this.#outgoingLines[i];
     if (!line) return null;
@@ -637,7 +637,7 @@ class ConnectorComponent extends ElementObject {
     }
   }
 
-  assignToNode(parent: NodeComponent): void {
+  assignToNode(parent: NodeMirror): void {
     this.parent = parent;
     const parentRef = this.parent;
     parentRef._prop[this.#name] = null;
@@ -650,20 +650,12 @@ class ConnectorComponent extends ElementObject {
     }
   }
 
-  createLine(): LineComponent {
+  createLine(): LineMirror {
     const line = this.#config.lineClass
       ? new this.#config.lineClass(this.engine, this)
-      : new LineComponent(this.engine, this);
+      : new LineMirror(this.engine, this);
     line.setSourceSurfaceContext(this.#defaultAnchorStrategy(), null);
     return line;
-  }
-
-  /** @deprecated Pointer-down now only arms; retained for source compatibility. */
-  startDragOutLine(prop: pointerDownProp): void {
-    this.armSurfaceGesture(
-      prop,
-      this.#resolveOwnSourceHit(prop.position, "source-start"),
-    );
   }
 
   findClosestConnector(): void {
@@ -683,7 +675,7 @@ class ConnectorComponent extends ElementObject {
 
   findClosestConnectorAtPoint(
     position: ConnectorPoint,
-  ): ConnectorComponent | null {
+  ): ConnectorMirror | null {
     return this.findCandidateAtPoint(position)?.connector ?? null;
   }
 
@@ -701,7 +693,7 @@ class ConnectorComponent extends ElementObject {
     return this.#resolveOwnSourceHit(position, "source-start");
   }
 
-  canConnectToConnector(connector: ConnectorComponent): boolean {
+  canConnectToConnector(connector: ConnectorMirror): boolean {
     if (
       connector.id === this.id ||
       !this.#capabilities.source ||
@@ -768,9 +760,9 @@ class ConnectorComponent extends ElementObject {
   }
 
   hoverWhileDragging(
-    targetConnector: ConnectorComponent,
+    targetConnector: ConnectorMirror,
   ): [number, number] | void {
-    if (!(targetConnector instanceof ConnectorComponent) || !this.#dragLine) {
+    if (!(targetConnector instanceof ConnectorMirror) || !this.#dragLine) {
       return;
     }
     const anchor = targetConnector.resolveAnchor({
@@ -825,7 +817,7 @@ class ConnectorComponent extends ElementObject {
       }
       if (request !== false) {
         const connectionOptions: Parameters<
-          ConnectorComponent["connectToConnector"]
+          ConnectorMirror["connectToConnector"]
         >[0] = {
           target: candidate.candidate.connector,
           line,
@@ -864,7 +856,7 @@ class ConnectorComponent extends ElementObject {
     this.#resetGesture();
   }
 
-  startPickUpLine(line: LineComponent, prop: pointerDownProp): void {
+  startPickUpLine(line: LineMirror, prop: pointerDownProp): void {
     this.engine.input.setPointerDragOwner(prop.event.pointerId, line.start);
     line.start.#arm(prop, {
       sourceHit: null,
@@ -874,8 +866,8 @@ class ConnectorComponent extends ElementObject {
   }
 
   connectToConnector(options: {
-    target: ConnectorComponent;
-    line?: LineComponent | null;
+    target: ConnectorMirror;
+    line?: LineMirror | null;
     origin?: ConnectionOrigin;
     payload?: unknown;
     candidate?: ConnectorResolvedHit | null;
@@ -957,7 +949,7 @@ class ConnectorComponent extends ElementObject {
   }
 
   disconnectFromConnector(
-    connector: ConnectorComponent,
+    connector: ConnectorMirror,
     reason: DisconnectReason = "programmatic",
   ): void {
     const lineIndex = this.#outgoingLines.findIndex(
@@ -975,10 +967,10 @@ class ConnectorComponent extends ElementObject {
     hit,
     strategy,
   }: {
-    line: LineComponent;
+    line: LineMirror;
     role: ConnectorRole;
     phase: ConnectorLinePhase;
-    peer: ConnectorComponent | null;
+    peer: ConnectorMirror | null;
     position: ConnectorPoint;
     hit: ConnectorHit | null;
     strategy: ConnectorSurfaceStrategy | null;
@@ -1132,7 +1124,7 @@ class ConnectorComponent extends ElementObject {
     });
   }
 
-  #detachLineForReconnect(line: LineComponent): void {
+  #detachLineForReconnect(line: LineMirror): void {
     const target = line.target;
     if (!target) return;
     target.#incomingLines = target.#incomingLines.filter(
@@ -1143,7 +1135,7 @@ class ConnectorComponent extends ElementObject {
   }
 
   #discardDraggedLine(
-    line: LineComponent,
+    line: LineMirror,
     prop: dragEndProp,
     connected: boolean,
   ): void {
@@ -1203,13 +1195,13 @@ class ConnectorComponent extends ElementObject {
     return this.element != null || this.#hasMeasuredCenter;
   }
 
-  #liveIncomingLines(): LineComponent[] {
+  #liveIncomingLines(): LineMirror[] {
     return this.#incomingLines.filter((line) => !line.isDeleteRequested);
   }
 
   #emitConnect(
-    target: ConnectorComponent,
-    line: LineComponent,
+    target: ConnectorMirror,
+    line: LineMirror,
     origin: ConnectionOrigin,
   ): void {
     this.#callbacks.onConnect?.({
@@ -1242,8 +1234,8 @@ class ConnectorComponent extends ElementObject {
   }
 
   #emitDisconnect(
-    target: ConnectorComponent,
-    line: LineComponent,
+    target: ConnectorMirror,
+    line: LineMirror,
     reason: DisconnectReason,
   ): void {
     this.#callbacks.onDisconnect?.({
@@ -1353,11 +1345,11 @@ function pickResolvedHit(
 export function resolveConnectorSourceAtPoint(
   engine: any,
   position: eventPosition,
-  node?: NodeComponent,
+  node?: NodeMirror,
 ): ConnectorResolvedHit | null {
   const hits: ConnectorResolvedHit[] = [];
   for (const surface of getSourceSurfaces(engine.global)) {
-    const connector = surface as ConnectorComponent;
+    const connector = surface as ConnectorMirror;
     if (
       connector.engine !== engine ||
       (node && connector.parent !== node) ||
@@ -1371,13 +1363,13 @@ export function resolveConnectorSourceAtPoint(
   return pickResolvedHit(hits);
 }
 
-function registeredConnectors(engine: any): ConnectorComponent[] {
+function registeredConnectors(engine: any): ConnectorMirror[] {
   const objectTable = engine.global?.getEngineObjectTable?.(engine);
   if (!objectTable) return [];
   return Object.values(objectTable).filter(
-    (object): object is ConnectorComponent =>
-      object instanceof ConnectorComponent && !object.isDeleteRequested,
+    (object): object is ConnectorMirror =>
+      object instanceof ConnectorMirror && !object.isDeleteRequested,
   );
 }
 
-export { ConnectorComponent };
+export { ConnectorMirror };

@@ -1,9 +1,9 @@
 import { BaseObject, ElementObject } from "@snap-engine/core";
 import {
-  ConnectorComponent,
+  ConnectorMirror,
   resolveConnectorSourceAtPoint,
 } from "./connector";
-import { LineComponent } from "./line";
+import { LineMirror } from "./line";
 import type {
   pointerUpProp,
   pointerDownProp,
@@ -92,13 +92,13 @@ export function mergeConfig<T extends object>(defaults: T, config: Partial<T>): 
 /** Consumer policy and lifecycle surfaces. Callbacks receive event objects so
  * new context can be added without growing positional signatures. */
 export interface NodePosition {
-  node: NodeComponent;
+  node: NodeMirror;
   x: number;
   y: number;
 }
 
 export interface NodePointerEvent {
-  node: NodeComponent;
+  node: NodeMirror;
   pointerId: number;
   position: eventPosition;
   originalEvent?: PointerEvent;
@@ -109,7 +109,7 @@ export interface NodeDragCommitEvent extends NodePointerEvent {
 }
 
 export interface NodeDragPositionEvent {
-  node: NodeComponent;
+  node: NodeMirror;
   x: number;
   y: number;
   startX: number;
@@ -123,7 +123,7 @@ export interface ResolvedNodeDragPosition {
 }
 
 export interface NodeResizeEvent {
-  node: NodeComponent;
+  node: NodeMirror;
   handle: ResizeHandle | null;
   x: number;
   y: number;
@@ -132,29 +132,29 @@ export interface NodeResizeEvent {
 }
 
 export interface NodeResizeHandleEvent {
-  node: NodeComponent;
+  node: NodeMirror;
   handle: ResizeHandle | null;
   cursor: string | null;
 }
 
 export interface NodeSelectionEvent {
-  node: NodeComponent;
+  node: NodeMirror;
   selected: boolean;
-  selection: readonly NodeComponent[];
+  selection: readonly NodeMirror[];
 }
 
 export type SelectionMode = "replace" | "add" | "toggle";
 
 export interface NodeSelectionModeEvent {
-  node: NodeComponent;
+  node: NodeMirror;
   selected: boolean;
-  selection: readonly NodeComponent[];
+  selection: readonly NodeMirror[];
   originalEvent: PointerEvent;
 }
 
 export interface NodeLinesEvent {
-  node: NodeComponent;
-  lines: readonly LineComponent[];
+  node: NodeMirror;
+  lines: readonly LineMirror[];
 }
 
 export interface NodeCallbacks {
@@ -186,7 +186,7 @@ class ResizeHandleCollider extends RectCollider {
 
   constructor(
     engine: any,
-    parent: NodeComponent,
+    parent: NodeMirror,
     handle: ResizeHandle,
     cursor: string,
   ) {
@@ -198,7 +198,7 @@ class ResizeHandleCollider extends RectCollider {
 
 class ResizeHoverController extends BaseObject {
   #count = 0;
-  #node: NodeComponent | null = null;
+  #node: NodeMirror | null = null;
   #handle: ResizeHandleCollider | null = null;
   #target: HTMLElement | null = null;
   #previousNodeCursor = "";
@@ -214,7 +214,7 @@ class ResizeHoverController extends BaseObject {
     this.#count++;
   }
 
-  release(node: NodeComponent): void {
+  release(node: NodeMirror): void {
     this.#count--;
     if (this.#node === node) this.clear();
     if (this.#count <= 0) {
@@ -224,7 +224,7 @@ class ResizeHoverController extends BaseObject {
   }
 
   activate(handle: ResizeHandleCollider, target?: EventTarget | null): void {
-    const node = handle.parent as NodeComponent;
+    const node = handle.parent as NodeMirror;
     const element = target instanceof HTMLElement ? target : null;
     if (this.#handle === handle && this.#target === element) return;
     this.#restoreCss();
@@ -290,7 +290,7 @@ function hoverController(engine: any): ResizeHoverController {
 function findResizeHandle(
   engine: any,
   position: eventPosition,
-  node?: NodeComponent,
+  node?: NodeMirror,
 ): ResizeHandleCollider | null {
   let winner: ResizeHandleCollider | null = null;
   for (const collider of getResizeHandles(engine.global)) {
@@ -304,9 +304,9 @@ function findResizeHandle(
   return winner;
 }
 
-class NodeComponent extends ElementObject {
+class NodeMirror extends ElementObject {
   #config: Required<NodeConfig>;
-  _connectors: { [key: string]: ConnectorComponent };
+  _connectors: { [key: string]: ConnectorMirror };
   _components: { [key: string]: ElementObject };
   _dragStartX = 0;
   _dragStartY = 0;
@@ -323,7 +323,7 @@ class NodeComponent extends ElementObject {
   #resizeHandleThickness: number;
   #resizeHoverController: ResizeHoverController | null = null;
   #activeResizeHandle: ResizeHandle | null = null;
-  /** Read by GroupNodeComponent to distinguish a resize from a move drag. */
+  /** Read by GroupNodeMirror to distinguish a resize from a move drag. */
   protected _resizing = false;
   #resizeArmed = false;
   #resizeStartW = 0;
@@ -334,8 +334,8 @@ class NodeComponent extends ElementObject {
   #edgePanPointerId: number | null = null;
   #dragHandles = new Set<HTMLElement>();
   #dragPointerId: number | null = null;
-  #dragRoots: NodeComponent[] = [];
-  #dragCommitNodes: NodeComponent[] = [];
+  #dragRoots: NodeMirror[] = [];
+  #dragCommitNodes: NodeMirror[] = [];
   #lastDragPosition: eventPosition | null = null;
   #pointerSelectionMode: SelectionMode = "replace";
   #selectedAtPointerDown = false;
@@ -399,7 +399,7 @@ class NodeComponent extends ElementObject {
     this._hasMoved = false;
 
     // Whenever the DOM box changes size (ResizeObserver) re-measure + re-glue.
-    this.event.dom.onResize = () => this.syncDomGeometry();
+    this.event.dom.onResize = () => this.remeasureDomGeometry();
 
     // Base positioning styles are framework-owned: adapters must render the
     // element with `position: absolute; transform-origin: top left` (see the
@@ -476,7 +476,7 @@ class NodeComponent extends ElementObject {
     });
   }
 
-  _filterDeletedLines(svgLines: LineComponent[]) {
+  _filterDeletedLines(svgLines: LineMirror[]) {
     for (let i = 0; i < svgLines.length; i++) {
       if (svgLines[i].isDeleteRequested) {
         svgLines.splice(i, 1);
@@ -504,12 +504,12 @@ class NodeComponent extends ElementObject {
     }
   }
 
-  #transformNodeTree(): NodeComponent[] {
-    const nodes: NodeComponent[] = [];
-    const visit = (node: NodeComponent) => {
+  #transformNodeTree(): NodeMirror[] {
+    const nodes: NodeMirror[] = [];
+    const visit = (node: NodeMirror) => {
       nodes.push(node);
       for (const child of node.transformChildren) {
-        if (child instanceof NodeComponent) visit(child);
+        if (child instanceof NodeMirror) visit(child);
       }
     };
     visit(this);
@@ -530,7 +530,7 @@ class NodeComponent extends ElementObject {
   // but resizing invalidates them, so they must be re-read. Shared by the
   // ResizeObserver and the JS-driven setSize; stable queueIds collapse a
   // same-frame double-fire (idempotent when it runs twice across frames).
-  syncDomGeometry(): void {
+  remeasureDomGeometry(): void {
     if (!this.element) {
       throw new Error("Cannot sync node geometry before assigning its DOM element");
     }
@@ -673,7 +673,7 @@ class NodeComponent extends ElementObject {
 
   // Transform-only (re)parenting used by group carry: the public/DOM graph is
   // left alone, so members stay flat siblings in the adapter's node list.
-  attachTransformToGroup(group: NodeComponent): void {
+  attachTransformToGroup(group: NodeMirror): void {
     this.setTransformParent(group, true);
   }
 
@@ -850,12 +850,12 @@ class NodeComponent extends ElementObject {
   }
 
   /** @internal Whether this node's drag behavior already carries `node`. */
-  containsSelectionDragNode(_node: NodeComponent): boolean {
+  containsSelectionDragNode(_node: NodeMirror): boolean {
     return false;
   }
 
   /** @internal Nodes whose final positions belong to this drag root's commit. */
-  selectionDragNodes(): NodeComponent[] {
+  selectionDragNodes(): NodeMirror[] {
     return [this];
   }
 
@@ -957,7 +957,7 @@ class NodeComponent extends ElementObject {
     });
   }
 
-  protected getDragCommitNodes(): NodeComponent[] {
+  protected getDragCommitNodes(): NodeMirror[] {
     return this.#dragCommitNodes.length
       ? [...this.#dragCommitNodes]
       : [...getSelectList(this.global)];
@@ -1005,7 +1005,7 @@ class NodeComponent extends ElementObject {
     this._hasMoved = false;
   }
 
-  getConnector(name: string): ConnectorComponent | null {
+  getConnector(name: string): ConnectorMirror | null {
     if (!(name in this._connectors)) {
       console.error(`Connector ${name} does not exist in node ${this.id}`);
       return null;
@@ -1013,7 +1013,7 @@ class NodeComponent extends ElementObject {
     return this._connectors[name];
   }
 
-  addConnectorObject(connector: ConnectorComponent) {
+  addConnectorObject(connector: ConnectorMirror) {
     connector.assignToNode(this);
   }
 
@@ -1021,13 +1021,13 @@ class NodeComponent extends ElementObject {
     this._propSetCallback[name] = callback;
   }
 
-  getAllOutgoingLines(): LineComponent[] {
+  getAllOutgoingLines(): LineMirror[] {
     return Object.values(this._connectors).flatMap(
       (connector) => connector.outgoingLines,
     );
   }
 
-  getAllIncomingLines(): LineComponent[] {
+  getAllIncomingLines(): LineMirror[] {
     return Object.values(this._connectors).flatMap(
       (connector) => connector.incomingLines,
     );
@@ -1038,10 +1038,10 @@ class NodeComponent extends ElementObject {
   }
 
   setProp(name: string, value: any) {
-    const pending: Array<{ node: NodeComponent; name: string }> = [
+    const pending: Array<{ node: NodeMirror; name: string }> = [
       { node: this, name },
     ];
-    const visited = new Map<NodeComponent, Set<string>>();
+    const visited = new Map<NodeMirror, Set<string>>();
 
     while (pending.length > 0) {
       const current = pending.pop();
@@ -1070,7 +1070,7 @@ class NodeComponent extends ElementObject {
         const peer = peers[index];
         if (!peer?.parent) continue;
         pending.push({
-          node: peer.parent as NodeComponent,
+          node: peer.parent as NodeMirror,
           name: peer.name,
         });
       }
@@ -1115,4 +1115,4 @@ class NodeComponent extends ElementObject {
   }
 }
 
-export { NodeComponent };
+export { NodeMirror };

@@ -26,14 +26,14 @@ npm install @snap-engine/core @snap-engine/snapline
 
 ```ts
 import {
-  GroupNodeComponent,
-  NodeComponent,
+  GroupNodeMirror,
+  NodeMirror,
   getParentGroup,
   setGroupMembershipResolver,
 } from "@snap-engine/snapline";
 ```
 
-After assigning a Vanilla-rendered element, call `syncDomGeometry()`. Svelte
+After assigning a Vanilla-rendered element, call `remeasureDomGeometry()`. Svelte
 and React adapters perform that synchronization automatically.
 
 Live gesture geometry stays outside framework state. Nodes and groups write

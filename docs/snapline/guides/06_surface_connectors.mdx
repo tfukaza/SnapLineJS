@@ -29,7 +29,7 @@ as their own ports:
 />
 ```
 
-`virtual` omits the connector element. The logical `ConnectorComponent` still
+`virtual` omits the connector element. The logical `ConnectorMirror` still
 belongs to its node, participates in connection policy, and owns its lines.
 Source surfaces are registered with the engine's input router, so their hit
 area may extend beyond the parent node's DOM box (for example, a 16-pixel rim
@@ -102,7 +102,7 @@ const callbacks: ConnectorCallbacks = {
 };
 ```
 
-The payload is retained on `LineComponent`. A custom line renderer can use that
+The payload is retained on `LineMirror`. A custom line renderer can use that
 stable ID to read the current edge from framework state. Programmatic hydration
 passes the same payload directly:
 

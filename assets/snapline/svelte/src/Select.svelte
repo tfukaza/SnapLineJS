@@ -1,12 +1,12 @@
 <script lang="ts">
-    import { RectSelectComponent, type SelectCallbacks } from "@snap-engine/snapline";
+    import { RectSelectController, type SelectCallbacks } from "@snap-engine/snapline";
     import type { Engine } from "@snap-engine/core";
     import { onDestroy, onMount, getContext } from "svelte";
 
     let { className = "", callbacks = {} }: { className?: string; callbacks?: SelectCallbacks } = $props();
 
     let engine: Engine = getContext("engine");
-    let select = new RectSelectComponent(engine, null, { callbacks });
+    let select = new RectSelectController(engine, null, { callbacks });
 
     let selectDOM: HTMLDivElement | null = null;
     let unbindGeometry: (() => void) | null = null;

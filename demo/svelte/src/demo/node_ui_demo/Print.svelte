@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { NodeComponent } from "@snap-engine/snapline";
+  import { NodeMirror } from "@snap-engine/snapline";
   import { Connector, Node } from "@snap-engine/snapline-svelte";
   import DemoLine from "./Line.svelte";
   import { onMount } from "svelte";
@@ -7,7 +7,7 @@
   let node: any = $state(null);
   let text: string = $state("Hello World");
   let fontSize: number = $state(20);
-  let { nodeObject }: { nodeObject?: NodeComponent | null } = $props();
+  let { nodeObject }: { nodeObject?: NodeMirror | null } = $props();
 
   onMount(() => {
     nodeObject = (node as any).getNodeObject();

@@ -25,7 +25,7 @@ drag surface.
 
 Set `virtual` when a connector should use the parent node's custom shape
 surfaces without rendering a port element. Opaque connection payloads remain on
-`LineComponent`, so a custom `lineComponent` can resolve presentation from
+`LineMirror`, so a custom `lineComponent` can resolve presentation from
 application-owned edge state. Custom renderers mount static structure and call
 `line.bindGeometryWriter(...)` from a layout effect to update retained SVG,
 Canvas, or graphics refs without rendering React on pointer movement.

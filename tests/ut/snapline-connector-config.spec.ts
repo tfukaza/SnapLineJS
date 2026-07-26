@@ -1,9 +1,9 @@
 import { expect, test } from "@playwright/test";
 import { CircleCollider } from "../../src/collision";
 import {
-  ConnectorComponent,
-  LineComponent,
-  NodeComponent,
+  ConnectorMirror,
+  LineMirror,
+  NodeMirror,
   PlacementController,
   type ConnectorSurfaceStrategy,
 } from "../../assets/snapline/core/src";
@@ -90,8 +90,8 @@ function installObserverStubs(): () => void {
 
 test("line geometry writers are imperative, replaceable, and separate from state", () => {
   const { engine } = createEngineHarness();
-  const sourceNode = new NodeComponent(engine, null);
-  const source = new ConnectorComponent(engine, sourceNode, {
+  const sourceNode = new NodeMirror(engine, null);
+  const source = new ConnectorMirror(engine, sourceNode, {
     name: "source",
     capabilities: { source: true, target: false },
   });
@@ -176,7 +176,7 @@ test("placement geometry writes do not require framework state updates", () => {
 test("framework cleanup detaches elements without removing owned DOM", () => {
   const restoreObservers = installObserverStubs();
   const { engine } = createEngineHarness();
-  const node = new NodeComponent(engine, null);
+  const node = new NodeMirror(engine, null);
   let firstRemovals = 0;
   let secondRemovals = 0;
   const firstElement = {
@@ -208,13 +208,13 @@ test("framework cleanup detaches elements without removing owned DOM", () => {
 
 test("connector config updates stay live without replacing topology", () => {
   const { engine, global } = createEngineHarness();
-  const sourceNode = new NodeComponent(engine, null);
-  const targetNode = new NodeComponent(engine, null);
-  const source = new ConnectorComponent(engine, sourceNode, {
+  const sourceNode = new NodeMirror(engine, null);
+  const targetNode = new NodeMirror(engine, null);
+  const source = new ConnectorMirror(engine, sourceNode, {
     name: "source",
     capabilities: { source: true, target: false },
   });
-  const target = new ConnectorComponent(engine, targetNode, {
+  const target = new ConnectorMirror(engine, targetNode, {
     name: "target",
     capabilities: { source: false, target: true, maxIncoming: -1 },
   });
@@ -224,7 +224,7 @@ test("connector config updates stay live without replacing topology", () => {
   expect(source.connectToConnector({ target })).toBe(true);
   const existingLine = source.outgoingLines[0];
 
-  class UpdatedLine extends LineComponent {}
+  class UpdatedLine extends LineMirror {}
   const strategy: ConnectorSurfaceStrategy = {
     sourceHitTest: ({ position }) => ({
       anchor: position,
@@ -299,7 +299,7 @@ test("connector config updates stay live without replacing topology", () => {
   expect((source.colliderList[0] as CircleCollider).radius).toBe(30);
   expect(global.data.sourceSurfaces).toEqual([]);
   const defaultLine = source.createLine();
-  expect(defaultLine).toBeInstanceOf(LineComponent);
+  expect(defaultLine).toBeInstanceOf(LineMirror);
   expect(defaultLine).not.toBeInstanceOf(UpdatedLine);
   defaultLine.destroy(false);
 
@@ -312,13 +312,13 @@ test("connector config updates stay live without replacing topology", () => {
 test("visible port binding can toggle while preserving connector lines", () => {
   const restoreObservers = installObserverStubs();
   const { engine } = createEngineHarness();
-  const sourceNode = new NodeComponent(engine, null);
-  const targetNode = new NodeComponent(engine, null);
-  const source = new ConnectorComponent(engine, sourceNode, {
+  const sourceNode = new NodeMirror(engine, null);
+  const targetNode = new NodeMirror(engine, null);
+  const source = new ConnectorMirror(engine, sourceNode, {
     name: "source",
     capabilities: { source: true, target: false },
   });
-  const target = new ConnectorComponent(engine, targetNode, {
+  const target = new ConnectorMirror(engine, targetNode, {
     name: "target",
     capabilities: { source: false, target: true },
   });
@@ -354,9 +354,9 @@ test("visible port binding can toggle while preserving connector lines", () => {
 
 test("bidirectional connector graphs propagate props without recursing forever", () => {
   const { engine } = createEngineHarness();
-  const firstNode = new NodeComponent(engine, null);
-  const secondNode = new NodeComponent(engine, null);
-  const first = new ConnectorComponent(engine, firstNode, {
+  const firstNode = new NodeMirror(engine, null);
+  const secondNode = new NodeMirror(engine, null);
+  const first = new ConnectorMirror(engine, firstNode, {
     name: "value",
     capabilities: {
       source: true,
@@ -364,7 +364,7 @@ test("bidirectional connector graphs propagate props without recursing forever",
       maxIncoming: -1,
     },
   });
-  const second = new ConnectorComponent(engine, secondNode, {
+  const second = new ConnectorMirror(engine, secondNode, {
     name: "value",
     capabilities: {
       source: true,

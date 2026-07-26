@@ -1,5 +1,5 @@
 import { useLayoutEffect, useRef, type CSSProperties } from "react";
-import { RectSelectComponent, type SelectCallbacks } from "@snap-engine/snapline";
+import { RectSelectController, type SelectCallbacks } from "@snap-engine/snapline";
 import { useSnapLineEngine } from "./Engine";
 
 export interface SelectProps {
@@ -16,11 +16,11 @@ export function Select({
   callbacks = {},
 }: SelectProps) {
   const engine = useSnapLineEngine();
-  const selectRef = useRef<RectSelectComponent | null>(null);
+  const selectRef = useRef<RectSelectController | null>(null);
   const selectDomRef = useRef<HTMLDivElement>(null);
 
   if (!selectRef.current) {
-    selectRef.current = new RectSelectComponent(engine, null, { callbacks });
+    selectRef.current = new RectSelectController(engine, null, { callbacks });
   }
   const select = selectRef.current;
 

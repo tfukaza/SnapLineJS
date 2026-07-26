@@ -1,9 +1,9 @@
 import type {
-  ConnectorComponent,
+  ConnectorMirror,
   ConnectorConnectionEvent,
   ConnectorDisconnectionEvent,
 } from "./connector";
-import type { NodeComponent } from "./node";
+import type { NodeMirror } from "./node";
 
 // Structural stand-in for EdgeSyncController so the manager (and the emit
 // sites that reach it) never value-import edge-sync — edge-sync imports the
@@ -28,8 +28,8 @@ export interface EdgeSyncLike {
 // today (`edgeSync`), layout helpers that need to walk `nodes` tomorrow.
 export class NodeManager {
   readonly engine: unknown;
-  #nodes = new Set<NodeComponent>();
-  #connectors = new Set<ConnectorComponent>();
+  #nodes = new Set<NodeMirror>();
+  #connectors = new Set<ConnectorMirror>();
 
   // Engine-scoped controlled-edges controller. Registered by
   // EdgeSyncController's constructor; the connector emit sites forward
@@ -40,30 +40,30 @@ export class NodeManager {
     this.engine = engine;
   }
 
-  registerNode(node: NodeComponent): void {
+  registerNode(node: NodeMirror): void {
     this.#nodes.add(node);
   }
 
-  unregisterNode(node: NodeComponent): void {
+  unregisterNode(node: NodeMirror): void {
     this.#nodes.delete(node);
   }
 
-  registerConnector(connector: ConnectorComponent): void {
+  registerConnector(connector: ConnectorMirror): void {
     this.#connectors.add(connector);
     this.edgeSync?.connectorRegistered?.();
   }
 
-  unregisterConnector(connector: ConnectorComponent): void {
+  unregisterConnector(connector: ConnectorMirror): void {
     this.#connectors.delete(connector);
   }
 
   // Live nodes in registration order. Returns a copy, never internal state.
-  get nodes(): readonly NodeComponent[] {
+  get nodes(): readonly NodeMirror[] {
     return [...this.#nodes];
   }
 
   // Live connectors in registration order. Returns a copy.
-  get connectors(): readonly ConnectorComponent[] {
+  get connectors(): readonly ConnectorMirror[] {
     return [...this.#connectors];
   }
 }

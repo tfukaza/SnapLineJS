@@ -1,8 +1,8 @@
 <script lang="ts">
   import {
-    NodeComponent,
-    ConnectorComponent,
-    LineComponent,
+    NodeMirror,
+    ConnectorMirror,
+    LineMirror,
     type ConnectorCapabilities,
     type ConnectorCallbacks,
     type ConnectorSurfaceStrategy,
@@ -37,15 +37,15 @@
     /** Keep the logical connector without rendering a visible port element. */
     virtual?: boolean;
     colliderRadius?: number;
-    lineClass?: typeof LineComponent;
-    connectorObject?: ConnectorComponent | null;
+    lineClass?: typeof LineMirror;
+    connectorObject?: ConnectorMirror | null;
     data?: Record<string, string>;
   } = $props();
 
   let engine: Engine = getContext("engine");
-  let nodeObject: NodeComponent = getContext("nodeObject");
+  let nodeObject: NodeMirror = getContext("nodeObject");
   const ownsConnector = connectorObject == null;
-  let connector = connectorObject ?? new ConnectorComponent(engine, nodeObject, {
+  let connector = connectorObject ?? new ConnectorMirror(engine, nodeObject, {
     name: name,
     maxConnectors: maxConnectors,
     allowDragOut: allowDragOut,
@@ -60,7 +60,7 @@
 
   nodeObject.addConnectorObject(connector);
 
-  export function object(): ConnectorComponent {
+  export function object(): ConnectorMirror {
     return connector;
   }
 

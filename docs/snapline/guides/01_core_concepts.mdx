@@ -16,10 +16,10 @@ sectionOrder: 2
 
 - One SnapEngine supplies input dispatch, scheduling, collision data, and the
   camera coordinate transform.
-- A `NodeComponent` owns connector objects and graph properties.
-- A `ConnectorComponent` describes direction, capacity, metadata, and
+- A `NodeMirror` owns connector objects and graph properties.
+- A `ConnectorMirror` describes direction, capacity, metadata, and
   connection policy.
-- A `LineComponent` joins two connectors and keeps its SVG path attached while
+- A `LineMirror` joins two connectors and keeps its SVG path attached while
   either node moves.
 
 `maxConnectors={-1}` permits unlimited incoming connections, `0` makes an

@@ -43,7 +43,7 @@ instead of expecting SnapLine to bind Delete, Shift, or platform modifiers.
 ## Troubleshooting
 
 - A line that starts in the wrong place usually means a Vanilla integration did
-  not call `syncDomGeometry()` after the connector DOM committed.
+  not call `remeasureDomGeometry()` after the connector DOM committed.
 - A node that moves twice is usually being moved both from application pointer
   handlers and SnapLine.
 - Group membership updates only at settle points by design.
