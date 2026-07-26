@@ -4,9 +4,14 @@ import {
   NodeMirror,
 } from "../../assets/snapline/core/src";
 import { getGraphMirror } from "../../assets/snapline/core/src/snapline-globals";
+import { attachControlledGraph, type LineChangeRequest } from "../../assets/snapline/core/src";
 import {
+  armGesture,
   createControlledHarness as controlledHarness,
+  createSiblingEngine,
+  driveGestureDrop,
   eventPositionAt as pos,
+  mountConnectedPair,
   nearTargetStrategy as nearStrategy,
 } from "../helpers/snapline-harness";
 
@@ -364,4 +369,137 @@ test("a gesture disconnect proposes removal; rejection re-glues, acceptance disc
   handle.flush();
   expect(mirror.line("line-a")).toBeNull();
   expect(source.outgoingLines).toEqual([]);
+});
+
+// ---- Remaining matrix: isolation, reconnect identity, bulk load ----
+
+test("controlled graphs on sibling engines are fully isolated, gestures included", () => {
+  const { engine, global, handle, requests } = controlledHarness();
+  const sibling = createSiblingEngine(global);
+  const siblingRequests: LineChangeRequest[] = [];
+  const siblingHandle = attachControlledGraph(sibling, {
+    onLineChangeRequest: (request) => siblingRequests.push(request),
+  });
+
+  // Same connector ids on both engines: no conflict, independent settles.
+  const a = mountConnectedPair(engine);
+  const b = mountConnectedPair(sibling);
+  handle.setCanonicalGraph({
+    lines: [{ id: "iso", fromConnectorId: "out-1", toConnectorId: "in-1" }],
+  });
+  handle.flush();
+  siblingHandle.flush();
+  expect(getGraphMirror(engine).line("iso")).not.toBeNull();
+  expect(getGraphMirror(sibling).line("iso")).toBeNull();
+
+  // A gesture on the sibling engine cannot discover engine A's targets:
+  // A's target accepts drops near x=100, the sibling's own target does not
+  // exist at all (destroyed) — the drop finds no candidate anywhere.
+  b.target.destroy(false);
+  armGesture(b.source, 11);
+  driveGestureDrop(b.source, 100, 11);
+  expect(siblingRequests).toEqual([]);
+  expect(b.source.outgoingLines).toEqual([]);
+  expect(requests).toEqual([]);
+  void a;
+});
+
+test("a gesture reconnect preserves the line's stable id and mirror", () => {
+  const { engine, handle, requests } = controlledHarness();
+  const mirror = getGraphMirror(engine);
+  const { source, targetNode, target } = mountConnectedPair(engine);
+  // Second input on the same node, hit-testable only left of x=500 too but
+  // distinguished by position: in-2 accepts drops at x >= 200.
+  const secondTarget = new ConnectorMirror(engine, targetNode, {
+    id: "in-2",
+    name: "in2",
+    rules: { maxOutgoing: 0 },
+    surfaceStrategies: [
+      {
+        targetHitTest: ({ position }: any) =>
+          position.x >= 200 && position.x < 500
+            ? { anchor: { x: position.x, y: position.y }, distance: 0 }
+            : null,
+      },
+    ],
+  });
+  // Restrict the first target to drops left of x=200 so the reconnect drop
+  // at x=300 lands on in-2.
+  target.updateConfig({
+    rules: { maxOutgoing: 0 },
+    surfaceStrategies: [
+      {
+        targetHitTest: ({ position }: any) =>
+          position.x < 200
+            ? { anchor: { x: position.x, y: position.y }, distance: 0 }
+            : null,
+      },
+    ],
+  });
+
+  handle.setCanonicalGraph({
+    lines: [{ id: "line-r", fromConnectorId: "out-1", toConnectorId: "in-1" }],
+  });
+  handle.flush();
+  const line = mirror.line("line-r")!;
+
+  // Pick up from in-1, drop on in-2.
+  const event = { button: 0, pointerId: 13 } as any;
+  target.armSurfaceGesture({ position: pos(0, 0), event } as any, null);
+  driveGestureDrop(source, 300, 13);
+
+  expect(requests).toHaveLength(1);
+  expect(requests[0]).toMatchObject({
+    intent: "reconnect",
+    update: [{ id: "line-r", toConnectorId: "in-2" }],
+  });
+
+  // The app applies the endpoint update; the SAME mirror settles onto in-2.
+  handle.setCanonicalGraph({
+    lines: [{ id: "line-r", fromConnectorId: "out-1", toConnectorId: "in-2" }],
+  });
+  handle.flush();
+  expect(mirror.line("line-r")).toBe(line);
+  expect(line.target).toBe(secondTarget);
+  expect(line.phase).toBe("connected");
+});
+
+test("a bulk load reconciles exactly once at the outermost batch end", async () => {
+  const { engine, handle } = controlledHarness();
+  const mirror = getGraphMirror(engine);
+  const reconciler = mirror.reconciler!;
+  const originalReconcile = reconciler.reconcile!.bind(reconciler);
+  let passes = 0;
+  (reconciler as { reconcile?: () => void }).reconcile = () => {
+    passes += 1;
+    originalReconcile();
+  };
+
+  const batch = mirror.beginBatch();
+  handle.setCanonicalGraph({
+    lines: [
+      { id: "bulk-1", fromConnectorId: "out-1", toConnectorId: "in-1" },
+      { id: "bulk-2", fromConnectorId: "out-2", toConnectorId: "in-1" },
+    ],
+  });
+  // Connectors mount across several "commits" while the batch is open.
+  const { targetNode } = mountConnectedPair(engine);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  new ConnectorMirror(engine, new NodeMirror(engine, null), {
+    id: "out-2",
+    name: "out2",
+    rules: { maxIncoming: 0 },
+  });
+  targetNode.setSizeState(10, 10);
+  expect(passes).toBe(0);
+
+  batch.end();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(passes).toBe(1);
+  expect(mirror.line("bulk-1")).not.toBeNull();
+  // bulk-2 targets the same maxIncoming:1 input — latent with a diagnostic,
+  // exactly one pass regardless.
+  expect(mirror.diagnostics().map((error) => error.code)).toEqual([
+    "capacity-exceeded",
+  ]);
 });
