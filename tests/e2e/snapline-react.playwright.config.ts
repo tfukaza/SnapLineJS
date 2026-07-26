@@ -7,7 +7,11 @@ const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 
 export default defineConfig({
   testDir: ".",
-  testMatch: "node-react.spec.ts",
+  testMatch: [
+    "node-react.spec.ts",
+    "snapline-react-features.spec.ts",
+    "snapline-edges-react.spec.ts",
+  ],
   fullyParallel: false,
   workers: 1,
   reporter: [["list"]],

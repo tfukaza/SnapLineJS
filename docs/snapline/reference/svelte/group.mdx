@@ -1,0 +1,21 @@
+---
+title: Group API
+description: Svelte Group props, snippets, callbacks, geometry, and ownership.
+order: 2
+sectionTitle: Reference
+sectionOrder: 3
+framework: svelte
+frameworkKey: group
+---
+
+`Group` accepts `x`, `y`, `width`, `height`, minimum dimensions, resize handle
+configuration, `metadata`, `callbacks`, `groupCallbacks`, `canContain`, and
+`edgePan`.
+
+Use `title` for a text header or `headerContent` for a custom snippet. The
+header is the move surface; the group body remains pointer-transparent so
+member nodes receive input.
+
+`onMembershipChange`, `onResizeCommit`, and `onDragCommit` are convenience
+callbacks composed with their callback-object equivalents. `getNodeObject()`
+returns the core group.

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import CardDocsLink from "./CardDocsLink.svelte";
   import { onDestroy, untrack } from "svelte";
   import ClientDemoFrame from "$lib/components/ClientDemoFrame.svelte";
   import { Engine } from "@snap-engine/asset-base-svelte";
@@ -506,6 +507,7 @@
       <p>Lightweight WAAPI (Web Animations API) based animation engine
           that can animate not only CSS properties but also arbitrary JavaScript variables.
         Deep integration with the engine allows maximal performance.</p>
+        <CardDocsLink href="/docs/snapengine/introduction/07_animation" label="Animation docs" />
     </div>
   </div>
 </article>

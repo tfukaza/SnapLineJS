@@ -490,6 +490,12 @@ export class DragSession {
       if (previousGhostLocation || this.dropTarget) {
         this.dropTarget = null;
         await lifecycle.removeGhost(this, "target");
+        this.#invalidateVisualGeometry(
+          previousGhostLocation
+            ? [previousGhostLocation.container]
+            : [],
+          "ghost",
+        );
         this.fireDropTargetChange(previousGhostLocation, null);
       }
       this.updateHoveredItem(null);
@@ -517,6 +523,10 @@ export class DragSession {
           targetIndex,
           target.ghostRect,
         );
+        this.#invalidateVisualGeometry(
+          [ghostSource.container, targetContainer],
+          "ghost",
+        );
         this.fireDropTargetChange(ghostSource, {
           container: targetContainer,
           index: targetIndex,
@@ -530,12 +540,26 @@ export class DragSession {
         targetIndex,
         target.ghostRect,
       );
+      this.#invalidateVisualGeometry([targetContainer], "ghost");
       this.fireDropTargetChange(null, {
         container: targetContainer,
         index: targetIndex,
       });
       lifecycle.afterSyncDropTarget(this);
     }
+  }
+
+  #invalidateVisualGeometry(
+    containers: readonly Container[],
+    reason: "ghost",
+  ): void {
+    const items = new Set<Item>(this.items);
+    for (const container of containers) {
+      for (const item of container.itemOrderedList) {
+        if (!item.isGhost) items.add(item);
+      }
+    }
+    this.root.invalidateVisualGeometry(items, reason);
   }
 
   private fireDropTargetChange(

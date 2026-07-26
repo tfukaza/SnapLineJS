@@ -1,7 +1,6 @@
 {
   "name": "@snap-engine/snapline",
-  "private": true,
-  "version": "0.2.0",
+  "version": "0.3.0",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/tfukaza/SnapEngineJS.git",
@@ -16,7 +15,10 @@
     "./node": "./src/node.ts",
     "./connector": "./src/connector.ts",
     "./line": "./src/line.ts",
-    "./select": "./src/select.ts"
+    "./select": "./src/select.ts",
+    "./group": "./src/group.ts",
+    "./placement": "./src/placement.ts",
+    "./query": "./src/query.ts"
   },
   "files": [
     "src",

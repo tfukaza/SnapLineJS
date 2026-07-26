@@ -1,0 +1,44 @@
+---
+title: Groups and nesting
+description: Use exclusive automatic membership, nested group trees, and custom parent resolution.
+order: 3
+sectionTitle: Guides
+sectionOrder: 2
+---
+
+<script>
+  import SnapLineDemo from "$lib/components/docs/SnapLineDemo.svelte";
+</script>
+
+<SnapLineDemo mode="groups" />
+
+Group membership is evaluated at settle points: initial measurement, node
+drops, group moves, resize commits, and group removal.
+
+- Every node has at most one direct parent.
+- Ordinary nodes join when their center is inside a group.
+- A nested group must fit completely inside its parent.
+- The smallest eligible group wins, producing an innermost-first hierarchy.
+- Dragging an outer group carries all descendants without adding them to the
+  current selection.
+
+`group.members` contains direct members. `group.descendants` contains the
+deduplicated recursive subtree, and `getParentGroup(node)` returns the settled
+direct parent.
+
+Use `canContain` to reject application-specific node types. For overlapping
+policies, configure one resolver per engine:
+
+```ts
+import { setGroupMembershipResolver } from "@snap-engine/snapline/group";
+
+const disposePolicy = setGroupMembershipResolver(engine, (event) => {
+  const pinned = event.candidates.find(
+    (group) => group.metadata.role === "pinned",
+  );
+  return pinned ?? event.defaultParent;
+});
+```
+
+A resolver may return one of the safe candidates or `null`. Persistence remains
+application-owned: use membership deltas to update group IDs in your document.

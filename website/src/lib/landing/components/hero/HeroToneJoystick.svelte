@@ -124,7 +124,8 @@
     knobObject.event.input.dragStart = (prop: dragStartProp) => {
       if (!knobObject) return;
 
-      knobObject.global.data.allowCameraControl = false;
+      // Claim the pointer while dragging (auto-releases at gesture end).
+      knobObject.engine.input.claimPointer(prop.pointerId);
       isDragging = true;
       dragStartX = knobObject.worldTransform.x;
       dragStartY = knobObject.worldTransform.y;
@@ -148,7 +149,6 @@
     };
 
     knobObject.event.input.dragEnd = (_: dragEndProp) => {
-      if (knobObject) knobObject.global.data.allowCameraControl = true;
       isDragging = false;
     };
   });

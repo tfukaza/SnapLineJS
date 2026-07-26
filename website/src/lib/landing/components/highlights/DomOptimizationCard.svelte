@@ -1,4 +1,5 @@
 <script lang="ts">
+  import CardDocsLink from "./CardDocsLink.svelte";
   import { onDestroy, tick } from "svelte";
   import { fade } from "svelte/transition";
   import ClientDemoFrame from "$lib/components/ClientDemoFrame.svelte";
@@ -622,6 +623,7 @@
           to be batched together to reduce <i>layout thrashing</i>.
           This allows for higher framerates when multiple elements are
           being mutated on screen.</p>
+          <CardDocsLink href="/docs/snapengine/introduction/03_render" label="Render queue docs" />
     </div>
 
     <div class="dom-optimization-column">
@@ -802,7 +804,7 @@
     h3 {
       max-width: 100%;
       margin: 0;
-      font-family: "Geist Pixel", sans-serif;
+      font-family: var(--font-display);
       font-size: var(--highlight-card-heading-size);
       line-height: 0.9;
     }
@@ -1312,11 +1314,11 @@
   }
 
   .operation-pill.read span {
-    color: var(--color-secondary-4);
+    color: var(--color-text-muted);
   }
 
   .operation-pill.write span {
-    color: var(--color-secondary-2);
+    color: var(--color-action);
   }
 
   .operation-pill.reflow span,

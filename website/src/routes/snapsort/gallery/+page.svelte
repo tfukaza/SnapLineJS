@@ -1,6 +1,7 @@
 <script lang="ts">
   import SeoHead from "$lib/components/SeoHead.svelte";
   import ClientDemoFrame from "$lib/components/ClientDemoFrame.svelte";
+  import ExhibitSource from "./ExhibitSource.svelte";
   import { Engine } from "@snap-engine/asset-base-svelte";
   import type { Engine as SnapEngine } from "@snap-engine/core";
   import {
@@ -58,6 +59,8 @@
     label: string;
     options?: EditorOption[];
   };
+
+  let { data } = $props();
 
   let examplesEngine: SnapEngine | null = $state(null);
 
@@ -757,7 +760,6 @@
 
 <section class="gallery-hero">
   <div class="gallery-hero-copy">
-    <p class="gallery-hero-kicker">SnapSort</p>
     <h1 class="gallery-hero-title">Gallery</h1>
     <p class="large gallery-hero-lede">
       A hands-on exhibition of interfaces built with SnapSort. Every piece is
@@ -783,8 +785,9 @@
   </aside>
 
   <div class="gallery-exhibits">
-  <ClientDemoFrame>
-    {#snippet fallback()}
+    <h2 class="visually-hidden">Interactive exhibits</h2>
+    <ClientDemoFrame>
+      {#snippet fallback()}
       <div class="examples-grid gallery-skeleton-grid" aria-hidden="true">
         <div id="todo-list" class="example-card pm-example example-side">
           <div class="example-placard">
@@ -1006,6 +1009,7 @@
             A sortable daily checklist — grab the handle to reorder tasks without
             losing your progress.
           </p>
+          <ExhibitSource href={data.sourceLinks["todo-list"]} label="TODO List" />
         </div>
         <div class="project-list">
           <Container
@@ -1044,6 +1048,7 @@
             Three linked columns sharing one drop group — drag cards between
             stages, or click one to advance it.
           </p>
+          <ExhibitSource href={data.sourceLinks["kanban-board"]} label="Kanban Board" />
         </div>
         <div class="kanban-board">
           <Container
@@ -1117,6 +1122,7 @@
             Compose a translation from word tiles. Ghost previews mark where each
             tile will settle.
           </p>
+          <ExhibitSource href={data.sourceLinks["sentence-builder"]} label="Sentence Builder" />
         </div>
         <div class="card ground sentence-builder">
           <div class="display prompt-section">
@@ -1249,6 +1255,7 @@
             An insertion-mode tree with nested folders — drop markers trace the
             exact depth as you drag.
           </p>
+          <ExhibitSource href={data.sourceLinks["file-explorer"]} label="File Explorer" />
         </div>
         <FileExplorerExample />
       </div>
@@ -1261,6 +1268,7 @@
             the palette item never leaves. Built on SnapSort's <code>copy</code>
             drop effect.
           </p>
+          <ExhibitSource href={data.sourceLinks["clone-palette"]} label="Clone Palette" />
         </div>
         <div class="clone-workspace">
           <Container
@@ -1375,6 +1383,7 @@
             reorders normally. Built on SnapSort's <code>none</code> drop
             effect.
           </p>
+          <ExhibitSource href={data.sourceLinks["trash-it"]} label="Trash It" />
         </div>
         <div class="trash-workspace">
           <Container
@@ -1459,6 +1468,7 @@
             Drag a tile onto another to trade places instantly — everything
             else stays put. Built on SnapSort's <code>swap</code> mode.
           </p>
+          <ExhibitSource href={data.sourceLinks["swap-grid"]} label="Swap Grid" />
         </div>
         <div class="swap-workspace">
           <Container
@@ -1532,6 +1542,7 @@
             A form builder with a draggable field palette and sortable option
             lists, rendered live as you edit.
           </p>
+          <ExhibitSource href={data.sourceLinks["editor"]} label="Editor" />
         </div>
         <div class="editor-builder">
           <div class="editor-palette" aria-label="Field palette">
@@ -1801,8 +1812,56 @@
   </div>
 </section>
 
+<section class="gallery-outro landing-section-gap">
+  <h2 class="landing-section-heading">Build one of these</h2>
+  <p class="gallery-outro-copy">
+    Every exhibit above is built from the same two primitives, <code>Container</code>
+    and <code>Item</code>. The setup guide walks through the first one.
+  </p>
+  <div class="gallery-outro-actions">
+    <a class="button primary gallery-outro-action" href="/docs/snapsort/introduction/01_setup">
+      Read the setup guide
+    </a>
+    <a class="button gallery-outro-action" href="/snapsort">Back to SnapSort</a>
+  </div>
+</section>
+
 <style lang="scss">
   @use "../../../lib/landing/landing.scss";
+
+  .gallery-outro {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--size-16);
+    margin-bottom: clamp(3rem, 6vw, 6rem);
+    text-align: center;
+  }
+
+  .gallery-outro-copy {
+    max-width: 560px;
+    margin: 0;
+    color: #5d6266;
+    font-size: clamp(1rem, 1.3vw, 1.12rem);
+    line-height: 1.7;
+
+    code {
+      font-family: var(--font-code);
+      font-size: 0.92em;
+    }
+  }
+
+  .gallery-outro-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: var(--size-12);
+    margin-top: var(--size-8);
+  }
+
+  .gallery-outro-action {
+    text-decoration: none;
+  }
 
   :global(.ghost) {
     background: rgba(0, 0, 0, 0.06);
@@ -1820,16 +1879,6 @@
 
   .gallery-hero-copy {
     max-width: 720px;
-  }
-
-  .gallery-hero-kicker {
-    margin: 0 0 var(--size-8);
-    color: var(--color-background-dark);
-    font-family: "Bitcount Grid Single", monospace;
-    font-size: 1rem;
-    font-weight: 300;
-    letter-spacing: 0.05em;
-    text-transform: lowercase;
   }
 
   .gallery-hero-title {
@@ -1865,6 +1914,18 @@
 
   .gallery-exhibits {
     min-width: 0;
+  }
+
+  .visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
   }
 
   .gallery-sidebar {

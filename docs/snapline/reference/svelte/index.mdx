@@ -1,0 +1,38 @@
+---
+title: Svelte API
+description: Svelte 5 SnapLine components, props, callbacks, and object access.
+order: 1
+sectionTitle: Reference
+sectionOrder: 3
+framework: svelte
+frameworkKey: overview
+---
+
+Wrap components in `Engine` from `@snap-engine/asset-base-svelte`.
+
+| Component   | Important props                                                                                        |
+| ----------- | ------------------------------------------------------------------------------------------------------ |
+| `Node`      | `nodeObject`, `x`, `y`, `width`, `height`, resize configuration, callbacks, `elementProps`             |
+| `Connector` | `name`, legacy port configuration, `virtual`, `capabilities`, `surfaceStrategies`, metadata, callbacks |
+| `Line`      | `line`                                                                                                 |
+| `Select`    | `callbacks`, `className`                                                                               |
+| `Group`     | Node geometry plus `title`, `headerContent`, `canContain`, membership callbacks                        |
+| `Placement` | `controller`, cancellation options, `preview` snippet                                                  |
+
+`getNodeObject()` exposes the underlying object from `Node` and `Group`;
+`Connector.object()` exposes its connector. Supplied objects are not destroyed
+when the component unmounts.
+
+A virtual connector renders no port element. Its source and target surfaces are
+resolved against the parent node, which is useful for whole-border diagram
+connections. Connection-request payloads stay opaque to the adapter and are
+available to custom `LineSvelteComponent` renderers through `LineComponent`.
+
+Connector callbacks, metadata, policy, surface strategies, collider radius,
+edge-pan behavior, and line class are reactive. `virtual` can also be toggled
+without replacing the logical connector or its lines. `name` and
+`connectorObject` are construction-time identities.
+
+Changed geometry props are authoritative. During a live pointer gesture the
+adapter renders local updates and reports the final values through commit
+callbacks.

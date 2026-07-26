@@ -1,0 +1,33 @@
+---
+title: Vanilla and core API
+description: Framework-neutral SnapLine classes, configuration, callbacks, and lifecycle.
+order: 1
+sectionTitle: Reference
+sectionOrder: 3
+framework: vanilla
+frameworkKey: overview
+---
+
+## Main classes
+
+| Class | Responsibility |
+| --- | --- |
+| `NodeComponent` | Position, selection, properties, resize, and connectors |
+| `ConnectorComponent` | Connection capacity, policy, metadata, and gestures |
+| `LineComponent` | Connection state and SVG geometry |
+| `RectSelectComponent` | Background rectangle selection |
+| `GroupNodeComponent` | Resizable exclusive membership and recursive carry |
+| `PlacementController<T>` | Preview, validation, commit, and cancellation state |
+
+Core objects require an engine with collision support. Assign each committed
+element to its object, then call `syncDomGeometry()`. Destroy owned objects when
+their records are removed.
+
+## Query helpers
+
+`getNodes`, `getConnectors`, `getGroupNodes`, and `getSelectedNodes` return
+engine-scoped snapshots. `getParentGroup` returns settled ownership.
+
+Callbacks use event objects carrying the relevant component, metadata, pointer
+information, and final geometry. Configuration objects are not graph
+persistence.

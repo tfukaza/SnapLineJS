@@ -168,6 +168,15 @@ type GlobalCallbackRegistry = Record<
 type TrackedPointer = pointerData & {
   owner: ElementObject | null;
   currentOwner: ElementObject | null;
+  /**
+   * When true, GLOBAL listeners no longer receive this pointer's events
+   * (pointerDown/Move, dragStart/drag; pinches involving it; and wheel while
+   * any claim is held) — owner dispatch is unaffected, and end events
+   * (pointerUp/dragEnd/pinchEnd) always deliver so an already-engaged global
+   * listener can terminate cleanly. The claim dies with this entry (pointer
+   * up/cancel), so it can never be stranded by a destroyed owner.
+   */
+  claimed: boolean;
 };
 
 interface dragGesture {
@@ -382,6 +391,42 @@ class InputControl {
     }
   }
 
+  /**
+   * Claims a pointer for its current gesture: GLOBAL listeners stop receiving
+   * that pointer's events (down/move, dragStart/drag; pinches involving it;
+   * wheel while any claim is held). Owner dispatch is unaffected, and end
+   * events (pointerUp/dragEnd/pinchEnd) still deliver so an already-engaged
+   * global listener can terminate cleanly. Call from a gesture owner's
+   * pointerDown handler (claiming at dragStart is legal but the camera may
+   * already have panned by the drag-start threshold).
+   *
+   * The claim is anchored to the input layer's pointer record and dies with it
+   * on pointer up/cancel — it auto-releases and cannot be stranded, even if
+   * the claiming object is destroyed mid-gesture.
+   */
+  claimPointer(pointerId: number): void {
+    const pointer = this.#pointerDict[pointerId];
+    if (pointer) pointer.claimed = true;
+  }
+
+  /** Releases a claim early (rarely needed — claims auto-release on gesture end). */
+  releasePointerClaim(pointerId: number): void {
+    const pointer = this.#pointerDict[pointerId];
+    if (pointer) pointer.claimed = false;
+  }
+
+  #isPointerClaimed(pointerId: number | undefined): boolean {
+    if (pointerId === undefined) return false;
+    return this.#pointerDict[pointerId]?.claimed === true;
+  }
+
+  #hasClaimedPointer(): boolean {
+    for (const pointer of Object.values(this.#pointerDict)) {
+      if (pointer.claimed) return true;
+    }
+    return false;
+  }
+
   subscribeGlobalCursorEvent<EventName extends keyof InputEventCallback>(
     event: EventName,
     id: string,
@@ -485,8 +530,27 @@ class InputControl {
       return;
     }
 
-    const owner = object ?? this.#getTargetOwner(event);
     const position = this.#getCoordinates(event.clientX, event.clientY);
+    const domOwner = this.#getTargetOwner(event);
+    // A visible connector is an explicit hit target and takes precedence over
+    // any wider virtual surface beneath it. Other DOM owners (nodes, camera
+    // layers, backgrounds) yield to a matching headless source surface.
+    const visibleConnectorOwner =
+      domOwner &&
+      typeof (domOwner as ElementObject & {
+        resolveSourceHit?: unknown;
+      }).resolveSourceHit === "function"
+        ? domOwner
+        : null;
+    // A resize-hitbox hit supersedes the DOM owner under it, and covers the case
+    // where the pointer is inside the (virtual) hitbox but outside the node's DOM
+    // box (so DOM routing would miss it). Explicit `object` still wins.
+    const owner =
+      object ??
+      this.#resolveResizeOwner(position) ??
+      visibleConnectorOwner ??
+      this.#resolveSourceSurfaceOwner(position) ??
+      domOwner;
     const isWithinEngine = this.#isCoordinateWithinEngine(
       event.clientX,
       event.clientY,
@@ -509,6 +573,7 @@ class InputControl {
       isWithinEngine,
       owner,
       currentOwner: owner,
+      claimed: false,
     };
 
     this.#gestureDict[event.pointerId] = {
@@ -527,7 +592,10 @@ class InputControl {
     };
 
     this.#dispatchObjectEvent(owner, "pointerDown", prop);
-    this.#dispatchGlobalEvent("pointerDown", prop);
+    // An owner's pointerDown handler may have claimed the pointer just above.
+    if (!this.#isPointerClaimed(event.pointerId)) {
+      this.#dispatchGlobalEvent("pointerDown", prop);
+    }
   };
 
   #onContainerPointerMove = (event: PointerEvent) => {
@@ -561,7 +629,9 @@ class InputControl {
     };
 
     this.#dispatchObjectEvent(currentOwner, "pointerMove", prop);
-    this.#dispatchGlobalEvent("pointerMove", prop);
+    if (!this.#isPointerClaimed(event.pointerId)) {
+      this.#dispatchGlobalEvent("pointerMove", prop);
+    }
 
     if (pointer) {
       Object.assign(pointer, {
@@ -646,7 +716,11 @@ class InputControl {
     };
 
     this.#dispatchObjectEvent(owner, "mouseWheel", prop);
-    this.#dispatchGlobalEvent("mouseWheel", prop);
+    // Wheel has no pointer identity; block it globally while any gesture holds
+    // a claim (e.g. no camera wheel-pan mid node-drag).
+    if (!this.#hasClaimedPointer()) {
+      this.#dispatchGlobalEvent("mouseWheel", prop);
+    }
   };
 
   #getCoordinates(screenX: number, screenY: number): eventPosition {
@@ -724,7 +798,9 @@ class InputControl {
     };
 
     this.#dispatchObjectEvent(pointer.owner, "dragStart", prop);
-    this.#dispatchGlobalEvent("dragStart", prop);
+    if (!pointer.claimed) {
+      this.#dispatchGlobalEvent("dragStart", prop);
+    }
   }
 
   #fireDrag(pointer: TrackedPointer) {
@@ -747,7 +823,9 @@ class InputControl {
     };
 
     this.#dispatchObjectEvent(pointer.owner, "drag", prop);
-    this.#dispatchGlobalEvent("drag", prop);
+    if (!pointer.claimed) {
+      this.#dispatchGlobalEvent("drag", prop);
+    }
   }
 
   #fireDragEnd(pointer: TrackedPointer, button: number) {
@@ -820,7 +898,12 @@ class InputControl {
           start: pinchStartGesture.start,
         };
         this.#dispatchObjectEvent(pinchStartGesture.member, "pinchStart", prop);
-        this.#dispatchGlobalEvent("pinchStart", prop);
+        if (
+          !this.#isPointerClaimed(pinchStartGesture.pointerId0) &&
+          !this.#isPointerClaimed(pinchStartGesture.pointerId1)
+        ) {
+          this.#dispatchGlobalEvent("pinchStart", prop);
+        }
       }
 
       const gesture = this.#gestureDict[gestureKey] as pinchGesture;
@@ -836,7 +919,14 @@ class InputControl {
         current: gesture.current,
       };
       this.#dispatchObjectEvent(gesture.member, "pinch", prop);
-      this.#dispatchGlobalEvent("pinch", prop);
+      // A pinch involving a claimed pointer is suppressed globally; pinchEnd
+      // still delivers (end events always do) so engaged listeners clean up.
+      if (
+        !this.#isPointerClaimed(gesture.pointerId0) &&
+        !this.#isPointerClaimed(gesture.pointerId1)
+      ) {
+        this.#dispatchGlobalEvent("pinch", prop);
+      }
     }
   }
 
@@ -890,6 +980,102 @@ class InputControl {
     }
   }
 
+  // Colliders never appear in composedPath, so a registered resize hitbox is
+  // resolved geometrically: if the pointerdown is inside one, the owner is the
+  // hitbox's object (collider.parent), so the whole gesture flows to it through
+  // the normal owner dispatch. Synchronous point test — independent of the
+  // frame-delayed collision sweep. The registry shape is declared in
+  // snapline's snapline-globals.ts (engine core cannot import snapline, hence
+  // the structural type here) — keep the two in sync.
+  #resolveResizeOwner(position: eventPosition): ElementObject | null {
+    const handles = this.global?.data?.resizeHandles as
+      | Array<{
+          engine: unknown;
+          parent: unknown;
+          containsWorldPoint(x: number, y: number): boolean;
+        }>
+      | undefined;
+    if (!handles) return null;
+    for (const collider of handles) {
+      if (collider.engine !== this.#engine) continue;
+      if (collider.containsWorldPoint(position.x, position.y)) {
+        return collider.parent as ElementObject;
+      }
+    }
+    return null;
+  }
+
+  // Headless connector surfaces can extend beyond their parent node's DOM box.
+  // SnapLine registers them in global.data so pointerdown ownership can be
+  // resolved geometrically before composedPath routing. The registry shape is
+  // declared in snapline-globals.ts (engine core cannot import SnapLine).
+  #resolveSourceSurfaceOwner(
+    position: eventPosition,
+  ): ElementObject | null {
+    const surfaces = this.global?.data?.sourceSurfaces as
+      | Array<{
+          id: string;
+          engine: unknown;
+          isDeleteRequested: boolean;
+          resolveSourceHit(position: eventPosition): {
+            candidate: {
+              hit: {
+                distance: number;
+                priority?: number;
+              };
+            };
+            strategyIndex: number;
+          } | null;
+        }>
+      | undefined;
+    if (!surfaces) return null;
+
+    let winner:
+      | {
+          owner: ElementObject;
+          priority: number;
+          distance: number;
+          strategyIndex: number;
+        }
+      | null = null;
+
+    for (const surface of surfaces) {
+      if (
+        surface.engine !== this.#engine ||
+        surface.isDeleteRequested
+      ) {
+        continue;
+      }
+      const resolved = surface.resolveSourceHit(position);
+      if (!resolved || !Number.isFinite(resolved.candidate.hit.distance)) {
+        continue;
+      }
+      const candidate = {
+        owner: surface as unknown as ElementObject,
+        priority: resolved.candidate.hit.priority ?? 0,
+        distance: resolved.candidate.hit.distance,
+        strategyIndex: resolved.strategyIndex,
+      };
+      if (
+        !winner ||
+        candidate.priority > winner.priority ||
+        (candidate.priority === winner.priority &&
+          candidate.distance < winner.distance) ||
+        (candidate.priority === winner.priority &&
+          candidate.distance === winner.distance &&
+          candidate.owner.id.localeCompare(winner.owner.id) < 0) ||
+        (candidate.priority === winner.priority &&
+          candidate.distance === winner.distance &&
+          candidate.owner.id === winner.owner.id &&
+          candidate.strategyIndex < winner.strategyIndex)
+      ) {
+        winner = candidate;
+      }
+    }
+
+    return winner?.owner ?? null;
+  }
+
   #getTargetOwner(event: Event): ElementObject | null {
     for (const target of this.#getEventPath(event)) {
       if (!(target instanceof HTMLElement)) {
@@ -926,7 +1112,31 @@ class InputControl {
 
   #isOwnerRegistered(owner: ElementObject) {
     const element = this.#elementByObjectId.get(owner.id);
-    return !!element && this.#objectByElement.get(element) === owner;
+    if (element && this.#objectByElement.get(element) === owner) {
+      return true;
+    }
+
+    // Some interaction owners are deliberately headless. Virtual connectors,
+    // resize handles, and similar surfaces are selected geometrically by a
+    // DOM-backed parent and then explicitly assigned with
+    // setPointerDragOwner(). They still belong to the engine even though they
+    // do not have an element to discover through composedPath().
+    //
+    // Keep DOM hit discovery separate (#getTargetOwner still only walks the
+    // element map), but allow direct dispatch to a live object registered with
+    // this engine. This also prevents a destroyed/replaced object with a reused
+    // id from continuing to receive an in-flight gesture.
+    if (owner.isDeleteRequested || !this.global || !this.#engine) {
+      return false;
+    }
+
+    try {
+      const objectTable = this.global.getEngineObjectTable(this.#engine);
+      return objectTable[owner.id] === owner;
+    } catch {
+      // The engine may already have been unregistered during teardown.
+      return false;
+    }
   }
 
   #isCoordinateWithinEngine(screenX: number, screenY: number) {

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import CardDocsLink from "./CardDocsLink.svelte";
   import type { Action } from "svelte/action";
   import ClientDemoFrame from "$lib/components/ClientDemoFrame.svelte";
   import { Engine } from "@snap-engine/asset-base-svelte";
@@ -721,7 +722,8 @@
           return;
         }
 
-        object.global.data.allowCameraControl = false;
+        // Claim the pointer while dragging (auto-releases at gesture end).
+        object.engine.input.claimPointer(prop.pointerId);
         isDragging = true;
         dragStartX = object.worldTransform.x;
         dragStartY = object.worldTransform.y;
@@ -736,9 +738,6 @@
       };
 
       object.event.input.dragEnd = () => {
-        if (object) {
-          object.global.data.allowCameraControl = true;
-        }
 
         isDragging = false;
       };
@@ -820,6 +819,7 @@
             {/each}
           </div>
           <p class="collision-description">{DESCRIPTION_TEXT}</p>
+          <CardDocsLink href="/docs/snapengine/introduction/06_collision" label="Collision docs" />
         </div>
       </div>
     {/snippet}
@@ -847,6 +847,7 @@
             </span>
           {/each}
         </p>
+        <CardDocsLink href="/docs/snapengine/introduction/06_collision" label="Collision docs" />
       </div>
 
       {#if dots.length > 0}
@@ -996,7 +997,7 @@
     width: min(26rem, calc(100% - var(--size-48)));
     margin: 0;
     color: #000000;
-    font-size: var(--font-size-16);
+    font-size: var(--type-body);
     line-height: 1.35;
     text-align: center;
     white-space: normal;

@@ -1,0 +1,64 @@
+---
+title: Selection and resizing
+description: Configure rectangle selection, drag surfaces, resize handles, and controlled geometry.
+order: 2
+sectionTitle: Guides
+sectionOrder: 2
+---
+
+<script>
+  import SnapLineDemo from "$lib/components/docs/SnapLineDemo.svelte";
+</script>
+
+<SnapLineDemo mode="selection" />
+
+`Select` starts a rubber-band gesture on unclaimed background space. Selection
+is reflected in `getSelectedNodes(engine)` and on each node through
+`data-selected`.
+
+SnapLine does not assign meanings to Shift, Control, or any other key. Use
+`callbacks.resolveSelectionMode` on nodes and selectors to translate the
+application's input policy into `"replace"`, `"add"`, or `"toggle"`:
+
+```ts
+const callbacks = {
+  resolveSelectionMode: ({ originalEvent }) =>
+    originalEvent.shiftKey ? "toggle" : "replace",
+};
+```
+
+For a rubber band, `"add"` preserves the baseline selection while adding the
+nodes touched by the rectangle. `"toggle"` inverts touched nodes relative to
+that baseline. Membership in a group never selects a node.
+
+Set `resizable` to enable all eight handles, or pass an exact list:
+
+```svelte framework=svelte
+<Node
+  x={node.x}
+  y={node.y}
+  width={node.width}
+  height={node.height}
+  resizeHandles={["e", "se", "s"]}
+  onResizeCommit={(event) => saveSize(event)}
+/>
+```
+
+```tsx framework=react
+<Node
+  x={node.x}
+  y={node.y}
+  width={node.width}
+  height={node.height}
+  resizeHandles={["e", "se", "s"]}
+  onResizeCommit={saveSize}
+/>
+```
+
+Geometry props are hybrid-controlled: changed props resynchronize the object,
+while active drags update locally without waiting for an application render.
+Persist final values from `onDragCommit` and `onResizeCommit`.
+
+Register a specific header or handle with `registerDragHandle()` (Vanilla),
+`useNodeHandle()` (React), or the component’s exposed node object (Svelte) when
+the entire node should not begin a move.

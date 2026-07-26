@@ -1,0 +1,38 @@
+---
+title: React API
+description: React SnapLine components, props, callbacks, contexts, and refs.
+order: 1
+sectionTitle: Reference
+sectionOrder: 3
+framework: react
+frameworkKey: overview
+---
+
+`Engine` creates or accepts a core engine and provides it through context.
+
+| Component   | Important props                                                                                         |
+| ----------- | ------------------------------------------------------------------------------------------------------- |
+| `Node`      | `nodeObject`, geometry, resize configuration, callbacks, `lineComponent`, `elementProps`                |
+| `Connector` | `connectorObject`, legacy port configuration, `virtual`, `capabilities`, `surfaceStrategies`, callbacks |
+| `Line`      | `line`, SVG presentation                                                                                |
+| `Select`    | callbacks and presentation                                                                              |
+| `Group`     | node geometry, header content, membership policy and callbacks                                          |
+| `Placement` | controller, cancellation behavior, render function                                                      |
+
+`Node` and `Group` forward refs to their core objects. `Connector` exposes a
+`ConnectorRef`, and `useNodeHandle()` returns a callback ref for a dedicated
+drag surface.
+
+Set `virtual` when a connector should use the parent node's custom shape
+surfaces without rendering a port element. Opaque connection payloads remain on
+`LineComponent`, so a custom `lineComponent` can resolve presentation from
+application-owned edge state.
+
+Connector callbacks, metadata, policy, surface strategies, collider radius,
+edge-pan behavior, and line class update across renders. `virtual` can also be
+toggled without replacing the logical connector or its lines. `name` and
+`connectorObject` are construction-time identities.
+
+Changed geometry props resynchronize the core object. Consumer callback objects
+and convenience callback props are composed, deduplicating the same function
+reference rather than overwriting one another.

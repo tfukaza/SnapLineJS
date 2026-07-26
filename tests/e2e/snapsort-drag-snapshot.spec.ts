@@ -67,6 +67,58 @@ test("framework container ownership never inherits Vanilla DOM callbacks", () =>
   );
   expect(() => assertCanFireItemSwap(vanilla)).not.toThrow();
 });
+
+test("visual geometry invalidations coalesce at the root container", async () => {
+  let nextId = 0;
+  const queue = {
+    READ_1: new Map(),
+    WRITE_1: new Map(),
+    READ_2: new Map(),
+    WRITE_2: new Map(),
+    READ_3: new Map(),
+    WRITE_3: new Map(),
+  };
+  const events: Array<{
+    items: readonly unknown[];
+    reasons: readonly string[];
+  }> = [];
+  const engine = {
+    global: {
+      data: {},
+      queue,
+      createId: () => `geometry-test-${++nextId}`,
+      registerObject: () => {},
+    },
+    input: {
+      subscribeGlobalCursorEvent: () => {},
+      unsubscribeGlobalCursorEvent: () => {},
+    },
+  };
+  const root = new SnapSortContainer(engine, null, {
+    domOwnership: "framework",
+    callbacks: {
+      onVisualGeometryInvalidated: (event) => events.push(event),
+    },
+  });
+  const child = new SnapSortContainer(engine, root, {
+    domOwnership: "framework",
+  });
+  const first = { isGhost: false } as never;
+  const second = { isGhost: false } as never;
+  const ghost = { isGhost: true } as never;
+
+  child.invalidateVisualGeometry([first, ghost], "drag");
+  root.invalidateVisualGeometry([first, second], "animation");
+
+  const rootQueue = queue.READ_1.get(root.id);
+  expect(rootQueue?.size).toBe(1);
+  const task = [...rootQueue!.values()][0]!;
+  for (const callback of task.callback ?? []) await callback();
+
+  expect(events).toHaveLength(1);
+  expect(events[0]!.items).toEqual([first, second]);
+  expect(events[0]!.reasons).toEqual(["drag", "animation"]);
+});
 type Box = Rect & {
   scaleX: number;
   scaleY: number;
@@ -3749,6 +3801,93 @@ test.describe("Snapsort drag-start snapshot layout", () => {
         ),
       ),
     });
+
+    expect(await animated.jsonValue()).toBe(true);
+    expect(
+      consoleMessages.filter((message) =>
+        /Missing drag snapshot|Unhandled|TypeError|ReferenceError/i.test(
+          message,
+        ),
+      ),
+    ).toHaveLength(0);
+  });
+
+  test("animates displaced items when the ghost reorders upward", async ({
+    page,
+  }, testInfo) => {
+    // Mirror of the downward test above. Upward reorders place the ghost
+    // BEFORE the displaced items in FLIP snapshot order, so a failure while
+    // animating the ghost entry silently kills every displaced-item
+    // animation — a class of bug the downward drag cannot catch.
+    const consoleMessages: string[] = [];
+    page.on("console", (message) => consoleMessages.push(message.text()));
+    await page.goto("/?demo=drop_snap_nested", { waitUntil: "networkidle" });
+
+    const verticalColumn = await demoBoxByHeading(page, "Vertical Column");
+    const item1 = await itemByTextIn(verticalColumn, "Item 1");
+    const item4 = await itemByTextIn(verticalColumn, "Item 4");
+    const item1Center = center(await itemRect(item1));
+    const item4Center = center(await itemRect(item4));
+
+    await page.mouse.move(item4Center.x, item4Center.y);
+    await page.mouse.down();
+
+    await page.evaluate(() => {
+      const win = window as unknown as {
+        __sawDisplacedTransform?: boolean;
+        __displacedObserver?: MutationObserver;
+      };
+      win.__sawDisplacedTransform = false;
+      const isDisplaced = (element: Element) =>
+        element.id !== "spacer" && !/Item 4/.test(element.textContent ?? "");
+      const check = (element: Element) => {
+        if (
+          isDisplaced(element) &&
+          /^translate3d\(/.test((element as HTMLElement).style.transform)
+        ) {
+          win.__sawDisplacedTransform = true;
+        }
+      };
+      const observer = new MutationObserver((mutations) => {
+        for (const mutation of mutations) check(mutation.target as Element);
+      });
+      for (const element of document.querySelectorAll(".snapsort-item")) {
+        observer.observe(element, {
+          attributes: true,
+          attributeFilter: ["style"],
+        });
+        check(element);
+      }
+      win.__displacedObserver = observer;
+    });
+
+    for (let step = 1; step <= 12; step++) {
+      await page.mouse.move(
+        item4Center.x,
+        item4Center.y + ((item1Center.y - item4Center.y) * step) / 12,
+      );
+      await page.waitForTimeout(16);
+    }
+
+    const animated = await page.waitForFunction(
+      () =>
+        (window as unknown as { __sawDisplacedTransform?: boolean })
+          .__sawDisplacedTransform === true,
+    );
+    await page.mouse.up();
+    await page.waitForTimeout(120);
+
+    await writeJson(
+      testInfo.outputPath("reorder-animation-upward-trace.json"),
+      {
+        animated: await animated.jsonValue(),
+        errors: consoleMessages.filter((message) =>
+          /Missing drag snapshot|Unhandled|TypeError|ReferenceError/i.test(
+            message,
+          ),
+        ),
+      },
+    );
 
     expect(await animated.jsonValue()).toBe(true);
     expect(

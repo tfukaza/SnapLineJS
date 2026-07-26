@@ -78,6 +78,17 @@ asset-base/
 **Configuration:**
 - `zoomLock?: boolean` - Disable zoom
 - `panLock?: boolean` - Disable pan
+- `edgePan?: CameraEdgePanConfig` - Opt-in programmatic edge panning for drag owners
+
+**Edge-pan API:**
+- `startEdgePan(pointerId, position, onFrame)` begins a pointer-owned request
+- `updateEdgePan(pointerId, position)` updates the screen-space pointer
+- `stopEdgePan(pointerId)` ends it
+
+The controller registers itself on `engine.edgePanController`. Motion is
+continuous while the pointer remains in the configured edge zone, and
+`onFrame` receives recomputed world coordinates after every camera move so a
+drag owner can stay glued to a stationary pointer.
 
 ### Background
 **Extends:** `ElementObject`

@@ -1,0 +1,122 @@
+---
+title: Shape surfaces and application-owned graphs
+description: Connect whole node borders, customize snapping geometry, and keep domain data in your framework.
+order: 6
+sectionTitle: Guides
+sectionOrder: 2
+---
+
+Ordinary SnapLine connectors are visible ports with circular hit areas and
+center anchors. A surface connector keeps the same connection lifecycle while
+letting the application define where a gesture can start, where it can land,
+and where a line attaches.
+
+Use a surface connector for diagrams whose boxes, circles, or other shapes act
+as their own ports:
+
+```svelte
+<Connector
+  name="surface"
+  virtual
+  capabilities={{
+    source: true,
+    target: true,
+    maxIncoming: -1,
+    reconnect: false,
+    allowParallel: true
+  }}
+  {surfaceStrategies}
+/>
+```
+
+`virtual` omits the connector element. The logical `ConnectorComponent` still
+belongs to its node, participates in connection policy, and owns its lines.
+Source surfaces are registered with the engine's input router, so their hit
+area may extend beyond the parent node's DOM box (for example, a 16-pixel rim
+around a shape). A visible connector under the pointer still wins over a wider
+virtual surface; otherwise matching surfaces are considered before the node or
+background starts its ordinary gesture.
+
+The Svelte and React adapters apply connector prop changes to the existing
+core object. Toggling `virtual` safely detaches or mounts the visible port
+without deleting connector topology. Vanilla integrations can update the same
+runtime options with `connector.updateConfig(...)`; `name` remains
+construction-only.
+
+Use the connector's `onPointerDown` callback for selection or other UI that
+must happen as soon as the surface claims the pointer. It receives the
+connector, normalized position, pointer ID, and original `PointerEvent`;
+`onDragStart` still waits until the drag threshold is crossed.
+
+## Hit testing
+
+A `ConnectorSurfaceStrategy` may provide separate `sourceHitTest` and
+`targetHitTest` callbacks. Callbacks receive the pointer in SnapEngine world,
+camera, and screen coordinates together with a cached geometry snapshot. They
+return a projected anchor and a score:
+
+```ts
+const borderSurface: ConnectorSurfaceStrategy = {
+  sourceHitTest: ({ position, geometry }) => hitBorder(position, geometry),
+  targetHitTest: ({ position, geometry }) => hitBorder(position, geometry),
+  resolveAnchor: ({ geometry, peerGeometry, position }) =>
+    boundaryToward(geometry, peerGeometry?.center ?? position),
+};
+```
+
+Return `null` or `false` for a miss. When several surfaces match, SnapLine sorts
+by priority, then distance, connector ID, and strategy order. This makes
+overlapping targets deterministic without requiring DOM z-index tricks.
+
+The geometry passed to callbacks is measured during SnapLine's read phase.
+Surface callbacks should use that snapshot instead of calling
+`getBoundingClientRect()` during pointer movement.
+
+## Preview and settled anchors
+
+Hit testing and line attachment are separate:
+
+- Source and target hits decide whether the pointer is on a valid surface.
+- `resolveAnchor` projects each endpoint for free previews, target previews,
+  drops, and settled connections.
+- Settled anchors are resolved again whenever either node moves or resizes.
+
+This separation allows a pointer to activate a wide border band while the
+visible line remains attached to the exact rim of a circle or rectangle.
+
+## Keep application data authoritative
+
+SnapLine owns gesture state and connector topology. Your React or Svelte graph
+should remain the source of truth for node labels, edge styles, persistence,
+and domain behavior.
+
+For gesture-created connections, a source connector can synchronously accept or
+reject the request and attach an opaque payload:
+
+```ts
+const callbacks: ConnectorCallbacks = {
+  onConnectionRequest({ source, target }) {
+    const edge = addEdgeToApplicationState(source, target);
+    return { payload: edge.id };
+  },
+};
+```
+
+The payload is retained on `LineComponent`. A custom line renderer can use that
+stable ID to read the current edge from framework state. Programmatic hydration
+passes the same payload directly:
+
+```ts
+source.connectToConnector({
+  target,
+  origin: "hydration",
+  payload: edge.id,
+});
+```
+
+Programmatic connections do not call `onConnectionRequest`, so restoring a
+saved graph cannot accidentally create a second application edge.
+
+Node and connector `metadata` remain available for small integration hints.
+Treat metadata and line payloads as opaque links, not as a second copy of the
+application graph.

@@ -1,5 +1,8 @@
 import { Item } from "./item";
-import type { ContainerCallbacks } from "./events";
+import type {
+  ContainerCallbacks,
+  VisualGeometryInvalidationReason,
+} from "./events";
 import { defaultCallbacks } from "./mutation";
 import type { LayoutMainAxisAlign } from "./layout";
 import type { LayoutWrap } from "./snapshot";
@@ -61,6 +64,8 @@ export class Container extends Item {
   #config: ContainerConfig;
   #depth: number = 0;
   #itemList: Item[] = [];
+  #visualInvalidationItems = new Set<Item>();
+  #visualInvalidationReasons = new Set<VisualGeometryInvalidationReason>();
 
   /** The in-progress drag session for this tree, or null when nothing is being dragged. Only meaningful on the root container. */
   dragSession: DragSession | null = null;
@@ -166,6 +171,55 @@ export class Container extends Item {
 
   get callbacks() {
     return this.#config.callbacks;
+  }
+
+  /**
+   * Queue one coalesced notification that rendered item geometry may have
+   * changed. This is a low-level integration seam, not a DOM mutation hook.
+   * @internal
+   */
+  invalidateVisualGeometry(
+    items: Iterable<Item>,
+    reason: VisualGeometryInvalidationReason,
+  ): void {
+    const root = this.rootContainer;
+    if (root !== this) {
+      root.invalidateVisualGeometry(items, reason);
+      return;
+    }
+
+    for (const item of items) {
+      if (!item.isGhost) this.#visualInvalidationItems.add(item);
+    }
+    this.#visualInvalidationReasons.add(reason);
+    // Always publish in the next read phase. Most invalidations originate in
+    // WRITE_3; enqueueing another WRITE_3 task from inside that stage can
+    // replace a task whose slot was already visited and lose the final visual
+    // position. READ_1 also gives integrations a safe point to enqueue their
+    // own geometry reads for the same frame.
+    this.schedule(
+      () => {
+        if (
+          this.#visualInvalidationItems.size === 0 ||
+          this.#visualInvalidationReasons.size === 0
+        ) {
+          return;
+        }
+        const event = {
+          root: this,
+          session: this.dragSession,
+          items: [...this.#visualInvalidationItems],
+          reasons: [...this.#visualInvalidationReasons],
+        };
+        this.#visualInvalidationItems.clear();
+        this.#visualInvalidationReasons.clear();
+        this.callbacks?.onVisualGeometryInvalidated?.(event);
+      },
+      {
+        stage: "READ_1",
+        queueId: `${this.id}-visual-geometry-invalidated`,
+      },
+    );
   }
 
   get itemList() {

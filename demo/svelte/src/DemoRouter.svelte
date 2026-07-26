@@ -3,6 +3,11 @@
   import AnimationVariableBenchPage from "./demo/animation/VariableBenchPage.svelte";
   import DragInputPage from "./demo/input/Drag.svelte";
   import NodeUiPage from "./demo/node_ui_demo/NodeUIDemo.svelte";
+  import NodeUiCameraPage from "./demo/node_ui_camera/NodeUICameraDemo.svelte";
+  import NodeUiEdgesPage from "./demo/node_ui_edges/NodeUIEdgesDemo.svelte";
+  import NodeUiGroupPage from "./demo/node_ui_group/NodeUIGroupDemo.svelte";
+  import NodeUiNestedGroupPage from "./demo/node_ui_group/NodeUINestedGroupDemo.svelte";
+  import NodeUiResizePage from "./demo/node_ui_resize/NodeUIResizeDemo.svelte";
   import DropSnapNestedPage from "./demo/drop_snap_nested/DropSnapNestedDemo.svelte";
   import SnapSortComponentsPage from "./demo/snapsort_components/SnapSortComponentsDemo.svelte";
   import SnapSortFileExplorerPage from "./demo/snapsort_file_explorer/SnapSortFileExplorerDemo.svelte";
@@ -54,6 +59,31 @@
       path: "/snapline",
       legacyPaths: ["/node-ui"],
       legacyDemoValues: ["snapline", "node_ui"],
+    },
+    {
+      label: "SnapLine Camera",
+      path: "/snapline-camera",
+      legacyDemoValues: ["snapline_camera"],
+    },
+    {
+      label: "SnapLine Edges",
+      path: "/snapline-edges",
+      legacyDemoValues: ["snapline_edges"],
+    },
+    {
+      label: "SnapLine Group",
+      path: "/snapline-group",
+      legacyDemoValues: ["snapline_group"],
+    },
+    {
+      label: "SnapLine Nested Group",
+      path: "/snapline-nested-group",
+      legacyDemoValues: ["snapline_nested_group"],
+    },
+    {
+      label: "SnapLine Resize",
+      path: "/snapline-resize",
+      legacyDemoValues: ["snapline_resize"],
     },
     {
       label: "SnapSort",
@@ -256,6 +286,16 @@
       <CameraControlPage />
     {:else if selectedPath === "/snapline"}
       <NodeUiPage />
+    {:else if selectedPath === "/snapline-camera"}
+      <NodeUiCameraPage />
+    {:else if selectedPath === "/snapline-edges"}
+      <NodeUiEdgesPage />
+    {:else if selectedPath === "/snapline-group"}
+      <NodeUiGroupPage />
+    {:else if selectedPath === "/snapline-nested-group"}
+      <NodeUiNestedGroupPage />
+    {:else if selectedPath === "/snapline-resize"}
+      <NodeUiResizePage />
     {:else if selectedPath === "/snapsort"}
       <DropSnapNestedPage bind:this={dropSnapNestedPageRef} />
     {:else if selectedPath === "/snapsort-components"}

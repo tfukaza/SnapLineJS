@@ -2,50 +2,105 @@
   import {
     NodeComponent,
     ConnectorComponent,
+    LineComponent,
+    type ConnectorCapabilities,
+    type ConnectorCallbacks,
+    type ConnectorSurfaceStrategy,
+    type SnapLineMetadata,
   } from "@snap-engine/snapline";
   import type { Engine } from "@snap-engine/core";
-  import { getContext, onDestroy, onMount } from "svelte";
+  import { getContext, onDestroy } from "svelte";
 
   let {
     name,
     maxConnectors = 1,
     allowDragOut = true,
+    metadata = {},
+    callbacks = {},
+    edgePan = true,
+    capabilities = undefined,
+    surfaceStrategies = [],
+    virtual = false,
+    colliderRadius = undefined,
+    lineClass = undefined,
+    connectorObject = null,
+    data = {},
   }: {
     name: string;
     maxConnectors?: number;
     allowDragOut?: boolean;
+    metadata?: SnapLineMetadata;
+    callbacks?: ConnectorCallbacks;
+    edgePan?: boolean;
+    capabilities?: Partial<ConnectorCapabilities>;
+    surfaceStrategies?: readonly ConnectorSurfaceStrategy[];
+    /** Keep the logical connector without rendering a visible port element. */
+    virtual?: boolean;
+    colliderRadius?: number;
+    lineClass?: typeof LineComponent;
+    connectorObject?: ConnectorComponent | null;
+    data?: Record<string, string>;
   } = $props();
 
   let engine: Engine = getContext("engine");
   let nodeObject: NodeComponent = getContext("nodeObject");
-  let connector = new ConnectorComponent(engine, nodeObject, {
+  const ownsConnector = connectorObject == null;
+  let connector = connectorObject ?? new ConnectorComponent(engine, nodeObject, {
     name: name,
     maxConnectors: maxConnectors,
     allowDragOut: allowDragOut,
+    metadata,
+    callbacks,
+    edgePan,
+    capabilities,
+    surfaceStrategies,
+    colliderRadius,
+    lineClass,
   });
 
   nodeObject.addConnectorObject(connector);
-  let connectorDOM: HTMLDivElement | null = null;
 
   export function object(): ConnectorComponent {
     return connector;
   }
 
-  onMount(() => {
-    connector.element = connectorDOM as HTMLElement;
+  function bindConnectorElement(element: HTMLDivElement) {
+    connector.bindElement(element);
+    return {
+      destroy() {
+        connector.bindElement(null);
+      },
+    };
+  }
+
+  $effect(() => {
+    connector.updateConfig({
+      maxConnectors,
+      allowDragOut,
+      metadata,
+      callbacks,
+      edgePan,
+      capabilities,
+      surfaceStrategies,
+      colliderRadius,
+      lineClass,
+    });
   });
 
   onDestroy(() => {
-    connector.destroy();
+    if (ownsConnector) connector.destroy();
   });
 </script>
 
-<div
-  bind:this={connectorDOM}
-  data-snapline-type="connector"
-  data-snapline-name={name}
-  class={`connector ${allowDragOut ? "right" : "left"}`}
-></div>
+{#if !virtual}
+  <div
+    use:bindConnectorElement
+    data-snapline-type="connector"
+    data-snapline-name={name}
+    {...Object.fromEntries(Object.entries(data).map(([key, value]) => [`data-${key}`, value]))}
+    class={`connector ${(capabilities?.source ?? allowDragOut) ? "right" : "left"}`}
+  ></div>
+{/if}
 
 <style>
   .connector {

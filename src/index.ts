@@ -1,4 +1,5 @@
 import { Engine } from "./engine";
+import type { EdgePanController } from "./engine";
 import {
   CoreObject,
   ElementObject,
@@ -21,6 +22,7 @@ import type {
   pinchEndProp,
   PinchSnapshot,
   InputControlConfig,
+  eventPosition,
 } from "./input";
 import { getDomProperty, cloneDomProperty, EventProxyFactory } from "./util";
 import { Camera } from "./camera";
@@ -50,6 +52,8 @@ export {
   type pinchEndProp,
   type PinchSnapshot,
   type InputControlConfig,
+  type eventPosition,
+  type EdgePanController,
   type DomProperty,
   type CameraConfig,
   mouseButtonBitmap,

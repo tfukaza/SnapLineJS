@@ -1,7 +1,21 @@
 <script lang="ts">
     import type { LineComponent } from "@snap-engine/snapline";
     import { onDestroy, onMount } from "svelte";
-    let { line }: { line: LineComponent } = $props();
+    let {
+      line,
+      className = "",
+      pathClassName = "sl-connector-line",
+      pathStyle = "",
+      showArrow = true,
+      data = {},
+    }: {
+      line: LineComponent;
+      className?: string;
+      pathClassName?: string;
+      pathStyle?: string;
+      showArrow?: boolean;
+      data?: Record<string, string>;
+    } = $props();
 
     let style = $state("position: absolute; overflow: visible; pointer-events: none; will-change: transform; transform: translate3d(0px, 0px, 0);");
     let dx = $state(0);
@@ -46,19 +60,24 @@
 
 <svg
   data-snapline-type="connector-line"
+  class={className}
+  {...Object.fromEntries(Object.entries(data).map(([key, value]) => [`data-${key}`, value]))}
   width="4"
   height="4"
   style={style}
   bind:this={lineDOM}
 >
   <path
-    class="sl-connector-line"
+    class={pathClassName}
+    style={pathStyle}
     d={`M 0,0 C ${x1}, ${y1} ${x2}, ${y2} ${x3}, ${y3}`}
-    marker-end={`url(#arrow-${line.id})`}
+    marker-end={showArrow ? `url(#arrow-${line.id})` : undefined}
   />
-  <marker id={`arrow-${line.id}`} viewBox="0 0 24 24" refX="0" refY="12" orient="auto">
-    <polygon points="4,4 20,12 4,22" fill="#545454"/>
-  </marker>
+  {#if showArrow}
+    <marker id={`arrow-${line.id}`} viewBox="0 0 24 24" refX="0" refY="12" orient="auto">
+      <polygon points="4,4 20,12 4,22" fill="#545454"/>
+    </marker>
+  {/if}
 </svg>
 
 <style>

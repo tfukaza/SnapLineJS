@@ -4,29 +4,85 @@ import type {
   pointerUpProp,
   mouseWheelProp,
   pinchProp,
+  eventPosition,
+  EdgePanController,
 } from "@snap-engine/core";
 import { ElementObject } from "@snap-engine/core";
 import { Camera } from "@snap-engine/core";
 import type { CameraConfig } from "@snap-engine/core";
 
+/** What the mouse wheel / trackpad two-finger scroll does. */
+export type CameraWheelConfig = {
+  /**
+   * What an unmodified wheel event does. "zoom" (default) zooms; "pan" is the
+   * trackpad "map" convention — two-finger scroll pans while a ctrl/cmd wheel
+   * (and trackpad pinch, which browsers report as a ctrl-wheel) still zooms.
+   */
+  action?: "zoom" | "pan";
+  /**
+   * Requires a modifier key for wheel zoom. With "ctrlOrMeta", an unmodified
+   * wheel event is left alone so the page scrolls normally; trackpad pinch
+   * still zooms, because browsers report it as a wheel event with ctrlKey set.
+   */
+  zoomModifier?: "none" | "ctrlOrMeta";
+  /** Multiplies wheel-zoom speed (default 1). */
+  zoomSensitivity?: number;
+  /** Multiplies wheel-pan speed (default 1 = 1:1 screen pixels). */
+  panSensitivity?: number;
+  /**
+   * Extra gain applied to trackpad pinch zoom (default 10). Chrome/Safari
+   * deliver a pinch as a ctrl-wheel whose deltaY is roughly an order of
+   * magnitude smaller than a mouse scroll notch; this brings it up to a
+   * comparable rate so pinch doesn't feel dead.
+   */
+  pinchZoomGain?: number;
+};
+
+/** What pointer (mouse/touch drag) input does. */
+export type CameraPointerConfig = {
+  /**
+   * Which mouse button starts a pointer pan. "left" (the default) preserves the
+   * original behavior; "middle" frees the left button for other gestures (e.g.
+   * rubber-band select) while the middle button pans; "both" pans on either.
+   */
+  panButton?: "left" | "middle" | "both";
+  /**
+   * Disables panning with a single pointer while leaving two-finger pinch
+   * panning intact. Pass "touch" to restrict the lock to touch pointers.
+   */
+  panLock?: boolean | "touch";
+};
+
+export type CameraEdgePanConfig = {
+  /** Enables edge-panning for consumers that explicitly request it. */
+  enabled?: boolean;
+  /** Screen-pixel width of the activation zone at each viewport edge. */
+  edgeDistance?: number;
+  /** Maximum camera speed in screen pixels per second. */
+  maxSpeed?: number;
+};
+
 export type CameraControlConfig = {
   zoomLock?: boolean;
   panLock?: boolean;
-  /**
-   * Disables panning with a single pointer while leaving two-finger pinch panning
-   * intact. Use when the camera sits inside a scrollable page and a one-finger drag
-   * should scroll the page instead of moving the camera.
-   *
-   * Pass "touch" to restrict the lock to touch pointers, so a mouse drag still pans —
-   * on desktop a drag never scrolls the page, so it costs nothing to keep.
-   */
+  /** Wheel/trackpad behavior, grouped. Wins over the flat deprecated aliases. */
+  wheel?: CameraWheelConfig;
+  /** Pointer behavior, grouped. Wins over the flat deprecated aliases. */
+  pointer?: CameraPointerConfig;
+  /** Programmatic edge-pan behavior used by drag owners such as SnapLine. */
+  edgePan?: CameraEdgePanConfig;
+  /** @deprecated Use `pointer.panLock` instead. */
   pointerPanLock?: boolean | "touch";
-  /**
-   * Requires a modifier key for wheel zoom. With "ctrlOrMeta", an unmodified wheel
-   * event is left alone so the page scrolls normally; trackpad pinch still zooms,
-   * because browsers report it as a wheel event with ctrlKey set.
-   */
+  /** @deprecated Use `wheel.zoomModifier` instead. */
   wheelZoomModifier?: "none" | "ctrlOrMeta";
+  /** @deprecated Use `wheel.action: "pan"` instead. */
+  wheelPan?: boolean;
+  /** @deprecated Use `wheel.zoomSensitivity` instead. */
+  zoomSensitivity?: number;
+  /** @deprecated Use `wheel.panSensitivity` instead. */
+  wheelPanSensitivity?: number;
+  /** @deprecated Use `pointer.panButton` instead. */
+  panButton?: "left" | "middle" | "both";
   /** Options forwarded to the underlying Camera, e.g. zoomBounds and contentBounds. */
   camera?: CameraConfig;
 };
@@ -36,7 +92,44 @@ const DEFAULT_CONFIG: CameraControlConfig = {
   panLock: false,
   pointerPanLock: false,
   wheelZoomModifier: "none",
+  wheelPan: false,
+  panButton: "left",
+  zoomSensitivity: 1,
+  wheelPanSensitivity: 1,
 };
+
+export interface ResolvedCameraOptions {
+  wheelAction: "zoom" | "pan";
+  wheelZoomModifier: "none" | "ctrlOrMeta";
+  zoomSensitivity: number;
+  wheelPanSensitivity: number;
+  pinchZoomGain: number;
+  panButton: "left" | "middle" | "both";
+  pointerPanLock: boolean | "touch";
+}
+
+/**
+ * Resolves the effective camera options at READ time: a grouped key, when
+ * defined, wins over its flat deprecated alias; an undefined grouped key falls
+ * back to the flat key, then to the default. Resolution happens per-read (not
+ * at construction) because `config` is a public field that adapters reassign
+ * wholesale when props change.
+ */
+export function resolveCameraOptions(
+  config: CameraControlConfig,
+): ResolvedCameraOptions {
+  return {
+    wheelAction: config.wheel?.action ?? (config.wheelPan ? "pan" : "zoom"),
+    wheelZoomModifier:
+      config.wheel?.zoomModifier ?? config.wheelZoomModifier ?? "none",
+    zoomSensitivity: config.wheel?.zoomSensitivity ?? config.zoomSensitivity ?? 1,
+    wheelPanSensitivity:
+      config.wheel?.panSensitivity ?? config.wheelPanSensitivity ?? 1,
+    pinchZoomGain: config.wheel?.pinchZoomGain ?? 10,
+    panButton: config.pointer?.panButton ?? config.panButton ?? "left",
+    pointerPanLock: config.pointer?.panLock ?? config.pointerPanLock ?? false,
+  };
+}
 
 type PinchAnchor = {
   centerX: number;
@@ -53,6 +146,13 @@ class CameraControl extends ElementObject {
   #mouseDownY: number;
   #panPointerId: number | null = null;
   #pinchAnchor: PinchAnchor | null = null;
+  #edgePanRequest: {
+    pointerId: number;
+    position: eventPosition;
+    onFrame: (position: eventPosition) => void;
+  } | null = null;
+  #edgePanFrameId: number | null = null;
+  #edgePanTimestamp: number | null = null;
 
   config: CameraControlConfig = {};
 
@@ -64,6 +164,7 @@ class CameraControl extends ElementObject {
     this.#mouseDownX = 0;
     this.#mouseDownY = 0;
     this.#state = "idle";
+    this.engine.edgePanController = this as EdgePanController;
     this.event.global.pointerDown = this.onCursorDown;
     this.event.global.pointerMove = this.onCursorMove;
     this.event.global.pointerUp = this.onCursorUp;
@@ -159,10 +260,140 @@ class CameraControl extends ElementObject {
     });
   }
 
+  startEdgePan(
+    pointerId: number,
+    position: eventPosition,
+    onFrame: (position: eventPosition) => void,
+  ): void {
+    if (!this.config.edgePan?.enabled) {
+      return;
+    }
+    this.#edgePanRequest = { pointerId, position, onFrame };
+    this.#edgePanTimestamp = null;
+    this.#scheduleEdgePanFrame();
+  }
+
+  updateEdgePan(pointerId: number, position: eventPosition): void {
+    if (!this.config.edgePan?.enabled) {
+      this.stopEdgePan(pointerId);
+      return;
+    }
+    if (!this.#edgePanRequest) {
+      return;
+    }
+    if (this.#edgePanRequest.pointerId !== pointerId) {
+      return;
+    }
+    this.#edgePanRequest.position = position;
+    this.#scheduleEdgePanFrame();
+  }
+
+  stopEdgePan(pointerId: number): void {
+    if (
+      this.#edgePanRequest &&
+      this.#edgePanRequest.pointerId !== pointerId
+    ) {
+      return;
+    }
+    this.#edgePanRequest = null;
+    this.#edgePanTimestamp = null;
+    if (this.#edgePanFrameId != null) {
+      cancelAnimationFrame(this.#edgePanFrameId);
+      this.#edgePanFrameId = null;
+    }
+  }
+
+  #scheduleEdgePanFrame(): void {
+    if (this.#edgePanFrameId != null || !this.#edgePanRequest) {
+      return;
+    }
+    this.#edgePanFrameId = requestAnimationFrame(this.#runEdgePanFrame);
+  }
+
+  #runEdgePanFrame = (timestamp: number): void => {
+    this.#edgePanFrameId = null;
+    const request = this.#edgePanRequest;
+    const camera = this.engine.camera;
+    const config = this.config.edgePan;
+    if (!request || !camera || !config?.enabled) {
+      this.#edgePanTimestamp = null;
+      return;
+    }
+
+    const edgeDistance = Math.max(1, config.edgeDistance ?? 48);
+    const maxSpeed = Math.max(0, config.maxSpeed ?? 600);
+    const left = camera.containerOffsetX;
+    const top = camera.containerOffsetY;
+    const right = left + camera.cameraWidth;
+    const bottom = top + camera.cameraHeight;
+    const axisSpeed = (value: number, min: number, max: number): number => {
+      if (value < min + edgeDistance) {
+        return -Math.min(1, (min + edgeDistance - value) / edgeDistance);
+      }
+      if (value > max - edgeDistance) {
+        return Math.min(1, (value - (max - edgeDistance)) / edgeDistance);
+      }
+      return 0;
+    };
+    const velocityX =
+      axisSpeed(request.position.screenX, left, right) * maxSpeed;
+    const velocityY =
+      axisSpeed(request.position.screenY, top, bottom) * maxSpeed;
+    const previousTimestamp = this.#edgePanTimestamp ?? timestamp;
+    const elapsedSeconds =
+      Math.min(32, Math.max(0, timestamp - previousTimestamp)) / 1000;
+    this.#edgePanTimestamp = timestamp;
+
+    if (
+      !this.config.panLock &&
+      (velocityX !== 0 || velocityY !== 0) &&
+      elapsedSeconds > 0
+    ) {
+      camera.handlePan(
+        velocityX * elapsedSeconds,
+        velocityY * elapsedSeconds,
+      );
+      this.paintCamera();
+      request.onFrame(
+        this.#positionFromScreen(
+          request.position.screenX,
+          request.position.screenY,
+        ),
+      );
+    }
+
+    this.#scheduleEdgePanFrame();
+  };
+
+  #positionFromScreen(screenX: number, screenY: number): eventPosition {
+    const camera = this.engine.camera;
+    if (!camera) {
+      return {
+        x: screenX,
+        y: screenY,
+        cameraX: screenX,
+        cameraY: screenY,
+        screenX,
+        screenY,
+      };
+    }
+    const [cameraX, cameraY] = camera.getCameraFromScreen(screenX, screenY);
+    const [x, y] = camera.getWorldFromCamera(cameraX, cameraY);
+    return { x, y, cameraX, cameraY, screenX, screenY };
+  }
+
   // Event Handlers
 
   onCursorDown(prop: pointerDownProp) {
-    if (prop.event.button != 0) {
+    const options = resolveCameraOptions(this.config);
+    // Left button is 0, middle button is 1. The pan button is configurable so
+    // consumers can reserve the left button for another gesture.
+    const panButton = options.panButton;
+    const buttonPans =
+      (panButton === "left" || panButton === "both") && prop.event.button === 0
+        ? true
+        : (panButton === "middle" || panButton === "both") && prop.event.button === 1;
+    if (!buttonPans) {
       return;
     }
     if (this.#state !== "idle") {
@@ -171,13 +402,15 @@ class CameraControl extends ElementObject {
     if (this.config.panLock) {
       return;
     }
-    const pointerPanLock = this.config.pointerPanLock;
+    const pointerPanLock = options.pointerPanLock;
     if (
       pointerPanLock === true ||
       (pointerPanLock === "touch" && prop.event.pointerType === "touch")
     ) {
       return;
     }
+    // Gesture owners block the camera at the input-dispatch layer (pointer
+    // claims); this legacy boolean remains for third-party writers only.
     if (this.global.data.allowCameraControl === false) {
       return;
     }
@@ -200,6 +433,8 @@ class CameraControl extends ElementObject {
     if (prop.event?.pointerId !== this.#panPointerId) {
       return;
     }
+    // Gesture owners block the camera at the input-dispatch layer (pointer
+    // claims); this legacy boolean remains for third-party writers only.
     if (this.global.data.allowCameraControl === false) {
       return;
     }
@@ -214,6 +449,7 @@ class CameraControl extends ElementObject {
   }
 
   onCursorUp(prop: pointerUpProp) {
+    this.stopEdgePan(prop.event.pointerId);
     if (this.#state != "panning") {
       return;
     }
@@ -231,15 +467,21 @@ class CameraControl extends ElementObject {
   }
 
   onZoom(prop: mouseWheelProp) {
+    const options = resolveCameraOptions(this.config);
+    const event = prop.event as WheelEvent;
+    const zoomIntent = event.ctrlKey || event.metaKey;
+    // Trackpad two-finger scroll pans; a modifier (and trackpad pinch, reported as
+    // a ctrl-wheel) falls through to zoom.
+    if (options.wheelAction === "pan" && !zoomIntent) {
+      this.panByWheel(prop, options.wheelPanSensitivity);
+      return;
+    }
     if (this.config.zoomLock) {
       return;
     }
-    if (this.config.wheelZoomModifier === "ctrlOrMeta") {
-      const event = prop.event as WheelEvent;
-      if (!event.ctrlKey && !event.metaKey) {
-        // Return without preventDefault so the page keeps scrolling.
-        return;
-      }
+    if (options.wheelZoomModifier === "ctrlOrMeta" && !zoomIntent) {
+      // Return without preventDefault so the page keeps scrolling.
+      return;
     }
     const camera = this.engine.camera!;
     if (
@@ -250,11 +492,51 @@ class CameraControl extends ElementObject {
     ) {
       return;
     }
+    // A trackpad pinch is a ctrl-wheel; Cmd+scroll is a meta-wheel with much larger
+    // deltas, so only the pinch gets the extra gain. Negate so pinch-out / scroll-up
+    // zooms in — the natural direction on every platform.
+    const pinch = event.ctrlKey && !event.metaKey;
+    const sensitivity =
+      options.zoomSensitivity * (pinch ? options.pinchZoomGain : 1);
     this.zoomBy(
-      prop.delta / 2000,
+      (-prop.delta * sensitivity) / 2000,
       prop.position.cameraX,
       prop.position.cameraY,
     );
+    prop.event.preventDefault();
+  }
+
+  private panByWheel(prop: mouseWheelProp, sensitivity: number) {
+    if (this.config.panLock) {
+      return;
+    }
+    // Gesture owners block the camera at the input-dispatch layer (pointer
+    // claims); this legacy boolean remains for third-party writers only.
+    if (this.global.data.allowCameraControl === false) {
+      return;
+    }
+    const camera = this.engine.camera;
+    if (!camera) {
+      return;
+    }
+    if (
+      prop.position.screenX < camera.containerOffsetX ||
+      prop.position.screenX > camera.containerOffsetX + camera.cameraWidth ||
+      prop.position.screenY < camera.containerOffsetY ||
+      prop.position.screenY > camera.containerOffsetY + camera.cameraHeight
+    ) {
+      return;
+    }
+    // Wheel deltas are screen pixels in the document-scroll sense (deltaY > 0 =
+    // scroll down); handlePan reads them the same way (positive = pan down) and
+    // divides by zoom, giving 1:1 screen-pixel panning like a pointer drag.
+    const event = prop.event as WheelEvent;
+    camera.handlePan(event.deltaX * sensitivity, event.deltaY * sensitivity);
+    this.style.transform = camera.canvasStyle as string;
+    this.schedule(() => this.writeTransform(), {
+      stage: "WRITE_2",
+      queueId: `${this.id}-transform`,
+    });
     prop.event.preventDefault();
   }
 
@@ -262,6 +544,8 @@ class CameraControl extends ElementObject {
     if (this.config.zoomLock && this.config.panLock) {
       return;
     }
+    // Gesture owners block the camera at the input-dispatch layer (pointer
+    // claims); this legacy boolean remains for third-party writers only.
     if (this.global.data.allowCameraControl === false) {
       return;
     }
@@ -275,6 +559,8 @@ class CameraControl extends ElementObject {
     if (this.config.zoomLock && this.config.panLock) {
       return;
     }
+    // Gesture owners block the camera at the input-dispatch layer (pointer
+    // claims); this legacy boolean remains for third-party writers only.
     if (this.global.data.allowCameraControl === false) {
       return;
     }
@@ -327,6 +613,16 @@ class CameraControl extends ElementObject {
     }
     this.#panPointerId = null;
     this.#pinchAnchor = null;
+  }
+
+  destroy(removeDom: boolean = true) {
+    if (this.#edgePanRequest) {
+      this.stopEdgePan(this.#edgePanRequest.pointerId);
+    }
+    if (this.engine.edgePanController === this) {
+      this.engine.edgePanController = null;
+    }
+    super.destroy(removeDom);
   }
 
   #createPinchAnchor(center: { x: number; y: number }, distance: number) {

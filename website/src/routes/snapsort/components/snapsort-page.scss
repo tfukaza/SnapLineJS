@@ -261,8 +261,12 @@
     gap: var(--size-12);
   }
 
-  .hero-cta button {
+  .hero-cta .button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     min-width: 9.5rem;
+    text-decoration: none;
   }
 
   .core-showcase {
@@ -303,12 +307,7 @@
     flex-direction: column;
     gap: var(--size-20);
     padding: clamp(var(--size-32), 4vw, var(--size-64));
-    background:
-        radial-gradient(
-        circle at 7% 6%, rgb(255 191 139 / 6%),
-        rgba(255, 166, 94, 0.018) 24%,
-        transparent 50%),
-        var(--color-background-tint);
+    background: var(--color-background-tint);
     border-radius: 16px;
     box-sizing: border-box;
     isolation: isolate;
@@ -464,14 +463,25 @@
   }
 
   .closing-card {
-    grid-column: span 6;
-    display: flex;
-    flex-direction: column;
-    gap: var(--size-24);
+    grid-column: 1 / -1;
     padding: clamp(var(--size-32), 4vw, var(--size-48));
     background: var(--color-background-tint);
     border-radius: 16px;
     box-sizing: border-box;
+  }
+
+  .gallery-card {
+    display: grid;
+    grid-template-columns: minmax(0, 1.25fr) minmax(18rem, 0.75fr);
+    align-items: center;
+    gap: clamp(var(--size-32), 5vw, var(--size-64));
+  }
+
+  .gallery-copy-panel {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--size-24);
   }
 
   .closing-copy h3 {
@@ -484,229 +494,84 @@
     color: #697074;
   }
 
-  .closing-frameworks {
-    display: flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: var(--size-24);
-    margin: 0;
-    padding: 0;
-    list-style: none;
-  }
-
-  .closing-frameworks li {
-    display: flex;
-  }
-
-  .closing-frameworks img {
-    display: block;
-    width: 2.5rem;
-    height: 2.5rem;
-    object-fit: contain;
-  }
-
-  .framework-wip-logo {
-    position: relative;
-    align-items: center;
-    justify-content: center;
-    width: 3.5rem;
-    height: 2.5rem;
-  }
-
-  .framework-wip-logo img {
-    width: 3.25rem;
-    height: 2.5rem;
-  }
-
-  .framework-wip-logo span {
-    position: absolute;
-    top: -0.55rem;
-    right: -0.65rem;
-    padding: 0.18rem 0.36rem;
-    border: 1px solid #d9dddf;
-    border-radius: 999px;
-    background: #ffffff;
-    color: #697074;
-    font-size: 0.62rem;
-    font-weight: 700;
-    line-height: 1;
-  }
-
   .closing-button {
     align-self: flex-start;
-    margin-top: auto;
     text-decoration: none;
   }
 
   .gallery-kanban {
-    height: 210px;
+    position: relative;
+    min-width: 0;
+    min-height: 320px;
     box-sizing: border-box;
-    overflow: hidden;
     pointer-events: none;
     user-select: none;
   }
 
-  /* The board is laid out at 2x width and scaled to half so the mockup keeps
-     the real demo's proportions while fitting the card. */
-  .gallery-kanban-scale {
-    width: 200%;
-    transform: scale(0.5);
-    transform-origin: top left;
-  }
-
-  .gallery-kanban .gk-board {
+  .gallery-preview-board {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    height: 100%;
     width: 100%;
+    min-height: 320px;
     gap: var(--size-16);
-    flex-wrap: nowrap;
-    align-items: flex-start;
+    padding: var(--size-16);
+    box-sizing: border-box;
   }
 
-  .gallery-kanban .gk-column {
-    flex: 1 1 0;
+  .gallery-preview-column {
+    --card-radius: var(--size-24);
+
+    display: flex;
+    flex-direction: column;
     min-width: 0;
-    gap: var(--size-8);
+    gap: var(--size-12);
     align-items: stretch;
-    padding: var(--size-12);
-    background: rgb(31 30 41 / 4%);
-    border-radius: 12px;
+    justify-content: flex-end;
+    padding: var(--size-16);
+    box-sizing: border-box;
   }
 
-  .gallery-kanban .gk-column .snapsort-item {
-    align-items: stretch;
-    width: 100%;
+  .gallery-preview-item,
+  .gallery-preview-drag-card {
+    --card-radius: var(--size-16);
+
     padding: 0;
   }
 
-  .gk-column-head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--size-8);
-    padding: 0 var(--size-4) var(--size-4);
-  }
-
-  .gk-column-head h4 {
-    margin: 0;
-    color: #8f9497;
-    font-family: "Bitcount Grid Single", monospace;
-    font-size: 0.85rem;
-    font-weight: 300;
-    letter-spacing: 0.05em;
-    text-transform: uppercase;
-  }
-
-  .gk-count {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-width: 1.3rem;
-    height: 1.3rem;
-    padding: 0 0.3rem;
-    border-radius: 999px;
-    background: rgb(31 30 41 / 7%);
-    color: #697074;
-    font-size: 0.72rem;
-    font-weight: 600;
-    line-height: 1;
-    box-sizing: border-box;
-  }
-
-  .gk-card {
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
+  .gallery-preview-item {
+    min-height: 72px;
     width: 100%;
-    padding: 0.8rem 0.9rem;
-    background: var(--color-background);
-    border: 1px solid rgb(31 30 41 / 8%);
-    border-radius: 10px;
-    box-shadow:
-      0 1px 2px rgb(31 30 41 / 5%),
-      0 4px 12px -6px rgb(31 30 41 / 8%);
     box-sizing: border-box;
   }
 
-  .gk-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0.5rem;
+  .gallery-preview-drop-target {
+    width: 100%;
+    min-height: 72px;
+    border: 2px dashed color-mix(in srgb, var(--color-primary) 45%, transparent);
+    border-radius: var(--size-16);
+    background: color-mix(in srgb, var(--color-primary) 7%, transparent);
+    box-sizing: border-box;
   }
 
-  .gk-title {
-    overflow: hidden;
-    color: #232526;
-    font-size: 0.95rem;
-    font-weight: 600;
-    line-height: 1.25;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+  .gallery-preview-drag-card {
+    position: absolute;
+    top: 160px;
+    left: 29%;
+    z-index: 3;
+    width: 42%;
+    min-height: 72px;
+    box-sizing: border-box;
   }
 
-  .gk-tag {
-    flex: 0 0 auto;
-    padding: 0.16rem 0.5rem;
-    border-radius: 999px;
-    background: color-mix(in srgb, var(--color-primary) 10%, #fff);
-    color: color-mix(in srgb, var(--color-primary) 72%, #222);
-    font-size: 0.7rem;
-    font-weight: 600;
-    line-height: 1.2;
-  }
-
-  .gk-desc {
-    display: -webkit-box;
-    margin: 0;
-    overflow: hidden;
-    color: #5f6569;
-    font-size: 0.85rem;
-    line-height: 1.35;
-    line-clamp: 2;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
-  }
-
-  .gk-footer {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0.5rem;
-    padding-top: 0.15rem;
-  }
-
-  .gk-avatar {
-    display: flex;
-    flex: 0 0 auto;
-    align-items: center;
-    justify-content: center;
-    width: 1.6rem;
-    height: 1.6rem;
-    border-radius: 50%;
-    background: var(--avatar-color);
-    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.28);
-    color: #ffffff;
-    font-family: "Bitcount Grid Single", monospace;
-    font-size: 0.6rem;
-    font-weight: 300;
-    line-height: 1;
-  }
-
-  .gk-due {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.22rem;
-    color: #8f9497;
-    font-size: 0.78rem;
-    line-height: 1;
-    white-space: nowrap;
-  }
-
-  .gk-due i {
-    font-family: "Material Symbols Rounded";
-    font-size: 0.9rem;
-    font-style: normal;
-    font-weight: 500;
-    line-height: 1;
+  .gallery-preview-cursor {
+    position: absolute;
+    top: 214px;
+    left: 64%;
+    z-index: 4;
+    width: 18px;
+    height: 27px;
+    transform: rotate(-10deg);
   }
 
   .customizable-demo {
@@ -2361,6 +2226,16 @@
     .closing-card {
       grid-column: 1 / -1;
     }
+
+    .gallery-card {
+      grid-template-columns: minmax(0, 1fr);
+      gap: var(--size-32);
+    }
+
+    .gallery-kanban,
+    .gallery-preview-board {
+      min-height: 280px;
+    }
   }
 
   @media (max-width: 640px) {
@@ -2385,7 +2260,7 @@
       display: none;
     }
 
-    .hero-cta button {
+    .hero-cta .button {
       min-width: 8.5rem;
     }
 

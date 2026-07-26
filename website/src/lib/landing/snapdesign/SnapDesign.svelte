@@ -32,6 +32,7 @@
         </p>
         <div class="style-selector" aria-label="Style">
           <button
+            class="button small"
             class:active={showcaseStyle === "existing"}
             type="button"
             onclick={() => setShowcaseStyle("existing")}
@@ -39,6 +40,7 @@
             Default
           </button>
           <button
+            class="button small"
             class:active={showcaseStyle === "dev"}
             type="button"
             onclick={() => setShowcaseStyle("dev")}
@@ -53,7 +55,7 @@
     <section class="showcase-section col-12">
       <h2>Typography</h2>
       <article class="type-article prose">
-        <h1>Inside Snap Engine</h1>
+        <p class="type-page-title">Inside SnapEngine</p>
         <p>
           Snap Engine is an interaction layer for building direct,
           responsive web tools. It coordinates input, layout reads, DOM writes,
@@ -180,10 +182,10 @@ object.schedule(() => &#123;
           <div>
             <h3>Buttons</h3>
             <div class="button-row">
-              <button>Default Button</button>
-              <button class="primary">Primary Button</button>
-              <button class="active">Active State</button>
-              <button class="primary" disabled>Disabled</button>
+              <button class="button">Default Button</button>
+              <button class="button primary">Primary Button</button>
+              <button class="button active">Active State</button>
+              <button class="button primary" disabled>Disabled</button>
             </div>
           </div>
           <div>
@@ -504,7 +506,7 @@ object.schedule(() => &#123;
     column-count: 2;
     column-gap: var(--size-48);
 
-    h1,
+    .type-page-title,
     h2,
     h3,
     h4,
@@ -513,9 +515,17 @@ object.schedule(() => &#123;
       break-inside: avoid;
     }
 
-    h1 {
+    .type-page-title {
       column-span: all;
+      margin-top: 0;
       margin-bottom: var(--size-24);
+      color: #373738;
+      font-family: var(--font-display);
+      font-size: var(--type-page-title);
+      font-weight: 500;
+      letter-spacing: -0.025em;
+      line-height: var(--leading-display);
+      text-wrap: balance;
     }
   }
 
@@ -567,7 +577,7 @@ object.schedule(() => &#123;
     gap: var(--size-12);
 
     span {
-      font-family: "Geist Mono", monospace;
+      font-family: var(--font-code);
       font-size: 1rem;
       color: var(--color-background-dark);
     }
@@ -645,7 +655,7 @@ object.schedule(() => &#123;
     gap: var(--size-8);
 
     span {
-      font-family: "IBM Plex Mono", monospace;
+      font-family: var(--font-code);
       font-size: 1rem;
       font-weight: 600;
     }
@@ -738,7 +748,7 @@ object.schedule(() => &#123;
   }
 
   .range-value {
-    font-family: "IBM Plex Mono", monospace;
+    font-family: var(--font-code);
     font-size: 1rem;
     color: var(--color-background-dark);
   }

@@ -60,9 +60,9 @@ Organized as npm workspaces following a consistent pattern:
 - See `assets/snapsort/AGENTS.md`
 
 ### 3. SnapLine
-- **Packages:** `@snap-engine/snapline`, `@snap-engine/snapline-svelte`
+- **Packages:** `@snap-engine/snapline`, `@snap-engine/snapline-svelte`, `@snap-engine/snapline-react`
 - **Purpose:** Node graph UI system
-- **Status:** Experimental and private (not published)
+- **Status:** Experimental public package
 - See `assets/snapline/AGENTS.md`
 
 ### 4. SnapZap
@@ -180,12 +180,19 @@ git tag asset-base-svelte-v{version}
 git tag asset-base-react-v{version}
 git tag snapsort-v{version}
 git tag snapsort-svelte-v{version}
+git tag snapsort-react-v{version}
+git tag snapline-v{version}
+git tag snapline-svelte-v{version}
+git tag snapline-react-v{version}
 git push origin asset-base-v{version}
 git push origin asset-base-svelte-v{version}
 git push origin asset-base-react-v{version}
 git push origin snapsort-v{version}
 git push origin snapsort-svelte-v{version}
 git push origin snapsort-react-v{version}
+git push origin snapline-v{version}
+git push origin snapline-svelte-v{version}
+git push origin snapline-react-v{version}
 ```
 
 Push release tags one at a time and verify each publish workflow before sending the next tag.

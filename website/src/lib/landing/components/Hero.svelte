@@ -1,6 +1,5 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { fade } from "svelte/transition";
   import ClientDemoFrame from "$lib/components/ClientDemoFrame.svelte";
   import { Engine } from "@snap-engine/asset-base-svelte";
   import { Container, Item } from "@snap-engine/snapsort-svelte";
@@ -53,8 +52,6 @@
 
   let toneInstrument: ReturnType<typeof createToneInstrument> | null = null;
   let activePadIndex = $state<number | null>(null);
-  // The hint only earns its space until the visitor discovers the pads are live.
-  let hasTriedDemo = $state(false);
 
   // Fixed tone character now that the joystick that used to drive these is gone.
   const toneX = 0.5;
@@ -137,7 +134,6 @@
   }
 
   async function playPad(index: number) {
-    hasTriedDemo = true;
     const instrument = await getToneInstrument();
     if (!instrument) return;
 
@@ -171,33 +167,17 @@
       <h1>
         Interactivity<br />Engine<br />for the Web
       </h1>
-      <p>
-        SnapEngine provides a framework agnostic foundation for making
-        any interactive UI elements, from simple TODO lists to
-        complex node UIs.
+      <p class="hero-lede">
+        SnapEngine is a toolkit for building interactive UI for web applications,
+        framework-agnostic, zero-dependency, and style-less.
       </p>
       <div class="hero-actions">
-        <a class="button primary hero-action" href="/docs/snapengine/introduction">
-          Read the docs
-        </a>
-        <a class="button hero-action" href="/snapsort/gallery">
-          See it in action
-          <span class="hero-action-icon material-symbols-rounded" aria-hidden="true">arrow_forward</span>
+        <a class="button primary hero-action" href="/#assets">
+          Explore assets
         </a>
       </div>
     </div>
     <div class="hero-card card">
-      {#if !hasTriedDemo}
-        <img
-          class="hero-try-me"
-          src="/images/try-me.png"
-          alt="Try me"
-          width="420"
-          height="330"
-          aria-hidden="true"
-          out:fade={{ duration: 220 }}
-        />
-      {/if}
       <ClientDemoFrame>
         {#snippet fallback()}
           <div class="hero-synth-panel hero-synth-skeleton" aria-hidden="true">
@@ -218,7 +198,12 @@
                 <div class="hero-button-slot"></div>
               {/each}
             </div>
-            <div class="hero-button-grid" aria-hidden="true">
+            <div
+              class="hero-button-grid"
+              role="group"
+              aria-label="Interactive SnapSort music pad demo"
+              aria-describedby="hero-demo-instructions"
+            >
               <Container
                 config={{
                   direction: "row",
@@ -240,6 +225,8 @@
                           playPad(index);
                         }
                       }}
+                      aria-label={`Pad ${index + 1}, ${padNotes[index]}. Press to play; drag to reorder.`}
+                      aria-describedby="hero-demo-instructions"
                       role="button"
                       tabindex="0"
                     >
@@ -257,6 +244,9 @@
         </div>
         </Engine>
       </ClientDemoFrame>
+      <p id="hero-demo-instructions" class="hero-demo-caption">
+        Drag pads to reorder, tap to play.
+      </p>
     </div>
   </div>
 </section>
@@ -265,7 +255,7 @@
   @use "../landing.scss";
 
   #landing {
-    height: 70vh;
+    min-height: min(680px, calc(100svh - 5rem));
     position: relative;
     border-radius: var(--size-12);
     background-color: var(--color-background-tint);
@@ -282,7 +272,7 @@
     grid-template-columns: 1fr 1.2fr;
     gap: 2rem;
     align-items: stretch;
-    padding: 50px;
+    padding: clamp(var(--size-32), 5vw, var(--size-64));
     box-sizing: border-box;
 
     @container landing (max-width: 900px) {
@@ -300,18 +290,22 @@
     align-items: flex-start;
     justify-content: center;
     text-align: left;
-    padding-left: var(--size-24);
+    padding-left: clamp(0px, 2vw, var(--size-24));
 
     h1 {
-      font-family: "Bitcount Single", monospace;
-      line-height: 1.05;
-      margin: 0;
-      font-size: 58px;
-      margin-bottom: 20px;
+      max-width: 10ch;
+      margin: 0 0 var(--size-20);
+      font-family: var(--font-display);
+      font-size: var(--type-page-title);
+      line-height: var(--leading-display);
+      text-wrap: balance;
     }
 
-    p {
-        font-size: 1.1rem;
+    .hero-lede {
+      max-width: 33rem;
+      color: var(--color-text-muted);
+      font-size: var(--type-lead);
+      line-height: var(--leading-body);
     }
 
     @container landing (max-width: 900px) {
@@ -319,10 +313,6 @@
         justify-content: center;
         align-items: center;
         text-align: center;
-
-        p {
-            font-size: 1.0rem;
-        }
 
         .hero-actions {
             justify-content: center;
@@ -342,23 +332,7 @@
     display: inline-flex;
     align-items: center;
     gap: var(--size-4);
-    padding: var(--size-8) var(--size-16);
     text-decoration: none;
-  }
-
-  .hero-action-icon {
-    font-size: 18px;
-    line-height: 1;
-    font-variation-settings:
-      "FILL" 0,
-      "wght" 500,
-      "GRAD" 0,
-      "opsz" 20;
-    transition: transform 0.15s ease;
-  }
-
-  .hero-action:hover .hero-action-icon {
-    transform: translateX(2px);
   }
 
   .hero-card {
@@ -370,36 +344,13 @@
     position: relative;
   }
 
-  .hero-try-me {
-    position: absolute;
-    top: calc(var(--size-24) * -1);
-    right: calc(var(--size-16) * -1);
-    z-index: 2;
-    width: 132px;
-    height: auto;
-    pointer-events: none;
-    transform-origin: center;
-    // The orange is baked into the asset rather than applied as a hue-rotate here: a
-    // CSS filter would drag the yellow outline into green along with the fill.
-    filter: drop-shadow(0 6px 14px rgba(6, 29, 57, 0.28));
-    animation: hero-try-me-bob 2.4s ease-in-out infinite;
-  }
-
-  @keyframes hero-try-me-bob {
-    0%,
-    100% {
-      transform: rotate(3deg) translateY(0);
-    }
-    50% {
-      transform: rotate(3deg) translateY(-4px);
-    }
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    .hero-try-me {
-      animation: none;
-      transform: rotate(3deg);
-    }
+  .hero-demo-caption {
+    margin: var(--size-16) auto 0;
+    color: var(--color-text-subtle);
+    font-size: var(--type-caption);
+    font-weight: 400;
+    line-height: var(--leading-caption);
+    text-align: center;
   }
 
   .hero-synth-skeleton {
@@ -524,7 +475,6 @@
       -0.5px -0.5px 0.5px 0.5px hsl(from var(--button-shadow-color) h s l / 0.5) inset,
       2.5px 2.5px 3px -2px rgba(13, 34, 68, 0.43),
       5px 5px 6px -3px rgba(6, 29, 57, 0.348);
-    transition: all 0.1s ease-in-out;
   }
 
   .hero-synth-button-bump {
@@ -645,6 +595,7 @@
   @container landing (max-width: 900px) {
     #landing {
       height: auto;
+      min-height: 0;
     }
 
     .hero-layout {
@@ -657,12 +608,22 @@
 
     .hero-text h1 {
       text-align: center;
-      font-size: clamp(2.5rem, 10vw, 5rem);
     }
 
     .hero-card {
       width: min(440px, calc(100% - var(--size-32)));
       justify-self: center;
+    }
+  }
+
+  @media (max-width: 420px) {
+    .hero-actions {
+      width: 100%;
+    }
+
+    .hero-action {
+      width: 100%;
+      justify-content: center;
     }
   }
 </style>

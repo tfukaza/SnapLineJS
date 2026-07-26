@@ -1,6 +1,103 @@
-export { NodeComponent } from "./node";
-export type { NodeConfig } from "./node";
-export { ConnectorComponent } from "./connector";
-export type { ConnectorConfig } from "./connector";
+export {
+  NodeComponent,
+  DEFAULT_RESIZE_CURSORS,
+  DEFAULT_RESIZE_HANDLE_THICKNESS,
+  RESIZE_HANDLES,
+} from "./node";
+export type {
+  NodeConfig,
+  NodeCallbacks,
+  NodeDragCommitEvent,
+  NodeDragPositionEvent,
+  NodeLinesEvent,
+  NodePointerEvent,
+  NodePosition,
+  ResolvedNodeDragPosition,
+  NodeResizeEvent,
+  NodeResizeHandleEvent,
+  NodeSelectionEvent,
+  NodeSelectionModeEvent,
+  ResizeHandle,
+  SelectionMode,
+} from "./node";
+export { ConnectorComponent, resolveConnectorSourceAtPoint } from "./connector";
+export type {
+  ConnectionOrigin,
+  ConnectorAnchor,
+  ConnectorAnchorEvent,
+  ConnectorCallbacks,
+  ConnectorCapabilities,
+  ConnectorCandidateEvent,
+  ConnectorCandidate,
+  ConnectorConfig,
+  ConnectorConfigUpdate,
+  ConnectorConnectionEvent,
+  ConnectorConnectionRequestEvent,
+  ConnectorConnectionRequestResult,
+  ConnectorDisconnectionEvent,
+  ConnectorDragEvent,
+  ConnectorGeometrySnapshot,
+  ConnectorHit,
+  ConnectorLinePhase,
+  ConnectorNormal,
+  ConnectorPairEvent,
+  ConnectorPoint,
+  ConnectorPointerEvent,
+  ConnectorResolvedHit,
+  ConnectorRole,
+  ConnectorSurfaceHitTestEvent,
+  ConnectorSurfaceStrategy,
+  DisconnectReason,
+  SnapLineMetadata,
+} from "./connector";
 export { LineComponent } from "./line";
+export {
+  GroupNodeComponent,
+  getParentGroup,
+  setGroupMembershipResolver,
+} from "./group";
+export type {
+  GroupCallbacks,
+  GroupConfig,
+  GroupContainEvent,
+  GroupMembershipEvent,
+  GroupMembershipResolutionEvent,
+  GroupMembershipResolver,
+} from "./group";
 export { RectSelectComponent } from "./select";
+export type {
+  SelectCallbacks,
+  SelectChangeEvent,
+  SelectConfig,
+  SelectRect,
+  SelectStartEvent,
+} from "./select";
+export {
+  getConnectors,
+  getGroupNodes,
+  getNodes,
+  getSelectedNodes,
+} from "./query";
+export { PlacementController } from "./placement";
+export type {
+  PlacementAnchor,
+  PlacementCallbacks,
+  PlacementCancelEvent,
+  PlacementConfig,
+  PlacementEvent,
+  PlacementPoint,
+  PlacementSize,
+  PlacementSnapshot,
+} from "./placement";
+export { NodeManager } from "./node-manager";
+export type { EdgeSyncLike } from "./node-manager";
+export { getNodeManager } from "./snapline-globals";
+export { EdgeSyncController } from "./edge-sync";
+export type {
+  EdgeConnectIntentEvent,
+  EdgeDisconnectIntentEvent,
+  EdgeEndpoint,
+  EdgeLike,
+  EdgeSyncCallbacks,
+  EdgeSyncConfig,
+} from "./edge-sync";

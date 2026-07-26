@@ -3,9 +3,10 @@
 > [!WARNING]
 > The engine is still in early stages of development. Expect frequent updates and breaking changes.
 
-# Interactivity Engine for the Web
+# SnapEngine: Interactivity Engine for the Web
 
-SnapEngineJS is a collection of utilities for building interactive UI elements on the web.
+SnapEngine is the shared, DOM-first foundation behind a growing family of
+interaction tools for the web. It provides:
 
 - Input handling with a common API for mouse and touch events.
 - Collision detection for basic shapes and lines.
@@ -15,15 +16,21 @@ SnapEngineJS is a collection of utilities for building interactive UI elements o
 - A visual debugger for inspecting engine internals.
 - Zero-dependency, framework-agnostic APIs.
 
-See the [website](https://snap-engine-js.vercel.app) for details and documentation.
+Most application developers should start with
+[SnapSort](https://snapengine.dev/docs/snapsort/introduction), an
+unstyled drag-and-drop toolkit built on SnapEngine. See the
+[website](https://snapengine.dev) to explore the ecosystem.
 
-## Installation
+## Using SnapEngine Core directly
+
+Install Core directly when authoring an interaction tool or asset, or when an
+application needs advanced custom behavior at the engine level.
 
 ```bash
 npm install @snap-engine/core
 ```
 
-## Quick Start
+## Core example
 
 ```ts
 import { Engine, ElementObject } from "@snap-engine/core";
@@ -38,7 +45,7 @@ object.schedule(() => {
   object.worldPosition = [100, 200];
   object.writeTransform();
 }, { stage: "WRITE_1" });
-````
+```
 
 ## License
 

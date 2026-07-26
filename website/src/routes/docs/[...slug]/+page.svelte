@@ -3,6 +3,7 @@
 	import "./doc.scss";
 	import { onMount } from "svelte";
 	import FrameworkSelect from "$lib/components/FrameworkSelect.svelte";
+	import ProjectSelect from "$lib/components/ProjectSelect.svelte";
 	import SeoHead from "$lib/components/SeoHead.svelte";
 	import {
 		initializeFrameworkPreference,
@@ -14,12 +15,14 @@
 
 	// Import the grouped entries function from +page.ts for sidebar
 	import { _getGroupedEntries, entries } from './+page.js';
+	import { docProjects, findDocProject } from '$lib/docsCatalog';
 	const docSections = _getGroupedEntries();
 	const allEntries = entries();
-	const projectOptions = [
-		{ slug: 'snapengine', label: 'SnapEngine', href: '/docs/snapengine/introduction' },
-		{ slug: 'snapsort', label: 'SnapSort', href: '/docs/snapsort/introduction' }
-	];
+	const projectOptions = docProjects.map((project) => ({
+		slug: project.slug,
+		label: project.title,
+		href: project.href
+	}));
 
 	// Compute breadcrumbs from $page.params.slug
 	import { page } from '$app/stores';
@@ -34,28 +37,35 @@
 		return stripped.charAt(0).toUpperCase() + stripped.slice(1).replace(/_/g, ' ');
 	};
 	const breadcrumbs = $derived([
+		{ name: 'Docs', href: '/docs' },
 		...slugParts.map((part, i) => ({
 			name: formatBreadcrumb(part, i),
-			href: '/docs/' + slugParts.slice(0, i + 1).join('/')
+			href:
+				i === 0
+					? (projectOptions.find((project) => project.slug === part)?.href ??
+						'/docs/' + slugParts.slice(0, i + 1).join('/'))
+					: '/docs/' + slugParts.slice(0, i + 1).join('/')
 		}))
 	]);
 
 	// Compute prev/next navigation
 	const currentSlug = $derived($page.params.slug || '');
+	const isDocsHome = $derived(slugParts.length === 0);
 	const currentProject = $derived(slugParts[0] || 'snapengine');
-	const currentProjectTitle = $derived(
-		currentProject === 'snapsort' ? 'SnapSort' : 'SnapEngine'
-	);
+	const currentProjectConfig = $derived(findDocProject(currentProject));
+	const currentProjectTitle = $derived(currentProjectConfig?.title ?? currentProject);
+	const showFrameworkSelect = $derived((currentProjectConfig?.frameworks.length ?? 0) > 1);
 	const docDescription = $derived(
 		data.metadata?.description ??
-			(currentProject === 'snapsort'
-				? 'Documentation for installing, configuring, and building drag and drop interfaces with SnapSort.'
-				: 'Documentation for building draggable, animated, collision-aware web experiences with SnapEngine.')
+			currentProjectConfig?.description ??
+			'SnapEngine documentation.'
 	);
 	const docTitle = $derived(
-		data.metadata?.title
-			? `${data.metadata.title} | ${currentProjectTitle} Docs`
-			: `${currentProjectTitle} Docs`
+		isDocsHome
+			? (data.metadata?.title ?? 'SnapEngine Documentation')
+			: data.metadata?.title
+				? `${data.metadata.title} | ${currentProjectTitle} Docs`
+				: `${currentProjectTitle} Docs`
 	);
 	const visibleDocSections = $derived(
 		docSections
@@ -81,6 +91,7 @@
 
 	// Mobile menu state
 	let mobileMenuOpen = $state(false);
+	let mobileMenuButton = $state<HTMLButtonElement | null>(null);
 
 	function toggleMobileMenu() {
 		mobileMenuOpen = !mobileMenuOpen;
@@ -88,6 +99,12 @@
 
 	function closeMobileMenu() {
 		mobileMenuOpen = false;
+	}
+
+	function handleDocKeyDown(event: KeyboardEvent) {
+		if (event.key !== 'Escape' || !mobileMenuOpen) return;
+		closeMobileMenu();
+		mobileMenuButton?.focus();
 	}
 
 	function handleFrameworkChange(framework: Framework) {
@@ -119,6 +136,8 @@
 	});
 </script>
 
+<svelte:window onkeydown={handleDocKeyDown} />
+
 <SeoHead
 	title={docTitle}
 	description={docDescription}
@@ -129,15 +148,25 @@
 <!-- Mobile sub-navbar with hamburger, breadcrumb, and dropdown menu -->
 <div class="mobile-navbar card">
 	<div class="mobile-navbar-bar">
-		<button class="mobile-menu-btn" onclick={toggleMobileMenu} aria-label="Toggle menu">
+		<button
+			bind:this={mobileMenuButton}
+			type="button"
+			class="mobile-menu-btn"
+			onclick={toggleMobileMenu}
+			aria-label="Toggle documentation menu"
+			aria-expanded={mobileMenuOpen}
+			aria-controls="mobile-doc-menu"
+		>
 			<span class="hamburger-line" class:open={mobileMenuOpen}></span>
 			<span class="hamburger-line" class:open={mobileMenuOpen}></span>
 			<span class="hamburger-line" class:open={mobileMenuOpen}></span>
 		</button>
-		<nav class="mobile-breadcrumb">
+		<nav class="mobile-breadcrumb" aria-label="Breadcrumb">
 			{#each breadcrumbs as crumb, i}
 				{#if i > 0} <span class="breadcrumb-sep">/</span> {/if}
-				<a href={crumb.href}>{crumb.name}</a>
+				<a href={crumb.href} aria-current={i === breadcrumbs.length - 1 ? 'page' : undefined}>
+					{crumb.name}
+				</a>
 			{/each}
 		</nav>
 	</div>
@@ -145,7 +174,7 @@
 	<!-- Mobile dropdown menu -->
 	<div class="mobile-menu-dropdown" class:open={mobileMenuOpen}>
 		<nav>
-			{#if currentProject === 'snapsort'}
+			{#if showFrameworkSelect}
 				<FrameworkSelect
 					id="mobile-doc-framework"
 					value={$selectedFramework}
@@ -155,7 +184,7 @@
 			{#each visibleDocSections as section}
 				<div class="sidebar-section">
 					{#if section.name}
-						<h3 class="section-title">{section.title}</h3>
+						<p class="section-title">{section.title}</p>
 					{/if}
 					<ul>
 						{#each section.entries as entry}
@@ -163,6 +192,7 @@
 								<a
 									href={entry.slug ? `/docs/${entry.slug}` : '/docs'}
 									class:active={(entry.slug || '') === currentSlug}
+									aria-current={(entry.slug || '') === currentSlug ? 'page' : undefined}
 									onclick={closeMobileMenu}
 								>
 									{entry.title}
@@ -176,27 +206,20 @@
 	</div>
 </div>
 
-<!-- Overlay for mobile menu -->
-{#if mobileMenuOpen}
-	<!-- svelte-ignore a11y_no_static_element_interactions -->
-	<!-- svelte-ignore a11y_click_events_have_key_events -->
-	<div class="mobile-overlay" onclick={closeMobileMenu}></div>
-{/if}
-
 <div class="doc-layout">
 	<aside class="doc-sidebar">
-		{#if currentProject === 'snapsort'}
+		{#if showFrameworkSelect}
 			<FrameworkSelect
 				id="desktop-doc-framework"
 				value={$selectedFramework}
 				onFrameworkChange={handleFrameworkChange}
 			/>
 		{/if}
-		<nav>
+		<nav aria-label="Documentation">
 			{#each visibleDocSections as section}
 				<div class="sidebar-section">
 					{#if section.name}
-						<h3 class="section-title">{section.title}</h3>
+						<p class="section-title">{section.title}</p>
 					{/if}
 					<ul>
 						{#each section.entries as entry}
@@ -204,6 +227,7 @@
 								<a
 									href={entry.slug ? `/docs/${entry.slug}` : '/docs'}
 									class:active={(entry.slug || '') === currentSlug}
+									aria-current={(entry.slug || '') === currentSlug ? 'page' : undefined}
 								>
 									{entry.title}
 								</a>
@@ -214,11 +238,13 @@
 			{/each}
 		</nav>
 	</aside>
-	<main class="doc-content">
-		<nav class="doc-breadcrumb">
+	<div class="doc-content">
+		<nav class="doc-breadcrumb" aria-label="Breadcrumb">
 			{#each breadcrumbs as crumb, i}
 				{#if i > 0} <span class="breadcrumb-sep">/</span> {/if}
-				<a href={crumb.href}>{crumb.name}</a>
+				<a href={crumb.href} aria-current={i === breadcrumbs.length - 1 ? 'page' : undefined}>
+					{crumb.name}
+				</a>
 			{/each}
 		</nav>
 		<div class="doc-header">
@@ -235,7 +261,7 @@
 			<data.component />
 		</article>
 
-		<nav class="doc-pagination">
+		<nav class="doc-pagination" aria-label="Documentation pages">
 			{#if prevEntry}
 				<a href={prevEntry.slug ? `/docs/${prevEntry.slug}` : '/docs'} class="pagination-link prev">
 					<span class="pagination-label">Previous</span>
@@ -253,7 +279,7 @@
 				<div class="pagination-placeholder"></div>
 			{/if}
 		</nav>
-	</main>
+	</div>
 </div>
 
 <style lang="scss">
@@ -310,15 +336,13 @@
 
 		&:hover,
 		&:focus-visible {
-			color: var(--color-primary);
+			color: var(--color-action);
 			text-decoration: none;
-			text-shadow: 0 0 6px rgba(255, 117, 58, 0.5);
 		}
 
 		&.active {
-			color: var(--color-secondary-1);
-			font-weight: 500;
-			text-shadow: 0 0 7px rgba(243, 67, 54, 0.52);
+			color: var(--color-action);
+			font-weight: 600;
 		}
 	}
 }
@@ -371,7 +395,7 @@
 		text-decoration: none;
 
 		&:hover {
-			color: var(--color-primary);
+			color: var(--color-action);
 			text-decoration: none;
 		}
 	}
@@ -418,8 +442,7 @@ p.description {
 
 		.pagination-label,
 		.pagination-title {
-			color: var(--color-primary);
-			text-shadow: 0 0 6px rgba(255, 117, 58, 0.5);
+			color: var(--color-action);
 		}
 	}
 
@@ -480,6 +503,11 @@ p.description {
 // Mobile menu button
 .mobile-menu-btn {
 	display: flex;
+	align-items: center;
+	justify-content: center;
+	min-width: 44px;
+	min-height: 44px;
+	box-sizing: border-box;
 	background: transparent;
 	border: none;
 	padding: 8px 8px;
@@ -525,7 +553,7 @@ p.description {
 		text-decoration: none;
 
 		&:hover {
-			color: var(--color-primary);
+			color: var(--color-action);
 			text-decoration: none;
 		}
 	}
@@ -541,12 +569,19 @@ p.description {
 	display: none;
 	max-height: 0;
 	overflow: hidden;
+	visibility: hidden;
+	pointer-events: none;
 	background: var(--color-background);
-	transition: max-height 0.3s ease;
+	transition:
+		max-height 0.3s ease,
+		visibility 0s linear 0.3s;
 
 	&.open {
 		max-height: 70vh;
 		overflow-y: auto;
+		visibility: visible;
+		pointer-events: auto;
+		transition-delay: 0s;
 		border-bottom: 1px solid color-mix(in srgb, var(--color-background-dark) 16%, transparent);
 	}
 
@@ -595,26 +630,15 @@ p.description {
 
 		&:hover,
 		&:focus-visible {
-			color: var(--color-primary);
+			color: var(--color-action);
 			text-decoration: none;
-			text-shadow: 0 0 6px rgba(255, 117, 58, 0.5);
 		}
 
 		&.active {
-			color: var(--color-secondary-1);
-			font-weight: 500;
-			text-shadow: 0 0 7px rgba(243, 67, 54, 0.52);
+			color: var(--color-action);
+			font-weight: 600;
 		}
 	}
-}
-
-// Mobile overlay
-.mobile-overlay {
-	display: none;
-	position: fixed;
-	inset: 0;
-	background: rgba(0, 0, 0, 0.3);
-	z-index: 99;
 }
 
 // Responsive styles
@@ -642,9 +666,6 @@ p.description {
 		display: none;
 	}
 
-	.mobile-overlay {
-		display: block;
-	}
 
 	.doc-header {
 		margin-bottom: 2rem;

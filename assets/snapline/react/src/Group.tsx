@@ -1,0 +1,313 @@
+import {
+  forwardRef,
+  useLayoutEffect,
+  useImperativeHandle,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from "react";
+import {
+  DEFAULT_RESIZE_HANDLE_THICKNESS,
+  GroupNodeComponent,
+  type GroupCallbacks,
+  type GroupContainEvent,
+  type GroupMembershipEvent,
+  type NodeCallbacks,
+  type NodeDragCommitEvent,
+  type NodeResizeEvent,
+  type ResizeHandle,
+  type SnapLineMetadata,
+} from "@snap-engine/snapline";
+import { useSnapLineEngine } from "./Engine";
+
+export interface GroupProps {
+  children?: ReactNode;
+  className?: string;
+  groupObject?: GroupNodeComponent | null;
+  style?: CSSProperties;
+  title?: string;
+  /** Consumer-rendered header contents. `title` remains the fallback. */
+  headerContent?: ReactNode;
+  x?: number;
+  y?: number;
+  width?: number;
+  height?: number;
+  minWidth?: number;
+  minHeight?: number;
+  resizeHandleThickness?: number;
+  resizeHandles?: true | readonly ResizeHandle[];
+  resizeCursors?: Partial<Record<ResizeHandle, string>>;
+  metadata?: SnapLineMetadata;
+  callbacks?: NodeCallbacks;
+  groupCallbacks?: GroupCallbacks;
+  canContain?: (event: GroupContainEvent) => boolean;
+  edgePan?: boolean;
+  onMembershipChange?: (event: GroupMembershipEvent) => void;
+  onResizeCommit?: (event: NodeResizeEvent) => void;
+  onDragCommit?: (event: NodeDragCommitEvent) => void;
+}
+
+export const Group = forwardRef<GroupNodeComponent, GroupProps>(function Group(
+  {
+    children,
+    className = "",
+    groupObject = null,
+    style,
+    title = "Group",
+    headerContent,
+    x = 0,
+    y = 0,
+    width = 400,
+    height = 300,
+    minWidth,
+    minHeight,
+    resizeHandleThickness,
+    resizeHandles,
+    resizeCursors,
+    metadata = {},
+    callbacks = {},
+    groupCallbacks = {},
+    canContain,
+    edgePan = true,
+    onMembershipChange,
+    onResizeCommit,
+    onDragCommit,
+  },
+  ref,
+) {
+  const engine = useSnapLineEngine();
+  const boxDomRef = useRef<HTMLDivElement>(null);
+  const headerRef = useRef<HTMLElement>(null);
+  const ownsGroupRef = useRef(groupObject == null);
+  const groupRef = useRef<GroupNodeComponent | null>(groupObject);
+  if (!groupRef.current) {
+    groupRef.current = new GroupNodeComponent(engine, null, {
+      width,
+      height,
+      minWidth,
+      minHeight,
+      resizeHandleThickness,
+      resizeHandles,
+      resizeCursors,
+      metadata,
+      callbacks: {},
+      groupCallbacks: {},
+      canContain,
+      edgePan,
+    });
+  }
+  const group = groupRef.current;
+
+  // The box's width/height are framework-owned: seeded from props, updated
+  // live by core's onSizeChange during a resize drag.
+  const [box, setBox] = useState<{ w: number; h: number }>({ w: width, h: height });
+  const latestRef = useRef({
+    callbacks,
+    groupCallbacks,
+    onMembershipChange,
+    onResizeCommit,
+    onDragCommit,
+  });
+  latestRef.current = {
+    callbacks,
+    groupCallbacks,
+    onMembershipChange,
+    onResizeCommit,
+    onDragCommit,
+  };
+
+  useImperativeHandle(ref, () => group, [group]);
+
+  useLayoutEffect(() => {
+    if (boxDomRef.current) {
+      group.element = boxDomRef.current;
+      group.syncDomGeometry();
+    }
+    const originalCallbacks = { ...group.callbacks };
+    const originalGroupCallbacks = { ...group.groupCallbacks };
+    const invoke = <Event,>(
+      event: Event,
+      ...handlers: Array<((value: Event) => unknown) | undefined>
+    ): void => {
+      const seen = new Set<Function>();
+      for (const handler of handlers) {
+        if (!handler || seen.has(handler)) continue;
+        seen.add(handler);
+        handler(event);
+      }
+    };
+    group.callbacks.canStartDrag = (event) => {
+      const handlers = [
+        originalCallbacks.canStartDrag,
+        latestRef.current.callbacks.canStartDrag,
+      ];
+      const seen = new Set<Function>();
+      for (const handler of handlers) {
+        if (!handler || seen.has(handler)) continue;
+        seen.add(handler);
+        if (handler(event) === false) return false;
+      }
+      return true;
+    };
+    group.callbacks.resolveSelectionMode = (event) =>
+      latestRef.current.callbacks.resolveSelectionMode?.(event) ??
+      originalCallbacks.resolveSelectionMode?.(event) ??
+      "replace";
+    group.callbacks.onDragStart = (event) =>
+      invoke(
+        event,
+        originalCallbacks.onDragStart,
+        latestRef.current.callbacks.onDragStart,
+      );
+    group.callbacks.onDrag = (event) =>
+      invoke(
+        event,
+        originalCallbacks.onDrag,
+        latestRef.current.callbacks.onDrag,
+      );
+    group.callbacks.onSelectionChange = (event) =>
+      invoke(
+        event,
+        originalCallbacks.onSelectionChange,
+        latestRef.current.callbacks.onSelectionChange,
+      );
+    group.callbacks.onResizeHandleChange = (event) =>
+      invoke(
+        event,
+        originalCallbacks.onResizeHandleChange,
+        latestRef.current.callbacks.onResizeHandleChange,
+      );
+    group.groupCallbacks.onMembershipChange = (event) =>
+      invoke(
+        event,
+        originalGroupCallbacks.onMembershipChange,
+        latestRef.current.groupCallbacks.onMembershipChange,
+        latestRef.current.onMembershipChange,
+      );
+    group.callbacks.onDragCommit = (event) =>
+      invoke(
+        event,
+        originalCallbacks.onDragCommit,
+        latestRef.current.callbacks.onDragCommit,
+        latestRef.current.onDragCommit,
+      );
+    group.callbacks.onSizeChange = (event) => {
+      invoke(
+        event,
+        originalCallbacks.onSizeChange,
+        latestRef.current.callbacks.onSizeChange,
+      );
+      setBox({ w: event.width, h: event.height });
+    };
+    group.callbacks.onResizeCommit = (event) =>
+      invoke(
+        event,
+        originalCallbacks.onResizeCommit,
+        latestRef.current.callbacks.onResizeCommit,
+        latestRef.current.onResizeCommit,
+      );
+    // Header is the only move surface. setSizeState seeds the collision
+    // footprint (the DOM size is rendered from state above).
+    const unregisterHandle = headerRef.current
+      ? group.registerDragHandle(headerRef.current)
+      : undefined;
+    // Seed membership once siblings have mounted and had hit boxes measured.
+    group.schedule(() => group.refreshMembership(true), {
+      stage: "WRITE_3",
+      queueId: `${group.id}-seed`,
+    });
+
+    return () => {
+      unregisterHandle?.();
+      group.callbacks.canStartDrag = originalCallbacks.canStartDrag;
+      group.callbacks.resolveSelectionMode =
+        originalCallbacks.resolveSelectionMode;
+      group.callbacks.onDragStart = originalCallbacks.onDragStart;
+      group.callbacks.onDrag = originalCallbacks.onDrag;
+      group.callbacks.onDragCommit = originalCallbacks.onDragCommit;
+      group.callbacks.onSelectionChange =
+        originalCallbacks.onSelectionChange;
+      group.callbacks.onResizeHandleChange =
+        originalCallbacks.onResizeHandleChange;
+      group.callbacks.onSizeChange = originalCallbacks.onSizeChange;
+      group.callbacks.onResizeCommit = originalCallbacks.onResizeCommit;
+      group.groupCallbacks.onMembershipChange =
+        originalGroupCallbacks.onMembershipChange;
+      if (ownsGroupRef.current) {
+        group.destroy();
+      }
+    };
+  }, [group]);
+
+  useLayoutEffect(() => {
+    group.worldTransform = { x, y };
+    group.schedule(() => group.writeTransformAndLines(), {
+      stage: "WRITE_2",
+      queueId: `${group.id}-transform`,
+    });
+  }, [group, x, y]);
+
+  useLayoutEffect(() => {
+    setBox({ w: width, h: height });
+  }, [width, height]);
+
+  useLayoutEffect(() => {
+    if (!group.element) return;
+    group.setSizeState(box.w, box.h);
+    group.syncDomGeometry();
+  }, [group, box]);
+
+  const handleSize =
+    resizeHandleThickness ?? DEFAULT_RESIZE_HANDLE_THICKNESS;
+  return (
+    <div
+      ref={boxDomRef}
+      data-snapline-type="group"
+      className={`snapline-group ${className}`}
+      style={{
+        position: "absolute",
+        transformOrigin: "top left",
+        willChange: "transform",
+        boxSizing: "border-box",
+        pointerEvents: "none",
+        width: `${box.w}px`,
+        height: `${box.h}px`,
+        ...style,
+      }}
+    >
+      <header
+        ref={headerRef}
+        data-snapline-part="group-header"
+        style={{ pointerEvents: "auto", cursor: "grab" }}
+      >
+        {headerContent ?? <span>{title}</span>}
+      </header>
+      <div style={{ pointerEvents: "none" }}>{children}</div>
+      {group.resizeHandles.map((handle) => (
+        <div
+          key={handle}
+          data-snapline-part="group-resize"
+          data-handle={handle}
+          style={{
+            position: "absolute",
+            pointerEvents: "none",
+            ...(handle === "n" || handle === "s"
+              ? { left: handleSize, right: handleSize, height: handleSize }
+              : null),
+            ...(handle === "e" || handle === "w"
+              ? { top: handleSize, bottom: handleSize, width: handleSize }
+              : null),
+            ...(handle.length === 2
+              ? { width: handleSize, height: handleSize }
+              : null),
+            ...(handle.startsWith("n") ? { top: -handleSize / 2 } : null),
+            ...(handle.startsWith("s") ? { bottom: -handleSize / 2 } : null),
+            ...(handle.endsWith("e") ? { right: -handleSize / 2 } : null),
+            ...(handle.endsWith("w") ? { left: -handleSize / 2 } : null),
+          }}
+        />
+      ))}
+    </div>
+  );
+});

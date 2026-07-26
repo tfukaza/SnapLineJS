@@ -2,23 +2,31 @@
 title: Overview
 order: 0
 project: snapengine
-projectTitle: SnapEngine
+projectTitle: SnapEngine Core
 section: introduction
 sectionTitle: Introduction
 sectionOrder: 1
 ---
 
-SnapEngine is an interactivity engine for the web.
-It provides useful utilities for building interactive UI elements,
+SnapEngine is a DOM-first interactivity engine for the web and the shared
+foundation behind interaction tools such as SnapSort. SnapEngine Core provides
+utilities for building interactive UI elements,
 like input handling, camera coordination, collision detection, 
 batched DOM reads and writes, animation helpers, and debugging overlays.
 
-The core package is intentionally framework-agnostic. Asset packages such as SnapSort build on top of it, and framework wrappers provide Svelte or React-facing components where useful.
+The core package is intentionally framework-agnostic. Interaction tools such as
+SnapSort build on top of it, and framework wrappers provide Svelte- or
+React-facing components where useful.
+
+Most application developers should start with the
+[SnapSort documentation](/docs/snapsort/introduction). Use these Core docs when
+authoring a reusable interaction tool or asset, or when you need advanced
+custom behavior beyond an existing tool.
 
 ## Using these docs
 
-Use the project dropdown at the top of the sidebar to switch between 
-SnapEngine and asset documentation such as SnapSort. 
+Use the search box and project dropdown at the top of the sidebar to search
+these pages and to switch between SnapSort and SnapEngine Core documentation.
 
-If you are new to SnapEngine, we recommend starting from **The Engine**
-section to start learning the key concepts first.
+If you are new to SnapEngine Core, start with **The Engine** to learn its key
+concepts before setting up the package.

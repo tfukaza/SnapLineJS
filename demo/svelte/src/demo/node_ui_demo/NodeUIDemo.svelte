@@ -10,7 +10,7 @@
     <Select />
     <SimpleNode title="Node A" x={120} y={120} />
     <SimpleNode title="Node B" x={440} y={170} />
-    <SimpleNode title="Node C" x={280} y={360} />
+    <SimpleNode title="Node C" x={280} y={360} maxIncoming={2} />
   </div>
 </Engine>
 

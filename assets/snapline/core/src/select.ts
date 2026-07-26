@@ -5,14 +5,62 @@ import type {
   pointerUpProp,
 } from "@snap-engine/core";
 import { RectCollider, Collider } from "@snap-engine/core/collision";
-import { NodeComponent } from "./node";
+import { NodeComponent, type SelectionMode } from "./node";
+import { getSelectList, snapData } from "./snapline-globals";
+
+/** World-space rectangle the framework renders as the selection box. */
+export interface SelectRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  visible: boolean;
+}
+
+export interface SelectStartEvent {
+  select: RectSelectComponent;
+  position: { x: number; y: number };
+  originalEvent: PointerEvent;
+}
+
+export interface SelectChangeEvent {
+  select: RectSelectComponent;
+  selection: readonly NodeComponent[];
+}
+
+export interface SelectCallbacks {
+  canStart?: (event: SelectStartEvent) => boolean;
+  /** Consumer-defined selection policy; SnapLine owns no modifier keys. */
+  resolveSelectionMode?: (event: SelectStartEvent) => SelectionMode;
+  /**
+   * The rubber-band rectangle changed — the FRAMEWORK renders it (position,
+   * size, visibility, and any custom styling). Core keeps only the pointer
+   * math and the selection collider; it never writes the box's DOM. This is
+   * deliberately a plain callback with no flush handshake: the box visual is
+   * not paint-atomic, so the framework may flush on its own schedule.
+   */
+  onRectChange?: (rect: SelectRect) => void;
+  onSelectionChange?: (event: SelectChangeEvent) => void;
+}
+
+export interface SelectConfig {
+  callbacks?: SelectCallbacks;
+}
 
 class RectSelectComponent extends ElementObject {
   _state: "none" | "dragging";
   _mouseDownX: number;
   _mouseDownY: number;
   _selectHitBox: Collider;
-  constructor(engine: any, parent: BaseObject | null) {
+  #callbacks: SelectCallbacks;
+  #selectionMode: SelectionMode = "replace";
+  #baselineSelection = new Set<NodeComponent>();
+
+  constructor(
+    engine: any,
+    parent: BaseObject | null,
+    config: SelectConfig = {},
+  ) {
     super(engine, parent);
 
     this._state = "none";
@@ -29,57 +77,58 @@ class RectSelectComponent extends ElementObject {
 
     this.addCollider(this._selectHitBox);
 
-    this.global.data.select = [];
+    snapData(this.global).select = [];
 
-    this.style = {
-      width: "0px",
-      height: "0px",
-      transformOrigin: "top left",
-      position: "absolute",
-      left: "0px",
-      top: "0px",
-      pointerEvents: "none",
-    };
-    this.schedule(() => this.writeDom(), {
-      stage: "WRITE_1",
-      queueId: `${this.id}-dom`,
-    });
+    this.#callbacks = config.callbacks ?? {};
   }
 
-  scheduleWrite() {
-    this.schedule(() => this.writeDom(), {
-      stage: "WRITE_1",
-      queueId: `${this.id}-dom`,
-    });
-    this.schedule(() => this.writeTransform(), {
-      stage: "WRITE_2",
-      queueId: `${this.id}-transform`,
+  get callbacks(): SelectCallbacks {
+    return this.#callbacks;
+  }
+
+  #fireRect(width: number, height: number, visible: boolean): void {
+    this.#callbacks.onRectChange?.({
+      x: this.worldTransform.x,
+      y: this.worldTransform.y,
+      width,
+      height,
+      visible,
     });
   }
 
   onGlobalCursorDown(prop: pointerDownProp): void {
-    if (
-      prop.event.button !== 0 ||
-      (prop.event.target &&
-        (prop.event.target as HTMLElement).id !== "sl-background")
-    ) {
+    if (prop.event.button !== 0) {
       return;
     }
-    for (let node of [...this.global.data.select]) {
-      node.setSelected(false);
+    const startEvent = {
+      select: this,
+      position: prop.position,
+      originalEvent: prop.event,
+    };
+    if (this.#callbacks.canStart?.(startEvent) === false) return;
+    this.#selectionMode =
+      this.#callbacks.resolveSelectionMode?.(startEvent) ?? "replace";
+    this.#baselineSelection = new Set(getSelectList(this.global));
+    if (this.#selectionMode === "replace") {
+      for (let node of [...getSelectList(this.global)]) {
+        node.setSelected(false);
+      }
+      snapData(this.global).select = [];
     }
 
-    this.global.data.select = [];
+    // worldTransform positions the selection collider (its transform parent);
+    // the visual box is framework-rendered from the callback rect.
     this.worldTransform = { x: prop.position.x, y: prop.position.y };
     this._state = "dragging";
-    this.style = {
-      display: "block",
-      width: "0px",
-      height: "0px",
-    };
     this._mouseDownX = prop.position.x;
     this._mouseDownY = prop.position.y;
-    this.scheduleWrite();
+    this._selectHitBox.width = 0;
+    this._selectHitBox.height = 0;
+    this.#fireRect(0, 0, true);
+    this.#callbacks.onSelectionChange?.({
+      select: this,
+      selection: [...getSelectList(this.global)],
+    });
 
     this._selectHitBox.event.collider.onBeginContact = (
       _: Collider,
@@ -87,7 +136,15 @@ class RectSelectComponent extends ElementObject {
     ) => {
       if (otherObject.parent instanceof NodeComponent) {
         let node = otherObject.parent as NodeComponent;
-        node.setSelected(true);
+        node.setSelected(
+          this.#selectionMode === "toggle"
+            ? !this.#baselineSelection.has(node)
+            : true,
+        );
+        this.#callbacks.onSelectionChange?.({
+          select: this,
+          selection: [...getSelectList(this.global)],
+        });
       }
     };
     this._selectHitBox.event.collider.onEndContact = (
@@ -96,7 +153,11 @@ class RectSelectComponent extends ElementObject {
     ) => {
       if (otherObject.parent instanceof NodeComponent) {
         let node = otherObject.parent as NodeComponent;
-        node.setSelected(false);
+        node.setSelected(this.#baselineSelection.has(node));
+        this.#callbacks.onSelectionChange?.({
+          select: this,
+          selection: [...getSelectList(this.global)],
+        });
       }
     };
   }
@@ -111,27 +172,21 @@ class RectSelectComponent extends ElementObject {
         Math.abs(prop.position.x - this._mouseDownX),
         Math.abs(prop.position.y - this._mouseDownY),
       ];
-      this.style = {
-        width: `${boxWidth}px`,
-        height: `${boxHeight}px`,
-      };
       this.worldTransform = { x: boxOriginX, y: boxOriginY };
       this._selectHitBox.localTransform = { x: 0, y: 0 };
       this._selectHitBox.width = boxWidth;
       this._selectHitBox.height = boxHeight;
-      this.scheduleWrite();
+      this.#fireRect(boxWidth, boxHeight, true);
     }
   }
 
   onGlobalCursorUp(_prop: pointerUpProp): void {
-    this.style = {
-      display: "none",
-    };
+    const wasDragging = this._state === "dragging";
     this._state = "none";
 
     this._selectHitBox.event.collider.onBeginContact = null;
     this._selectHitBox.event.collider.onEndContact = null;
-    this.scheduleWrite();
+    if (wasDragging) this.#fireRect(0, 0, false);
   }
 
   onCollideNode(_hitBox: Collider, _node: Collider): void {}

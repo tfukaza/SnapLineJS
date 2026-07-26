@@ -4,6 +4,7 @@ import {
   entries,
   getGroupedEntries,
   legacyDocRedirects,
+  findDocProject,
 } from "$lib/docsCatalog";
 
 export const csr = true;
@@ -15,17 +16,14 @@ export async function load({ params }) {
   const modules = import.meta.glob("@docs/**/*.{md,mdx}");
 
   const slug = params.slug || "";
-  if (slug === "") {
-    throw redirect(308, "/docs/snapengine/introduction");
+  // `/docs` renders the hub page (docs/index.mdx) that explains the
+  // SnapEngine-vs-asset split; `/docs/index` is folded into it.
+  if (slug === "index") {
+    throw redirect(308, "/docs");
   }
 
-  if (slug === "snapengine") {
-    throw redirect(308, "/docs/snapengine/introduction");
-  }
-
-  if (slug === "snapsort") {
-    throw redirect(308, "/docs/snapsort/introduction");
-  }
+  const project = findDocProject(slug);
+  if (project) throw redirect(308, project.href);
 
   if (legacyDocRedirects[slug]) {
     throw redirect(308, `/docs/${legacyDocRedirects[slug]}`);
@@ -36,7 +34,7 @@ export async function load({ params }) {
     const pathSlug = docSlugFromPath(path);
     if (pathSlug) {
       if (pathSlug === "index") {
-        if (slug === "index") {
+        if (slug === "") {
           const mdx: any = await resolver();
           return {
             component: mdx.default,
@@ -44,7 +42,7 @@ export async function load({ params }) {
           };
         }
       } else {
-        if (pathSlug === slug && slug !== "index") {
+        if (pathSlug === slug && slug !== "") {
           const mdx: any = await resolver();
           return {
             component: mdx.default,

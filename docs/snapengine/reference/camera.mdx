@@ -111,6 +111,26 @@ cameraControl.zoomBy(-0.1);
 cameraControl.zoomBy(0.1, 200, 150);
 ```
 
+### Edge panning for drag owners
+
+Enable programmatic edge panning when composing the camera with a drag system
+such as SnapLine:
+
+```ts
+const cameraControl = new CameraControl(engine, {
+  edgePan: {
+    enabled: true,
+    edgeDistance: 48,
+    maxSpeed: 600,
+  },
+});
+```
+
+Drag owners use `startEdgePan(pointerId, position, onFrame)`,
+`updateEdgePan(pointerId, position)`, and `stopEdgePan(pointerId)`. The frame
+callback receives the pointer position converted through the camera after each
+pan, keeping dragged content anchored while the pointer is stationary.
+
 ## Public API
 
 | API | Description |

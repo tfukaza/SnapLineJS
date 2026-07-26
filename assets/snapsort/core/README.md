@@ -17,7 +17,7 @@ npm install @snap-engine/snapsort @snap-engine/core
 - `Container`
 - `Item`
 - `DragSession`
-- Event types: `ItemInsertEvent`, `ItemRemoveEvent`, `ItemMoveEvent`, `ItemSwapEvent`, `GhostCreateEvent`, `GhostInsertEvent`, `GhostRemoveEvent`, `DragStartEvent`, `DragEndEvent`, `DropTargetChangeEvent`, `CanDropEvent`, `DragLocation`
+- Event types: `ItemInsertEvent`, `ItemRemoveEvent`, `ItemMoveEvent`, `ItemSwapEvent`, `GhostCreateEvent`, `GhostInsertEvent`, `GhostRemoveEvent`, `DragStartEvent`, `DragEndEvent`, `DropTargetChangeEvent`, `CanDropEvent`, `VisualGeometryInvalidationEvent`, `DragLocation`
 - `ContainerCallbacks`, `ContainerConfig`, `SortMode`, `SortStrategy`
 
 ## Usage
@@ -55,6 +55,11 @@ never fight over the same DOM nodes. The contract:
 
 `awaitMutation` remains deprecated for compatibility. Promise-returning
 mutation waits are not paint-atomic and are not supported by the FLIP path.
+
+`onVisualGeometryInvalidated` is the low-level seam for visuals owned by other
+systems. SnapSort coalesces drag, ghost, and FLIP changes at the root container
+and reports the affected items during the next engine read phase. The callback
+does not refresh any dependent UI itself; consumers decide what to invalidate.
 
 A concrete consequence: **the dragged element stays in its original DOM
 parent for the entire drag.** It never gets reparented into whichever

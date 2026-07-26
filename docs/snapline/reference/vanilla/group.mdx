@@ -1,0 +1,23 @@
+---
+title: Group API
+description: Core group configuration, exclusive hierarchy, callbacks, and resolver API.
+order: 2
+sectionTitle: Reference
+sectionOrder: 3
+framework: vanilla
+frameworkKey: group
+---
+
+`GroupConfig` extends `NodeConfig` with `width`, `height`, `canContain`, and
+`groupCallbacks`.
+
+| Member | Meaning |
+| --- | --- |
+| `members` | Read-only direct member set |
+| `descendants` | Read-only recursive member set |
+| `parentGroup` | Settled direct parent or `null` |
+| `refreshMembership(fireDelta)` | Reconcile engine membership after an external geometry change |
+
+`GroupMembershipEvent` contains `added`, `removed`, and the final direct
+`members`. `setGroupMembershipResolver(engine, resolver)` overrides the default
+innermost candidate and returns a cleanup function.

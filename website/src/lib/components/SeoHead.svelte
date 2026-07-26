@@ -16,7 +16,7 @@
     description = defaultDescription,
     path = "/",
     image = defaultImage,
-    imageAlt = "SnapEngineJS website preview",
+    imageAlt = "SnapEngine website preview",
     type = "website",
   }: {
     title?: string;
