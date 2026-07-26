@@ -3,7 +3,7 @@
     NodeMirror,
     ConnectorMirror,
     LineMirror,
-    type ConnectorCapabilities,
+    type ConnectorRules,
     type ConnectorCallbacks,
     type ConnectorSurfaceStrategy,
     type SnapLineMetadata,
@@ -12,13 +12,12 @@
   import { getContext, onDestroy } from "svelte";
 
   let {
+    id = undefined,
     name,
-    maxConnectors = 1,
-    allowDragOut = true,
+    rules = undefined,
     metadata = {},
     callbacks = {},
     edgePan = true,
-    capabilities = undefined,
     surfaceStrategies = [],
     virtual = false,
     colliderRadius = undefined,
@@ -26,13 +25,13 @@
     connectorObject = null,
     data = {},
   }: {
+    /** Stable domain identity; minted when omitted (supply for persistence). */
+    id?: string;
     name: string;
-    maxConnectors?: number;
-    allowDragOut?: boolean;
+    rules?: Partial<ConnectorRules>;
     metadata?: SnapLineMetadata;
     callbacks?: ConnectorCallbacks;
     edgePan?: boolean;
-    capabilities?: Partial<ConnectorCapabilities>;
     surfaceStrategies?: readonly ConnectorSurfaceStrategy[];
     /** Keep the logical connector without rendering a visible port element. */
     virtual?: boolean;
@@ -46,13 +45,12 @@
   let nodeObject: NodeMirror = getContext("nodeObject");
   const ownsConnector = connectorObject == null;
   let connector = connectorObject ?? new ConnectorMirror(engine, nodeObject, {
+    id,
     name: name,
-    maxConnectors: maxConnectors,
-    allowDragOut: allowDragOut,
+    rules,
     metadata,
     callbacks,
     edgePan,
-    capabilities,
     surfaceStrategies,
     colliderRadius,
     lineClass,
@@ -75,12 +73,10 @@
 
   $effect(() => {
     connector.updateConfig({
-      maxConnectors,
-      allowDragOut,
+      rules,
       metadata,
       callbacks,
       edgePan,
-      capabilities,
       surfaceStrategies,
       colliderRadius,
       lineClass,
@@ -98,7 +94,7 @@
     data-snapline-type="connector"
     data-snapline-name={name}
     {...Object.fromEntries(Object.entries(data).map(([key, value]) => [`data-${key}`, value]))}
-    class={`connector ${(capabilities?.source ?? allowDragOut) ? "right" : "left"}`}
+    class={`connector ${(rules?.maxOutgoing ?? "unlimited") !== 0 ? "right" : "left"}`}
   ></div>
 {/if}
 

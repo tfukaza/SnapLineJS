@@ -12,14 +12,14 @@
     <div class="node-body">
         <div class="input-row">
             <div class="connector-wrapper">
-                <Connector name="input" maxConnectors={maxIncoming} allowDragOut={false} />
+                <Connector name="input" rules={{ maxOutgoing: 0, maxIncoming: maxIncoming === -1 ? "unlimited" : maxIncoming, onFull: "replace-oldest" }} />
             </div>
             <span>Input</span>
         </div>
         <div class="output-row">
             <span>Output</span>
             <div class="connector-wrapper">
-                <Connector name="output" maxConnectors={-1} allowDragOut={true} />
+                <Connector name="output" rules={{ maxIncoming: 0 }} />
             </div>
         </div>
     </div>

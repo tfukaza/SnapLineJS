@@ -34,14 +34,14 @@ function ResizableNode({ title, x, y }) {
       <div className="node-body" style={{ flex: 1 }}>
         <div className="input-row">
           <div className="connector-wrapper">
-            <Connector name="input" maxConnectors={1} allowDragOut={false} />
+            <Connector name="input" rules={{ maxOutgoing: 0, maxIncoming: 1, onFull: "replace-oldest" }} />
           </div>
           <span>Input</span>
         </div>
         <div className="output-row">
           <span>Output</span>
           <div className="connector-wrapper">
-            <Connector name="output" maxConnectors={-1} allowDragOut={true} />
+            <Connector name="output" rules={{ maxIncoming: 0 }} />
           </div>
         </div>
       </div>
@@ -108,14 +108,14 @@ function SimpleNode({ title, x, y }) {
       <div className="node-body">
         <div className="input-row">
           <div className="connector-wrapper">
-            <Connector name="input" maxConnectors={1} allowDragOut={false} />
+            <Connector name="input" rules={{ maxOutgoing: 0, maxIncoming: 1, onFull: "replace-oldest" }} />
           </div>
           <span>Input</span>
         </div>
         <div className="output-row">
           <span>Output</span>
           <div className="connector-wrapper">
-            <Connector name="output" maxConnectors={-1} allowDragOut={true} />
+            <Connector name="output" rules={{ maxIncoming: 0 }} />
           </div>
         </div>
       </div>
@@ -193,8 +193,7 @@ function EdgeSyncNode({ nodeId, title, x, y, maxIncoming = 1 }) {
           <div className="connector-wrapper">
             <Connector
               name="input"
-              maxConnectors={maxIncoming}
-              allowDragOut={false}
+              rules={{ maxOutgoing: 0, maxIncoming: maxIncoming === -1 ? "unlimited" : maxIncoming, onFull: "replace-oldest" }}
               metadata={{ node: nodeId, port: "input" }}
             />
           </div>
@@ -205,8 +204,7 @@ function EdgeSyncNode({ nodeId, title, x, y, maxIncoming = 1 }) {
           <div className="connector-wrapper">
             <Connector
               name="output"
-              maxConnectors={-1}
-              allowDragOut={true}
+              rules={{ maxIncoming: 0 }}
               metadata={{ node: nodeId, port: "output" }}
             />
           </div>

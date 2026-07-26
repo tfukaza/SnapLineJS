@@ -10,7 +10,7 @@ import {
 import {
   ConnectorMirror,
   LineMirror,
-  type ConnectorCapabilities,
+  type ConnectorRules,
   type ConnectorCallbacks,
   type ConnectorSurfaceStrategy,
   type SnapLineMetadata,
@@ -19,15 +19,15 @@ import { useSnapLineEngine } from "./Engine";
 import { NodeMirrorContext } from "./Node";
 
 export interface ConnectorProps {
-  allowDragOut?: boolean;
+  /** Stable domain identity; minted when omitted (supply for persistence). */
+  id?: string;
   className?: string;
-  maxConnectors?: number;
   name: string;
   style?: CSSProperties;
   metadata?: SnapLineMetadata;
   callbacks?: ConnectorCallbacks;
   edgePan?: boolean;
-  capabilities?: Partial<ConnectorCapabilities>;
+  rules?: Partial<ConnectorRules>;
   surfaceStrategies?: readonly ConnectorSurfaceStrategy[];
   /** Keep the logical connector without rendering a visible port element. */
   virtual?: boolean;
@@ -44,15 +44,14 @@ export interface ConnectorRef {
 export const Connector = forwardRef<ConnectorRef, ConnectorProps>(
   (
     {
-      allowDragOut = true,
+      id,
       className = "",
-      maxConnectors = 1,
       name,
       style,
       metadata = {},
       callbacks = {},
       edgePan = true,
-      capabilities,
+      rules,
       surfaceStrategies = [],
       virtual = false,
       colliderRadius,
@@ -72,13 +71,12 @@ export const Connector = forwardRef<ConnectorRef, ConnectorProps>(
     const connectorRef = useRef<ConnectorMirror | null>(connectorObject);
     if (!connectorRef.current) {
       connectorRef.current = new ConnectorMirror(engine, nodeObject, {
-        allowDragOut,
-        maxConnectors,
+        id,
         name,
+        rules,
         metadata,
         callbacks,
         edgePan,
-        capabilities,
         surfaceStrategies,
         colliderRadius,
         lineClass,
@@ -93,26 +91,22 @@ export const Connector = forwardRef<ConnectorRef, ConnectorProps>(
 
     useEffect(() => {
       connector.updateConfig({
-        allowDragOut,
-        maxConnectors,
+        rules,
         metadata,
         callbacks,
         edgePan,
-        capabilities,
         surfaceStrategies,
         colliderRadius,
         lineClass,
       });
     }, [
-      allowDragOut,
       callbacks,
-      capabilities,
       colliderRadius,
       connector,
       edgePan,
       lineClass,
-      maxConnectors,
       metadata,
+      rules,
       surfaceStrategies,
     ]);
 
@@ -139,7 +133,7 @@ export const Connector = forwardRef<ConnectorRef, ConnectorProps>(
         {...Object.fromEntries(
           Object.entries(data).map(([key, value]) => [`data-${key}`, value]),
         )}
-        className={`connector ${capabilities?.source ?? allowDragOut ? "right" : "left"} ${className}`.trim()}
+        className={`connector ${(rules?.maxOutgoing ?? "unlimited") !== 0 ? "right" : "left"} ${className}`.trim()}
         style={{
           background: "#4f46e5",
           border: "2px solid #ffffff",

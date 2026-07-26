@@ -19,12 +19,12 @@
     <div class="rnode-header"><h3>{title}</h3></div>
     <div class="rnode-body">
         <div class="input-row">
-            <div class="cw"><Connector name="input" maxConnectors={1} allowDragOut={false} /></div>
+            <div class="cw"><Connector name="input" rules={{ maxOutgoing: 0, maxIncoming: 1, onFull: "replace-oldest" }} /></div>
             <span>In</span>
         </div>
         <div class="output-row">
             <span>Out</span>
-            <div class="cw"><Connector name="output" maxConnectors={-1} allowDragOut={true} /></div>
+            <div class="cw"><Connector name="output" rules={{ maxIncoming: 0 }} /></div>
         </div>
     </div>
 </Node>

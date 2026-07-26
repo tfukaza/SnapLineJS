@@ -18,7 +18,7 @@ test("line geometry writers are imperative, replaceable, and separate from state
   const sourceNode = new NodeMirror(engine, null);
   const source = new ConnectorMirror(engine, sourceNode, {
     name: "source",
-    capabilities: { source: true, target: false },
+    rules: { maxIncoming: 0 },
   });
   sourceNode.addConnectorObject(source);
   const line = source.createLine();
@@ -137,11 +137,11 @@ test("connector config updates stay live without replacing topology", () => {
   const targetNode = new NodeMirror(engine, null);
   const source = new ConnectorMirror(engine, sourceNode, {
     name: "source",
-    capabilities: { source: true, target: false },
+    rules: { maxIncoming: 0 },
   });
   const target = new ConnectorMirror(engine, targetNode, {
     name: "target",
-    capabilities: { source: false, target: true, maxIncoming: -1 },
+    rules: { maxOutgoing: 0, maxIncoming: "unlimited" },
   });
   sourceNode.addConnectorObject(source);
   targetNode.addConnectorObject(target);
@@ -156,25 +156,25 @@ test("connector config updates stay live without replacing topology", () => {
       distance: 0,
     }),
   };
+  const isValidConnection = () => true;
   const callbacks = {
-    canConnect: () => true,
+    onDragStart: () => {},
   };
   const metadata = { domainId: "updated-source" };
 
   source.updateConfig({
-    allowDragOut: true,
     callbacks,
-    capabilities: {
-      source: true,
-      target: true,
+    rules: {
+      maxOutgoing: "unlimited",
       maxIncoming: 4,
       reconnect: false,
       allowParallel: true,
+      onFull: "replace-oldest",
+      isValidConnection,
     },
     colliderRadius: 42,
     edgePan: false,
     lineClass: UpdatedLine,
-    maxConnectors: 4,
     metadata,
     surfaceStrategies: [strategy],
   });
@@ -183,13 +183,16 @@ test("connector config updates stay live without replacing topology", () => {
   expect(existingLine.target).toBe(target);
   expect(source.callbacks).toBe(callbacks);
   expect(source.metadata).toBe(metadata);
-  expect(source.capabilities).toEqual({
-    source: true,
-    target: true,
+  expect(source.rules).toEqual({
+    maxOutgoing: Infinity,
     maxIncoming: 4,
     reconnect: false,
     allowParallel: true,
+    onFull: "replace-oldest",
+    isValidConnection,
   });
+  expect(source.isSource).toBe(true);
+  expect(source.isTarget).toBe(true);
   expect(source.config.edgePan).toBe(false);
   expect(source.config.lineClass).toBe(UpdatedLine);
   expect(source.colliderList[0]).toBeInstanceOf(CircleCollider);
@@ -200,13 +203,11 @@ test("connector config updates stay live without replacing topology", () => {
   updatedLine.destroy(false);
 
   source.updateConfig({
-    allowDragOut: false,
     callbacks: undefined,
-    capabilities: undefined,
+    rules: { maxOutgoing: 0, maxIncoming: 2 },
     colliderRadius: undefined,
     edgePan: true,
     lineClass: undefined,
-    maxConnectors: 2,
     metadata: undefined,
     surfaceStrategies: [],
   });
@@ -214,13 +215,16 @@ test("connector config updates stay live without replacing topology", () => {
   expect(source.outgoingLines).toEqual([existingLine]);
   expect(source.callbacks).toEqual({});
   expect(source.metadata).toEqual({});
-  expect(source.capabilities).toEqual({
-    source: false,
-    target: true,
+  expect(source.rules).toEqual({
+    maxOutgoing: 0,
     maxIncoming: 2,
     reconnect: true,
     allowParallel: false,
+    onFull: "reject",
+    isValidConnection: null,
   });
+  expect(source.isSource).toBe(false);
+  expect(source.isTarget).toBe(true);
   expect((source.colliderList[0] as CircleCollider).radius).toBe(30);
   expect(global.data.sourceSurfaces).toEqual([]);
   const defaultLine = source.createLine();
@@ -241,11 +245,11 @@ test("visible port binding can toggle while preserving connector lines", () => {
   const targetNode = new NodeMirror(engine, null);
   const source = new ConnectorMirror(engine, sourceNode, {
     name: "source",
-    capabilities: { source: true, target: false },
+    rules: { maxIncoming: 0 },
   });
   const target = new ConnectorMirror(engine, targetNode, {
     name: "target",
-    capabilities: { source: false, target: true },
+    rules: { maxOutgoing: 0 },
   });
   sourceNode.addConnectorObject(source);
   targetNode.addConnectorObject(target);
@@ -283,18 +287,14 @@ test("bidirectional connector graphs propagate props without recursing forever",
   const secondNode = new NodeMirror(engine, null);
   const first = new ConnectorMirror(engine, firstNode, {
     name: "value",
-    capabilities: {
-      source: true,
-      target: true,
-      maxIncoming: -1,
+    rules: {
+      maxIncoming: "unlimited",
     },
   });
   const second = new ConnectorMirror(engine, secondNode, {
     name: "value",
-    capabilities: {
-      source: true,
-      target: true,
-      maxIncoming: -1,
+    rules: {
+      maxIncoming: "unlimited",
     },
   });
   firstNode.addConnectorObject(first);

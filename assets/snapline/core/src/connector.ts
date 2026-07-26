@@ -103,12 +103,44 @@ export interface ConnectorSurfaceStrategy {
   ) => ConnectorAnchor | null | void;
 }
 
-export interface ConnectorCapabilities {
-  source: boolean;
-  target: boolean;
+/** `"unlimited"` is the explicit no-limit value (normalized to Infinity
+ * internally so capacity checks stay branch-free). */
+export type ConnectionLimit = number | "unlimited";
+
+export interface ConnectorRules {
+  /** Maximum outgoing lines (previews reserve a slot). 0 makes the connector
+   * target-only. Default `"unlimited"`. */
+  maxOutgoing: ConnectionLimit;
+  /** Maximum settled incoming lines. 0 makes the connector source-only.
+   * Default 1. */
+  maxIncoming: ConnectionLimit;
+  reconnect: boolean;
+  /** Both endpoints must allow parallel lines between the same pair. */
+  allowParallel: boolean;
+  /** Policy when a proposal would exceed `maxIncoming`: reject it (default)
+   * or evict the oldest incoming lines to make room. */
+  onFull: "reject" | "replace-oldest";
+  /** Line-aware admission predicate — synchronous and side-effect free
+   * (candidate discovery calls it repeatedly; rechecked on the final drop).
+   * Either endpoint's predicate may veto. */
+  isValidConnection?: (proposal: ConnectionProposal) => boolean;
+}
+
+/** Rules with limits normalized to numbers (Infinity = unlimited). */
+export interface ResolvedConnectorRules {
+  maxOutgoing: number;
   maxIncoming: number;
   reconnect: boolean;
   allowParallel: boolean;
+  onFull: "reject" | "replace-oldest";
+  isValidConnection: ((proposal: ConnectionProposal) => boolean) | null;
+}
+
+export interface ConnectionProposal {
+  line: LineMirror;
+  source: ConnectorMirror;
+  target: ConnectorMirror;
+  phase: "candidate" | "drop";
 }
 
 export interface ConnectorPairEvent {
@@ -159,7 +191,6 @@ export type ConnectorConnectionRequestResult =
   | { payload?: unknown };
 
 export interface ConnectorCallbacks {
-  canConnect?: (event: ConnectorPairEvent) => boolean;
   /** Gesture-only and source-only canonical-model creation seam. */
   onConnectionRequest?: (
     event: ConnectorConnectionRequestEvent,
@@ -187,11 +218,7 @@ export interface ConnectorConfig {
    */
   id?: string;
   name?: string;
-  /** @deprecated Prefer capabilities.maxIncoming. */
-  maxConnectors?: number;
-  /** @deprecated Prefer capabilities.source/target. */
-  allowDragOut?: boolean;
-  capabilities?: Partial<ConnectorCapabilities>;
+  rules?: Partial<ConnectorRules>;
   surfaceStrategies?: readonly ConnectorSurfaceStrategy[];
   lineClass?: typeof LineMirror;
   colliderRadius?: number;
@@ -221,7 +248,7 @@ class ConnectorMirror extends ElementObject {
    * Never the engine-internal `BaseObject.id`. */
   readonly connectorId: string;
   #config: ConnectorConfig;
-  #capabilities: Readonly<ConnectorCapabilities>;
+  #rules: Readonly<ResolvedConnectorRules>;
   #name: string;
   #prop: { [key: string]: any };
   #outgoingLines: LineMirror[];
@@ -258,7 +285,7 @@ class ConnectorMirror extends ElementObject {
     this.#outgoingLines = [];
     this.#incomingLines = [];
     this.#config = { ...config };
-    this.#capabilities = Object.freeze(resolveCapabilities(this.#config));
+    this.#rules = Object.freeze(resolveRules(this.#config));
     this.#name = config.name || this.id || "";
     this.connectorId = config.id ?? mintDomainId("connector", this.global);
     this.#callbacks = config.callbacks ?? {};
@@ -301,8 +328,18 @@ class ConnectorMirror extends ElementObject {
     return this.#config;
   }
 
-  get capabilities(): Readonly<ConnectorCapabilities> {
-    return this.#capabilities;
+  get rules(): Readonly<ResolvedConnectorRules> {
+    return this.#rules;
+  }
+
+  /** Derived role: this connector may originate lines. */
+  get isSource(): boolean {
+    return this.#rules.maxOutgoing !== 0;
+  }
+
+  /** Derived role: this connector may receive lines. */
+  get isTarget(): boolean {
+    return this.#rules.maxIncoming !== 0;
   }
 
   get surfaceStrategies(): readonly ConnectorSurfaceStrategy[] {
@@ -372,7 +409,7 @@ class ConnectorMirror extends ElementObject {
   updateConfig(config: ConnectorConfigUpdate): void {
     this.#config = { ...this.#config, ...config };
     this.#callbacks = this.#config.callbacks ?? {};
-    this.#capabilities = Object.freeze(resolveCapabilities(this.#config));
+    this.#rules = Object.freeze(resolveRules(this.#config));
     this.#hitCircle.radius = this.#config.colliderRadius ?? 30;
     this.#syncSourceSurfaceRegistration();
     this.scheduleAllLineWrites();
@@ -512,7 +549,7 @@ class ConnectorMirror extends ElementObject {
   ): void {
     if (prop.event.button !== 0) return;
     const currentIncomingLines = this.#liveIncomingLines();
-    if (this.#capabilities.reconnect && currentIncomingLines.length > 0) {
+    if (this.#rules.reconnect && currentIncomingLines.length > 0) {
       const line = currentIncomingLines[0];
       const source = line.start;
       this.engine.input.setPointerDragOwner(prop.event.pointerId, source);
@@ -524,7 +561,9 @@ class ConnectorMirror extends ElementObject {
       return;
     }
 
-    if (!this.#capabilities.source) return;
+    if (!this.isSource) return;
+    // A new preview reserves an outgoing slot; a full source cannot start one.
+    if (this.#liveOutgoingLines().length >= this.#rules.maxOutgoing) return;
     this.#arm(prop, {
       sourceHit: sourceHit?.candidate.hit ?? null,
       sourceStrategy: sourceHit?.strategy ?? this.#defaultAnchorStrategy(),
@@ -706,34 +745,58 @@ class ConnectorMirror extends ElementObject {
     return this.#resolveOwnSourceHit(position, "source-start");
   }
 
-  canConnectToConnector(connector: ConnectorMirror): boolean {
+  /**
+   * Imperative admission query. Structural rules always apply; the
+   * line-aware isValidConnection predicates run only when a line is given.
+   */
+  canConnect(target: ConnectorMirror, line: LineMirror | null = null): boolean {
+    return this.#admitsConnection(target, line, "drop");
+  }
+
+  #admitsConnection(
+    target: ConnectorMirror,
+    line: LineMirror | null,
+    phase: "candidate" | "drop",
+  ): boolean {
+    if (target.id === this.id || !this.isSource || !target.isTarget) {
+      return false;
+    }
+
+    // The in-flight line never counts against capacity or parallel checks
+    // (it may still be attached during an idempotent re-connect).
+    const incoming = target
+      .#liveIncomingLines()
+      .filter((incomingLine) => incomingLine !== line);
+
+    // A full target only admits when its policy makes room.
     if (
-      connector.id === this.id ||
-      !this.#capabilities.source ||
-      !connector.#capabilities.target ||
-      connector.#capabilities.maxIncoming === 0
+      incoming.length >= target.#rules.maxIncoming &&
+      target.#rules.onFull === "reject"
     ) {
       return false;
     }
 
-    const hasParallel = connector
-      .#liveIncomingLines()
-      .some((line) => line.start === this);
+    const hasParallel = incoming.some(
+      (incomingLine) => incomingLine.start === this,
+    );
     if (
       hasParallel &&
-      !(
-        this.#capabilities.allowParallel &&
-        connector.#capabilities.allowParallel
-      )
+      !(this.#rules.allowParallel && target.#rules.allowParallel)
     ) {
       return false;
     }
 
-    const event = { source: this, target: connector };
-    return (
-      this.#callbacks.canConnect?.(event) !== false &&
-      connector.#callbacks.canConnect?.(event) !== false
-    );
+    if (line) {
+      const proposal: ConnectionProposal = {
+        line,
+        source: this,
+        target,
+        phase,
+      };
+      if (this.#rules.isValidConnection?.(proposal) === false) return false;
+      if (target.#rules.isValidConnection?.(proposal) === false) return false;
+    }
+    return true;
   }
 
   runDragOutLine(prop: dragProp): void {
@@ -910,16 +973,31 @@ class ConnectorMirror extends ElementObject {
       return true;
     }
 
-    if (!this.canConnectToConnector(target)) return false;
+    // Admission needs the actual proposed line; mint it before validating
+    // and discard it again if the proposal is refused.
+    let createdHere = false;
+    if (line == null) {
+      line = this.createLine();
+      createdHere = true;
+    }
+    const alreadyOurs = this.#outgoingLines.includes(line);
+    const admitted =
+      this.#admitsConnection(target, line, "drop") &&
+      (alreadyOurs ||
+        this.#liveOutgoingLines().length < this.#rules.maxOutgoing);
+    if (!admitted) {
+      if (createdHere) line.destroy(false);
+      return false;
+    }
 
-    const maxIncoming = target.#capabilities.maxIncoming;
-    if (maxIncoming > 0) {
-      const currentIncomingLines = target.#liveIncomingLines();
-      const removeCount = Math.max(
-        0,
-        currentIncomingLines.length - maxIncoming + 1,
-      );
-      for (const incomingLine of currentIncomingLines.slice(0, removeCount)) {
+    // Explicit replacement policy: a full target admitted us only because it
+    // evicts its oldest incoming lines ("replace-oldest").
+    const incoming = target
+      .#liveIncomingLines()
+      .filter((incomingLine) => incomingLine !== line);
+    const overflow = incoming.length - target.#rules.maxIncoming + 1;
+    if (overflow > 0) {
+      for (const incomingLine of incoming.slice(0, overflow)) {
         incomingLine.start.deleteLine(
           incomingLine.start.outgoingLines.indexOf(incomingLine),
           "replacement",
@@ -927,10 +1005,7 @@ class ConnectorMirror extends ElementObject {
       }
     }
 
-    if (line == null) {
-      line = this.createLine();
-      this.#outgoingLines.unshift(line);
-    } else if (!this.#outgoingLines.includes(line)) {
+    if (!alreadyOurs) {
       this.#outgoingLines.unshift(line);
     }
 
@@ -1063,7 +1138,7 @@ class ConnectorMirror extends ElementObject {
     for (const connector of registeredConnectors(this.engine)) {
       if (
         connector.engine !== this.engine ||
-        !this.canConnectToConnector(connector)
+        !this.#admitsConnection(connector, this.#dragLine, "candidate")
       ) {
         continue;
       }
@@ -1189,7 +1264,7 @@ class ConnectorMirror extends ElementObject {
     const sourceSurfaces = getSourceSurfaces(this.global);
     const index = sourceSurfaces.indexOf(this);
     const shouldRegister =
-      this.#capabilities.source &&
+      this.isSource &&
       this.surfaceStrategies.some((strategy) => strategy.sourceHitTest);
     if (shouldRegister && index === -1) {
       sourceSurfaces.push(this);
@@ -1210,6 +1285,10 @@ class ConnectorMirror extends ElementObject {
 
   #liveIncomingLines(): LineMirror[] {
     return this.#incomingLines.filter((line) => !line.isDeleteRequested);
+  }
+
+  #liveOutgoingLines(): LineMirror[] {
+    return this.#outgoingLines.filter((line) => !line.isDeleteRequested);
   }
 
   #emitConnect(
@@ -1281,16 +1360,20 @@ class ConnectorMirror extends ElementObject {
   }
 }
 
-function resolveCapabilities(config: ConnectorConfig): ConnectorCapabilities {
-  const legacyMaxIncoming = config.maxConnectors ?? 1;
-  const legacySource = config.allowDragOut ?? false;
+function resolveRules(config: ConnectorConfig): ResolvedConnectorRules {
+  const rules = config.rules ?? {};
+  const toCount = (
+    limit: ConnectionLimit | undefined,
+    fallback: number,
+  ): number =>
+    limit === undefined ? fallback : limit === "unlimited" ? Infinity : limit;
   return {
-    source: config.capabilities?.source ?? legacySource,
-    target:
-      config.capabilities?.target ?? (!legacySource && legacyMaxIncoming !== 0),
-    maxIncoming: config.capabilities?.maxIncoming ?? legacyMaxIncoming,
-    reconnect: config.capabilities?.reconnect ?? true,
-    allowParallel: config.capabilities?.allowParallel ?? false,
+    maxOutgoing: toCount(rules.maxOutgoing, Infinity),
+    maxIncoming: toCount(rules.maxIncoming, 1),
+    reconnect: rules.reconnect ?? true,
+    allowParallel: rules.allowParallel ?? false,
+    onFull: rules.onFull ?? "reject",
+    isValidConnection: rules.isValidConnection ?? null,
   };
 }
 
@@ -1366,7 +1449,7 @@ export function resolveConnectorSourceAtPoint(
     if (
       connector.engine !== engine ||
       (node && connector.parent !== node) ||
-      !connector.capabilities.source
+      !connector.isSource
     ) {
       continue;
     }

@@ -25,7 +25,7 @@
 <Node bind:this={node} className="node card" LineSvelteComponent={DemoLine} nodeObject={nodeObject}>
   <div class="row-container">
     <input type="text" oninput={onInput} bind:this={input} />
-    <Connector name="text" maxConnectors={0} allowDragOut={true} />
+    <Connector name="text" rules={{ maxIncoming: 0 }} />
   </div>
 </Node>
 

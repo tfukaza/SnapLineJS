@@ -22,11 +22,12 @@ export type {
 } from "./node";
 export { ConnectorMirror, resolveConnectorSourceAtPoint } from "./connector";
 export type {
+  ConnectionLimit,
   ConnectionOrigin,
+  ConnectionProposal,
   ConnectorAnchor,
   ConnectorAnchorEvent,
   ConnectorCallbacks,
-  ConnectorCapabilities,
   ConnectorCandidateEvent,
   ConnectorCandidate,
   ConnectorConfig,
@@ -45,9 +46,11 @@ export type {
   ConnectorPointerEvent,
   ConnectorResolvedHit,
   ConnectorRole,
+  ConnectorRules,
   ConnectorSurfaceHitTestEvent,
   ConnectorSurfaceStrategy,
   DisconnectReason,
+  ResolvedConnectorRules,
   SnapLineMetadata,
 } from "./connector";
 export { LineMirror } from "./line";

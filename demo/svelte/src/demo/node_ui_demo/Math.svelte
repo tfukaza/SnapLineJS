@@ -139,15 +139,14 @@
         }}><p>/</p></button
       >
     </div>
-    <Connector name="output" maxConnectors={0} allowDragOut={true} />
+    <Connector name="output" rules={{ maxIncoming: 0 }} />
   </div>
   <hr>
   {#each Object.values(inputValues) as input (input.id)}
     <div class="row-container">
       <Connector
         name={`input-${input.id}`}
-        maxConnectors={1}
-        allowDragOut={false}
+        rules={{ maxOutgoing: 0, maxIncoming: 1, onFull: "replace-oldest" }}
         bind:this={input.connector}
       />
       <div class="input-container">

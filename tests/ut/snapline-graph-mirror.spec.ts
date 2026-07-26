@@ -83,11 +83,11 @@ test("lines move preview -> settled -> preview and unregister on destroy", () =>
     const targetNode = new NodeMirror(engine, null);
     const source = new ConnectorMirror(engine, sourceNode, {
       name: "out",
-      capabilities: { source: true, target: false },
+      rules: { maxIncoming: 0 },
     });
     const target = new ConnectorMirror(engine, targetNode, {
       name: "in",
-      capabilities: { source: false, target: true, maxIncoming: -1 },
+      rules: { maxOutgoing: 0, maxIncoming: "unlimited" },
     });
 
     const line = source.createLine();

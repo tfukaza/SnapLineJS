@@ -13,8 +13,7 @@
             <div class="connector-wrapper">
                 <Connector
                     name="input"
-                    maxConnectors={maxIncoming}
-                    allowDragOut={false}
+                    rules={{ maxOutgoing: 0, maxIncoming: maxIncoming === -1 ? "unlimited" : maxIncoming, onFull: "replace-oldest" }}
                     metadata={{ node: nodeId, port: "input" }}
                 />
             </div>
@@ -25,8 +24,7 @@
             <div class="connector-wrapper">
                 <Connector
                     name="output"
-                    maxConnectors={-1}
-                    allowDragOut={true}
+                    rules={{ maxIncoming: 0 }}
                     metadata={{ node: nodeId, port: "output" }}
                 />
             </div>

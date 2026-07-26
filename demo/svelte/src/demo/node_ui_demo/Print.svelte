@@ -22,11 +22,11 @@
 
 <Node bind:this={node} className="node card" LineSvelteComponent={DemoLine} nodeObject={nodeObject}>
   <div class="row-container">
-    <Connector name="text" maxConnectors={1} allowDragOut={false} />
+    <Connector name="text" rules={{ maxOutgoing: 0, maxIncoming: 1, onFull: "replace-oldest" }} />
     <p>Text</p>
   </div>
   <div class="row-container">
-    <Connector name="font-size" maxConnectors={1} allowDragOut={false} />
+    <Connector name="font-size" rules={{ maxOutgoing: 0, maxIncoming: 1, onFull: "replace-oldest" }} />
     <p>Font Size</p>
   </div>
   <hr/>

@@ -77,13 +77,13 @@
           <Node className="doc-node" x={55} y={80}>
             <strong>Source</strong>
             <span>Drag the port</span>
-            <div class="port right"><Connector name="value" maxConnectors={-1} /></div>
+            <div class="port right"><Connector name="value" rules={{ maxIncoming: 0 }} /></div>
           </Node>
           <Node className="doc-node" x={310} y={155}>
             <strong>Result</strong>
             <span>Drop it here</span>
             <div class="port left">
-              <Connector name="value" maxConnectors={1} allowDragOut={false} />
+              <Connector name="value" rules={{ maxOutgoing: 0, maxIncoming: 1, onFull: "replace-oldest" }} />
             </div>
           </Node>
         {:else if mode === "selection"}
