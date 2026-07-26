@@ -1,3 +1,12 @@
+import {
+  ConnectorMirror,
+  NodeMirror,
+  attachControlledGraph,
+  type ConnectorSurfaceStrategy,
+  type LineChangeRequest,
+  type ReconciliationError,
+} from "../../assets/snapline/core/src";
+
 // Headless engine stand-in for SnapLine unit tests: a six-stage frame queue,
 // an engine-scoped object table, and the input/collision surface the mirrors
 // touch during construction. No DOM, no render loop.
@@ -103,4 +112,71 @@ export function installObserverStubs(): () => void {
       delete (globalThis as Record<string, unknown>).MutationObserver;
     }
   };
+}
+
+/** Engine + attached controlled-graph bridge with request/diagnostic logs. */
+export function createControlledHarness() {
+  const { engine, global } = createEngineHarness();
+  const requests: LineChangeRequest[] = [];
+  const diagnosticsLog: (readonly ReconciliationError[])[] = [];
+  const handle = attachControlledGraph(engine, {
+    onLineChangeRequest: (request) => requests.push(request),
+    onDiagnosticsChanged: (diagnostics) => diagnosticsLog.push(diagnostics),
+  });
+  return { engine, global, handle, requests, diagnosticsLog };
+}
+
+export function eventPositionAt(x: number, y: number) {
+  return { x, y, cameraX: x, cameraY: y, screenX: x, screenY: y };
+}
+
+/** targetHitTest accepting drops left of x=500 (far drops miss). */
+export const nearTargetStrategy: ConnectorSurfaceStrategy = {
+  targetHitTest: ({ position }) =>
+    position.x < 500
+      ? { anchor: { x: position.x, y: position.y }, distance: 0 }
+      : null,
+};
+
+/** Arm a connection gesture on `connector` (pointer down at origin). */
+export function armGesture(connector: ConnectorMirror, pointerId = 7): void {
+  const event = { button: 0, pointerId } as any;
+  connector.onCursorDown({ position: eventPositionAt(0, 0), event } as any);
+}
+
+/** Drive dragStart + dragEnd on the gesture owner, dropping at `dropX`. */
+export function driveGestureDrop(
+  owner: ConnectorMirror,
+  dropX: number,
+  pointerId = 7,
+): void {
+  const event = { button: 0, pointerId } as any;
+  (owner as any).event.input.dragStart({
+    start: eventPositionAt(0, 0),
+    pointerId,
+    event,
+  });
+  (owner as any).event.input.dragEnd({
+    end: eventPositionAt(dropX, 10),
+    pointerId,
+    event,
+  });
+}
+
+/** Source/target pair with stable ids for controlled-graph tests. */
+export function mountConnectedPair(engine: any) {
+  const sourceNode = new NodeMirror(engine, null, { id: "n-src" });
+  const targetNode = new NodeMirror(engine, null, { id: "n-tgt" });
+  const source = new ConnectorMirror(engine, sourceNode, {
+    id: "out-1",
+    name: "out",
+    rules: { maxIncoming: 0 },
+  });
+  const target = new ConnectorMirror(engine, targetNode, {
+    id: "in-1",
+    name: "in",
+    rules: { maxOutgoing: 0 },
+    surfaceStrategies: [nearTargetStrategy],
+  });
+  return { sourceNode, targetNode, source, target };
 }

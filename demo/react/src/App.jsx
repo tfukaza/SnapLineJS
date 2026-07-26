@@ -17,7 +17,27 @@ import {
 import "../demo.css";
 import AssetBaseReactDemo from "./AssetBaseReactDemo";
 
-function ResizableNode({ title, x, y }) {
+// The demo's canonical line document: topology is always controlled, so
+// even a sandbox owns its lines and accepts every atomic proposal.
+function DemoGraph() {
+  const [lines, setLines] = useState([]);
+  const applyRequest = useCallback((request) => {
+    setLines((current) => [
+      ...current
+        .filter((record) => !request.remove.includes(record.id))
+        .map((record) => {
+          const update = request.update.find((u) => u.id === record.id);
+          return update
+            ? { ...record, toConnectorId: update.toConnectorId }
+            : record;
+        }),
+      ...request.add,
+    ]);
+  }, []);
+  return <ControlledGraph lines={lines} onLineChangeRequest={applyRequest} />;
+}
+
+function ResizableNode({ title, id = title, x, y }) {
   return (
     <Node
       className="card node"
@@ -34,14 +54,14 @@ function ResizableNode({ title, x, y }) {
       <div className="node-body" style={{ flex: 1 }}>
         <div className="input-row">
           <div className="connector-wrapper">
-            <Connector name="input" rules={{ maxOutgoing: 0, maxIncoming: 1, onFull: "replace-oldest" }} />
+            <Connector id={`${id}:input`} name="input" rules={{ maxOutgoing: 0, maxIncoming: 1, onFull: "replace-oldest" }} />
           </div>
           <span>Input</span>
         </div>
         <div className="output-row">
           <span>Output</span>
           <div className="connector-wrapper">
-            <Connector name="output" rules={{ maxIncoming: 0 }} />
+            <Connector id={`${id}:output`} name="output" rules={{ maxIncoming: 0 }} />
           </div>
         </div>
       </div>
@@ -55,6 +75,7 @@ function SnapLineResizeDemo() {
       <SnapEngine id="node-ui-resize-canvas" className="snapline-canvas">
         <div id="node-ui-demo">
           <div id="sl-background" />
+          <DemoGraph />
           <ResizableNode title="Resizable A" x={120} y={140} />
           <SimpleNode title="Fixed B" x={560} y={200} />
         </div>
@@ -99,7 +120,7 @@ function SnapLineGroupDemo() {
   );
 }
 
-function SimpleNode({ title, x, y }) {
+function SimpleNode({ title, id = title, x, y }) {
   return (
     <Node className="card node" x={x} y={y}>
       <div className="node-header">
@@ -108,14 +129,14 @@ function SimpleNode({ title, x, y }) {
       <div className="node-body">
         <div className="input-row">
           <div className="connector-wrapper">
-            <Connector name="input" rules={{ maxOutgoing: 0, maxIncoming: 1, onFull: "replace-oldest" }} />
+            <Connector id={`${id}:input`} name="input" rules={{ maxOutgoing: 0, maxIncoming: 1, onFull: "replace-oldest" }} />
           </div>
           <span>Input</span>
         </div>
         <div className="output-row">
           <span>Output</span>
           <div className="connector-wrapper">
-            <Connector name="output" rules={{ maxIncoming: 0 }} />
+            <Connector id={`${id}:output`} name="output" rules={{ maxIncoming: 0 }} />
           </div>
         </div>
       </div>
@@ -314,6 +335,7 @@ function SnapLineDemo() {
         <div id="node-ui-demo">
           <div id="sl-background" />
           <Select />
+          <DemoGraph />
           <SimpleNode title="Node A" x={120} y={120} />
           <SimpleNode title="Node B" x={440} y={170} />
           <SimpleNode title="Node C" x={280} y={360} />

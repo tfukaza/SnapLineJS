@@ -3,14 +3,16 @@ import {
   ConnectorMirror,
   GroupNodeMirror,
   NodeMirror,
-  SnapLineAuthorityError,
-  setGraphAuthority,
 } from "../../assets/snapline/core/src";
 import { getGraphMirror } from "../../assets/snapline/core/src/snapline-globals";
 import {
+  armGesture,
+  createControlledHarness,
   createEngineHarness,
   createSiblingEngine,
+  driveGestureDrop,
   installObserverStubs,
+  mountConnectedPair,
 } from "../helpers/snapline-harness";
 
 test("mirrors mint domain ids when none is supplied and honor supplied ids", () => {
@@ -79,33 +81,32 @@ test("duplicate ids never steal the index: first wins, diagnostic until resolved
 test("lines move preview -> settled -> preview and unregister on destroy", () => {
   const restore = installObserverStubs();
   try {
-    const { engine } = createEngineHarness();
-    setGraphAuthority(engine, "uncontrolled");
+    const { engine, handle } = createControlledHarness();
     const mirror = getGraphMirror(engine);
-    const sourceNode = new NodeMirror(engine, null);
-    const targetNode = new NodeMirror(engine, null);
-    const source = new ConnectorMirror(engine, sourceNode, {
-      name: "out",
-      rules: { maxIncoming: 0 },
-    });
-    const target = new ConnectorMirror(engine, targetNode, {
-      name: "in",
-      rules: { maxOutgoing: 0, maxIncoming: "unlimited" },
-    });
+    const { source } = mountConnectedPair(engine);
 
-    const line = source.createLine();
-    expect(mirror.previewLines).toContain(line);
-    expect(mirror.lines).not.toContain(line);
-    expect(mirror.line(line.lineId)).toBeNull();
+    // A freshly minted line is a preview, not part of the settled graph.
+    const preview = source.createLine();
+    expect(mirror.previewLines).toContain(preview);
+    expect(mirror.lines).not.toContain(preview);
+    expect(mirror.line(preview.lineId)).toBeNull();
+    preview.destroy(false);
+    expect(mirror.previewLines).not.toContain(preview);
 
-    expect(source.connectToConnector({ target, line })).toBe(true);
+    // A canonical record settles into the id index...
+    handle.setCanonicalGraph({
+      lines: [{ id: "l1", fromConnectorId: "out-1", toConnectorId: "in-1" }],
+    });
+    handle.flush();
+    const line = mirror.line("l1")!;
     expect(mirror.previewLines).not.toContain(line);
-    expect(mirror.line(line.lineId)).toBe(line);
 
+    // ...a reconnect pickup unsettles it back to a preview...
     line.clearTarget();
-    expect(mirror.line(line.lineId)).toBeNull();
+    expect(mirror.line("l1")).toBeNull();
     expect(mirror.previewLines).toContain(line);
 
+    // ...and destroy unregisters it entirely.
     line.destroy(false);
     expect(mirror.previewLines).not.toContain(line);
   } finally {
@@ -170,32 +171,26 @@ test("group registries are engine-scoped", () => {
   }
 });
 
-test("imperative topology commands require a declared uncontrolled authority", () => {
+test("a gesture without a graph owner warns and discards the preview", () => {
   const { engine } = createEngineHarness();
-  const sourceNode = new NodeMirror(engine, null);
-  const targetNode = new NodeMirror(engine, null);
-  const source = new ConnectorMirror(engine, sourceNode, {
-    name: "out",
-    rules: { maxIncoming: 0 },
-  });
-  const target = new ConnectorMirror(engine, targetNode, {
-    name: "in",
-    rules: { maxOutgoing: 0 },
-  });
-
-  // Undeclared: fail fast, nothing defaults into uncontrolled authority.
-  expect(() => source.connectToConnector({ target })).toThrow(
-    SnapLineAuthorityError,
-  );
+  const { source, target } = mountConnectedPair(engine);
+  const warnings: string[] = [];
+  const originalWarn = console.warn;
+  console.warn = (message: unknown) => {
+    warnings.push(String(message));
+  };
+  try {
+    armGesture(source, 5);
+    driveGestureDrop(source, 100, 5);
+  } finally {
+    console.warn = originalWarn;
+  }
+  // Topology is always controlled: with no document to propose to, the
+  // gesture cannot produce a line.
   expect(source.outgoingLines).toEqual([]);
-
-  setGraphAuthority(engine, "uncontrolled");
-  expect(source.connectToConnector({ target })).toBe(true);
-
-  // Re-declaring the same mode is a no-op; the other mode fails fast.
-  setGraphAuthority(engine, "uncontrolled");
-  expect(() => setGraphAuthority(engine, "controlled")).toThrow(
-    SnapLineAuthorityError,
+  expect(target.incomingLines).toEqual([]);
+  expect(warnings.some((message) => message.includes("no graph owner"))).toBe(
+    true,
   );
 });
 

@@ -9,6 +9,8 @@
     Placement,
     Select,
   } from "@snap-engine/snapline-svelte";
+  import { ControlledGraph } from "@snap-engine/snapline-svelte";
+  import type { LineChangeRequest, LineRecord } from "@snap-engine/snapline";
   import ClientDemoFrame from "$lib/components/ClientDemoFrame.svelte";
 
   let {
@@ -18,6 +20,22 @@
   } = $props();
 
   let engine = $state<CoreEngine | null>(null);
+  // Topology is always controlled: the demo owns its line document and
+  // accepts every atomic proposal.
+  let lines = $state<LineRecord[]>([]);
+  function applyRequest(request: LineChangeRequest): void {
+    lines = [
+      ...lines
+        .filter((record) => !request.remove.includes(record.id))
+        .map((record) => {
+          const update = request.update.find((entry) => entry.id === record.id);
+          return update
+            ? { ...record, toConnectorId: update.toConnectorId }
+            : record;
+        }),
+      ...request.add,
+    ];
+  }
   let placement = $state<PlacementController<string> | null>(null);
   let placedNodes = $state<Array<{ id: number; x: number; y: number }>>([]);
   let nextPlacedId = 1;
@@ -74,16 +92,17 @@
       <Engine bind:engine id={`snapline-doc-${mode}`} className="demo-engine">
         <div class="grid" data-demo-background></div>
         {#if mode === "connections"}
+          <ControlledGraph {lines} onLineChangeRequest={applyRequest} />
           <Node className="doc-node" x={55} y={80}>
             <strong>Source</strong>
             <span>Drag the port</span>
-            <div class="port right"><Connector name="value" rules={{ maxIncoming: 0 }} /></div>
+            <div class="port right"><Connector id="source:value" name="value" rules={{ maxIncoming: 0 }} /></div>
           </Node>
           <Node className="doc-node" x={310} y={155}>
             <strong>Result</strong>
             <span>Drop it here</span>
             <div class="port left">
-              <Connector name="value" rules={{ maxOutgoing: 0, maxIncoming: 1, onFull: "replace-oldest" }} />
+              <Connector id="result:value" name="value" rules={{ maxOutgoing: 0, maxIncoming: 1, onFull: "replace-oldest" }} />
             </div>
           </Node>
         {:else if mode === "selection"}

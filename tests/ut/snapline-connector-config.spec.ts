@@ -5,11 +5,12 @@ import {
   LineMirror,
   NodeMirror,
   PlacementController,
-  setGraphAuthority,
   type ConnectorSurfaceStrategy,
 } from "../../assets/snapline/core/src";
+import { getGraphMirror } from "../../assets/snapline/core/src/snapline-globals";
 
 import {
+  createControlledHarness,
   createEngineHarness,
   installObserverStubs,
 } from "../helpers/snapline-harness";
@@ -133,23 +134,28 @@ test("framework cleanup detaches elements without removing owned DOM", () => {
 });
 
 test("connector config updates stay live without replacing topology", () => {
-  const { engine, global } = createEngineHarness();
-  setGraphAuthority(engine, "uncontrolled");
+  const { engine, global, handle } = createControlledHarness();
   const sourceNode = new NodeMirror(engine, null);
   const targetNode = new NodeMirror(engine, null);
   const source = new ConnectorMirror(engine, sourceNode, {
+    id: "cfg-out",
     name: "source",
     rules: { maxIncoming: 0 },
   });
   const target = new ConnectorMirror(engine, targetNode, {
+    id: "cfg-in",
     name: "target",
     rules: { maxOutgoing: 0, maxIncoming: "unlimited" },
   });
   sourceNode.addConnectorObject(source);
   targetNode.addConnectorObject(target);
 
-  expect(source.connectToConnector({ target })).toBe(true);
-  const existingLine = source.outgoingLines[0];
+  handle.setCanonicalGraph({
+    lines: [{ id: "cfg-line", fromConnectorId: "cfg-out", toConnectorId: "cfg-in" }],
+  });
+  handle.flush();
+  const existingLine = getGraphMirror(engine).line("cfg-line")!;
+  expect(source.outgoingLines).toEqual([existingLine]);
 
   class UpdatedLine extends LineMirror {}
   const strategy: ConnectorSurfaceStrategy = {
@@ -242,22 +248,27 @@ test("connector config updates stay live without replacing topology", () => {
 
 test("visible port binding can toggle while preserving connector lines", () => {
   const restoreObservers = installObserverStubs();
-  const { engine } = createEngineHarness();
-  setGraphAuthority(engine, "uncontrolled");
+  const { engine, handle } = createControlledHarness();
   const sourceNode = new NodeMirror(engine, null);
   const targetNode = new NodeMirror(engine, null);
   const source = new ConnectorMirror(engine, sourceNode, {
+    id: "bind-out",
     name: "source",
     rules: { maxIncoming: 0 },
   });
   const target = new ConnectorMirror(engine, targetNode, {
+    id: "bind-in",
     name: "target",
     rules: { maxOutgoing: 0 },
   });
   sourceNode.addConnectorObject(source);
   targetNode.addConnectorObject(target);
-  expect(source.connectToConnector({ target })).toBe(true);
+  handle.setCanonicalGraph({
+    lines: [{ id: "bind-line", fromConnectorId: "bind-out", toConnectorId: "bind-in" }],
+  });
+  handle.flush();
   const line = source.outgoingLines[0];
+  expect(line.target).toBe(target);
   const firstElement = {} as HTMLElement;
   const secondElement = {} as HTMLElement;
 

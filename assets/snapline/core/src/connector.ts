@@ -12,11 +12,11 @@ import type { NodeMirror } from "./node";
 import { LineMirror, type LineMirrorPhase } from "./line";
 import { getGraphMirror } from "./snapline-globals";
 import { getSourceSurfaces } from "./snapline-globals";
-import { mintDomainId, SnapLineAuthorityError } from "./graph-mirror";
+import { mintDomainId } from "./graph-mirror";
 import type { LineChangeRequest } from "./line-reconciler";
 
 export type SnapLineMetadata = Record<string, unknown>;
-export type ConnectionOrigin = "gesture" | "programmatic" | "hydration";
+export type ConnectionOrigin = "gesture" | "hydration";
 export type DisconnectReason =
   | "gesture"
   | "replacement"
@@ -612,13 +612,12 @@ class ConnectorMirror extends ElementObject {
     line.setPhase("preview-free");
   }
 
+  /** @internal Reconciler/teardown-only: topology is always controlled —
+   * applications remove lines by removing their canonical records. */
   deleteLine(
     line: LineMirror,
     reason: DisconnectReason = "programmatic",
   ): LineMirror | null {
-    if (reason === "programmatic") {
-      this.#assertImperativeAllowed("deleteLine()");
-    }
     const index = this.#outgoingLines.indexOf(line);
     if (index === -1) return null;
 
@@ -635,10 +634,8 @@ class ConnectorMirror extends ElementObject {
     return line;
   }
 
+  /** @internal Teardown-only. */
   deleteAllLines(reason: DisconnectReason = "programmatic"): void {
-    if (reason === "programmatic") {
-      this.#assertImperativeAllowed("deleteAllLines()");
-    }
     for (const line of [...this.#outgoingLines]) {
       this.deleteLine(line, reason);
     }
@@ -681,6 +678,8 @@ class ConnectorMirror extends ElementObject {
     }
   }
 
+  /** @internal Gesture/reconciler-only: lines exist because canonical
+   * records (or in-flight gestures) say so. */
   createLine(config: { id?: string } = {}): LineMirror {
     const line = this.#config.lineClass
       ? new this.#config.lineClass(this.engine, this, config)
@@ -856,44 +855,16 @@ class ConnectorMirror extends ElementObject {
     line.setPreviewPosition(prop.end);
 
     const mirror = getGraphMirror(this.engine);
-    if (
-      mirror.authority === "controlled" &&
-      typeof mirror.reconciler?.dispatchLineChangeRequest === "function"
-    ) {
+    if (typeof mirror.reconciler?.dispatchLineChangeRequest === "function") {
       this.#endControlledDrop(line, candidate, prop);
       return;
     }
-    if (mirror.authority === null) {
-      // Bridge until adapters expose the declaration ergonomically: warn,
-      // then behave as an uncontrolled engine.
-      console.warn(
-        'SnapLine: gesture on an engine with no declared graph authority — call setGraphAuthority(engine, "controlled" | "uncontrolled").',
-      );
-    }
-
-    let connected = false;
-    if (candidate) {
-      connected = this.connectToConnector({
-        target: candidate.candidate.connector,
-        line,
-        origin: "gesture",
-        candidate,
-      });
-    }
-
-    if (!connected) {
-      this.#discardDraggedLine(line, prop, false);
-      return;
-    }
-
-    this.parent.scheduleLineWrites();
-    this.#callbacks.onDragEnd?.({
-      connector: this,
-      position: prop.end,
-      pointerId: prop.pointerId,
-      connected: true,
-    });
-    this.#resetGesture();
+    // Topology is always controlled: without a graph owner attached there
+    // is no document to propose to, so the gesture cannot produce a line.
+    console.warn(
+      "SnapLine: gesture on an engine with no graph owner — mount <ControlledGraph> (or attachControlledGraph) so gestures have a document to propose to.",
+    );
+    this.#discardDraggedLine(line, prop, false);
   }
 
   /**
@@ -1047,71 +1018,6 @@ class ConnectorMirror extends ElementObject {
     });
   }
 
-  connectToConnector(options: {
-    target: ConnectorMirror;
-    line?: LineMirror | null;
-    origin?: ConnectionOrigin;
-    payload?: unknown;
-    candidate?: ConnectorResolvedHit | null;
-  }): boolean {
-    const {
-      target,
-      line: requestedLine = null,
-      origin = "programmatic",
-      candidate = null,
-    } = options;
-    let line = requestedLine;
-    const hasPayload = Object.prototype.hasOwnProperty.call(options, "payload");
-    if (origin === "programmatic") {
-      this.#assertImperativeAllowed("connectToConnector()");
-    }
-    if (line && line.start !== this) return false;
-
-    const alreadyConnected =
-      line?.target === target &&
-      this.#outgoingLines.includes(line) &&
-      target.#incomingLines.includes(line);
-    if (alreadyConnected && line) {
-      if (hasPayload) line.setPayload(options.payload);
-      line.connectTarget(
-        target,
-        candidate?.candidate ?? null,
-        candidate?.strategy ?? target.#defaultAnchorStrategy(),
-      );
-      line.writeTransform();
-      return true;
-    }
-
-    // Admission needs the actual proposed line; mint it before validating
-    // and discard it again if the proposal is refused.
-    let createdHere = false;
-    if (line == null) {
-      line = this.createLine();
-      createdHere = true;
-    }
-    const alreadyOurs = this.#outgoingLines.includes(line);
-    const admitted =
-      this.#admitsConnection(target, line, "drop") &&
-      (alreadyOurs ||
-        this.#liveOutgoingLines().length < this.#rules.maxOutgoing);
-    if (!admitted) {
-      if (createdHere) line.destroy(false);
-      return false;
-    }
-
-    if (!alreadyOurs) {
-      this.#outgoingLines.unshift(line);
-    }
-    this.#settlePreviewLine(
-      line,
-      target,
-      candidate,
-      origin,
-      hasPayload ? { value: options.payload } : null,
-    );
-    return true;
-  }
-
   /**
    * Settle a line that already sits in this connector's outgoing list onto
    * its target: run the explicit replacement policy, detach any previous
@@ -1161,13 +1067,11 @@ class ConnectorMirror extends ElementObject {
     this.#emitConnect(target, line, origin);
   }
 
+  /** @internal Reconciler/teardown-only. */
   disconnectFromConnector(
     connector: ConnectorMirror,
     reason: DisconnectReason = "programmatic",
   ): void {
-    if (reason === "programmatic") {
-      this.#assertImperativeAllowed("disconnectFromConnector()");
-    }
     const line = this.#outgoingLines.find(
       (outgoingLine) => outgoingLine.target === connector,
     );
@@ -1501,24 +1405,6 @@ class ConnectorMirror extends ElementObject {
       return "connection-rejected";
     }
     return true;
-  }
-
-  /**
-   * Imperative topology commands require a declared "uncontrolled" engine;
-   * a reconciler pass acting for the canonical document bypasses the gate.
-   */
-  #assertImperativeAllowed(op: string): void {
-    const mirror = getGraphMirror(this.engine);
-    if (mirror.reconcilerActive) return;
-    if (mirror.authority === "uncontrolled") return;
-    if (mirror.authority === "controlled") {
-      throw new SnapLineAuthorityError(
-        `SnapLine: ${op} is an uncontrolled command, but this engine's graph is controlled — change the canonical document instead.`,
-      );
-    }
-    throw new SnapLineAuthorityError(
-      `SnapLine: declare setGraphAuthority(engine, "controlled" | "uncontrolled") before calling ${op}.`,
-    );
   }
 
   #liveIncomingLines(): LineMirror[] {

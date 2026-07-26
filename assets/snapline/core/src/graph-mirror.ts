@@ -50,13 +50,6 @@ export interface GraphReconcilerLike {
   dispatchLineChangeRequest?(request: LineChangeRequest): void;
 }
 
-/** One authority model per engine, declared explicitly before any graph use. */
-export type GraphAuthority = "controlled" | "uncontrolled";
-
-/** Thrown when a topology command runs on an undeclared engine or against
- * the other authority mode. */
-export class SnapLineAuthorityError extends Error {}
-
 /** A batch token from `beginBatch()`; `end()` is idempotent. */
 export interface GraphBatch {
   end(): void;
@@ -97,9 +90,6 @@ export class GraphMirror {
   // attachControlledGraph(); the connector emit sites and the scheduler
   // reach it through this slot.
   reconciler: GraphReconcilerLike | null = null;
-
-  /** Declared authority mode; null until `setGraphAuthority()` runs. */
-  authority: GraphAuthority | null = null;
 
   /** @internal True while a reconciler pass mutates topology on the
    * canonical document's behalf — those mutations bypass the authority gate

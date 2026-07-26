@@ -1,6 +1,7 @@
 <script lang="ts">
   import { Engine } from "@snap-engine/asset-base-svelte";
   import { Select } from "@snap-engine/snapline-svelte";
+  import DemoGraph from "./DemoGraph.svelte";
   import SimpleNode from "./SimpleNode.svelte";
 </script>
 
@@ -8,6 +9,7 @@
   <div id="node-ui-demo">
     <div id="sl-background"></div>
     <Select />
+    <DemoGraph />
     <SimpleNode title="Node A" x={120} y={120} />
     <SimpleNode title="Node B" x={440} y={170} />
     <SimpleNode title="Node C" x={280} y={360} maxIncoming={2} />

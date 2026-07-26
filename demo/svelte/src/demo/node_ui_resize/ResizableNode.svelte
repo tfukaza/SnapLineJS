@@ -1,7 +1,7 @@
 <script lang="ts">
     import { Node, Connector, Line } from "@snap-engine/snapline-svelte";
 
-    let { title = "Node", x = 0, y = 0, resizable = false, resizeHandles = undefined } = $props();
+    let { title = "Node", id = title, x = 0, y = 0, resizable = false, resizeHandles = undefined } = $props();
     let nodeComponent: any = $state(null);
 </script>
 
@@ -19,12 +19,12 @@
     <div class="rnode-header"><h3>{title}</h3></div>
     <div class="rnode-body">
         <div class="input-row">
-            <div class="cw"><Connector name="input" rules={{ maxOutgoing: 0, maxIncoming: 1, onFull: "replace-oldest" }} /></div>
+            <div class="cw"><Connector id={`${id}:input`} name="input" rules={{ maxOutgoing: 0, maxIncoming: 1, onFull: "replace-oldest" }} /></div>
             <span>In</span>
         </div>
         <div class="output-row">
             <span>Out</span>
-            <div class="cw"><Connector name="output" rules={{ maxIncoming: 0 }} /></div>
+            <div class="cw"><Connector id={`${id}:output`} name="output" rules={{ maxIncoming: 0 }} /></div>
         </div>
     </div>
 </Node>

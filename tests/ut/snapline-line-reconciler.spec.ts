@@ -2,23 +2,13 @@ import { expect, test } from "@playwright/test";
 import {
   ConnectorMirror,
   NodeMirror,
-  attachControlledGraph,
-  type LineChangeRequest,
-  type ReconciliationError,
 } from "../../assets/snapline/core/src";
 import { getGraphMirror } from "../../assets/snapline/core/src/snapline-globals";
-import { createEngineHarness } from "../helpers/snapline-harness";
-
-function controlledHarness() {
-  const { engine, global } = createEngineHarness();
-  const requests: LineChangeRequest[] = [];
-  const diagnosticsLog: (readonly ReconciliationError[])[] = [];
-  const handle = attachControlledGraph(engine, {
-    onLineChangeRequest: (request) => requests.push(request),
-    onDiagnosticsChanged: (diagnostics) => diagnosticsLog.push(diagnostics),
-  });
-  return { engine, global, handle, requests, diagnosticsLog };
-}
+import {
+  createControlledHarness as controlledHarness,
+  eventPositionAt as pos,
+  nearTargetStrategy as nearStrategy,
+} from "../helpers/snapline-harness";
 
 function mountPair(engine: any) {
   const sourceNode = new NodeMirror(engine, null, { id: "n-src" });
@@ -192,17 +182,7 @@ test("duplicate canonical ids and predicate vetoes surface as diagnostics", () =
   expect(mirror.diagnostics()).toEqual([]);
 });
 
-// ---- Controlled gesture protocol (3e) ----
-
-function pos(x: number, y: number) {
-  return { x, y, cameraX: x, cameraY: y, screenX: x, screenY: y };
-}
-
-/** targetHitTest that only accepts drops left of x=500 (so far drops miss). */
-const nearStrategy = {
-  targetHitTest: ({ position }: any) =>
-    position.x < 500 ? { anchor: { x: position.x, y: position.y }, distance: 0 } : null,
-};
+// ---- Controlled gesture protocol ----
 
 function gestureHarness() {
   const base = controlledHarness();

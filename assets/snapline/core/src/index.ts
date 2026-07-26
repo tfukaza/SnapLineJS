@@ -103,11 +103,9 @@ export type {
   ConnectorId,
   LineId,
   ReconciliationError,
-  GraphAuthority,
   GraphBatch,
 } from "./graph-mirror";
-export { SnapLineAuthorityError } from "./graph-mirror";
-export { setGraphAuthority, attachControlledGraph } from "./snapline-globals";
+export { attachControlledGraph } from "./snapline-globals";
 export type {
   CanonicalGraphSnapshot,
   ControlledGraphCallbacks,
