@@ -95,9 +95,12 @@ export type {
   PlacementSize,
   PlacementSnapshot,
 } from "./placement";
-export { NodeManager } from "./node-manager";
-export type { EdgeSyncLike } from "./node-manager";
-export { getNodeManager } from "./snapline-globals";
+export type {
+  NodeId,
+  ConnectorId,
+  LineId,
+  ReconciliationError,
+} from "./graph-mirror";
 export { EdgeSyncController } from "./edge-sync";
 export type {
   EdgeConnectIntentEvent,

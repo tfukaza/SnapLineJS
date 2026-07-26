@@ -10,8 +10,9 @@ import type {
 import { CircleCollider } from "@snap-engine/core/collision";
 import type { NodeMirror } from "./node";
 import { LineMirror } from "./line";
-import { getNodeManager } from "./snapline-globals";
+import { getGraphMirror } from "./snapline-globals";
 import { getSourceSurfaces } from "./snapline-globals";
+import { mintDomainId } from "./graph-mirror";
 
 export type SnapLineMetadata = Record<string, unknown>;
 export type ConnectionOrigin = "gesture" | "programmatic" | "hydration";
@@ -179,6 +180,12 @@ enum ConnectorState {
 }
 
 export interface ConnectorConfig {
+  /**
+   * Stable application-facing identity (graph-global, one namespace across
+   * the whole graph). Minted by SnapLine when omitted; supply one for any
+   * graph that outlives this mirror (persistence, remounts, reloads).
+   */
+  id?: string;
   name?: string;
   /** @deprecated Prefer capabilities.maxIncoming. */
   maxConnectors?: number;
@@ -210,6 +217,9 @@ interface ArmedConnection {
 }
 
 class ConnectorMirror extends ElementObject {
+  /** Stable domain identity — supplied via `ConnectorConfig.id` or minted.
+   * Never the engine-internal `BaseObject.id`. */
+  readonly connectorId: string;
   #config: ConnectorConfig;
   #capabilities: Readonly<ConnectorCapabilities>;
   #name: string;
@@ -250,6 +260,7 @@ class ConnectorMirror extends ElementObject {
     this.#config = { ...config };
     this.#capabilities = Object.freeze(resolveCapabilities(this.#config));
     this.#name = config.name || this.id || "";
+    this.connectorId = config.id ?? mintDomainId("connector", this.global);
     this.#callbacks = config.callbacks ?? {};
     this.#localCenter = { x: 0, y: 0 };
     this.transformMode = "none";
@@ -269,7 +280,7 @@ class ConnectorMirror extends ElementObject {
     );
     this.addCollider(this.#hitCircle);
     this.#syncSourceSurfaceRegistration();
-    getNodeManager(this.engine).registerConnector(this);
+    getGraphMirror(this.engine).registerConnector(this);
 
     this.event.dom.onAssignDom = () => {
       this.schedule(
@@ -1008,7 +1019,7 @@ class ConnectorMirror extends ElementObject {
     }
     this.#resetGesture();
     this.deleteAllLines("teardown");
-    getNodeManager(this.engine).unregisterConnector(this);
+    getGraphMirror(this.engine).unregisterConnector(this);
     if (this.parent?._connectors[this.#name] === this) {
       delete this.parent._connectors[this.#name];
     }
@@ -1222,7 +1233,7 @@ class ConnectorMirror extends ElementObject {
       role: "target",
       origin,
     });
-    getNodeManager(this.engine).edgeSync?.notifyConnect({
+    getGraphMirror(this.engine).edgeSync?.notifyConnect({
       source: this,
       target,
       connector: this,
@@ -1256,7 +1267,7 @@ class ConnectorMirror extends ElementObject {
       role: "target",
       reason,
     });
-    getNodeManager(this.engine).edgeSync?.notifyDisconnect({
+    getGraphMirror(this.engine).edgeSync?.notifyDisconnect({
       source: this,
       target,
       connector: this,

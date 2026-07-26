@@ -4,7 +4,7 @@ import type {
   ConnectorDisconnectionEvent,
 } from "./connector";
 import type { LineMirror } from "./line";
-import { getNodeManager } from "./snapline-globals";
+import { getGraphMirror } from "./snapline-globals";
 
 export interface EdgeEndpoint {
   node: string;
@@ -84,7 +84,7 @@ export class EdgeSyncController {
 
   constructor(config: EdgeSyncConfig) {
     this.#config = config;
-    const manager = getNodeManager(config.engine);
+    const manager = getGraphMirror(config.engine);
     if (manager.edgeSync && manager.edgeSync !== this) {
       console.warn(
         "SnapLine: replacing an existing EdgeSyncController for this engine.",
@@ -99,11 +99,11 @@ export class EdgeSyncController {
 
   dispose(): void {
     this.#disposed = true;
-    const manager = getNodeManager(this.#config.engine);
+    const manager = getGraphMirror(this.#config.engine);
     if (manager.edgeSync === this) manager.edgeSync = null;
   }
 
-  // @internal Called by NodeManager when a connector registers after this
+  // @internal Called by the GraphMirror registry when a connector registers after this
   // controller exists (a node mounted). Coalesced into one microtask so a
   // mounting batch reconciles once, before the frame paints.
   connectorRegistered(): void {
@@ -123,7 +123,7 @@ export class EdgeSyncController {
     if (this.#reconciling) return;
     this.#reconciling = true;
     try {
-      const manager = getNodeManager(this.#config.engine);
+      const manager = getGraphMirror(this.#config.engine);
       const identity = this.#config.identity;
       const connectors = manager.connectors;
 

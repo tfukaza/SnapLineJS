@@ -1,7 +1,7 @@
 import type { RectCollider } from "@snap-engine/core/collision";
 import type { eventPosition } from "@snap-engine/core";
 import type { NodeMirror } from "./node";
-import { NodeManager } from "./node-manager";
+import { GraphMirror } from "./graph-mirror";
 
 /**
  * Structural stand-in for GroupNodeMirror so node.ts can notify groups on
@@ -62,10 +62,12 @@ export interface SnapLineSharedData {
   allowCameraControl?: boolean;
   /**
    * Per-engine SnapLine registries. GlobalManager is application-wide, so the
-   * map is keyed by engine; `getNodeManager` lazy-creates entries the first
-   * time a SnapLine component registers on that engine.
+   * map is keyed by engine; `getGraphMirror` lazy-creates entries the first
+   * time a SnapLine mirror registers on that engine. WeakMap so a destroyed
+   * engine releases its registry (and every mirror it indexes) — nothing ever
+   * enumerates this map.
    */
-  nodeManagers?: Map<unknown, NodeManager>;
+  graphMirrors?: WeakMap<object, GraphMirror>;
 }
 
 /** Typed view over the untyped global data bag (cast at the boundary). */
@@ -100,18 +102,19 @@ export function getSourceSurfaces(global: {
 }
 
 
-export function getNodeManager(engine: {
+export function getGraphMirror(engine: {
   global: { data: any } | null;
-}): NodeManager {
+}): GraphMirror {
   if (!engine.global) {
-    throw new Error("SnapLine: getNodeManager requires an initialized engine.");
+    throw new Error("SnapLine: getGraphMirror requires an initialized engine.");
   }
   const data = snapData(engine.global);
-  if (!data.nodeManagers) data.nodeManagers = new Map();
-  let manager = data.nodeManagers.get(engine);
-  if (!manager) {
-    manager = new NodeManager(engine);
-    data.nodeManagers.set(engine, manager);
+  if (!data.graphMirrors) data.graphMirrors = new WeakMap();
+  const key = engine as unknown as object;
+  let mirror = data.graphMirrors.get(key);
+  if (!mirror) {
+    mirror = new GraphMirror(engine);
+    data.graphMirrors.set(key, mirror);
   }
-  return manager;
+  return mirror;
 }

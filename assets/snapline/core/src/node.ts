@@ -14,7 +14,8 @@ import type {
   pointerMoveProp,
 } from "@snap-engine/core";
 import { RectCollider } from "@snap-engine/core/collision";
-import { getSelectList, getGroups, getNodeManager, getResizeHandles, snapData } from "./snapline-globals";
+import { getSelectList, getGroups, getGraphMirror, getResizeHandles, snapData } from "./snapline-globals";
+import { mintDomainId } from "./graph-mirror";
 import type { SnapLineMetadata } from "./connector";
 
 export type ResizeHandle = "n" | "ne" | "e" | "se" | "s" | "sw" | "w" | "nw";
@@ -42,6 +43,12 @@ export const DEFAULT_RESIZE_CURSORS: Readonly<Record<ResizeHandle, string>> = {
 };
 
 export interface NodeConfig {
+  /**
+   * Stable application-facing identity (graph-global). Minted by SnapLine
+   * when omitted; supply one for any graph that outlives this mirror
+   * (persistence, remounts, cross-session reloads).
+   */
+  id?: string;
   lockPosition?: boolean;
   /** Enables resize handles. All four sides and corners are enabled by default. */
   resizable?: boolean;
@@ -65,7 +72,9 @@ export interface NodeConfig {
 /** Shared by core hitboxes and adapter resize-handle visuals. */
 export const DEFAULT_RESIZE_HANDLE_THICKNESS = 14;
 
-const DEFAULT_NODE_CONFIG: Required<NodeConfig> = {
+// `id` is identity, not configuration — read once in the constructor, never
+// defaulted or merged.
+const DEFAULT_NODE_CONFIG: Required<Omit<NodeConfig, "id">> = {
   lockPosition: false,
   resizable: false,
   minWidth: 0,
@@ -305,7 +314,10 @@ function findResizeHandle(
 }
 
 class NodeMirror extends ElementObject {
-  #config: Required<NodeConfig>;
+  /** Stable domain identity — supplied via `NodeConfig.id` or minted. Never
+   * the engine-internal `BaseObject.id`. */
+  readonly nodeId: string;
+  #config: Required<Omit<NodeConfig, "id">>;
   _connectors: { [key: string]: ConnectorMirror };
   _components: { [key: string]: ElementObject };
   _dragStartX = 0;
@@ -344,7 +356,8 @@ class NodeMirror extends ElementObject {
     super(engine, parent);
     this.#config = mergeConfig(DEFAULT_NODE_CONFIG, config);
     this.#callbacks = this.#config.callbacks;
-    getNodeManager(this.engine).registerNode(this);
+    this.nodeId = config.id ?? mintDomainId("node", this.global);
+    getGraphMirror(this.engine).registerNode(this);
     const resizeEnabled = config.resizable === true || config.resizeHandles !== undefined;
     this.#resizeHandles = !resizeEnabled
       ? []
@@ -409,7 +422,7 @@ class NodeMirror extends ElementObject {
     getSelectList(this.global);
   }
 
-  get config(): Required<NodeConfig> {
+  get config(): Required<Omit<NodeConfig, "id">> {
     return this.#config;
   }
 
@@ -1099,7 +1112,7 @@ class NodeMirror extends ElementObject {
       // disconnect — keep the reason contract honest for intent consumers.
       connector.deleteAllLines("teardown");
     }
-    getNodeManager(this.engine).unregisterNode(this);
+    getGraphMirror(this.engine).unregisterNode(this);
     this.setSelected(false);
     if (this.#resizeHitBoxes.size > 0) {
       const ownedHandles = new Set(this.#resizeHitBoxes.values());

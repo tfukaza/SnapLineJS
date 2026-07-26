@@ -498,12 +498,10 @@ export class BaseObject extends CoreObject {
     }
   }
 
+  // Read-only: the id keys the global object table and render-queue task
+  // ids, so reassigning it after construction would orphan those entries.
   get id(): string {
     return this.#id;
-  }
-
-  set id(id: string) {
-    this.#id = id;
   }
 
   get parent(): BaseObject | null {

@@ -9,6 +9,8 @@ import type {
   ConnectorSurfaceStrategy,
 } from "./connector";
 import type { GeometryWriter } from "./geometry";
+import { getGraphMirror } from "./snapline-globals";
+import { mintDomainId } from "./graph-mirror";
 
 export interface LineGeometrySnapshot {
   readonly start: ConnectorAnchor;
@@ -27,6 +29,10 @@ class LineMirror extends ElementObject {
   endWorldX: number;
   endWorldY: number;
 
+  /** Stable domain identity — minted at creation (or supplied by the
+   * reconciler for canonical records). Never the engine-internal
+   * `BaseObject.id`. */
+  readonly lineId: string;
   start: ConnectorMirror;
   target: ConnectorMirror | null;
   payload: unknown;
@@ -43,7 +49,7 @@ class LineMirror extends ElementObject {
   #targetHit: ConnectorHit | null = null;
   #previewPosition: ConnectorPoint | null = null;
 
-  constructor(engine: any, parent: BaseObject) {
+  constructor(engine: any, parent: BaseObject, config: { id?: string } = {}) {
     super(engine, parent);
 
     this.endWorldX = 0;
@@ -57,6 +63,13 @@ class LineMirror extends ElementObject {
     this.phase = "source-start";
     this.candidate = null;
     this.transformMode = "direct";
+    this.lineId = config.id ?? mintDomainId("line", this.global);
+    getGraphMirror(this.engine).registerLine(this);
+  }
+
+  override destroy(removeElement: boolean = true): void {
+    getGraphMirror(this.engine).unregisterLine(this);
+    super.destroy(removeElement);
   }
 
   bindGeometryWriter(
@@ -147,6 +160,7 @@ class LineMirror extends ElementObject {
     this.#targetHit = candidate?.hit ?? this.#targetHit;
     this.candidate = null;
     this.phase = "connected";
+    getGraphMirror(this.engine).settleLine(this);
     this.updateAnchors();
     this.#emitStateChange();
   }
@@ -161,6 +175,7 @@ class LineMirror extends ElementObject {
     this.#targetStrategy = null;
     this.#targetHit = null;
     this.phase = "preview-free";
+    getGraphMirror(this.engine).unsettleLine(this);
     if (changed) this.#emitStateChange();
   }
 

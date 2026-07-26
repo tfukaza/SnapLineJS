@@ -1,7 +1,7 @@
 import type { ConnectorMirror } from "./connector";
 import { GroupNodeMirror } from "./group";
 import type { NodeMirror } from "./node";
-import { getNodeManager, getSelectList } from "./snapline-globals";
+import { getGraphMirror, getSelectList } from "./snapline-globals";
 
 type EngineLike = {
   global: {
@@ -9,24 +9,24 @@ type EngineLike = {
   };
 };
 
-// Enumeration delegates to the per-engine NodeManager registry (components
+// Enumeration delegates to the per-engine GraphMirror registry (components
 // register in their constructors), replacing the old engine-object-table
 // scans. Public signatures unchanged.
 
 export function getNodes(engine: EngineLike): readonly NodeMirror[] {
-  return getNodeManager(engine).nodes;
+  return getGraphMirror(engine).nodes;
 }
 
 export function getConnectors(
   engine: EngineLike,
 ): readonly ConnectorMirror[] {
-  return getNodeManager(engine).connectors;
+  return getGraphMirror(engine).connectors;
 }
 
 export function getGroupNodes(
   engine: EngineLike,
 ): readonly GroupNodeMirror[] {
-  return getNodeManager(engine).nodes.filter(
+  return getGraphMirror(engine).nodes.filter(
     (node): node is GroupNodeMirror => node instanceof GroupNodeMirror,
   );
 }
