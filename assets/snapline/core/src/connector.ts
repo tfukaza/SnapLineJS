@@ -325,12 +325,14 @@ class ConnectorMirror extends ElementObject {
     this.updateConfig({ callbacks });
   }
 
-  get outgoingLines(): LineMirror[] {
-    return this.#outgoingLines;
+  // Snapshots, never the internal arrays — topology mutation goes through
+  // connectToConnector/deleteLine/disconnectFromConnector.
+  get outgoingLines(): readonly LineMirror[] {
+    return [...this.#outgoingLines];
   }
 
-  get incomingLines(): LineMirror[] {
-    return this.#incomingLines;
+  get incomingLines(): readonly LineMirror[] {
+    return [...this.#incomingLines];
   }
 
   get targetConnector(): ConnectorMirror | null {
@@ -1375,11 +1377,10 @@ export function resolveConnectorSourceAtPoint(
 }
 
 function registeredConnectors(engine: any): ConnectorMirror[] {
-  const objectTable = engine.global?.getEngineObjectTable?.(engine);
-  if (!objectTable) return [];
-  return Object.values(objectTable).filter(
-    (object): object is ConnectorMirror =>
-      object instanceof ConnectorMirror && !object.isDeleteRequested,
+  // The registry is the one connector source — no engine-object-table scan
+  // (this runs per pointer move during a connection drag).
+  return getGraphMirror(engine).connectors.filter(
+    (connector) => !connector.isDeleteRequested,
   );
 }
 

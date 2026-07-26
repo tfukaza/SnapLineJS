@@ -319,7 +319,6 @@ class NodeMirror extends ElementObject {
   readonly nodeId: string;
   #config: Required<Omit<NodeConfig, "id">>;
   _connectors: { [key: string]: ConnectorMirror };
-  _components: { [key: string]: ElementObject };
   _dragStartX = 0;
   _dragStartY = 0;
   _prop: { [key: string]: any };
@@ -371,7 +370,6 @@ class NodeMirror extends ElementObject {
       DEFAULT_RESIZE_HANDLE_THICKNESS;
 
     this._connectors = {};
-    this._components = {};
     this._dragStartX = this.worldTransform.x;
     this._dragStartY = this.worldTransform.y;
     this._mouseDownX = 0;
@@ -484,15 +482,6 @@ class NodeMirror extends ElementObject {
       selected,
       selection: [...getGraphMirror(this.engine).selection],
     });
-  }
-
-  _filterDeletedLines(svgLines: LineMirror[]) {
-    for (let i = 0; i < svgLines.length; i++) {
-      if (svgLines[i].isDeleteRequested) {
-        svgLines.splice(i, 1);
-        i--;
-      }
-    }
   }
 
   /** Schedules a WRITE_2 write for every line on every connector of this node. */

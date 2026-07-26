@@ -82,7 +82,9 @@ export {
   getGroupNodes,
   getNodes,
   getSelectedNodes,
+  query,
 } from "./query";
+export type { GraphQuery } from "./query";
 export { PlacementController } from "./placement";
 export type {
   PlacementAnchor,
