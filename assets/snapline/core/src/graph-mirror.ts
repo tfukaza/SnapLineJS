@@ -87,6 +87,7 @@ export class GraphMirror {
   #linesById = new Map<LineId, LineMirror>();
   #previewLines = new Set<LineMirror>();
   #duplicateErrors = new Map<object, ReconciliationError>();
+  #reconciliationErrors: readonly ReconciliationError[] = [];
 
   // Engine-scoped controlled-lines reconciler. Registered by
   // EdgeSyncController's constructor; the connector emit sites forward
@@ -281,7 +282,22 @@ export class GraphMirror {
   }
 
   diagnostics(): readonly ReconciliationError[] {
-    return [...this.#duplicateErrors.values()];
+    return [...this.#duplicateErrors.values(), ...this.#reconciliationErrors];
+  }
+
+  /** @internal Reconciler-only: replace the derived per-pass error set.
+   * Returns whether the contents changed (shallow, order-insensitive on the
+   * code+id triple). */
+  setReconciliationErrors(errors: readonly ReconciliationError[]): boolean {
+    const key = (error: ReconciliationError) =>
+      `${error.code}|${error.lineId ?? ""}|${error.connectorId ?? ""}|${error.nodeId ?? ""}`;
+    const previous = this.#reconciliationErrors.map(key).sort();
+    const next = errors.map(key).sort();
+    this.#reconciliationErrors = [...errors];
+    return (
+      previous.length !== next.length ||
+      previous.some((entry, index) => entry !== next[index])
+    );
   }
 
   #index<T extends object>(

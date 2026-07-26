@@ -5,6 +5,11 @@ import {
   SnapLineAuthorityError,
   type GraphAuthority,
 } from "./graph-mirror";
+import {
+  LineReconciler,
+  type ControlledGraphCallbacks,
+  type ControlledGraphHandle,
+} from "./line-reconciler";
 
 /**
  * Structural source-surface contract shared with engine input. Keeping this
@@ -112,4 +117,29 @@ export function setGraphAuthority(
     );
   }
   mirror.authority = authority;
+}
+
+/**
+ * Attach the controlled-graph bridge: declares "controlled" authority,
+ * installs the line reconciler, and returns the handle the application (or
+ * adapter) pushes canonical snapshots through.
+ */
+export function attachControlledGraph(
+  engine: { global: { data: any } | null },
+  callbacks: ControlledGraphCallbacks,
+): ControlledGraphHandle {
+  setGraphAuthority(engine, "controlled");
+  const mirror = getGraphMirror(engine);
+  if (mirror.edgeSync) {
+    console.warn(
+      "SnapLine: replacing this engine's existing controlled-graph bridge.",
+    );
+  }
+  const reconciler = new LineReconciler(mirror, callbacks);
+  mirror.edgeSync = reconciler;
+  return {
+    setCanonicalGraph: (snapshot) => reconciler.setCanonicalGraph(snapshot),
+    flush: () => mirror.flush(),
+    dispose: () => reconciler.dispose(),
+  };
 }

@@ -1305,6 +1305,98 @@ class ConnectorMirror extends ElementObject {
   }
 
   /**
+   * @internal Reconciler-only: create a settled mirror for a canonical line
+   * record. No gesture policy — capacity is strict (never evicts, regardless
+   * of onFull) and refusal reports a diagnostic code instead of throwing.
+   */
+  createSettledLineFromRecord(
+    target: ConnectorMirror,
+    record: { id: string; payload?: unknown },
+  ): LineMirror | "capacity-exceeded" | "connection-rejected" {
+    const structural = this.#admitsRecordEndpoints(target, null);
+    if (structural !== true) return structural;
+
+    const line = this.createLine({ id: record.id });
+    const proposal: ConnectionProposal = {
+      line,
+      source: this,
+      target,
+      phase: "drop",
+    };
+    if (
+      this.#rules.isValidConnection?.(proposal) === false ||
+      target.#rules.isValidConnection?.(proposal) === false
+    ) {
+      line.destroy(false);
+      return "connection-rejected";
+    }
+    this.#outgoingLines.unshift(line);
+    this.#settlePreviewLine(line, target, null, "hydration", {
+      value: record.payload,
+    });
+    return line;
+  }
+
+  /**
+   * @internal Reconciler-only: move an existing settled line to a new
+   * canonical target, preserving the mirror. Strict capacity; never evicts.
+   */
+  retargetSettledLineFromRecord(
+    line: LineMirror,
+    target: ConnectorMirror,
+  ): true | "capacity-exceeded" | "connection-rejected" {
+    const structural = this.#admitsRecordEndpoints(target, line);
+    if (structural !== true) return structural;
+    const proposal: ConnectionProposal = {
+      line,
+      source: this,
+      target,
+      phase: "drop",
+    };
+    if (
+      this.#rules.isValidConnection?.(proposal) === false ||
+      target.#rules.isValidConnection?.(proposal) === false
+    ) {
+      return "connection-rejected";
+    }
+    this.#settlePreviewLine(line, target, null, "hydration", null);
+    return true;
+  }
+
+  /** Strict structural admission for canonical records: roles, capacity
+   * without replacement, and the parallel rule. */
+  #admitsRecordEndpoints(
+    target: ConnectorMirror,
+    line: LineMirror | null,
+  ): true | "capacity-exceeded" | "connection-rejected" {
+    if (target.id === this.id || !this.isSource || !target.isTarget) {
+      return "connection-rejected";
+    }
+    const incoming = target
+      .#liveIncomingLines()
+      .filter((incomingLine) => incomingLine !== line);
+    const outgoing = this.#liveOutgoingLines().filter(
+      (outgoingLine) => outgoingLine !== line,
+    );
+    if (
+      incoming.length >= target.#rules.maxIncoming ||
+      outgoing.length >= this.#rules.maxOutgoing
+    ) {
+      return "capacity-exceeded";
+    }
+    const hasParallel = incoming.some(
+      (incomingLine) => incomingLine.start === this,
+    );
+    if (
+      hasParallel &&
+      !(this.#rules.allowParallel && target.#rules.allowParallel)
+    ) {
+      return "connection-rejected";
+    }
+    return true;
+  }
+
+  /**
    * Imperative topology commands require a declared "uncontrolled" engine;
    * a reconciler pass acting for the canonical document bypasses the gate.
    */

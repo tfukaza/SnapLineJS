@@ -109,7 +109,16 @@ export type {
   GraphBatch,
 } from "./graph-mirror";
 export { SnapLineAuthorityError } from "./graph-mirror";
-export { setGraphAuthority } from "./snapline-globals";
+export { setGraphAuthority, attachControlledGraph } from "./snapline-globals";
+export type {
+  CanonicalGraphSnapshot,
+  ControlledGraphCallbacks,
+  ControlledGraphHandle,
+  LineChangeRequest,
+  LineEndpointUpdate,
+  LineRecord,
+  ProposedLine,
+} from "./line-reconciler";
 export { EdgeSyncController } from "./edge-sync";
 export type {
   EdgeConnectIntentEvent,
