@@ -175,10 +175,6 @@
         });
     });
 
-    export function addSetPropCallback(name: string, callback: (prop: any) => void) {
-        nodeObject!.addSetPropCallback(callback, name);
-    }
-
     export function getNodeObject() {
         return nodeObject;
     }

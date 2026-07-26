@@ -321,8 +321,6 @@ class NodeMirror extends ElementObject {
   _connectors: { [key: string]: ConnectorMirror };
   _dragStartX = 0;
   _dragStartY = 0;
-  _prop: { [key: string]: any };
-  _propSetCallback: { [key: string]: (value: any) => void };
   _nodeStyle: any;
   #hitBox: RectCollider;
   _selected: boolean;
@@ -374,8 +372,6 @@ class NodeMirror extends ElementObject {
     this._dragStartY = this.worldTransform.y;
     this._mouseDownX = 0;
     this._mouseDownY = 0;
-    this._prop = {};
-    this._propSetCallback = {};
     this.transformMode = "direct";
 
     this.event.input.pointerDown = this.onCursorDown;
@@ -1016,10 +1012,6 @@ class NodeMirror extends ElementObject {
     connector.assignToNode(this);
   }
 
-  addSetPropCallback(callback: (value: any) => void, name: string) {
-    this._propSetCallback[name] = callback;
-  }
-
   getAllOutgoingLines(): LineMirror[] {
     return Object.values(this._connectors).flatMap(
       (connector) => connector.outgoingLines,
@@ -1030,56 +1022,6 @@ class NodeMirror extends ElementObject {
     return Object.values(this._connectors).flatMap(
       (connector) => connector.incomingLines,
     );
-  }
-
-  getProp(name: string) {
-    return this._prop[name];
-  }
-
-  setProp(name: string, value: any) {
-    const pending: Array<{ node: NodeMirror; name: string }> = [
-      { node: this, name },
-    ];
-    const visited = new Map<NodeMirror, Set<string>>();
-
-    while (pending.length > 0) {
-      const current = pending.pop();
-      if (!current) continue;
-
-      let visitedNames = visited.get(current.node);
-      if (!visitedNames) {
-        visitedNames = new Set();
-        visited.set(current.node, visitedNames);
-      }
-      if (visitedNames.has(current.name)) continue;
-      visitedNames.add(current.name);
-
-      if (current.name in current.node._propSetCallback) {
-        current.node._propSetCallback[current.name](value);
-      }
-      current.node._prop[current.name] = value;
-
-      const connector = current.node._connectors[current.name];
-      if (!connector) continue;
-
-      const peers = connector.outgoingLines
-        .filter((line) => line.target && !line.isDeleteRequested)
-        .map((line) => line.target);
-      for (let index = peers.length - 1; index >= 0; index -= 1) {
-        const peer = peers[index];
-        if (!peer?.parent) continue;
-        pending.push({
-          node: peer.parent as NodeMirror,
-          name: peer.name,
-        });
-      }
-    }
-  }
-
-  propagateProp() {
-    for (const connector of Object.values(this._connectors)) {
-      this.setProp(connector.name, this.getProp(connector.name));
-    }
   }
 
   #refreshResizeHover(position: eventPosition, target?: EventTarget | null): void {

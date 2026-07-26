@@ -203,7 +203,7 @@ test("the scheduler coalesces bursts and defers passes to the outermost batch en
   const { engine } = createEngineHarness();
   const mirror = getGraphMirror(engine);
   let passes = 0;
-  mirror.edgeSync = {
+  mirror.reconciler = {
     notifyConnect() {},
     notifyDisconnect() {},
     reconcile: () => {

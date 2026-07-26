@@ -1,7 +1,3 @@
-import type {
-  ConnectorConnectionEvent,
-  ConnectorDisconnectionEvent,
-} from "./connector";
 import type { LineMirror } from "./line";
 import type {
   ConnectorId,
@@ -87,12 +83,8 @@ export class LineReconciler {
 
   dispose(): void {
     this.#disposed = true;
-    if (this.#mirror.edgeSync === this) this.#mirror.edgeSync = null;
+    if (this.#mirror.reconciler === this) this.#mirror.reconciler = null;
   }
-
-  // Slot contract: reconciliation never reacts to local topology events.
-  notifyConnect(_event: ConnectorConnectionEvent): void {}
-  notifyDisconnect(_event: ConnectorDisconnectionEvent): void {}
 
   /** Forward a gesture's atomic proposal to the application. */
   dispatchLineChangeRequest(request: LineChangeRequest): void {

@@ -35,13 +35,13 @@ export interface ReconciliationError {
   cause?: unknown;
 }
 
-// Structural stand-in for EdgeSyncController so the registry (and the emit
-// sites that reach it) never value-import edge-sync — edge-sync imports the
-// registry accessor, not the reverse. Replaced by the LineReconciler contract
-// when the controlled line protocol lands.
-export interface EdgeSyncLike {
-  notifyConnect(event: ConnectorConnectionEvent): void;
-  notifyDisconnect(event: ConnectorDisconnectionEvent): void;
+// Structural reconciler contract so the registry (and the connector emit
+// sites that reach it) never value-import the reconciler module — it imports
+// the registry accessor, not the reverse.
+export interface GraphReconcilerLike {
+  /** Local-topology observations; the controlled reconciler ignores them. */
+  notifyConnect?(event: ConnectorConnectionEvent): void;
+  notifyDisconnect?(event: ConnectorDisconnectionEvent): void;
   /** Run one reconciliation pass against the latest canonical state. Invoked
    * by the mirror's coalescing, batch-aware scheduler. */
   reconcile?(): void;
@@ -93,10 +93,10 @@ export class GraphMirror {
   #duplicateErrors = new Map<object, ReconciliationError>();
   #reconciliationErrors: readonly ReconciliationError[] = [];
 
-  // Engine-scoped controlled-lines reconciler. Registered by
-  // EdgeSyncController's constructor; the connector emit sites forward
-  // connection events through it.
-  edgeSync: EdgeSyncLike | null = null;
+  // Engine-scoped controlled-lines reconciler, installed by
+  // attachControlledGraph(); the connector emit sites and the scheduler
+  // reach it through this slot.
+  reconciler: GraphReconcilerLike | null = null;
 
   /** Declared authority mode; null until `setGraphAuthority()` runs. */
   authority: GraphAuthority | null = null;
@@ -129,7 +129,7 @@ export class GraphMirror {
     queueMicrotask(() => {
       if (!this.#reconciliationQueued) return; // flushed synchronously
       this.#reconciliationQueued = false;
-      this.edgeSync?.reconcile?.();
+      this.reconciler?.reconcile?.();
     });
   }
 
@@ -137,7 +137,7 @@ export class GraphMirror {
   flush(): void {
     this.#reconciliationQueued = false;
     this.#batchDirty = false;
-    this.edgeSync?.reconcile?.();
+    this.reconciler?.reconcile?.();
   }
 
   /**

@@ -24,19 +24,13 @@
   let operation = $state("+");
   let node: any = $state(null);
 
-  function assignCallback(id: string) {
-    nodeObject?.addSetPropCallback((value: number) => {
-      calculate(id, value);
-    }, `input-${id}`);
-  }
-
+  // Dataflow is application-owned now: SnapLine no longer propagates values
+  // through connectors. This demo keeps its arithmetic local.
   onMount(() => {
     if (!nodeObject) {
       nodeObject = (node as any).getNodeObject();
     }
-    assignCallback("0");
     setUpCallback("0");
-    assignCallback("1");
     setUpCallback("1");
   });
 
@@ -62,7 +56,7 @@
         result /= Number(inputValues[key].value);
       }
     }
-    nodeObject?.setProp("output", result);
+    void result;
   }
 
   function setUpCallback(id: string) {
@@ -88,7 +82,6 @@
   function addInput() {
     let id: string = (nextInputId++).toString();
     inputValues[id] = { value: 0, id, connector: null, input: null, editable: true };
-    assignCallback(id);
     tick().then(() => {
       setUpCallback(id);
     });

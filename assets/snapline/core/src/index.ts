@@ -117,12 +117,3 @@ export type {
   LineRecord,
   ProposedLine,
 } from "./line-reconciler";
-export { EdgeSyncController } from "./edge-sync";
-export type {
-  EdgeConnectIntentEvent,
-  EdgeDisconnectIntentEvent,
-  EdgeEndpoint,
-  EdgeLike,
-  EdgeSyncCallbacks,
-  EdgeSyncConfig,
-} from "./edge-sync";

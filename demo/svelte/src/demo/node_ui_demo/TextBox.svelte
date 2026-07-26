@@ -8,23 +8,19 @@
   let { nodeObject, text }: { nodeObject?: NodeMirror | null, text?: string | null } = $props();
   let input: HTMLInputElement | null = null;
 
+  // Dataflow is application-owned now: SnapLine no longer propagates values
+  // through connectors; the input edits local state only.
   onMount(() => {
     nodeObject = (node as any).getNodeObject();
     if (text) {
       input!.value = text;
-      nodeObject!.setProp("text", text);
     }
   });
-
-  function onInput(e: any) {
-    const text = (e.target as any).value;
-    nodeObject?.setProp("text", text);
-  }
 </script>
 
 <Node bind:this={node} className="node card" LineSvelteComponent={DemoLine} nodeObject={nodeObject}>
   <div class="row-container">
-    <input type="text" oninput={onInput} bind:this={input} />
+    <input type="text" bind:this={input} />
     <Connector name="text" rules={{ maxIncoming: 0 }} />
   </div>
 </Node>

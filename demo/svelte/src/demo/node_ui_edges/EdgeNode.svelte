@@ -12,9 +12,9 @@
         <div class="input-row">
             <div class="connector-wrapper">
                 <Connector
+                    id={`${nodeId}:input`}
                     name="input"
                     rules={{ maxOutgoing: 0, maxIncoming: maxIncoming === -1 ? "unlimited" : maxIncoming, onFull: "replace-oldest" }}
-                    metadata={{ node: nodeId, port: "input" }}
                 />
             </div>
             <span>Input</span>
@@ -23,9 +23,9 @@
             <span>Output</span>
             <div class="connector-wrapper">
                 <Connector
+                    id={`${nodeId}:output`}
                     name="output"
                     rules={{ maxIncoming: 0 }}
-                    metadata={{ node: nodeId, port: "output" }}
                 />
             </div>
         </div>

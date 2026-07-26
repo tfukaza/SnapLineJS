@@ -48,7 +48,7 @@ test("react: programmatic edge add renders a line with zero intents", async ({ p
   await expect(page.getByTestId("connect-intents")).toHaveText("0");
 });
 
-test("react: full input replaces via the document in order", async ({ page }) => {
+test("react: full input replaces via ONE atomic request", async ({ page }) => {
   await dragFromTo(
     page,
     await centerOf(connectorOf(page, "Node A", "output")),
@@ -63,6 +63,6 @@ test("react: full input replaces via the document in order", async ({ page }) =>
   await expect(page.getByTestId("edge-count")).toHaveText("1");
   await expect(page.locator(LINE)).toHaveCount(1);
   await expect(page.getByTestId("intent-log")).toHaveText(
-    "connect:a->b|disconnect(replacement):a->b|connect:c->b",
+    "connect:a->b|replace:-a->b+c->b",
   );
 });

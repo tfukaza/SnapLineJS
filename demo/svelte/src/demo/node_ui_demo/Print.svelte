@@ -9,14 +9,10 @@
   let fontSize: number = $state(20);
   let { nodeObject }: { nodeObject?: NodeMirror | null } = $props();
 
+  // Dataflow is application-owned now: SnapLine no longer propagates values
+  // through connectors; this demo shows its local defaults.
   onMount(() => {
     nodeObject = (node as any).getNodeObject();
-    nodeObject?.addSetPropCallback((value: string) => {
-      text = value;
-    }, "text");
-    nodeObject?.addSetPropCallback((value: number) => {
-      fontSize = value;
-    }, "font-size");
   });
 </script>
 

@@ -130,13 +130,13 @@ export function attachControlledGraph(
 ): ControlledGraphHandle {
   setGraphAuthority(engine, "controlled");
   const mirror = getGraphMirror(engine);
-  if (mirror.edgeSync) {
+  if (mirror.reconciler) {
     console.warn(
       "SnapLine: replacing this engine's existing controlled-graph bridge.",
     );
   }
   const reconciler = new LineReconciler(mirror, callbacks);
-  mirror.edgeSync = reconciler;
+  mirror.reconciler = reconciler;
   return {
     setCanonicalGraph: (snapshot) => reconciler.setCanonicalGraph(snapshot),
     flush: () => mirror.flush(),

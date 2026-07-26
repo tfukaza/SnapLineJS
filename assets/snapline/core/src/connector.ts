@@ -230,7 +230,6 @@ class ConnectorMirror extends ElementObject {
   #config: ConnectorConfig;
   #rules: Readonly<ResolvedConnectorRules>;
   #name: string;
-  #prop: { [key: string]: any };
   #outgoingLines: LineMirror[];
   #incomingLines: LineMirror[];
   #state: ConnectorState = ConnectorState.IDLE;
@@ -262,7 +261,6 @@ class ConnectorMirror extends ElementObject {
   ) {
     super(engine, parent as unknown as BaseObject);
 
-    this.#prop = {};
     this.#outgoingLines = [];
     this.#incomingLines = [];
     this.#config = { ...config };
@@ -325,10 +323,6 @@ class ConnectorMirror extends ElementObject {
 
   get surfaceStrategies(): readonly ConnectorSurfaceStrategy[] {
     return this.#config.surfaceStrategies ?? [];
-  }
-
-  get prop(): { [key: string]: any } {
-    return this.#prop;
   }
 
   get metadata(): SnapLineMetadata {
@@ -679,8 +673,6 @@ class ConnectorMirror extends ElementObject {
   assignToNode(parent: NodeMirror): void {
     this.parent = parent;
     const parentRef = this.parent;
-    parentRef._prop[this.#name] = null;
-    this.#prop = parentRef._prop;
     parentRef._connectors[this.#name] = this;
     this.#outgoingLines = [];
     this.#incomingLines = [];
@@ -866,7 +858,7 @@ class ConnectorMirror extends ElementObject {
     const mirror = getGraphMirror(this.engine);
     if (
       mirror.authority === "controlled" &&
-      typeof mirror.edgeSync?.dispatchLineChangeRequest === "function"
+      typeof mirror.reconciler?.dispatchLineChangeRequest === "function"
     ) {
       this.#endControlledDrop(line, candidate, prop);
       return;
@@ -894,8 +886,6 @@ class ConnectorMirror extends ElementObject {
       return;
     }
 
-    candidate!.candidate.connector.#prop[candidate!.candidate.connector.#name] =
-      this.#prop[this.#name];
     this.parent.scheduleLineWrites();
     this.#callbacks.onDragEnd?.({
       connector: this,
@@ -1003,7 +993,7 @@ class ConnectorMirror extends ElementObject {
       );
     }
     mirror.pendingGestureRequest = true;
-    mirror.edgeSync?.dispatchLineChangeRequest?.(request);
+    mirror.reconciler?.dispatchLineChangeRequest?.(request);
     // The decisive pass runs after the adapter's post-request push — the
     // adapter queues its push inside the dispatch above, ahead of this
     // scheduled microtask.
@@ -1169,7 +1159,6 @@ class ConnectorMirror extends ElementObject {
 
     this.parent.updateNodeLineList();
     this.#emitConnect(target, line, origin);
-    this.parent.setProp(this.#name, this.#prop[this.#name]);
   }
 
   disconnectFromConnector(
@@ -1563,7 +1552,7 @@ class ConnectorMirror extends ElementObject {
       role: "target",
       origin,
     });
-    getGraphMirror(this.engine).edgeSync?.notifyConnect({
+    getGraphMirror(this.engine).reconciler?.notifyConnect?.({
       source: this,
       target,
       connector: this,
@@ -1597,7 +1586,7 @@ class ConnectorMirror extends ElementObject {
       role: "target",
       reason,
     });
-    getGraphMirror(this.engine).edgeSync?.notifyDisconnect({
+    getGraphMirror(this.engine).reconciler?.notifyDisconnect?.({
       source: this,
       target,
       connector: this,
