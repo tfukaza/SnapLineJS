@@ -6,6 +6,7 @@ import type {
 import type { NodeMirror } from "./node";
 import type { LineMirror } from "./line";
 import type { GroupNodeMirror, GroupMembershipResolver } from "./group";
+import type { LineChangeRequest } from "./line-reconciler";
 
 /** Stable application-facing identity of a canonical node. */
 export type NodeId = string;
@@ -44,6 +45,9 @@ export interface EdgeSyncLike {
   /** Run one reconciliation pass against the latest canonical state. Invoked
    * by the mirror's coalescing, batch-aware scheduler. */
   reconcile?(): void;
+  /** Forward a gesture's atomic proposal to the application. Present only on
+   * the controlled bridge; its presence routes gesture drops. */
+  dispatchLineChangeRequest?(request: LineChangeRequest): void;
 }
 
 /** One authority model per engine, declared explicitly before any graph use. */
@@ -101,6 +105,10 @@ export class GraphMirror {
    * canonical document's behalf — those mutations bypass the authority gate
    * on imperative commands. */
   reconcilerActive = false;
+
+  /** @internal One in-flight gesture request per engine (gestures are
+   * serial); cleared by the next reconciliation pass. */
+  pendingGestureRequest = false;
 
   #reconciliationQueued = false;
   #batchDepth = 0;

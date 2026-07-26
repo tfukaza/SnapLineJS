@@ -13,6 +13,7 @@ import { LineMirror, type LineMirrorPhase } from "./line";
 import { getGraphMirror } from "./snapline-globals";
 import { getSourceSurfaces } from "./snapline-globals";
 import { mintDomainId, SnapLineAuthorityError } from "./graph-mirror";
+import type { LineChangeRequest } from "./line-reconciler";
 
 export type SnapLineMetadata = Record<string, unknown>;
 export type ConnectionOrigin = "gesture" | "programmatic" | "hydration";
@@ -173,22 +174,7 @@ export interface ConnectorPointerEvent extends ConnectorDragEvent {
   originalEvent: PointerEvent;
 }
 
-export interface ConnectorConnectionRequestEvent extends ConnectorPairEvent {
-  line: LineMirror;
-  candidate: ConnectorCandidate;
-  position: eventPosition;
-}
-
-export type ConnectorConnectionRequestResult =
-  | false
-  | void
-  | { payload?: unknown };
-
 export interface ConnectorCallbacks {
-  /** Gesture-only and source-only canonical-model creation seam. */
-  onConnectionRequest?: (
-    event: ConnectorConnectionRequestEvent,
-  ) => ConnectorConnectionRequestResult;
   /** Fires when this connector claims a primary pointer, before drag threshold. */
   onPointerDown?: (event: ConnectorPointerEvent) => void;
   onDragStart?: (event: ConnectorDragEvent) => void;
@@ -257,6 +243,7 @@ class ConnectorMirror extends ElementObject {
   #localCenter: ConnectorPoint;
   #hasMeasuredCenter = false;
   #armed: ArmedConnection | null = null;
+  #gestureOrigin: "new" | "reconnect" | null = null;
   #cancelledPointers = new Set<number>();
   #callbacks: ConnectorCallbacks;
 
@@ -606,6 +593,7 @@ class ConnectorMirror extends ElementObject {
 
     const armed = this.#armed;
     let line = armed.reconnectLine;
+    this.#gestureOrigin = line ? "reconnect" : "new";
     if (line) {
       this.#detachLineForReconnect(line);
       line.clearTarget();
@@ -875,39 +863,30 @@ class ConnectorMirror extends ElementObject {
     line.setPhase("drop");
     line.setPreviewPosition(prop.end);
 
+    const mirror = getGraphMirror(this.engine);
+    if (
+      mirror.authority === "controlled" &&
+      typeof mirror.edgeSync?.dispatchLineChangeRequest === "function"
+    ) {
+      this.#endControlledDrop(line, candidate, prop);
+      return;
+    }
+    if (mirror.authority === null) {
+      // Bridge until adapters expose the declaration ergonomically: warn,
+      // then behave as an uncontrolled engine.
+      console.warn(
+        'SnapLine: gesture on an engine with no declared graph authority — call setGraphAuthority(engine, "controlled" | "uncontrolled").',
+      );
+    }
+
     let connected = false;
     if (candidate) {
-      let request: ConnectorConnectionRequestResult;
-      try {
-        request = this.#callbacks.onConnectionRequest?.({
-          source: this,
-          target: candidate.candidate.connector,
-          line,
-          candidate: candidate.candidate,
-          position: prop.end,
-        });
-      } catch (error) {
-        this.#discardDraggedLine(line, prop, false);
-        throw error;
-      }
-      if (request !== false) {
-        const connectionOptions: Parameters<
-          ConnectorMirror["connectToConnector"]
-        >[0] = {
-          target: candidate.candidate.connector,
-          line,
-          origin: "gesture",
-          candidate,
-        };
-        if (
-          request &&
-          typeof request === "object" &&
-          Object.prototype.hasOwnProperty.call(request, "payload")
-        ) {
-          connectionOptions.payload = request.payload;
-        }
-        connected = this.connectToConnector(connectionOptions);
-      }
+      connected = this.connectToConnector({
+        target: candidate.candidate.connector,
+        line,
+        origin: "gesture",
+        candidate,
+      });
     }
 
     if (!connected) {
@@ -925,6 +904,144 @@ class ConnectorMirror extends ElementObject {
       connected: true,
     });
     this.#resetGesture();
+  }
+
+  /**
+   * Controlled-mode drop: nothing mutates settled topology locally. The
+   * gesture stages its outcome on the line mirror and proposes one atomic
+   * LineChangeRequest; the post-request reconciliation pass settles or
+   * discards the staged state against the canonical decision.
+   */
+  #endControlledDrop(
+    line: LineMirror,
+    candidate: ConnectorResolvedHit | null,
+    prop: dragEndProp,
+  ): void {
+    const target = candidate?.candidate.connector ?? null;
+
+    if (!candidate || !target || !this.#admitsConnection(target, line, "drop")) {
+      if (this.#gestureOrigin === "reconnect") {
+        // Gesture disconnect: propose the removal; the line stays visibly
+        // detached until the decision. A rejected removal re-glues it from
+        // the unchanged document.
+        line.stageForRemoval();
+        this.parent.updateNodeLineList();
+        this.#dispatchRequest({
+          intent: "disconnect",
+          add: [],
+          remove: [line.lineId],
+          update: [],
+        });
+        this.parent.scheduleLineWrites();
+        this.#callbacks.onDragEnd?.({
+          connector: this,
+          position: prop.end,
+          pointerId: prop.pointerId,
+          connected: false,
+        });
+        this.#resetGesture();
+        return;
+      }
+      this.#discardDraggedLine(line, prop, false);
+      return;
+    }
+
+    // Evictions ride the atomic proposal ("replace") — never local deletes.
+    const evictions: string[] = [];
+    const incoming = target
+      .#liveIncomingLines()
+      .filter((incomingLine) => incomingLine !== line);
+    const overflow = incoming.length - target.#rules.maxIncoming + 1;
+    if (overflow > 0) {
+      for (const evicted of incoming.slice(0, overflow)) {
+        evictions.push(evicted.lineId);
+      }
+    }
+
+    line.stageTarget(target, candidate.candidate, candidate.strategy);
+    this.parent.updateNodeLineList();
+
+    const request: LineChangeRequest =
+      this.#gestureOrigin === "reconnect"
+        ? {
+            intent: evictions.length > 0 ? "replace" : "reconnect",
+            add: [],
+            remove: evictions,
+            update: [{ id: line.lineId, toConnectorId: target.connectorId }],
+          }
+        : {
+            intent: evictions.length > 0 ? "replace" : "connect",
+            add: [
+              {
+                id: line.lineId,
+                fromConnectorId: this.connectorId,
+                toConnectorId: target.connectorId,
+                ...(line.payload !== undefined
+                  ? { payload: line.payload }
+                  : {}),
+              },
+            ],
+            remove: evictions,
+            update: [],
+          };
+    this.#dispatchRequest(request);
+    this.parent.scheduleLineWrites();
+    this.#callbacks.onDragEnd?.({
+      connector: this,
+      position: prop.end,
+      pointerId: prop.pointerId,
+      connected: true,
+    });
+    this.#resetGesture();
+  }
+
+  #dispatchRequest(request: LineChangeRequest): void {
+    const mirror = getGraphMirror(this.engine);
+    if (mirror.pendingGestureRequest) {
+      console.warn(
+        "SnapLine: a line-change request is already in flight; gestures are serial, so this indicates a stalled adapter push.",
+      );
+    }
+    mirror.pendingGestureRequest = true;
+    mirror.edgeSync?.dispatchLineChangeRequest?.(request);
+    // The decisive pass runs after the adapter's post-request push — the
+    // adapter queues its push inside the dispatch above, ahead of this
+    // scheduled microtask.
+    mirror.scheduleReconciliation();
+  }
+
+  /** @internal Reconciler-only: settle a staged gesture line onto its
+   * accepted target. Capacity and both predicates recheck strictly. */
+  settleStagedLineFromRecord(
+    line: LineMirror,
+    target: ConnectorMirror,
+  ): true | "capacity-exceeded" | "connection-rejected" {
+    const structural = this.#admitsRecordEndpoints(target, line);
+    if (structural !== true) return structural;
+    const proposal: ConnectionProposal = {
+      line,
+      source: this,
+      target,
+      phase: "drop",
+    };
+    if (
+      this.#rules.isValidConnection?.(proposal) === false ||
+      target.#rules.isValidConnection?.(proposal) === false
+    ) {
+      return "connection-rejected";
+    }
+    this.#settlePreviewLine(line, target, null, "gesture", null);
+    return true;
+  }
+
+  /** @internal Reconciler-only: drop a staged line the canonical owner
+   * declined. No disconnect observation — no connect was ever observed. */
+  discardStagedLine(line: LineMirror): void {
+    const index = this.#outgoingLines.indexOf(line);
+    if (index === -1) return;
+    this.#outgoingLines.splice(index, 1);
+    line.destroy(false);
+    this.parent?.updateNodeLineList();
   }
 
   _endLineDragCleanup(): void {
@@ -1270,6 +1387,7 @@ class ConnectorMirror extends ElementObject {
     this.#state = ConnectorState.IDLE;
     this.#armed = null;
     this.#dragLine = null;
+    this.#gestureOrigin = null;
     this.#setCandidate(null);
   }
 

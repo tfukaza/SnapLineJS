@@ -109,6 +109,31 @@ class LineMirror extends ElementObject {
     this.#target = null;
   }
 
+  /** @internal Controlled gesture staging: attach the drop target visually
+   * and await the canonical decision. No topology commitment — the line is
+   * not in the target's incoming list and not in the settled index. */
+  stageTarget(
+    target: ConnectorMirror,
+    candidate: ConnectorCandidate | null,
+    strategy: ConnectorSurfaceStrategy | null,
+  ): void {
+    this.#target = target;
+    this.#targetStrategy = strategy ?? this.#targetStrategy;
+    this.#targetHit = candidate?.hit ?? this.#targetHit;
+    this.#candidate = null;
+    this.#phase = "staged";
+    this.updateAnchors();
+    this.#emitStateChange();
+  }
+
+  /** @internal Controlled gesture disconnect: already detached; hold the
+   * staged phase until the canonical decision (a rejected removal re-glues
+   * from the unchanged document). */
+  stageForRemoval(): void {
+    this.#phase = "staged";
+    this.#emitStateChange();
+  }
+
   override destroy(removeElement: boolean = true): void {
     getGraphMirror(this.engine).unregisterLine(this);
     super.destroy(removeElement);

@@ -33,8 +33,6 @@ export type {
   ConnectorConfig,
   ConnectorConfigUpdate,
   ConnectorConnectionEvent,
-  ConnectorConnectionRequestEvent,
-  ConnectorConnectionRequestResult,
   ConnectorDisconnectionEvent,
   ConnectorDragEvent,
   ConnectorGeometrySnapshot,

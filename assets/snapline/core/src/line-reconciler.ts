@@ -2,6 +2,7 @@ import type {
   ConnectorConnectionEvent,
   ConnectorDisconnectionEvent,
 } from "./connector";
+import type { LineMirror } from "./line";
 import type {
   ConnectorId,
   GraphMirror,
@@ -89,10 +90,14 @@ export class LineReconciler {
     if (this.#mirror.edgeSync === this) this.#mirror.edgeSync = null;
   }
 
-  // Slot contract: gesture intents route through the request path (3e);
-  // reconciliation itself never reacts to local topology events.
+  // Slot contract: reconciliation never reacts to local topology events.
   notifyConnect(_event: ConnectorConnectionEvent): void {}
   notifyDisconnect(_event: ConnectorDisconnectionEvent): void {}
+
+  /** Forward a gesture's atomic proposal to the application. */
+  dispatchLineChangeRequest(request: LineChangeRequest): void {
+    this.#callbacks.onLineChangeRequest(request);
+  }
 
   /** One pass: prune, preserve/retarget by stable id, create, report. */
   reconcile(): void {
@@ -126,6 +131,13 @@ export class LineReconciler {
         }
       }
 
+      // Preview lines by stable id: staged lines await this pass's decision;
+      // a mid-drag line leaves its record latent.
+      const previewById = new Map<LineId, LineMirror>();
+      for (const preview of mirror.previewLines) {
+        previewById.set(preview.lineId, preview);
+      }
+
       // Converge every record.
       for (const record of recordById.values()) {
         const existing = mirror.line(record.id);
@@ -151,6 +163,31 @@ export class LineReconciler {
           continue;
         }
 
+        const preview = previewById.get(record.id);
+        if (preview) {
+          if (preview.phase !== "staged") continue; // mid-drag: latent
+          const stagedTarget = mirror.connector(record.toConnectorId);
+          if (
+            preview.start.connectorId === record.fromConnectorId &&
+            stagedTarget
+          ) {
+            // The canonical owner adopted the proposed id: settle the staged
+            // mirror in place (capacity/predicates recheck strictly).
+            const settled = preview.start.settleStagedLineFromRecord(
+              preview,
+              stagedTarget,
+            );
+            if (settled !== true) {
+              preview.start.discardStagedLine(preview);
+              errors.push(this.#ruleError(settled, record));
+            }
+            continue;
+          }
+          // Normalized away from the staged shape: discard, then converge
+          // the record like any other below.
+          preview.start.discardStagedLine(preview);
+        }
+
         const source = mirror.connector(record.fromConnectorId);
         const target = mirror.connector(record.toConnectorId);
         // A soft link whose mirror has not mounted yet is latent, not an
@@ -162,9 +199,19 @@ export class LineReconciler {
           errors.push(this.#ruleError(created, record));
         }
       }
+
+      // A staged line whose id the canonical owner declined (or ignored —
+      // the adapter's post-request push still delivered a snapshot without
+      // it) is discarded; nothing was ever committed locally.
+      for (const line of mirror.previewLines) {
+        if (line.phase === "staged" && !recordById.has(line.lineId)) {
+          line.start.discardStagedLine(line);
+        }
+      }
     } finally {
       this.#reconciling = false;
       mirror.reconcilerActive = false;
+      mirror.pendingGestureRequest = false;
     }
 
     if (mirror.setReconciliationErrors(errors)) {

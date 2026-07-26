@@ -23,6 +23,7 @@ export function createEngineHarness() {
     input: {
       claimPointer() {},
       registerObjectElement() {},
+      setPointerDragOwner() {},
       subscribeGlobalCursorEvent() {},
       unregisterObjectElement() {},
       unsubscribeGlobalCursorEvent() {},
@@ -60,6 +61,7 @@ export function createSiblingEngine(global: any) {
     input: {
       claimPointer() {},
       registerObjectElement() {},
+      setPointerDragOwner() {},
       subscribeGlobalCursorEvent() {},
       unregisterObjectElement() {},
       unsubscribeGlobalCursorEvent() {},

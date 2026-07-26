@@ -191,3 +191,197 @@ test("duplicate canonical ids and predicate vetoes surface as diagnostics", () =
   expect(mirror.line("line-v")!.start).toBe(source);
   expect(mirror.diagnostics()).toEqual([]);
 });
+
+// ---- Controlled gesture protocol (3e) ----
+
+function pos(x: number, y: number) {
+  return { x, y, cameraX: x, cameraY: y, screenX: x, screenY: y };
+}
+
+/** targetHitTest that only accepts drops left of x=500 (so far drops miss). */
+const nearStrategy = {
+  targetHitTest: ({ position }: any) =>
+    position.x < 500 ? { anchor: { x: position.x, y: position.y }, distance: 0 } : null,
+};
+
+function gestureHarness() {
+  const base = controlledHarness();
+  const sourceNode = new NodeMirror(base.engine, null, { id: "n-src" });
+  const targetNode = new NodeMirror(base.engine, null, { id: "n-tgt" });
+  const source = new ConnectorMirror(base.engine, sourceNode, {
+    id: "out-1",
+    name: "out",
+    rules: { maxIncoming: 0 },
+  });
+  const target = new ConnectorMirror(base.engine, targetNode, {
+    id: "in-1",
+    name: "in",
+    rules: { maxOutgoing: 0 },
+    surfaceStrategies: [nearStrategy],
+  });
+  return { ...base, source, target };
+}
+
+function dragFrom(connector: ConnectorMirror, dropX: number, pointerId = 7) {
+  const event = { button: 0, pointerId } as any;
+  connector.onCursorDown({ position: pos(0, 0), event } as any);
+}
+
+function driveDrop(owner: ConnectorMirror, dropX: number, pointerId = 7) {
+  const event = { button: 0, pointerId } as any;
+  (owner as any).event.input.dragStart({
+    start: pos(0, 0),
+    pointerId,
+    event,
+  });
+  (owner as any).event.input.dragEnd({
+    end: pos(dropX, 10),
+    pointerId,
+    event,
+  });
+}
+
+test("a controlled connect stages, proposes one atomic request, and settles in place on adoption", () => {
+  const { engine, handle, requests, source, target } = gestureHarness();
+  const mirror = getGraphMirror(engine);
+
+  dragFrom(source, 100);
+  driveDrop(source, 100);
+
+  expect(requests).toHaveLength(1);
+  const request = requests[0];
+  expect(request.intent).toBe("connect");
+  expect(request.remove).toEqual([]);
+  expect(request.add).toHaveLength(1);
+  expect(request.add[0].fromConnectorId).toBe("out-1");
+  expect(request.add[0].toConnectorId).toBe("in-1");
+
+  // Staged: visually attached, but no topology commitment anywhere.
+  const staged = source.outgoingLines[0];
+  expect(staged.lineId).toBe(request.add[0].id);
+  expect(staged.phase).toBe("staged");
+  expect(staged.target).toBe(target);
+  expect(target.incomingLines).toEqual([]);
+  expect(mirror.line(staged.lineId)).toBeNull();
+
+  // Adoption settles the SAME mirror in place.
+  handle.setCanonicalGraph({
+    lines: [
+      {
+        id: request.add[0].id,
+        fromConnectorId: "out-1",
+        toConnectorId: "in-1",
+      },
+    ],
+  });
+  handle.flush();
+  expect(mirror.line(staged.lineId)).toBe(staged);
+  expect(staged.phase).toBe("connected");
+  expect(target.incomingLines).toEqual([staged]);
+});
+
+test("rejection-by-inaction discards the staged line on the decisive pass", () => {
+  const { engine, handle, requests, source } = gestureHarness();
+  const mirror = getGraphMirror(engine);
+
+  dragFrom(source, 100);
+  driveDrop(source, 100);
+  expect(requests).toHaveLength(1);
+  expect(source.outgoingLines).toHaveLength(1);
+
+  // The application declines by doing nothing; the adapter's post-request
+  // push still delivers the unchanged (empty) snapshot.
+  handle.flush();
+  expect(source.outgoingLines).toEqual([]);
+  expect(mirror.diagnostics()).toEqual([]);
+  expect(mirror.previewLines).toEqual([]);
+});
+
+test("a full replace-oldest target yields one atomic replace request with no local eviction", () => {
+  const { engine, handle, requests, source, target } = gestureHarness();
+  const mirror = getGraphMirror(engine);
+  target.updateConfig({
+    rules: { maxOutgoing: 0, maxIncoming: 1, onFull: "replace-oldest" },
+    surfaceStrategies: [nearStrategy],
+  });
+  const otherSource = new ConnectorMirror(
+    engine,
+    new NodeMirror(engine, null),
+    { id: "out-2", name: "out2", rules: { maxIncoming: 0 } },
+  );
+
+  handle.setCanonicalGraph({
+    lines: [{ id: "line-a", fromConnectorId: "out-2", toConnectorId: "in-1" }],
+  });
+  handle.flush();
+  const existing = mirror.line("line-a")!;
+
+  dragFrom(source, 100);
+  driveDrop(source, 100);
+  expect(requests).toHaveLength(1);
+  const request = requests[0];
+  expect(request.intent).toBe("replace");
+  expect(request.remove).toEqual(["line-a"]);
+  expect(request.add).toHaveLength(1);
+
+  // Nothing was evicted locally: the app decides.
+  expect(existing.phase).toBe("connected");
+  expect(target.incomingLines).toEqual([existing]);
+
+  handle.setCanonicalGraph({
+    lines: [
+      {
+        id: request.add[0].id,
+        fromConnectorId: "out-1",
+        toConnectorId: "in-1",
+      },
+    ],
+  });
+  handle.flush();
+  expect(mirror.line("line-a")).toBeNull();
+  expect(mirror.line(request.add[0].id)).not.toBeNull();
+  expect(target.incomingLines).toHaveLength(1);
+  expect(otherSource.outgoingLines).toEqual([]);
+});
+
+test("a gesture disconnect proposes removal; rejection re-glues, acceptance discards", () => {
+  const { engine, handle, requests, source, target } = gestureHarness();
+  const mirror = getGraphMirror(engine);
+
+  handle.setCanonicalGraph({
+    lines: [{ id: "line-a", fromConnectorId: "out-1", toConnectorId: "in-1" }],
+  });
+  handle.flush();
+  const line = mirror.line("line-a")!;
+
+  // Pick the line up from its target and drop it in the void (x >= 500).
+  const event = { button: 0, pointerId: 9 } as any;
+  target.armSurfaceGesture({ position: pos(0, 0), event } as any, null);
+  driveDrop(source, 900, 9);
+
+  expect(requests).toHaveLength(1);
+  expect(requests[0]).toMatchObject({
+    intent: "disconnect",
+    remove: ["line-a"],
+  });
+  expect(line.phase).toBe("staged");
+  expect(line.target).toBeNull();
+  expect(target.incomingLines).toEqual([]);
+
+  // Rejected: the unchanged document still contains line-a — re-glue the
+  // SAME mirror back onto its canonical target.
+  handle.flush();
+  expect(mirror.line("line-a")).toBe(line);
+  expect(line.phase).toBe("connected");
+  expect(line.target).toBe(target);
+  expect(target.incomingLines).toEqual([line]);
+
+  // Accepted: the document drops the record — the mirror goes with it.
+  target.armSurfaceGesture({ position: pos(0, 0), event } as any, null);
+  driveDrop(source, 900, 9);
+  expect(requests).toHaveLength(2);
+  handle.setCanonicalGraph({ lines: [] });
+  handle.flush();
+  expect(mirror.line("line-a")).toBeNull();
+  expect(source.outgoingLines).toEqual([]);
+});
