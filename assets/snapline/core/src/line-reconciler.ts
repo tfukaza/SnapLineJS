@@ -172,6 +172,8 @@ export class LineReconciler {
             if (settled !== true) {
               preview.start.discardStagedLine(preview);
               errors.push(this.#ruleError(settled, record));
+            } else {
+              preview.setPayload(record.payload);
             }
             continue;
           }
