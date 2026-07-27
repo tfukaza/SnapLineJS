@@ -99,6 +99,10 @@ export const Group = forwardRef<GroupNodeMirror, GroupProps>(function Group(
     });
   }
   const group = groupRef.current;
+  // Snapshot, not a live binding: after mount the engine owns the size, and a
+  // second writer on the same property is what splits it from the transform.
+  // Rendering it once keeps SSR and the first client paint correctly sized.
+  const initialSize = useRef({ width, height }).current;
 
   const latestRef = useRef({
     callbacks,
@@ -215,8 +219,7 @@ export const Group = forwardRef<GroupNodeMirror, GroupProps>(function Group(
       group.callbacks.onDragStart = originalCallbacks.onDragStart;
       group.callbacks.onDrag = originalCallbacks.onDrag;
       group.callbacks.onGeometryChanged = originalCallbacks.onGeometryChanged;
-      group.callbacks.onSelectionChange =
-        originalCallbacks.onSelectionChange;
+      group.callbacks.onSelectionChange = originalCallbacks.onSelectionChange;
       group.callbacks.onResizeHandleChange =
         originalCallbacks.onResizeHandleChange;
       group.callbacks.onSizeChange = originalCallbacks.onSizeChange;
@@ -230,24 +233,17 @@ export const Group = forwardRef<GroupNodeMirror, GroupProps>(function Group(
     };
   }, [group]);
 
+  // One effect for all four geometry props, committed through one engine task.
+  // Splitting position and size across two writers — React's renderer for the
+  // size, the engine's queue for the transform — lets them land in different
+  // frames, which paints the new size at the old position for one frame.
   useLayoutEffect(() => {
     group.worldTransform = { x, y };
-    group.schedule(() => group.writeTransformAndLines(), {
-      stage: "WRITE_2",
-      queueId: `${group.id}-transform`,
-    });
-  }, [group, x, y]);
-
-  useLayoutEffect(() => {
-    if (!group.element) return;
-    group.element.style.width = `${width}px`;
-    group.element.style.height = `${height}px`;
     group.setSizeState(width, height);
-    group.remeasureDomGeometry();
-  }, [group, width, height]);
+    group.scheduleGeometryWrite();
+  }, [group, x, y, width, height]);
 
-  const handleSize =
-    resizeHandleThickness ?? DEFAULT_RESIZE_HANDLE_THICKNESS;
+  const handleSize = resizeHandleThickness ?? DEFAULT_RESIZE_HANDLE_THICKNESS;
   return (
     <div
       ref={boxDomRef}
@@ -259,8 +255,8 @@ export const Group = forwardRef<GroupNodeMirror, GroupProps>(function Group(
         willChange: "transform",
         boxSizing: "border-box",
         pointerEvents: "none",
-        width: `${width}px`,
-        height: `${height}px`,
+        width: `${initialSize.width}px`,
+        height: `${initialSize.height}px`,
         ...style,
       }}
     >

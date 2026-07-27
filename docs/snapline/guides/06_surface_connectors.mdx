@@ -29,6 +29,13 @@ as their own ports:
 />
 ```
 
+The `rules` shown override defaults of `maxOutgoing: "unlimited"`,
+`maxIncoming: 1`, `reconnect: true`, `allowParallel: false`, and
+`onFull: "reject"` — a full-border diagram surface typically wants unlimited
+incoming lines and parallel edges, while `onFull: "replace-oldest"` suits a
+single-input port that should adopt the newest connection instead of
+rejecting it.
+
 `virtual` omits the connector element. The logical `ConnectorMirror` still
 belongs to its node, participates in connection policy, and owns its lines.
 Source surfaces are registered with the engine's input router, so their hit
@@ -65,8 +72,9 @@ const borderSurface: ConnectorSurfaceStrategy = {
 ```
 
 Return `null` or `false` for a miss. When several surfaces match, SnapLine sorts
-by priority, then distance, connector ID, and strategy order. This makes
-overlapping targets deterministic without requiring DOM z-index tricks.
+by priority, then distance, then falls back to internal object identity order
+and strategy order for exact ties. This makes overlapping targets
+deterministic without requiring DOM z-index tricks.
 
 The geometry passed to callbacks is measured during SnapLine's read phase.
 Surface callbacks should use that snapshot instead of calling

@@ -151,13 +151,14 @@ test("connector config updates stay live without replacing topology", () => {
   targetNode.addConnectorObject(target);
 
   handle.setCanonicalGraph({
-    lines: [{ id: "cfg-line", fromConnectorId: "cfg-out", toConnectorId: "cfg-in" }],
+    lines: [
+      { id: "cfg-line", fromConnectorId: "cfg-out", toConnectorId: "cfg-in" },
+    ],
   });
   handle.flush();
   const existingLine = getGraphMirror(engine).line("cfg-line")!;
   expect(source.outgoingLines).toEqual([existingLine]);
 
-  class UpdatedLine extends LineMirror {}
   const strategy: ConnectorSurfaceStrategy = {
     sourceHitTest: ({ position }) => ({
       anchor: position,
@@ -182,7 +183,6 @@ test("connector config updates stay live without replacing topology", () => {
     },
     colliderRadius: 42,
     edgePan: false,
-    lineClass: UpdatedLine,
     metadata,
     surfaceStrategies: [strategy],
   });
@@ -202,12 +202,11 @@ test("connector config updates stay live without replacing topology", () => {
   expect(source.isSource).toBe(true);
   expect(source.isTarget).toBe(true);
   expect(source.config.edgePan).toBe(false);
-  expect(source.config.lineClass).toBe(UpdatedLine);
   expect(source.colliderList[0]).toBeInstanceOf(CircleCollider);
   expect((source.colliderList[0] as CircleCollider).radius).toBe(42);
   expect(global.data.sourceSurfaces).toEqual([source]);
   const updatedLine = source.createLine();
-  expect(updatedLine).toBeInstanceOf(UpdatedLine);
+  expect(updatedLine).toBeInstanceOf(LineMirror);
   updatedLine.destroy(false);
 
   source.updateConfig({
@@ -215,7 +214,6 @@ test("connector config updates stay live without replacing topology", () => {
     rules: { maxOutgoing: 0, maxIncoming: 2 },
     colliderRadius: undefined,
     edgePan: true,
-    lineClass: undefined,
     metadata: undefined,
     surfaceStrategies: [],
   });
@@ -237,7 +235,6 @@ test("connector config updates stay live without replacing topology", () => {
   expect(global.data.sourceSurfaces).toEqual([]);
   const defaultLine = source.createLine();
   expect(defaultLine).toBeInstanceOf(LineMirror);
-  expect(defaultLine).not.toBeInstanceOf(UpdatedLine);
   defaultLine.destroy(false);
 
   source.destroy();
@@ -264,7 +261,13 @@ test("visible port binding can toggle while preserving connector lines", () => {
   sourceNode.addConnectorObject(source);
   targetNode.addConnectorObject(target);
   handle.setCanonicalGraph({
-    lines: [{ id: "bind-line", fromConnectorId: "bind-out", toConnectorId: "bind-in" }],
+    lines: [
+      {
+        id: "bind-line",
+        fromConnectorId: "bind-out",
+        toConnectorId: "bind-in",
+      },
+    ],
   });
   handle.flush();
   const line = source.outgoingLines[0];

@@ -145,6 +145,44 @@ test("raw Markdown validates routes and framework values", async ({ request }) =
   expect(missingPage.status()).toBe(404);
 });
 
+test("SnapEngine browser support exposes its audited feature matrix", async ({
+  page,
+  request,
+}) => {
+  const response = await page.goto(
+    "/docs/snapengine/introduction/09_browser_support",
+  );
+  expect(response?.status()).toBe(200);
+
+  await expect(
+    page.getByRole("heading", { name: "Browser Support", level: 1 }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("columnheader", { name: "Chrome Android" }).first(),
+  ).toBeVisible();
+
+  const customVariableRow = page
+    .getByRole("row")
+    .filter({ hasText: "Custom $variable animation" });
+  await expect(customVariableRow).toContainText("128+");
+  await expect(customVariableRow).toContainText("16.4+");
+  await expect(
+    page.getByRole("link", { name: "CSS.registerProperty()" }).first(),
+  ).toHaveAttribute(
+    "href",
+    "https://developer.mozilla.org/en-US/docs/Web/API/CSS/registerProperty_static",
+  );
+
+  const markdownResponse = await request.get(
+    "/docs/snapengine/introduction/09_browser_support.md",
+  );
+  expect(markdownResponse.status()).toBe(200);
+  const markdown = await markdownResponse.text();
+  expect(markdown).toContain("# Browser Support");
+  expect(markdown).toContain("| Custom `$variable` animation |");
+  expect(markdown).toContain("MDN Browser Compatibility Data");
+});
+
 test("project llms.txt files expose ordered framework-aware Markdown trees", async ({
   request,
 }) => {
@@ -180,9 +218,12 @@ test("project llms.txt files expose ordered framework-aware Markdown trees", asy
   const snapEngineResponse = await request.get("/docs/snapengine/llms.txt");
   expect(snapEngineResponse.status()).toBe(200);
   const snapEngineIndex = await snapEngineResponse.text();
-  expect(snapEngineIndex).toContain("# SnapEngine Documentation");
+  expect(snapEngineIndex).toContain("# SnapEngine Core Documentation");
   expect(snapEngineIndex).toContain(
     "https://snapengine.dev/docs/snapengine/introduction.md",
+  );
+  expect(snapEngineIndex).toContain(
+    "https://snapengine.dev/docs/snapengine/introduction/09_browser_support.md",
   );
   expect(snapEngineIndex).toContain(
     "https://snapengine.dev/docs/snapengine/reference/engine.md",

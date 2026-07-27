@@ -62,6 +62,12 @@
         groupObject = new GroupNodeMirror(engine, null, { id, width, height, minWidth, minHeight, resizeHandleThickness, resizeHandles, resizeCursors, metadata, callbacks: {}, groupCallbacks: {}, canContain, edgePan });
     }
 
+    // Snapshot, not a reactive binding: after mount the engine owns the size, and
+    // a second writer on the same property is what splits it from the transform.
+    // Rendering it once keeps SSR and the first client paint correctly sized.
+    const initialWidth = width;
+    const initialHeight = height;
+
     let mounted = $state(false);
     let unregisterHeader: (() => void) | null = null;
     let originalCallbacks: import("@snap-engine/snapline").NodeCallbacks = {};
@@ -118,13 +124,11 @@
         groupObject!.callbacks.onGeometryChanged = (event) =>
             invoke(event, originalCallbacks.onGeometryChanged, callbacks.onGeometryChanged, onGeometryChanged);
         // Header is the only move surface; wait a tick so the alias wins over the
-        // element registration. setSizeState seeds the collision footprint (the
-        // DOM size is already rendered from props above).
+        // element registration. The geometry effect seeds the collision footprint
+        // and schedules the first paint once `mounted` flips.
         void tick().then(() => {
             if (!mounted || !groupObject!.element) return;
             if (headerEl) unregisterHeader = groupObject!.registerDragHandle(headerEl);
-            groupObject!.setSizeState(width, height);
-            groupObject!.remeasureDomGeometry();
             // Seed membership once siblings have mounted, positioned, and had their
             // hit boxes measured (a WRITE stage runs after READ_1's measure).
             groupObject!.schedule(() => groupObject!.refreshMembership(true), {
@@ -151,30 +155,20 @@
         else if (boxDOM) groupObject!.detachElement(boxDOM);
     });
 
+    // One effect for all four geometry props, committed through one engine task.
+    // Splitting position and size across two writers — Svelte's renderer for the
+    // size, the engine's queue for the transform — lets them land in different
+    // frames, which paints the new size at the old position for one frame.
     $effect(() => {
         const nextX = x;
         const nextY = y;
-        if (!mounted) return;
-        const object = untrack(() => groupObject!);
-        object.worldTransform = { x: nextX, y: nextY };
-        object.schedule(() => object.writeTransformAndLines(), {
-            stage: "WRITE_2",
-            queueId: `${object.id}-transform`,
-        });
-    });
-
-    $effect(() => {
         const nextWidth = width;
         const nextHeight = height;
         if (!mounted) return;
         const object = untrack(() => groupObject!);
-        void tick().then(() => {
-            if (!mounted || !object.element) return;
-            object.element.style.width = `${nextWidth}px`;
-            object.element.style.height = `${nextHeight}px`;
-            object.setSizeState(nextWidth, nextHeight);
-            object.remeasureDomGeometry();
-        });
+        object.worldTransform = { x: nextX, y: nextY };
+        object.setSizeState(nextWidth, nextHeight);
+        object.scheduleGeometryWrite();
     });
 
     export function getNodeObject() {
@@ -186,9 +180,7 @@
     bind:this={boxDOM}
     data-snapline-type="group"
     class={`snapline-group ${className}`}
-    style="position: absolute; transform-origin: top left; will-change: transform;"
-    style:width={`${width}px`}
-    style:height={`${height}px`}
+    style={`position: absolute; transform-origin: top left; will-change: transform; width: ${initialWidth}px; height: ${initialHeight}px;`}
 >
     <header bind:this={headerEl} class="snapline-group-header" data-snapline-part="group-header">
         {#if headerContent}

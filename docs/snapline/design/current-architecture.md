@@ -1,3 +1,9 @@
+---
+title: SnapLine current architecture
+description: Internal design doc — the post-re-architecture implementation.
+hidden: true
+---
+
 # SnapLine current architecture
 
 Status: describes the post-re-architecture implementation  

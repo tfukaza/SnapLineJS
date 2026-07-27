@@ -204,6 +204,18 @@ Concretely:
   the batched `onGeometryChanged({ nodes })` reports settled geometry the
   framework may persist (geometry is SnapLine-owned; ignoring the event
   never reverts the mirror).
+- **Position and size are one commit.** `#writeSizeGeometry` paints
+  `style.width`/`style.height` and the transform subtree in a single WRITE_1
+  task, from the values authored in a single tick — never re-read from state a
+  later measurement may have moved. Two consequences bind every contributor:
+  a DOM→state reconcile must not adopt the measured box while a gesture owns
+  the authored one (the rendered box is a frame behind, and pairing it with a
+  fresh transform makes the anchored edge jump), and **an adapter must not
+  write size through the framework renderer while scheduling the transform
+  through the engine** — two schedulers with no ordering contract land them in
+  different frames. Prop-driven adapter geometry therefore sets
+  `worldTransform` + `setSizeState(...)` and calls `scheduleGeometryWrite()`,
+  which routes both through that same single task.
 - **Initial node geometry** is explicit: after assigning a committed framework
   element, adapters call `remeasureDomGeometry()`. ResizeObserver remains the
   ongoing invalidation path, not the initial-mount handshake.

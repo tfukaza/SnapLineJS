@@ -26,9 +26,16 @@ sectionOrder: 2
 Connector `rules` are symmetric limits: `maxIncoming`/`maxOutgoing` accept a
 count, `0` (disables that direction), or the explicit `"unlimited"`. A
 source-only output is `{ maxIncoming: 0 }`; a single-input port is
-`{ maxOutgoing: 0, maxIncoming: 1 }`. Topology is always controlled — lines
-exist because your document's `LineRecord`s say so, and gestures propose
-changes through `ControlledGraph`'s `onLineChangeRequest`.
+`{ maxOutgoing: 0, maxIncoming: 1 }`. Omitted rules default to
+`maxOutgoing: "unlimited"`, `maxIncoming: 1`, `reconnect: true`,
+`allowParallel: false`, and `onFull: "reject"`. `onFull` decides what happens
+when a proposal would exceed `maxIncoming`: `"reject"` refuses it, while
+`"replace-oldest"` evicts the oldest incoming lines to make room — useful for
+single-input ports that should adopt the newest connection. Topology is
+always controlled — lines exist because your document's `LineRecord`s say so,
+and gestures propose changes through `ControlledGraph`'s
+`onLineChangeRequest`; imperative topology methods like `deleteLine` are
+`@internal` and not part of the public API.
 
 ## Coordinates
 

@@ -21,10 +21,13 @@ canonical document.
 
 Adapters expose stable attributes including:
 
-- `data-snapline-type="node|connector|group|selection"`
+- `data-snapline-type="node|connector|connector-line|group|selection|placement-preview"`
 - `data-snapline-part="group-header|group-resize|node-resize"`
 - `data-handle="n|ne|e|se|s|sw|w|nw"`
 - `data-selected="true|false"`
+- `data-snapline-state="focus|idle"` (written alongside `data-selected`)
+- `data-line-id` (the line's stable `lineId`, on the rendered line element)
+- `data-allowed="true|false"` (on the placement preview wrapper)
 
 SnapLine supplies only structural positioning and pointer requirements. Node
 cards, connector shapes, line strokes, selection fills, focus rings, and group

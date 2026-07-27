@@ -12,25 +12,27 @@ frameworkKey: overview
 
 | Class | Responsibility |
 | --- | --- |
-| `NodeMirror` | Position, selection, resize, and connectors |
-| `ConnectorMirror` | Connection rules, metadata, and gestures |
-| `LineMirror` | Connection state and SVG geometry |
-| `RectSelectController` | Background rectangle selection |
-| `GroupNodeMirror` | Resizable exclusive membership and recursive carry |
-| `PlacementController<T>` | Preview, validation, commit, and cancellation state |
+| [`NodeMirror`](/docs/snapline/reference/vanilla/node) | Position, selection, resize, and connectors |
+| [`ConnectorMirror`](/docs/snapline/reference/vanilla/connector) | Connection rules, metadata, and gestures |
+| [`LineMirror`](/docs/snapline/reference/vanilla/line) | Connection state and SVG geometry |
+| [`RectSelectController`](/docs/snapline/reference/vanilla/select) | Background rectangle selection |
+| [`GroupNodeMirror`](/docs/snapline/reference/vanilla/group) | Resizable exclusive membership and recursive carry |
+| [`PlacementController<T>`](/docs/snapline/reference/vanilla/placement) | Preview, validation, commit, and cancellation state |
 
 Core objects require an engine with collision support. Assign each committed
 element to its object, then call `remeasureDomGeometry()`. Destroy owned objects when
 their records are removed. Topology is always controlled: attach a graph owner
-with `attachControlledGraph(engine, { onLineChangeRequest })`, push your
-`LineRecord`s through `setCanonicalGraph`, and apply each gesture's atomic
-proposal to your records.
+with [`attachControlledGraph(engine, { onLineChangeRequest })`](/docs/snapline/reference/vanilla/controlled-graph),
+push your `LineRecord`s through `setCanonicalGraph`, and apply each gesture's
+atomic proposal to your records.
 
 ## Query helpers
 
 `getNodes`, `getConnectors`, `getGroupNodes`, and `getSelectedNodes` return
 engine-scoped snapshots; `query(engine)` exposes the read-only `GraphQuery`
-facade with identity lookups (`node(id)` / `connector(id)` / `line(id)`) and
+facade with collection snapshots (`nodes()` / `connectors()` / `groups()` /
+`lines()` — settled lines only, and the only public way to enumerate them),
+identity lookups (`node(id)` / `connector(id)` / `line(id)`), and
 `diagnostics()`. `getParentGroup` returns settled ownership.
 
 Callbacks use event objects carrying the relevant component, metadata, pointer

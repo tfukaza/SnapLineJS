@@ -2,7 +2,6 @@
   import {
     NodeMirror,
     ConnectorMirror,
-    LineMirror,
     type ConnectorRules,
     type ConnectorCallbacks,
     type ConnectorSurfaceStrategy,
@@ -21,7 +20,6 @@
     surfaceStrategies = [],
     virtual = false,
     colliderRadius = undefined,
-    lineClass = undefined,
     connectorObject = null,
     data = {},
   }: {
@@ -36,7 +34,6 @@
     /** Keep the logical connector without rendering a visible port element. */
     virtual?: boolean;
     colliderRadius?: number;
-    lineClass?: typeof LineMirror;
     connectorObject?: ConnectorMirror | null;
     data?: Record<string, string>;
   } = $props();
@@ -53,7 +50,6 @@
     edgePan,
     surfaceStrategies,
     colliderRadius,
-    lineClass,
   });
 
   nodeObject.addConnectorObject(connector);
@@ -79,7 +75,6 @@
       edgePan,
       surfaceStrategies,
       colliderRadius,
-      lineClass,
     });
   });
 

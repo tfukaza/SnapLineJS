@@ -1,0 +1,45 @@
+---
+title: Line API
+description: Core LineMirror identity, phases, geometry snapshots, and render binding.
+order: 4
+sectionTitle: Reference
+sectionOrder: 3
+framework: vanilla
+frameworkKey: line
+---
+
+`LineMirror` carries a line's connection state and geometry. Lines are
+created by gestures and by the reconciler for canonical records — never
+construct or delete them imperatively.
+
+`lineId` is the stable domain identity, minted at creation or supplied by the
+reconciler for canonical records. It is never the engine-internal
+`BaseObject.id`.
+
+## Phases
+
+`LineMirrorPhase` is the explicit line lifetime:
+
+| Phase | Meaning |
+| --- | --- |
+| `"source-start"` | Gesture claimed a source; no geometry yet |
+| `"preview-free"` | Following the pointer with no candidate target |
+| `"preview-target"` | Snapped to a candidate target |
+| `"drop"` | Pointer released; admission is being decided |
+| `"staged"` | Completed locally, awaiting the canonical owner's decision (controlled mode) |
+| `"connected"` | Settled |
+
+Preview phases are the same mirror, not a second entity. Subscribe with
+`onStateChange` to receive `LineStateSnapshot`s (`phase`, `target`,
+`candidate`, `payload`).
+
+## Rendering
+
+`bindGeometryWriter(callback)` registers a retained-mode writer that receives
+`LineGeometrySnapshot`s (`start`, `end`, `delta`) on movement and returns a
+cleanup function; `geometrySnapshot()` reads the current geometry once.
+`payload` carries the canonical record's opaque payload for presentation
+decisions.
+
+Enumerate settled lines with `query(engine).lines()` (gesture previews are not
+part of the settled graph); look one up with `query(engine).line(id)`.

@@ -9,7 +9,6 @@ import {
 } from "react";
 import {
   ConnectorMirror,
-  LineMirror,
   type ConnectorRules,
   type ConnectorCallbacks,
   type ConnectorSurfaceStrategy,
@@ -32,7 +31,6 @@ export interface ConnectorProps {
   /** Keep the logical connector without rendering a visible port element. */
   virtual?: boolean;
   colliderRadius?: number;
-  lineClass?: typeof LineMirror;
   connectorObject?: ConnectorMirror | null;
   data?: Record<string, string>;
 }
@@ -55,7 +53,6 @@ export const Connector = forwardRef<ConnectorRef, ConnectorProps>(
       surfaceStrategies = [],
       virtual = false,
       colliderRadius,
-      lineClass,
       connectorObject = null,
       data = {},
     },
@@ -79,7 +76,6 @@ export const Connector = forwardRef<ConnectorRef, ConnectorProps>(
         edgePan,
         surfaceStrategies,
         colliderRadius,
-        lineClass,
       });
       nodeObject.addConnectorObject(connectorRef.current);
     }
@@ -97,14 +93,12 @@ export const Connector = forwardRef<ConnectorRef, ConnectorProps>(
         edgePan,
         surfaceStrategies,
         colliderRadius,
-        lineClass,
       });
     }, [
       callbacks,
       colliderRadius,
       connector,
       edgePan,
-      lineClass,
       metadata,
       rules,
       surfaceStrategies,

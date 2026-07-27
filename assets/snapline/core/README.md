@@ -23,6 +23,9 @@ npm install @snap-engine/core @snap-engine/snapline
 - `@snap-engine/snapline/group`
 - `@snap-engine/snapline/placement`
 - `@snap-engine/snapline/query`
+- `@snap-engine/snapline/graph-mirror`
+- `@snap-engine/snapline/line-reconciler`
+- `@snap-engine/snapline/geometry`
 
 ```ts
 import {
@@ -57,7 +60,7 @@ before the drag threshold, so consumers can preserve click selection or other
 gesture-start UI for headless surfaces.
 
 Call `connector.updateConfig(...)` to change callbacks, metadata, policy,
-surface strategies, collider radius, edge-pan behavior, or the line class
+surface strategies, collider radius, or edge-pan behavior
 without replacing the connector or its existing lines. `name` is
 construction-only because it is the connector's key in its parent node.
 

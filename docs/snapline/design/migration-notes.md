@@ -1,3 +1,9 @@
+---
+title: SnapLine migration notes
+description: Internal design doc — migrating across the controlled-graph re-architecture.
+hidden: true
+---
+
 # SnapLine migration notes — the controlled-graph re-architecture
 
 Status: migration reference for the pre-1.0 re-architecture  

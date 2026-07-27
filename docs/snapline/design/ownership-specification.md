@@ -1,3 +1,9 @@
+---
+title: SnapLine ownership specification
+description: Internal design doc — the normative framework ownership contract.
+hidden: true
+---
+
 # SnapLine framework ownership specification
 
 Status: normative ownership contract — implemented by the controlled-graph
@@ -529,12 +535,27 @@ Adapters MAY render from SnapLine’s line-mirror collection as long as:
 
 ### A3. Geometry
 
-Adapters MUST render node/group width and height.
+Adapters MUST render the initial node/group width and height.
 Core MAY update collision state synchronously and request a rendered size
 through callbacks.
 
 Adapters MUST call `remeasureDomGeometry()` after the committed element and
 dimensions are available.
+
+An adapter MUST NOT write size through the framework renderer while routing the
+transform through the engine queue: they are separate schedulers with no
+ordering contract, so the two can be painted in different frames — visible as
+the new size at the old position for one frame whenever the anchored edge is
+the top or left one. Prop-driven geometry updates MUST therefore assign
+`worldTransform`, call `setSizeState(...)`, and then `scheduleGeometryWrite()`,
+which commits position and size in one task at one stage. Consequently a
+reactive `width`/`height` binding on the rendered element is a second writer
+and MUST be a one-time initial snapshot rather than a live binding.
+
+Core MUST paint the size authored in the same tick as the transform it is
+painted with. A DOM→state reconcile MUST NOT adopt the measured box while a
+gesture owns the authored one: the rendered box is one frame behind, and
+pairing it with a current transform moves the anchored edge.
 
 ### A4. Callback composition
 

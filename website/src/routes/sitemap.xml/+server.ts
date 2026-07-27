@@ -5,6 +5,7 @@ const staticPaths = [
   "/",
   "/snapsort",
   "/snapsort/gallery",
+  "/snapline",
   "/about",
   "/docs",
 ];

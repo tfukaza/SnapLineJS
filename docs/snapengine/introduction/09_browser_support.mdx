@@ -1,0 +1,141 @@
+---
+title: Browser Support
+description: Browser compatibility for SnapEngine Core features and the web platform APIs they use.
+order: 9
+project: snapengine
+projectTitle: SnapEngine
+section: introduction
+sectionTitle: Introduction
+sectionOrder: 1
+---
+
+SnapEngine Core targets modern, evergreen browsers. The compatibility below is
+derived from the browser APIs and syntax used by the current source, not from a
+claim that every browser and version receives the complete automated test suite.
+
+This audit covers `src/` and was last reviewed on July 26, 2026 against
+[MDN Browser Compatibility Data](https://github.com/mdn/browser-compat-data)
+version 8.0.8.
+
+## Minimum versions
+
+For full Core behavior, including input-listener cleanup, use at least these
+browser versions:
+
+| Browser | Minimum version |
+|---|---:|
+| Chrome | 90 |
+| Edge | 90 |
+| Firefox | 86 |
+| Safari | 15 |
+| Chrome for Android | 90 |
+| Firefox for Android | 86 |
+| Safari on iOS | 15 |
+
+The limiting Core primitive is abortable event listeners:
+`addEventListener(type, listener, { signal })`. Several other required APIs,
+including `ResizeObserver` and Pointer Events, became available earlier.
+SnapEngine does not include browser polyfills, and Internet Explorer is not
+supported.
+
+## Feature support matrix
+
+`✅ 90+` means that the feature has the platform APIs it needs beginning with
+that browser version. It does not mean that every listed version is continuously
+tested by SnapEngine.
+
+| SnapEngine feature | Chrome | Edge | Firefox | Safari | Chrome Android | Firefox Android | iOS Safari |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| Core engine and render queue | ✅ 90+ | ✅ 90+ | ✅ 86+ | ✅ 15+ | ✅ 90+ | ✅ 86+ | ✅ 15+ |
+| DOM measurement and synchronization | ✅ 90+ | ✅ 90+ | ✅ 86+ | ✅ 15+ | ✅ 90+ | ✅ 86+ | ✅ 15+ |
+| Pointer, wheel, drag, and pinch input | ✅ 90+ | ✅ 90+ | ✅ 86+ | ✅ 15+ | ✅ 90+ | ✅ 86+ | ✅ 15+ |
+| Camera and coordinate transforms | ✅ 90+ | ✅ 90+ | ✅ 86+ | ✅ 15+ | ✅ 90+ | ✅ 86+ | ✅ 15+ |
+| Collision detection | ✅ 90+ | ✅ 90+ | ✅ 86+ | ✅ 15+ | ✅ 90+ | ✅ 86+ | ✅ 15+ |
+| Standard CSS-property animation | ✅ 90+ | ✅ 90+ | ✅ 86+ | ✅ 15+ | ✅ 90+ | ✅ 86+ | ✅ 15+ |
+| Custom `$variable` animation | ✅ 90+ | ✅ 90+ | ✅ 128+ | ✅ 16.4+ | ✅ 90+ | ✅ 128+ | ✅ 16.4+ |
+| Canvas debug renderer | ✅ 90+ | ✅ 90+ | ✅ 86+ | ✅ 15+ | ✅ 90+ | ✅ 86+ | ✅ 15+ |
+
+Custom `$variable` animation has a newer floor because it registers typed,
+numeric CSS custom properties with
+[`CSS.registerProperty()`](https://developer.mozilla.org/en-US/docs/Web/API/CSS/registerProperty_static).
+Constructing an animation with `$` keys throws a descriptive error when that API
+is unavailable. Ordinary CSS-property animations do not use
+`CSS.registerProperty()`.
+
+## Platform API audit
+
+| SnapEngine functionality | Browser APIs and syntax currently used | Requirement |
+|---|---|---|
+| Shared render pipeline | `requestAnimationFrame()`, `cancelAnimationFrame()`, promises, `Map`, and `Set` | Required by every engine |
+| Container and object layout | `ResizeObserver`, `MutationObserver`, `getBoundingClientRect()`, `getComputedStyle()`, and `CSSStyleDeclaration` | Required when DOM is assigned |
+| Input handling | Pointer Events, the `PointerEvent` constructor, `WheelEvent`, abortable event listeners, and `Event.composedPath()` | Required for full pointer, wheel, drag, and pinch behavior |
+| Object transforms | CSS `transform`, `translate3d()`, and `scale()` | Required for DOM-backed object positioning |
+| Camera transforms | CSS `matrix3d()` and DOM rectangles | Required when applying camera output to a DOM layer |
+| Collision detection | JavaScript number and collection APIs, including `Math.hypot()` | No additional browser API beyond Core |
+| Standard animation | `Animation`, `KeyframeEffect`, `AnimationEffect.getComputedTiming()`, `Animation.commitStyles()`, and computed styles | Required by `AnimationObject` |
+| Custom animation variables | CSS custom properties, `CSS.registerProperty()`, `style.setProperty()`, and `style.getPropertyValue()` | Required only for `$variable` keyframes |
+| Debug renderer | `<canvas>` and `CanvasRenderingContext2D` | Required only when debugging is enabled |
+| DOM bookkeeping | `classList`, data attributes, `Element.remove()`, `WeakMap`, and `Proxy` | Required by DOM-backed objects |
+
+`Event.composedPath()` is preferred for routing through composed DOM trees, but
+SnapEngine contains a parent-node fallback. `globalThis.reportError()` is also
+optional because frame-task failures fall back to `console.error()`.
+
+## Key API version floors
+
+These are the first unprefixed versions for the relevant API, or the newest
+primitive in a grouped requirement. The overall feature matrix uses the higher
+Core minimum where necessary.
+
+| Platform requirement | Chrome | Edge | Firefox | Safari | Chrome Android | Firefox Android | iOS Safari |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| `requestAnimationFrame()` | 24 | 12 | 23 | 7 | 25 | 23 | 7 |
+| `ResizeObserver` | 64 | 79 | 69 | 13.1 | 64 | 79 | 13.4 |
+| `PointerEvent` and its constructor | 55 | 12 | 59 | 13 | 55 | 79 | 13 |
+| Abortable `addEventListener()` | 90 | 90 | 86 | 15 | 90 | 86 | 15 |
+| Animation constructors, timing, and `commitStyles()` | 84 | 84 | 75 | 13.1 | 84 | 79 | 13.4 |
+| `CSS.registerProperty()` | 78 | 79 | 128 | 16.4 | 78 | 128 | 16.4 |
+| ES modules and nullish coalescing | 80 | 80 | 72 | 13.1 | 80 | 79 | 13.4 |
+
+Canvas 2D, mutation observers, computed styles, DOM rectangles, class lists, and
+the CSS transform functions used by SnapEngine all predate the Core minimums
+above.
+
+## Build and runtime expectations
+
+The package exports TypeScript source as ES modules. Consuming applications are
+expected to process it through their TypeScript-aware bundler and choose a
+JavaScript syntax target appropriate for their browser policy. The version
+matrix on this page covers runtime platform APIs; it cannot account for a
+consumer build that leaves unsupported JavaScript syntax untransformed.
+
+SnapEngine is browser-only. Create engines and animations after a DOM is
+available rather than during server rendering.
+
+## Browser-specific notes
+
+- Safari on iOS can report adjusted `getBoundingClientRect()` values when the
+  user zooms the page. Test camera and pointer-coordinate behavior if page zoom
+  is part of the product experience.
+- Pointer Events provide the touch data used for drag and pinch gestures, but an
+  application may still need an appropriate CSS `touch-action` policy to keep
+  native scrolling or zooming from winning a gesture.
+- `Animation.commitStyles()` is used to preserve the final computed state.
+  SnapEngine catches commit failures, but browsers below the documented
+  animation floor can revert a non-persistent animation after it is canceled.
+- The main Playwright configuration exercises Chromium and Firefox. Some layout
+  suites also exercise WebKit, but the compatibility table should not be read
+  as an end-to-end test guarantee for Safari or branded mobile browsers.
+
+## Compatibility sources
+
+- [MDN: `requestAnimationFrame()`](https://developer.mozilla.org/en-US/docs/Web/API/Window/requestAnimationFrame)
+- [MDN: Resize Observer API](https://developer.mozilla.org/en-US/docs/Web/API/Resize_Observer_API)
+- [MDN: Pointer events](https://developer.mozilla.org/en-US/docs/Web/API/Pointer_events)
+- [MDN: `addEventListener()` options](https://developer.mozilla.org/en-US/docs/Web/API/EventTarget/addEventListener)
+- [MDN: Web Animations API](https://developer.mozilla.org/en-US/docs/Web/API/Web_Animations_API)
+- [MDN: `Animation.commitStyles()`](https://developer.mozilla.org/en-US/docs/Web/API/Animation/commitStyles)
+- [MDN: `CSS.registerProperty()`](https://developer.mozilla.org/en-US/docs/Web/API/CSS/registerProperty_static)
+- [MDN: CSS transforms](https://developer.mozilla.org/en-US/docs/Web/CSS/transform)
+- [MDN: Canvas 2D](https://developer.mozilla.org/en-US/docs/Web/API/CanvasRenderingContext2D)
+- [MDN: JavaScript `import`](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/import)

@@ -1,8 +1,5 @@
 import { BaseObject, ElementObject } from "@snap-engine/core";
-import {
-  ConnectorMirror,
-  resolveConnectorSourceAtPoint,
-} from "./connector";
+import { ConnectorMirror, resolveConnectorSourceAtPoint } from "./connector";
 import { LineMirror } from "./line";
 import type {
   pointerUpProp,
@@ -89,7 +86,10 @@ const DEFAULT_NODE_CONFIG: Required<Omit<NodeConfig, "id">> = {
 
 /** Object-spread merge that ignores undefined values (adapters forward
  * possibly-undefined props, which must not shadow the defaults). */
-export function mergeConfig<T extends object>(defaults: T, config: Partial<T>): T {
+export function mergeConfig<T extends object>(
+  defaults: T,
+  config: Partial<T>,
+): T {
   const merged = { ...defaults };
   for (const key of Object.keys(config) as (keyof T)[]) {
     const value = config[key];
@@ -219,6 +219,10 @@ class ResizeHoverController extends BaseObject {
   #previousNodeCursor = "";
   #previousContainerCursor = "";
   #previousTargetCursor = "";
+  // Whether this controller currently owns the cursor it wrote. Restoration is
+  // gated on it so clear() is idempotent and never clobbers a cursor the
+  // application set on the container itself.
+  #applied = false;
 
   constructor(engine: any) {
     super(engine, null);
@@ -234,6 +238,8 @@ class ResizeHoverController extends BaseObject {
     if (this.#node === node) this.clear();
     if (this.#count <= 0) {
       resizeHoverControllers.delete(this.engine);
+      // destroy() clears, so a cursor written for some other node cannot be
+      // stranded on the container when the last node releases.
       this.destroy();
     }
   }
@@ -255,6 +261,7 @@ class ResizeHoverController extends BaseObject {
     if (nodeElement) nodeElement.style.cursor = handle.cursor;
     if (container) container.style.cursor = handle.cursor;
     if (element) element.style.cursor = handle.cursor;
+    this.#applied = true;
     node.callbacks.onResizeHandleChange?.({
       node,
       handle: handle.handle,
@@ -263,16 +270,23 @@ class ResizeHoverController extends BaseObject {
   }
 
   clear(): void {
-    if (!this.#node) return;
     const node = this.#node;
+    // Not gated on `node`: the container cursor outlives any single node, so
+    // restoring it must not depend on one still being tracked.
     this.#restoreCss();
     this.#node = null;
     this.#handle = null;
     this.#target = null;
-    node.callbacks.onResizeHandleChange?.({ node, handle: null, cursor: null });
+    node?.callbacks.onResizeHandleChange?.({
+      node,
+      handle: null,
+      cursor: null,
+    });
   }
 
   #restoreCss(): void {
+    if (!this.#applied) return;
+    this.#applied = false;
     const nodeElement = this.#node?.element;
     const container = this.engine.containerElement as HTMLElement | null;
     nodeElement?.removeAttribute("data-snapline-resize-handle");
@@ -288,6 +302,17 @@ class ResizeHoverController extends BaseObject {
       return;
     }
     this.activate(handle, prop.event?.target);
+  }
+
+  destroy(): void {
+    // BaseObject.destroy does not unsubscribe global callbacks. Left attached,
+    // a destroyed controller keeps handling pointerMove, so a remount (HMR,
+    // React StrictMode) leaves two controllers writing the cursor — and the
+    // second captures the first's write as its "previous" value, permanently
+    // poisoning restoration.
+    this.event.global.pointerMove = null;
+    this.clear();
+    super.destroy();
   }
 }
 
@@ -309,10 +334,18 @@ function findResizeHandle(
 ): ResizeHandleCollider | null {
   let winner: ResizeHandleCollider | null = null;
   for (const collider of getResizeHandles(engine.global)) {
-    if (!(collider instanceof ResizeHandleCollider) || collider.engine !== engine) continue;
+    if (
+      !(collider instanceof ResizeHandleCollider) ||
+      collider.engine !== engine
+    )
+      continue;
     if (node && collider.parent !== node) continue;
     if (!collider.containsWorldPoint(position.x, position.y)) continue;
-    if (!winner || CORNER_HANDLES.has(collider.handle) || !CORNER_HANDLES.has(winner.handle)) {
+    if (
+      !winner ||
+      CORNER_HANDLES.has(collider.handle) ||
+      !CORNER_HANDLES.has(winner.handle)
+    ) {
       winner = collider;
     }
   }
@@ -341,6 +374,12 @@ class NodeMirror extends ElementObject {
   #activeResizeHandle: ResizeHandle | null = null;
   /** Read by GroupNodeMirror to distinguish a resize from a move drag. */
   #resizing = false;
+  // The size last authored through setSizeState, kept apart from #hitBox (which
+  // tracks what the browser actually rendered) so a write always paints the
+  // value its own tick authored.
+  #authoredWidth = 0;
+  #authoredHeight = 0;
+  #hasAuthoredSize = false;
   #resizeArmed = false;
   #resizeStartW = 0;
   #resizeStartH = 0;
@@ -362,7 +401,8 @@ class NodeMirror extends ElementObject {
     this.#callbacks = this.#config.callbacks;
     this.nodeId = config.id ?? mintDomainId("node", this.global);
     getGraphMirror(this.engine).registerNode(this);
-    const resizeEnabled = config.resizable === true || config.resizeHandles !== undefined;
+    const resizeEnabled =
+      config.resizable === true || config.resizeHandles !== undefined;
     this.#resizeHandles = !resizeEnabled
       ? []
       : config.resizeHandles !== undefined
@@ -371,8 +411,7 @@ class NodeMirror extends ElementObject {
           : [...new Set(config.resizeHandles)]
         : RESIZE_HANDLES;
     this.#resizeHandleThickness =
-      config.resizeHandleThickness ??
-      DEFAULT_RESIZE_HANDLE_THICKNESS;
+      config.resizeHandleThickness ?? DEFAULT_RESIZE_HANDLE_THICKNESS;
 
     this._connectors = {};
     this.#dragStartX = this.worldTransform.x;
@@ -417,7 +456,6 @@ class NodeMirror extends ElementObject {
     // Base positioning styles are framework-owned: adapters must render the
     // element with `position: absolute; transform-origin: top left` (see the
     // ownership note in assets/snapline/AGENTS.md).
-
   }
 
   get config(): Required<Omit<NodeConfig, "id">> {
@@ -532,21 +570,38 @@ class NodeMirror extends ElementObject {
   // same-frame double-fire (idempotent when it runs twice across frames).
   remeasureDomGeometry(): void {
     if (!this.element) {
-      throw new Error("Cannot sync node geometry before assigning its DOM element");
+      throw new Error(
+        "Cannot sync node geometry before assigning its DOM element",
+      );
     }
-    this.schedule(
-      () => {
-        const property = this.readDom({ unapplyTransform: false }, "READ_1");
-        this.#hitBox.width = property.width;
-        this.#hitBox.height = property.height;
-        this.#positionResizeHitBoxes(property.width, property.height);
-        for (const connector of Object.values(this._connectors)) {
-          connector.measureLocalCenter("READ_1");
-        }
-      },
-      { stage: "READ_1", queueId: `${this.id}-remeasure` },
-    );
+    this.schedule(() => this.#syncMeasuredGeometry("READ_1"), {
+      stage: "READ_1",
+      queueId: `${this.id}-remeasure`,
+    });
     this.scheduleLineWrites();
+  }
+
+  // Reconciles state with what the browser actually rendered: the node box, the
+  // resize hitboxes derived from it, and each connector's local center. Shared
+  // by the ResizeObserver (READ_1) and the post-write re-measure (READ_2) so the
+  // two cannot drift apart.
+  #syncMeasuredGeometry(stage: "READ_1" | "READ_2"): void {
+    if (!this.element) return;
+    const property = this.readDom({ unapplyTransform: false }, stage);
+    // While a gesture is authoring the size, the authored box is the truth and
+    // the rendered box is one frame behind: the ResizeObserver fires for frame
+    // N's paint, so this read lands in frame N+1 AFTER that frame's pointermove
+    // already advanced both the size and worldTransform. Adopting it here would
+    // make the WRITE_1 paint a stale height beside a fresh transform — a
+    // one-frame jump of the anchored edge on every north/west drag.
+    if (!this.#resizing) {
+      this.#hitBox.width = property.width;
+      this.#hitBox.height = property.height;
+      this.#positionResizeHitBoxes(property.width, property.height);
+    }
+    for (const connector of Object.values(this._connectors)) {
+      connector.measureLocalCenter(stage);
+    }
   }
 
   // State-only half of a size change: clamps to min and synchronously updates
@@ -556,6 +611,12 @@ class NodeMirror extends ElementObject {
   setSizeState(width: number, height: number): void {
     const w = Math.max(this.#config.minWidth, width);
     const h = Math.max(this.#config.minHeight, height);
+    // The authored size is captured here and painted verbatim, so whatever
+    // reconciles #hitBox with the DOM in between cannot desynchronize the size
+    // from the worldTransform authored in the same tick.
+    this.#authoredWidth = w;
+    this.#authoredHeight = h;
+    this.#hasAuthoredSize = true;
     this.#hitBox.width = w;
     this.#hitBox.height = h;
     this.#positionResizeHitBoxes(w, h);
@@ -563,7 +624,11 @@ class NodeMirror extends ElementObject {
 
   // Drives live resize geometry directly. The framework observes and persists
   // the result, but it is not part of the pointer-move paint path.
-  setSize(width: number, height: number, handle: ResizeHandle | null = null): void {
+  setSize(
+    width: number,
+    height: number,
+    handle: ResizeHandle | null = null,
+  ): void {
     this.setSizeState(width, height);
     this.#scheduleSizeGeometryWrite();
     this.#callbacks.onSizeChange?.({
@@ -576,31 +641,38 @@ class NodeMirror extends ElementObject {
     });
   }
 
+  /**
+   * Schedules the one task that paints size and transform together, plus the
+   * re-measure and line re-glue. Adapters mutate `worldTransform` and
+   * `setSizeState(...)` and then call this, so a prop-driven position+size
+   * change lands in one frame, in one stage-legal task. Unlike `setSize` it
+   * emits no `onSizeChange`, which would echo a controlled app's own value
+   * back at it.
+   */
+  scheduleGeometryWrite(): void {
+    this.#scheduleSizeGeometryWrite();
+  }
+
   #scheduleSizeGeometryWrite(): void {
-    this.schedule(
-      () => this.#writeSizeGeometry(),
-      { stage: "WRITE_1", queueId: `${this.id}-size` },
-    );
-    this.schedule(
-      () => {
-        if (!this.element) return;
-        const property = this.readDom({ unapplyTransform: false }, "READ_2");
-        this.#hitBox.width = property.width;
-        this.#hitBox.height = property.height;
-        this.#positionResizeHitBoxes(property.width, property.height);
-        for (const connector of Object.values(this._connectors)) {
-          connector.measureLocalCenter("READ_2");
-        }
-      },
-      { stage: "READ_2", queueId: `${this.id}-size-measure` },
-    );
+    this.schedule(() => this.#writeSizeGeometry(), {
+      stage: "WRITE_1",
+      queueId: `${this.id}-size`,
+    });
+    this.schedule(() => this.#syncMeasuredGeometry("READ_2"), {
+      stage: "READ_2",
+      queueId: `${this.id}-size-measure`,
+    });
     this.scheduleLineWrites();
   }
 
+  // The single atomic geometry commit: size and transform are painted in one
+  // synchronous block, in one task, in one stage — and from values authored in
+  // the same tick, never re-read from state that a later measurement may have
+  // moved underneath them.
   #writeSizeGeometry(): void {
-    if (this.element) {
-      this.element.style.width = `${this.#hitBox.width}px`;
-      this.element.style.height = `${this.#hitBox.height}px`;
+    if (this.element && this.#hasAuthoredSize) {
+      this.element.style.width = `${this.#authoredWidth}px`;
+      this.element.style.height = `${this.#authoredHeight}px`;
     }
     this.writeTransformRecursive();
   }
@@ -720,7 +792,9 @@ class NodeMirror extends ElementObject {
     const dragAllowed =
       this.#resizeArmed ||
       ((this.#dragHandles.size === 0 ||
-        [...this.#dragHandles].some((handle) => target && handle.contains(target))) &&
+        [...this.#dragHandles].some(
+          (handle) => target && handle.contains(target),
+        )) &&
         this.#callbacks.canStartDrag?.({
           node: this,
           pointerId: e.event.pointerId,
@@ -747,7 +821,10 @@ class NodeMirror extends ElementObject {
         originalEvent: e.event,
       }) ?? "replace";
 
-    if (this.#pointerSelectionMode === "replace" && !this.#selectedAtPointerDown) {
+    if (
+      this.#pointerSelectionMode === "replace" &&
+      !this.#selectedAtPointerDown
+    ) {
       for (const node of [...getGraphMirror(this.engine).selection]) {
         node.setSelected(false);
       }
@@ -890,23 +967,39 @@ class NodeMirror extends ElementObject {
       this.#edgePanPointerId = null;
     }
     if (this.#resizing) {
-      this.#applyResizeDrag(
-        prop.end.x - this.#mouseDownX,
-        prop.end.y - this.#mouseDownY,
-      );
-      // Pointer-up is a synchronization boundary for consumers that immediately
-      // query the committed handle/box. Keep the coalesced frame write for the
-      // hot path, but make the final retained geometry observable now.
-      this.#writeSizeGeometry();
-      this.#callbacks.onGeometryChanged?.({
-        nodes: [this.#geometryOf(this)],
-      });
-      this.#resizing = false;
-      this.#resizeArmed = false;
-      this.#activeResizeHandle = null;
-      getGraphMirror(this.engine).resizingNode = null;
-      this.#dragPointerId = null;
-      this.#refreshResizeHover(prop.end);
+      // The teardown runs in `finally` because everything above it calls out:
+      // #writeSizeGeometry touches the DOM and onGeometryChanged is consumer
+      // code. A throw that skipped these resets would strand `resizingNode`,
+      // which permanently disables click-selection (see onUp), and would leave
+      // the resize cursor pinned with no path back to a hover recompute.
+      try {
+        this.#applyResizeDrag(
+          prop.end.x - this.#mouseDownX,
+          prop.end.y - this.#mouseDownY,
+        );
+        // Pointer-up is a synchronization boundary for consumers that immediately
+        // query the committed handle/box. Keep the coalesced frame write for the
+        // hot path, but make the final retained geometry observable now.
+        this.#writeSizeGeometry();
+        this.#callbacks.onGeometryChanged?.({
+          nodes: [this.#geometryOf(this)],
+        });
+      } finally {
+        this.#resizing = false;
+        this.#resizeArmed = false;
+        this.#activeResizeHandle = null;
+        getGraphMirror(this.engine).resizingNode = null;
+        this.#dragPointerId = null;
+        // No target element: dragEndProp carries no originating event. activate()
+        // still writes the node and container cursors, and the next pointermove
+        // re-activates with a target because #target differs.
+        this.#refreshResizeHover(prop.end);
+      }
+      // Settle #hitBox against what actually rendered. The gesture suppressed
+      // that reconciliation, and the release write often authors the previous
+      // frame's values, so no ResizeObserver would fire to trigger it — without
+      // this an authored size the stylesheet refused would stick.
+      this.remeasureDomGeometry();
       // A resized node's center may have moved into/out of a group.
       for (const group of getGraphMirror(this.engine).groups) {
         if ((group as unknown) !== this) group.refreshMembership(true);
@@ -1027,7 +1120,10 @@ class NodeMirror extends ElementObject {
     );
   }
 
-  #refreshResizeHover(position: eventPosition, target?: EventTarget | null): void {
+  #refreshResizeHover(
+    position: eventPosition,
+    target?: EventTarget | null,
+  ): void {
     this.#resizeHoverController?.clear();
     const handle = findResizeHandle(this.engine, position);
     if (handle) this.#resizeHoverController?.activate(handle, target);
@@ -1047,9 +1143,9 @@ class NodeMirror extends ElementObject {
     this.setSelected(false);
     if (this.#resizeHitBoxes.size > 0) {
       const ownedHandles = new Set(this.#resizeHitBoxes.values());
-      snapData(this.global).resizeHandles = getResizeHandles(this.global).filter(
-        (handle) => !ownedHandles.has(handle as ResizeHandleCollider),
-      );
+      snapData(this.global).resizeHandles = getResizeHandles(
+        this.global,
+      ).filter((handle) => !ownedHandles.has(handle as ResizeHandleCollider));
       this.#resizeHoverController?.release(this);
       this.#resizeHoverController = null;
       this.#resizeHitBoxes.clear();

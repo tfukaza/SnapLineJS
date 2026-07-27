@@ -1302,10 +1302,14 @@ export class ElementObject extends BaseObject {
   // the transform graph) where the read walks public children (DOM layout nests
   // publicly). No reparenting or position mutation: each descendant's world value
   // is already current via the epoch cache, so writeTransform just paints it.
+  // IDLE is permitted here as it is for writeTransform/writeDom: style writes only
+  // invalidate layout. The read twin stays frame-only because it forces layout.
   writeTransformRecursive() {
-    const stage = this.global.currentStage as FrameWriteStages;
-    if (!["WRITE_1", "WRITE_2", "WRITE_3"].includes(stage)) {
-      throw new Error(`Invalid stage: ${stage}`);
+    const currentStage = this.global.currentStage;
+    if (!["WRITE_1", "WRITE_2", "WRITE_3", "IDLE"].includes(currentStage)) {
+      throw new Error(
+        `Writing transform during ${currentStage} is prohibited. Only WRITE_1, WRITE_2, WRITE_3, and IDLE are allowed.`,
+      );
     }
 
     this.writeTransform();

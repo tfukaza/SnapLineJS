@@ -7,6 +7,7 @@ import type { RequestHandler } from "./$types";
 const projectHome: Record<string, string> = {
   snapengine: "snapengine/introduction",
   snapsort: "snapsort/introduction",
+  snapline: "snapline/introduction",
 };
 
 export const GET: RequestHandler = ({ params, url }) => {

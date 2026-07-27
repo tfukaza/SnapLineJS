@@ -1,0 +1,24 @@
+---
+title: Select API
+description: Core RectSelectController configuration, callbacks, and geometry binding.
+order: 5
+sectionTitle: Reference
+sectionOrder: 3
+framework: vanilla
+frameworkKey: select
+---
+
+`RectSelectController` implements background rectangle selection. Construct
+it with `new RectSelectController(engine, parent, { callbacks })`.
+
+`SelectCallbacks` receives selection start and change events; a
+`SelectChangeEvent` carries the selected nodes for the in-progress marquee.
+
+Bind a marquee element with `bindGeometryWriter(callback)`: the callback
+receives a `SelectRect` (`x`, `y`, `width`, `height`, `visible`) and writes
+element geometry directly, returning a cleanup function. Destroy the
+controller with `destroy(false)` when tearing down.
+
+Read the settled selection with `getSelectedNodes(engine)`. Per-node
+selection behavior (replace, toggle, append) is decided by each node's
+`resolveSelectionMode` callback.

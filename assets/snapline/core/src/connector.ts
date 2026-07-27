@@ -200,7 +200,6 @@ export interface ConnectorConfig {
   name?: string;
   rules?: Partial<ConnectorRules>;
   surfaceStrategies?: readonly ConnectorSurfaceStrategy[];
-  lineClass?: typeof LineMirror;
   colliderRadius?: number;
   metadata?: SnapLineMetadata;
   callbacks?: ConnectorCallbacks;
@@ -254,11 +253,7 @@ class ConnectorMirror extends ElementObject {
     super.parent = parent;
   }
 
-  constructor(
-    engine: any,
-    parent: NodeMirror,
-    config: ConnectorConfig = {},
-  ) {
+  constructor(engine: any, parent: NodeMirror, config: ConnectorConfig = {}) {
     super(engine, parent as unknown as BaseObject);
 
     this.#outgoingLines = [];
@@ -681,9 +676,7 @@ class ConnectorMirror extends ElementObject {
   /** @internal Gesture/reconciler-only: lines exist because canonical
    * records (or in-flight gestures) say so. */
   createLine(config: { id?: string } = {}): LineMirror {
-    const line = this.#config.lineClass
-      ? new this.#config.lineClass(this.engine, this, config)
-      : new LineMirror(this.engine, this, config);
+    const line = new LineMirror(this.engine, this, config);
     line.setSourceSurfaceContext(this.#defaultAnchorStrategy(), null);
     return line;
   }
@@ -895,7 +888,11 @@ class ConnectorMirror extends ElementObject {
   ): void {
     const target = candidate?.candidate.connector ?? null;
 
-    if (!candidate || !target || !this.#admitsConnection(target, line, "drop")) {
+    if (
+      !candidate ||
+      !target ||
+      !this.#admitsConnection(target, line, "drop")
+    ) {
       if (this.#gestureOrigin === "reconnect") {
         // Gesture disconnect: propose the removal; the line stays visibly
         // detached until the decision. A rejected removal re-glues it from

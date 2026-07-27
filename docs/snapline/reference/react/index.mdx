@@ -12,13 +12,13 @@ frameworkKey: overview
 
 | Component   | Important props                                                                                         |
 | ----------- | ------------------------------------------------------------------------------------------------------- |
-| `Node`      | `id`, `nodeObject`, geometry, resize configuration, callbacks, `onGeometryChanged`, `lineComponent`, `elementProps` |
-| `Connector` | `id`, `connectorObject`, `rules`, `virtual`, `surfaceStrategies`, metadata, callbacks                   |
-| `Line`      | `line`, SVG presentation                                                                                |
-| `Select`    | callbacks and presentation                                                                              |
-| `Group`     | node geometry, header content, membership policy and callbacks                                          |
-| `Placement` | controller, cancellation behavior, render function                                                      |
-| `ControlledGraph` | `lines` (your `LineRecord`s), `onLineChangeRequest`, `onDiagnosticsChanged`                       |
+| [`Node`](/docs/snapline/reference/react/node)      | `id`, `nodeObject`, geometry, resize configuration, callbacks, `onGeometryChanged`, `lineComponent`, `elementProps` |
+| [`Connector`](/docs/snapline/reference/react/connector) | `id`, `name` (required), `connectorObject`, `rules`, `virtual`, `surfaceStrategies`, metadata, callbacks |
+| [`Line`](/docs/snapline/reference/react/line)      | `line`, SVG presentation                                                                                |
+| [`Select`](/docs/snapline/reference/react/select)    | callbacks and presentation                                                                              |
+| [`Group`](/docs/snapline/reference/react/group)     | node geometry, header content, membership policy and callbacks                                          |
+| [`Placement`](/docs/snapline/reference/react/placement) | controller, cancellation behavior, render function                                                      |
+| [`ControlledGraph`](/docs/snapline/reference/react/controlled-graph) | `lines` (your `LineRecord`s), `onLineChangeRequest`, `onDiagnosticsChanged`                       |
 
 `Node` and `Group` forward refs to their core objects. `Connector` exposes a
 `ConnectorRef`, and `useNodeHandle()` returns a callback ref for a dedicated
@@ -32,7 +32,7 @@ application-owned edge state. Custom renderers mount static structure and call
 Canvas, or graphics refs without rendering React on pointer movement.
 
 Connector callbacks, metadata, policy, surface strategies, collider radius,
-edge-pan behavior, and line class update across renders. `virtual` can also be
+and edge-pan behavior update across renders. `virtual` can also be
 toggled without replacing the logical connector or its lines. `name` and
 `connectorObject` are construction-time identities.
 

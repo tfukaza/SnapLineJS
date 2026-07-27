@@ -28,7 +28,7 @@
   class="assets-showcase landing-section-gap landing-section-gap-wide"
 >
   <div class="assets-header">
-    <h2 class="eyebrow landing-section-heading">Choose an asset to get started.</h2>
+    <h2 class="eyebrow landing-section-heading">Choose an asset to get started</h2>
     <p class="subhead">
       Assets built on top of SnapEngine provide a wide variety of interactive UI
       components for popular front-end frameworks, from node UI to drag-and-drop
@@ -76,7 +76,7 @@
       </div>
     </article>
 
-    <div class="asset-card planned-card">
+    <div id="asset-snapzap" class="asset-card planned-card">
       <div class="asset-preview pending-preview" aria-hidden="true">
         <div class="pending-plus-grid">
           {#each pendingPlusCells as cell (cell)}
@@ -100,7 +100,7 @@
       </div>
     </div>
 
-    <div class="asset-card planned-card snapline-card">
+    <article id="asset-snapline" class="asset-card snapline-card">
       <div class="asset-preview snapline-preview" aria-hidden="true">
         <div class="pending-plus-grid">
           {#each pendingPlusCells as cell (cell)}
@@ -126,15 +126,9 @@
           <h3>SnapLine</h3>
         </div>
         <p>Node-based UI</p>
-        <button
-          type="button"
-          class="button primary learn-more-button planned-button-placeholder"
-          disabled
-        >
-          Learn more
-        </button>
+        <a class="button primary learn-more-button" href="/snapline">Learn more</a>
       </div>
-    </div>
+    </article>
   </div>
 </section>
 
