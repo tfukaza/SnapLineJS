@@ -1,31 +1,27 @@
 <script lang="ts">
   import { Connector, Node } from "@snap-engine/snapline-svelte";
   import DemoLine from "./Line.svelte";
-  import { NodeComponent } from "@snap-engine/snapline";
+  import { NodeMirror } from "@snap-engine/snapline";
   import { onMount } from "svelte";
 
   let node: any = $state(null);
-  let { nodeObject, text }: { nodeObject?: NodeComponent | null, text?: string | null } = $props();
+  let { nodeObject, text }: { nodeObject?: NodeMirror | null, text?: string | null } = $props();
   let input: HTMLInputElement | null = null;
 
+  // Dataflow is application-owned now: SnapLine no longer propagates values
+  // through connectors; the input edits local state only.
   onMount(() => {
     nodeObject = (node as any).getNodeObject();
     if (text) {
       input!.value = text;
-      nodeObject!.setProp("text", text);
     }
   });
-
-  function onInput(e: any) {
-    const text = (e.target as any).value;
-    nodeObject?.setProp("text", text);
-  }
 </script>
 
 <Node bind:this={node} className="node card" LineSvelteComponent={DemoLine} nodeObject={nodeObject}>
   <div class="row-container">
-    <input type="text" oninput={onInput} bind:this={input} />
-    <Connector name="text" maxConnectors={0} allowDragOut={true} />
+    <input type="text" bind:this={input} />
+    <Connector name="text" rules={{ maxIncoming: 0 }} />
   </div>
 </Node>
 

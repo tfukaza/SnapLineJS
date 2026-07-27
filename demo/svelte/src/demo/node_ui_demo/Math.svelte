@@ -1,13 +1,13 @@
 <script lang="ts">
   import { onMount, tick } from "svelte";
 
-  import { NodeComponent } from "@snap-engine/snapline";
+  import { NodeMirror } from "@snap-engine/snapline";
   import { Connector, Node } from "@snap-engine/snapline-svelte";
 
   import Line from "./Line.svelte";
   import "./../../node_ui.scss";
 
-  let {nodeObject}: { nodeObject?: NodeComponent | null } = $props();
+  let {nodeObject}: { nodeObject?: NodeMirror | null } = $props();
 
   interface input {
     value: number;
@@ -24,19 +24,13 @@
   let operation = $state("+");
   let node: any = $state(null);
 
-  function assignCallback(id: string) {
-    nodeObject?.addSetPropCallback((value: number) => {
-      calculate(id, value);
-    }, `input-${id}`);
-  }
-
+  // Dataflow is application-owned now: SnapLine no longer propagates values
+  // through connectors. This demo keeps its arithmetic local.
   onMount(() => {
     if (!nodeObject) {
       nodeObject = (node as any).getNodeObject();
     }
-    assignCallback("0");
     setUpCallback("0");
-    assignCallback("1");
     setUpCallback("1");
   });
 
@@ -62,7 +56,7 @@
         result /= Number(inputValues[key].value);
       }
     }
-    nodeObject?.setProp("output", result);
+    void result;
   }
 
   function setUpCallback(id: string) {
@@ -88,7 +82,6 @@
   function addInput() {
     let id: string = (nextInputId++).toString();
     inputValues[id] = { value: 0, id, connector: null, input: null, editable: true };
-    assignCallback(id);
     tick().then(() => {
       setUpCallback(id);
     });
@@ -139,15 +132,14 @@
         }}><p>/</p></button
       >
     </div>
-    <Connector name="output" maxConnectors={0} allowDragOut={true} />
+    <Connector name="output" rules={{ maxIncoming: 0 }} />
   </div>
   <hr>
   {#each Object.values(inputValues) as input (input.id)}
     <div class="row-container">
       <Connector
         name={`input-${input.id}`}
-        maxConnectors={1}
-        allowDragOut={false}
+        rules={{ maxOutgoing: 0, maxIncoming: 1, onFull: "replace-oldest" }}
         bind:this={input.connector}
       />
       <div class="input-container">

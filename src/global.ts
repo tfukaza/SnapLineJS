@@ -1,4 +1,5 @@
 import { BaseObject, FrameTask } from "./object";
+import type { FrameStages } from "./object";
 import type { Engine } from "./engine";
 
 type renderEntry = Map<string, Map<string, FrameTask>>;
@@ -132,58 +133,40 @@ class GlobalManager {
         // Process each stage for ALL engines before moving to the next stage.
         // Stages are awaited so framework adapters can flush DOM work from
         // queued callbacks before the next layout read.
+        //
+        // Each stage's queue is swapped out BEFORE it drains, never replaced
+        // after. Because every callback is awaited, an adapter's microtask
+        // flush can run mid-drain and schedule into the stage currently
+        // running; replacing the map afterwards would discard that task
+        // outright, stranding a node at a half-applied geometry with no retry.
+        // Swapping first means such a task deterministically runs next frame.
+        const drain = async (stage: FrameStages) => {
+          this.currentStage = stage;
+          const batch = this.queue[stage];
+          this.queue[stage] = new Map();
+          for (const engine of this.#engineObjectTables.keys()) {
+            await engine.processStage(stage, batch);
+          }
+        };
 
-        // READ_1 stage for all engines
-        this.currentStage = "READ_1";
-        for (const engine of this.#engineObjectTables.keys()) {
-          await engine.processStage("READ_1", this.queue.READ_1);
-        }
-        this.queue.READ_1 = new Map();
+        await drain("READ_1");
 
         // Collision detection after READ_1 so colliders have up-to-date positions
         for (const engine of this.#engineObjectTables.keys()) {
           engine.processCollisions();
         }
 
-        // WRITE_1 stage for all engines
-        this.currentStage = "WRITE_1";
-        for (const engine of this.#engineObjectTables.keys()) {
-          await engine.processStage("WRITE_1", this.queue.WRITE_1);
-        }
-        this.queue.WRITE_1 = new Map();
-
-        // READ_2 stage for all engines
-        this.currentStage = "READ_2";
-        for (const engine of this.#engineObjectTables.keys()) {
-          await engine.processStage("READ_2", this.queue.READ_2);
-        }
-        this.queue.READ_2 = new Map();
-
-        // WRITE_2 stage for all engines
-        this.currentStage = "WRITE_2";
-        for (const engine of this.#engineObjectTables.keys()) {
-          await engine.processStage("WRITE_2", this.queue.WRITE_2);
-        }
-        this.queue.WRITE_2 = new Map();
+        await drain("WRITE_1");
+        await drain("READ_2");
+        await drain("WRITE_2");
 
         // Animation processing for all engines
         for (const engine of this.#engineObjectTables.keys()) {
           engine.processAnimations(timestamp);
         }
 
-        // READ_3 stage for all engines
-        this.currentStage = "READ_3";
-        for (const engine of this.#engineObjectTables.keys()) {
-          await engine.processStage("READ_3", this.queue.READ_3);
-        }
-        this.queue.READ_3 = new Map();
-
-        // WRITE_3 stage for all engines
-        this.currentStage = "WRITE_3";
-        for (const engine of this.#engineObjectTables.keys()) {
-          await engine.processStage("WRITE_3", this.queue.WRITE_3);
-        }
-        this.queue.WRITE_3 = new Map();
+        await drain("READ_3");
+        await drain("WRITE_3");
 
         this.currentStage = "IDLE";
 

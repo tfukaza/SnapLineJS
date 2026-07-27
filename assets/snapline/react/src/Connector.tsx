@@ -8,80 +8,74 @@ import {
   type CSSProperties,
 } from "react";
 import {
-  ConnectorComponent,
-  LineComponent,
-  type ConnectorCapabilities,
+  ConnectorMirror,
+  type ConnectorRules,
   type ConnectorCallbacks,
   type ConnectorSurfaceStrategy,
   type SnapLineMetadata,
 } from "@snap-engine/snapline";
 import { useSnapLineEngine } from "./Engine";
-import { NodeObjectContext } from "./Node";
+import { NodeMirrorContext } from "./Node";
 
 export interface ConnectorProps {
-  allowDragOut?: boolean;
+  /** Stable domain identity; minted when omitted (supply for persistence). */
+  id?: string;
   className?: string;
-  maxConnectors?: number;
   name: string;
   style?: CSSProperties;
   metadata?: SnapLineMetadata;
   callbacks?: ConnectorCallbacks;
   edgePan?: boolean;
-  capabilities?: Partial<ConnectorCapabilities>;
+  rules?: Partial<ConnectorRules>;
   surfaceStrategies?: readonly ConnectorSurfaceStrategy[];
   /** Keep the logical connector without rendering a visible port element. */
   virtual?: boolean;
   colliderRadius?: number;
-  lineClass?: typeof LineComponent;
-  connectorObject?: ConnectorComponent | null;
+  connectorObject?: ConnectorMirror | null;
   data?: Record<string, string>;
 }
 
 export interface ConnectorRef {
-  object(): ConnectorComponent;
+  object(): ConnectorMirror;
 }
 
 export const Connector = forwardRef<ConnectorRef, ConnectorProps>(
   (
     {
-      allowDragOut = true,
+      id,
       className = "",
-      maxConnectors = 1,
       name,
       style,
       metadata = {},
       callbacks = {},
       edgePan = true,
-      capabilities,
+      rules,
       surfaceStrategies = [],
       virtual = false,
       colliderRadius,
-      lineClass,
       connectorObject = null,
       data = {},
     },
     ref,
   ) => {
     const engine = useSnapLineEngine();
-    const nodeObject = useContext(NodeObjectContext);
+    const nodeObject = useContext(NodeMirrorContext);
     if (!nodeObject) {
       throw new Error("<Connector> must be rendered inside <Node>.");
     }
 
     const ownsConnectorRef = useRef(connectorObject == null);
-    const connectorRef = useRef<ConnectorComponent | null>(connectorObject);
+    const connectorRef = useRef<ConnectorMirror | null>(connectorObject);
     if (!connectorRef.current) {
-      connectorRef.current = new ConnectorComponent(engine, nodeObject, {
-        allowDragOut,
-        maxConnectors,
+      connectorRef.current = new ConnectorMirror(engine, nodeObject, {
+        id,
         name,
+        rules,
         metadata,
         callbacks,
         edgePan,
-        capabilities,
         surfaceStrategies,
         colliderRadius,
-        lineClass,
       });
       nodeObject.addConnectorObject(connectorRef.current);
     }
@@ -93,26 +87,20 @@ export const Connector = forwardRef<ConnectorRef, ConnectorProps>(
 
     useEffect(() => {
       connector.updateConfig({
-        allowDragOut,
-        maxConnectors,
+        rules,
         metadata,
         callbacks,
         edgePan,
-        capabilities,
         surfaceStrategies,
         colliderRadius,
-        lineClass,
       });
     }, [
-      allowDragOut,
       callbacks,
-      capabilities,
       colliderRadius,
       connector,
       edgePan,
-      lineClass,
-      maxConnectors,
       metadata,
+      rules,
       surfaceStrategies,
     ]);
 
@@ -125,7 +113,7 @@ export const Connector = forwardRef<ConnectorRef, ConnectorProps>(
 
     useEffect(() => {
       return () => {
-        if (ownsConnectorRef.current) connector.destroy();
+        if (ownsConnectorRef.current) connector.destroy(false);
       };
     }, [connector]);
 
@@ -139,7 +127,7 @@ export const Connector = forwardRef<ConnectorRef, ConnectorProps>(
         {...Object.fromEntries(
           Object.entries(data).map(([key, value]) => [`data-${key}`, value]),
         )}
-        className={`connector ${capabilities?.source ?? allowDragOut ? "right" : "left"} ${className}`.trim()}
+        className={`connector ${(rules?.maxOutgoing ?? "unlimited") !== 0 ? "right" : "left"} ${className}`.trim()}
         style={{
           background: "#4f46e5",
           border: "2px solid #ffffff",

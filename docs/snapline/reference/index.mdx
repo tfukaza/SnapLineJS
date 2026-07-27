@@ -4,6 +4,7 @@ description: Entry points and framework-specific references for SnapLine 0.3.
 order: 1
 sectionTitle: Reference
 sectionOrder: 3
+hidden: true
 ---
 
 Use the framework selector to switch between equivalent Vanilla, Svelte, and
@@ -11,9 +12,9 @@ React pages.
 
 | Package | Primary exports |
 | --- | --- |
-| `@snap-engine/snapline` | Node, connector, line, selection, group, placement, and query core APIs |
-| `@snap-engine/snapline-svelte` | `Node`, `Connector`, `Line`, `Select`, `Group`, `Placement` |
-| `@snap-engine/snapline-react` | `Engine`, `Node`, `Connector`, `Line`, `Select`, `Group`, `Placement` |
+| `@snap-engine/snapline` | Node, connector, line, selection, group, placement, controlled-graph, and query core APIs |
+| `@snap-engine/snapline-svelte` | `Node`, `Connector`, `Line`, `Select`, `Group`, `Placement`, `ControlledGraph` |
+| `@snap-engine/snapline-react` | `Engine`, `Node`, `Connector`, `Line`, `Select`, `Group`, `Placement`, `ControlledGraph` |
 
 Supported core subpaths are `node`, `connector`, `line`, `select`, `group`,
-`placement`, and `query`.
+`placement`, `query`, `graph-mirror`, `line-reconciler`, and `geometry`.

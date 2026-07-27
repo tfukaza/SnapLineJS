@@ -85,7 +85,7 @@ test("programmatic edge add and remove sync lines with zero intents", async ({ p
   expect(result.disconnect).toBe(0);
 });
 
-test("full input replaces via the document: disconnect then connect, in order", async ({ page }) => {
+test("full input replaces via ONE atomic request the document applies", async ({ page }) => {
   await dragFromTo(
     page,
     await centerOf(connectorOf(page, "Node A", "output")),
@@ -100,9 +100,7 @@ test("full input replaces via the document: disconnect then connect, in order", 
   await expect(page.getByTestId("edge-count")).toHaveText("1");
   await expect(page.locator(LINE)).toHaveCount(1);
   const log = (await page.getByTestId("intent-log").textContent()) ?? "";
-  expect(log).toBe(
-    "connect:a->b|disconnect(replacement):a->b|connect:c->b",
-  );
+  expect(log).toBe("connect:a->b|replace:-a->b+c->b");
 });
 
 test("rejected gesture connect leaves no line after re-sync and no paint flicker on accept", async ({ page }) => {

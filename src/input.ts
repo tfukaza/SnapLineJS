@@ -1,5 +1,6 @@
 import type { GlobalManager } from "./global";
 import type { ElementObject } from "./object";
+import { reportConsumerError } from "./errors";
 
 export enum mouseButton {
   LEFT = 0,
@@ -537,9 +538,11 @@ class InputControl {
     // layers, backgrounds) yield to a matching headless source surface.
     const visibleConnectorOwner =
       domOwner &&
-      typeof (domOwner as ElementObject & {
-        resolveSourceHit?: unknown;
-      }).resolveSourceHit === "function"
+      typeof (
+        domOwner as ElementObject & {
+          resolveSourceHit?: unknown;
+        }
+      ).resolveSourceHit === "function"
         ? domOwner
         : null;
     // A resize-hitbox hit supersedes the DOM owner under it, and covers the case
@@ -671,35 +674,44 @@ class InputControl {
       button: event.buttons,
     };
 
-    this.#dispatchObjectEvent(currentOwner, "pointerUp", prop);
-    this.#dispatchGlobalEvent("pointerUp", prop);
+    try {
+      this.#dispatchObjectEvent(currentOwner, "pointerUp", prop);
+      this.#dispatchGlobalEvent("pointerUp", prop);
 
-    if (!pointer) {
-      return;
-    }
-
-    pointer.endX = event.clientX;
-    pointer.endY = event.clientY;
-
-    const gesture = this.#gestureDict[event.pointerId];
-    if (gesture?.type === "drag") {
-      // Once a drag has actually started (dragStart was dispatched, so the
-      // gesture is in the "drag" state), releasing must always fire dragEnd —
-      // even if the pointer wandered back near its start point. Re-measuring
-      // the distance at release would misclassify an away-and-back gesture
-      // (e.g. dropping an item back in the same place) as a click and leave
-      // the drag session uncommitted. Only a gesture still "pending" at
-      // release (never crossed the start threshold) is a click.
-      const dragStarted = gesture.state === "drag";
-      gesture.state = "release";
-      if (dragStarted || this.#isPastDragStartThreshold(pointer)) {
-        this.#fireDragEnd(pointer, pointer.button);
+      if (!pointer) {
+        return;
       }
-      delete this.#gestureDict[event.pointerId];
-    }
 
-    this.#endPinchGesturesForPointer(event.pointerId);
-    delete this.#pointerDict[event.pointerId];
+      pointer.endX = event.clientX;
+      pointer.endY = event.clientY;
+
+      const gesture = this.#gestureDict[event.pointerId];
+      if (gesture?.type === "drag") {
+        // Once a drag has actually started (dragStart was dispatched, so the
+        // gesture is in the "drag" state), releasing must always fire dragEnd —
+        // even if the pointer wandered back near its start point. Re-measuring
+        // the distance at release would misclassify an away-and-back gesture
+        // (e.g. dropping an item back in the same place) as a click and leave
+        // the drag session uncommitted. Only a gesture still "pending" at
+        // release (never crossed the start threshold) is a click.
+        const dragStarted = gesture.state === "drag";
+        gesture.state = "release";
+        if (dragStarted || this.#isPastDragStartThreshold(pointer)) {
+          this.#fireDragEnd(pointer, pointer.button);
+        }
+      }
+    } finally {
+      // Deleting the pointer record is what releases its claim, and a claim
+      // that outlives its gesture suppresses every later global pointerMove
+      // for that pointer id — so this cannot be skippable by anything above.
+      // Only drag gestures are keyed by a bare pointer id (pinches use a
+      // composite key), so the delete matches the old conditional exactly.
+      if (pointer) {
+        delete this.#gestureDict[event.pointerId];
+        this.#endPinchGesturesForPointer(event.pointerId);
+        delete this.#pointerDict[event.pointerId];
+      }
+    }
   }
 
   #onWheel = (event: WheelEvent) => {
@@ -949,9 +961,14 @@ class InputControl {
         current: gesture.current,
         end: gesture.current,
       };
-      this.#dispatchObjectEvent(gesture.member, "pinchEnd", prop);
-      this.#dispatchGlobalEvent("pinchEnd", prop);
-      delete this.#gestureDict[gestureKey];
+      try {
+        this.#dispatchObjectEvent(gesture.member, "pinchEnd", prop);
+        this.#dispatchGlobalEvent("pinchEnd", prop);
+      } finally {
+        // Same invariant as the drag path: a gesture that survives its own end
+        // event keeps re-ending on every later release.
+        delete this.#gestureDict[gestureKey];
+      }
     }
   }
 
@@ -963,7 +980,14 @@ class InputControl {
     if (!owner || !this.#isOwnerRegistered(owner)) {
       return;
     }
-    owner.event.input[event]?.(prop as any);
+    try {
+      owner.event.input[event]?.(prop as any);
+    } catch (error) {
+      // A consumer handler must not unwind the dispatch: the pointer-lifecycle
+      // cleanup that follows releases the pointer's claim, and skipping it
+      // suppresses every later global pointerMove for that pointer id.
+      reportConsumerError(error);
+    }
   }
 
   #dispatchGlobalEvent<EventName extends keyof InputEventCallback>(
@@ -976,7 +1000,13 @@ class InputControl {
       if (engine && engine !== this.#engine) {
         continue;
       }
-      callback(prop);
+      try {
+        callback(prop);
+      } catch (error) {
+        // Per listener: one throwing subscriber must not starve the ones
+        // registered after it (hover cursor, camera control, selection).
+        reportConsumerError(error);
+      }
     }
   }
 
@@ -1009,9 +1039,7 @@ class InputControl {
   // SnapLine registers them in global.data so pointerdown ownership can be
   // resolved geometrically before composedPath routing. The registry shape is
   // declared in snapline-globals.ts (engine core cannot import SnapLine).
-  #resolveSourceSurfaceOwner(
-    position: eventPosition,
-  ): ElementObject | null {
+  #resolveSourceSurfaceOwner(position: eventPosition): ElementObject | null {
     const surfaces = this.global?.data?.sourceSurfaces as
       | Array<{
           id: string;
@@ -1030,20 +1058,15 @@ class InputControl {
       | undefined;
     if (!surfaces) return null;
 
-    let winner:
-      | {
-          owner: ElementObject;
-          priority: number;
-          distance: number;
-          strategyIndex: number;
-        }
-      | null = null;
+    let winner: {
+      owner: ElementObject;
+      priority: number;
+      distance: number;
+      strategyIndex: number;
+    } | null = null;
 
     for (const surface of surfaces) {
-      if (
-        surface.engine !== this.#engine ||
-        surface.isDeleteRequested
-      ) {
+      if (surface.engine !== this.#engine || surface.isDeleteRequested) {
         continue;
       }
       const resolved = surface.resolveSourceHit(position);

@@ -1,15 +1,11 @@
 import type { RectCollider } from "@snap-engine/core/collision";
 import type { eventPosition } from "@snap-engine/core";
-import type { NodeComponent } from "./node";
-import { NodeManager } from "./node-manager";
-
-/**
- * Structural stand-in for GroupNodeComponent so node.ts can notify groups on
- * settle without importing the group module (no group→node import cycle).
- */
-export interface GroupLike {
-  refreshMembership(fireDelta: boolean): void;
-}
+import { GraphMirror } from "./graph-mirror";
+import {
+  LineReconciler,
+  type ControlledGraphCallbacks,
+  type ControlledGraphHandle,
+} from "./line-reconciler";
 
 /**
  * Structural source-surface contract shared with engine input. Keeping this
@@ -43,16 +39,10 @@ export interface SourceSurfaceOwner {
  * with this declaration.
  */
 export interface SnapLineSharedData {
-  /** Currently-selected nodes (multi-select drag moves all of them). */
-  select?: NodeComponent[];
-  /** All live groups; notified on any node's drop so membership stays settled. */
-  groups?: GroupLike[];
   /** Registered resize hitboxes; input.ts routes pointerdowns over them. */
   resizeHandles?: RectCollider[];
   /** Registered headless source surfaces; input.ts routes pointerdowns to them. */
   sourceSurfaces?: SourceSurfaceOwner[];
-  /** The node mid-resize, so an unrelated pointerUp doesn't click-select. */
-  resizingNode?: NodeComponent | null;
   /**
    * @deprecated Legacy camera-control boolean (last-writer-wins), read by the
    * camera for third-party writers only. In-repo gesture owners block the
@@ -62,27 +52,17 @@ export interface SnapLineSharedData {
   allowCameraControl?: boolean;
   /**
    * Per-engine SnapLine registries. GlobalManager is application-wide, so the
-   * map is keyed by engine; `getNodeManager` lazy-creates entries the first
-   * time a SnapLine component registers on that engine.
+   * map is keyed by engine; `getGraphMirror` lazy-creates entries the first
+   * time a SnapLine mirror registers on that engine. WeakMap so a destroyed
+   * engine releases its registry (and every mirror it indexes) — nothing ever
+   * enumerates this map.
    */
-  nodeManagers?: Map<unknown, NodeManager>;
+  graphMirrors?: WeakMap<object, GraphMirror>;
 }
 
 /** Typed view over the untyped global data bag (cast at the boundary). */
 export function snapData(global: { data: any }): SnapLineSharedData {
   return global.data as SnapLineSharedData;
-}
-
-export function getSelectList(global: { data: any }): NodeComponent[] {
-  const data = snapData(global);
-  if (!data.select) data.select = [];
-  return data.select;
-}
-
-export function getGroups(global: { data: any }): GroupLike[] {
-  const data = snapData(global);
-  if (!data.groups) data.groups = [];
-  return data.groups;
 }
 
 export function getResizeHandles(global: { data: any }): RectCollider[] {
@@ -100,18 +80,43 @@ export function getSourceSurfaces(global: {
 }
 
 
-export function getNodeManager(engine: {
+export function getGraphMirror(engine: {
   global: { data: any } | null;
-}): NodeManager {
+}): GraphMirror {
   if (!engine.global) {
-    throw new Error("SnapLine: getNodeManager requires an initialized engine.");
+    throw new Error("SnapLine: getGraphMirror requires an initialized engine.");
   }
   const data = snapData(engine.global);
-  if (!data.nodeManagers) data.nodeManagers = new Map();
-  let manager = data.nodeManagers.get(engine);
-  if (!manager) {
-    manager = new NodeManager(engine);
-    data.nodeManagers.set(engine, manager);
+  if (!data.graphMirrors) data.graphMirrors = new WeakMap();
+  const key = engine as unknown as object;
+  let mirror = data.graphMirrors.get(key);
+  if (!mirror) {
+    mirror = new GraphMirror(engine);
+    data.graphMirrors.set(key, mirror);
   }
-  return manager;
+  return mirror;
+}
+
+/**
+ * Attach the controlled-graph bridge: declares "controlled" authority,
+ * installs the line reconciler, and returns the handle the application (or
+ * adapter) pushes canonical snapshots through.
+ */
+export function attachControlledGraph(
+  engine: { global: { data: any } | null },
+  callbacks: ControlledGraphCallbacks,
+): ControlledGraphHandle {
+  const mirror = getGraphMirror(engine);
+  if (mirror.reconciler) {
+    console.warn(
+      "SnapLine: replacing this engine's existing controlled-graph bridge.",
+    );
+  }
+  const reconciler = new LineReconciler(mirror, callbacks);
+  mirror.reconciler = reconciler;
+  return {
+    setCanonicalGraph: (snapshot) => reconciler.setCanonicalGraph(snapshot),
+    flush: () => mirror.flush(),
+    dispose: () => reconciler.dispose(),
+  };
 }

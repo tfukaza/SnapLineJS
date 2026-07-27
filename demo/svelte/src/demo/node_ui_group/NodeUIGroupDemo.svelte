@@ -3,7 +3,7 @@
   import { Group } from "@snap-engine/snapline-svelte";
   import SimpleNode from "../node_ui_demo/SimpleNode.svelte";
 
-  // The framework hands the member NodeComponent to these callbacks; a consumer
+  // The framework hands the member NodeMirror to these callbacks; a consumer
   // hangs any visual cue off them. Here we tag the member's element so the e2e
   // (and the eye) can see which nodes belong to the group.
   function onMembershipChange(event: {

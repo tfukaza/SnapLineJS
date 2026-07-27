@@ -1,0 +1,50 @@
+---
+title: Connector API
+description: React Connector props, rules and defaults, surfaces, and ref.
+order: 3
+sectionTitle: Reference
+sectionOrder: 3
+framework: react
+frameworkKey: connector
+---
+
+`Connector` must render inside a `Node` (it throws otherwise). It owns (or
+adopts) a core `ConnectorMirror` registered against the parent node. The
+forwarded ref is a `ConnectorRef` whose `object()` returns the mirror.
+
+| Prop | Meaning |
+| --- | --- |
+| `id` | Stable domain identity; minted when omitted — supply it for persistence |
+| `name` | **Required.** The connector's key within its parent node |
+| `rules` | `Partial<ConnectorRules>` admission rules (see below) |
+| `metadata` | `SnapLineMetadata` attached to the connector |
+| `callbacks` | `ConnectorCallbacks` (pointer, candidate, connection events) |
+| `surfaceStrategies` | Custom source/target hit-test and anchor strategies |
+| `virtual` | Keep the logical connector without rendering a port element; surfaces resolve against the parent node |
+| `colliderRadius` | Pointer pickup radius override |
+| `edgePan` | Pan the camera when dragging a line near the viewport edge (default `true`) |
+| `connectorObject` | Adopt an existing `ConnectorMirror` |
+| `className`, `style` | Presentation for the port element |
+| `data` | Extra `data-*` attributes for the port element |
+
+`name` and `connectorObject` are construction-time identities; every other
+prop updates across renders, including `virtual`.
+
+## Connection rules
+
+| Rule | Default | Meaning |
+| --- | --- | --- |
+| `maxOutgoing` | `"unlimited"` | Maximum outgoing lines (previews reserve a slot); `0` makes the connector target-only |
+| `maxIncoming` | `1` | Maximum settled incoming lines; `0` makes the connector source-only |
+| `reconnect` | `true` | Allow dragging a settled line's end to a new target |
+| `allowParallel` | `false` | Both endpoints must allow parallel lines between the same pair |
+| `onFull` | `"reject"` | Policy when a proposal would exceed `maxIncoming`: `"reject"` it, or `"replace-oldest"` to evict the oldest incoming lines |
+| `isValidConnection` | — | Line-aware admission predicate; synchronous and side-effect free, called repeatedly during candidate discovery and rechecked on drop. Either endpoint may veto |
+
+An omitted `rules` prop therefore yields an unlimited-outgoing,
+single-incoming connector that rejects extra incoming lines.
+
+> [!WARNING]
+> Topology methods on `ConnectorMirror` such as `createLine`, `deleteLine`,
+> `deleteAllLines`, and `disconnectFromConnector` are `@internal`. Change
+> topology by updating your canonical `LineRecord`s through `ControlledGraph`.

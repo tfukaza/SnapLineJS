@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { NodeComponent } from "@snap-engine/snapline";
+  import { NodeMirror } from "@snap-engine/snapline";
   import { Connector, Node } from "@snap-engine/snapline-svelte";
   import DemoLine from "./Line.svelte";
   import { onMount } from "svelte";
@@ -7,26 +7,22 @@
   let node: any = $state(null);
   let text: string = $state("Hello World");
   let fontSize: number = $state(20);
-  let { nodeObject }: { nodeObject?: NodeComponent | null } = $props();
+  let { nodeObject }: { nodeObject?: NodeMirror | null } = $props();
 
+  // Dataflow is application-owned now: SnapLine no longer propagates values
+  // through connectors; this demo shows its local defaults.
   onMount(() => {
     nodeObject = (node as any).getNodeObject();
-    nodeObject?.addSetPropCallback((value: string) => {
-      text = value;
-    }, "text");
-    nodeObject?.addSetPropCallback((value: number) => {
-      fontSize = value;
-    }, "font-size");
   });
 </script>
 
 <Node bind:this={node} className="node card" LineSvelteComponent={DemoLine} nodeObject={nodeObject}>
   <div class="row-container">
-    <Connector name="text" maxConnectors={1} allowDragOut={false} />
+    <Connector name="text" rules={{ maxOutgoing: 0, maxIncoming: 1, onFull: "replace-oldest" }} />
     <p>Text</p>
   </div>
   <div class="row-container">
-    <Connector name="font-size" maxConnectors={1} allowDragOut={false} />
+    <Connector name="font-size" rules={{ maxOutgoing: 0, maxIncoming: 1, onFull: "replace-oldest" }} />
     <p>Font Size</p>
   </div>
   <hr/>

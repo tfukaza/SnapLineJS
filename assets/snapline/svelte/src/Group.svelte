@@ -1,9 +1,10 @@
 <script lang="ts">
-    import { GroupNodeComponent, DEFAULT_RESIZE_HANDLE_THICKNESS, type GroupCallbacks, type GroupContainEvent, type GroupMembershipEvent, type NodeDragCommitEvent, type NodeResizeEvent, type ResizeHandle, type SnapLineMetadata } from "@snap-engine/snapline";
+    import { GroupNodeMirror, DEFAULT_RESIZE_HANDLE_THICKNESS, type GroupCallbacks, type GroupContainEvent, type GroupMembershipEvent, type GeometryChangeEvent, type ResizeHandle, type SnapLineMetadata } from "@snap-engine/snapline";
     import type { Engine } from "@snap-engine/core";
     import { onMount, onDestroy, getContext, tick, untrack, type Snippet } from "svelte";
 
     let {
+        id = undefined,
         className = "",
         groupObject = null,
         x = 0,
@@ -24,12 +25,13 @@
         canContain = undefined,
         edgePan = true,
         onMembershipChange = undefined,
-        onResizeCommit = undefined,
-        onDragCommit = undefined,
+        onGeometryChanged = undefined,
         children = undefined,
     }: {
+        /** Stable domain identity; minted when omitted (supply for persistence). */
+        id?: string;
         className?: string;
-        groupObject?: GroupNodeComponent | null;
+        groupObject?: GroupNodeMirror | null;
         x?: number;
         y?: number;
         width?: number;
@@ -48,8 +50,7 @@
         canContain?: (event: GroupContainEvent) => boolean;
         edgePan?: boolean;
         onMembershipChange?: (event: GroupMembershipEvent) => void;
-        onResizeCommit?: (event: NodeResizeEvent) => void;
-        onDragCommit?: (event: NodeDragCommitEvent) => void;
+        onGeometryChanged?: (event: GeometryChangeEvent) => void;
         children?: any;
     } = $props();
 
@@ -58,13 +59,15 @@
     let engine: Engine = getContext("engine");
     const ownsGroup = groupObject == null;
     if (!groupObject) {
-        groupObject = new GroupNodeComponent(engine, null, { width, height, minWidth, minHeight, resizeHandleThickness, resizeHandles, resizeCursors, metadata, callbacks: {}, groupCallbacks: {}, canContain, edgePan });
+        groupObject = new GroupNodeMirror(engine, null, { id, width, height, minWidth, minHeight, resizeHandleThickness, resizeHandles, resizeCursors, metadata, callbacks: {}, groupCallbacks: {}, canContain, edgePan });
     }
 
-    // The box's width/height are framework-owned: seeded from props in the first
-    // markup pass, updated live by core's onSizeChange during a resize drag.
-    let boxW = $state(width);
-    let boxH = $state(height);
+    // Snapshot, not a reactive binding: after mount the engine owns the size, and
+    // a second writer on the same property is what splits it from the transform.
+    // Rendering it once keeps SSR and the first client paint correctly sized.
+    const initialWidth = width;
+    const initialHeight = height;
+
     let mounted = $state(false);
     let unregisterHeader: (() => void) | null = null;
     let originalCallbacks: import("@snap-engine/snapline").NodeCallbacks = {};
@@ -113,25 +116,19 @@
             invoke(event, originalCallbacks.onResizeHandleChange, callbacks.onResizeHandleChange);
         groupObject!.groupCallbacks.onMembershipChange = (event) =>
             invoke(event, originalGroupCallbacks.onMembershipChange, groupCallbacks.onMembershipChange, onMembershipChange);
-        // Resize is handled by the core edge/corner hitboxes; the framework renders
-        // the live size, and the consumer persists the committed size.
+        // Resize is handled by the core edge/corner hitboxes and writes live size
+        // directly; the consumer persists the committed size.
         groupObject!.callbacks.onSizeChange = (event) => {
             invoke(event, originalCallbacks.onSizeChange, callbacks.onSizeChange);
-            boxW = event.width;
-            boxH = event.height;
         };
-        groupObject!.callbacks.onResizeCommit = (event) =>
-            invoke(event, originalCallbacks.onResizeCommit, callbacks.onResizeCommit, onResizeCommit);
-        groupObject!.callbacks.onDragCommit = (event) =>
-            invoke(event, originalCallbacks.onDragCommit, callbacks.onDragCommit, onDragCommit);
+        groupObject!.callbacks.onGeometryChanged = (event) =>
+            invoke(event, originalCallbacks.onGeometryChanged, callbacks.onGeometryChanged, onGeometryChanged);
         // Header is the only move surface; wait a tick so the alias wins over the
-        // element registration. setSizeState seeds the collision footprint (the
-        // DOM size is already rendered from props above).
+        // element registration. The geometry effect seeds the collision footprint
+        // and schedules the first paint once `mounted` flips.
         void tick().then(() => {
             if (!mounted || !groupObject!.element) return;
             if (headerEl) unregisterHeader = groupObject!.registerDragHandle(headerEl);
-            groupObject!.setSizeState(boxW, boxH);
-            groupObject!.syncDomGeometry();
             // Seed membership once siblings have mounted, positioned, and had their
             // hit boxes measured (a WRITE stage runs after READ_1's measure).
             groupObject!.schedule(() => groupObject!.refreshMembership(true), {
@@ -149,39 +146,29 @@
         groupObject!.callbacks.resolveSelectionMode = originalCallbacks.resolveSelectionMode;
         groupObject!.callbacks.onDragStart = originalCallbacks.onDragStart;
         groupObject!.callbacks.onDrag = originalCallbacks.onDrag;
-        groupObject!.callbacks.onDragCommit = originalCallbacks.onDragCommit;
+        groupObject!.callbacks.onGeometryChanged = originalCallbacks.onGeometryChanged;
         groupObject!.callbacks.onSelectionChange = originalCallbacks.onSelectionChange;
         groupObject!.callbacks.onResizeHandleChange = originalCallbacks.onResizeHandleChange;
         groupObject!.callbacks.onSizeChange = originalCallbacks.onSizeChange;
-        groupObject!.callbacks.onResizeCommit = originalCallbacks.onResizeCommit;
         groupObject!.groupCallbacks.onMembershipChange = originalGroupCallbacks.onMembershipChange;
-        if (ownsGroup) groupObject!.destroy();
+        if (ownsGroup) groupObject!.destroy(false);
+        else if (boxDOM) groupObject!.detachElement(boxDOM);
     });
 
+    // One effect for all four geometry props, committed through one engine task.
+    // Splitting position and size across two writers — Svelte's renderer for the
+    // size, the engine's queue for the transform — lets them land in different
+    // frames, which paints the new size at the old position for one frame.
     $effect(() => {
         const nextX = x;
         const nextY = y;
-        if (!mounted) return;
-        const object = untrack(() => groupObject!);
-        object.worldTransform = { x: nextX, y: nextY };
-        object.schedule(() => object.writeTransformAndLines(), {
-            stage: "WRITE_2",
-            queueId: `${object.id}-transform`,
-        });
-    });
-
-    $effect(() => {
         const nextWidth = width;
         const nextHeight = height;
         if (!mounted) return;
-        boxW = nextWidth;
-        boxH = nextHeight;
         const object = untrack(() => groupObject!);
-        void tick().then(() => {
-            if (!mounted || !object.element) return;
-            object.setSizeState(nextWidth, nextHeight);
-            object.syncDomGeometry();
-        });
+        object.worldTransform = { x: nextX, y: nextY };
+        object.setSizeState(nextWidth, nextHeight);
+        object.scheduleGeometryWrite();
     });
 
     export function getNodeObject() {
@@ -193,9 +180,7 @@
     bind:this={boxDOM}
     data-snapline-type="group"
     class={`snapline-group ${className}`}
-    style="position: absolute; transform-origin: top left; will-change: transform;"
-    style:width={`${boxW}px`}
-    style:height={`${boxH}px`}
+    style={`position: absolute; transform-origin: top left; will-change: transform; width: ${initialWidth}px; height: ${initialHeight}px;`}
 >
     <header bind:this={headerEl} class="snapline-group-header" data-snapline-part="group-header">
         {#if headerContent}

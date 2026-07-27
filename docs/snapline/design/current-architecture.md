@@ -1,600 +1,454 @@
+---
+title: SnapLine current architecture
+description: Internal design doc — the post-re-architecture implementation.
+hidden: true
+---
+
 # SnapLine current architecture
 
-Status: review baseline  
+Status: describes the post-re-architecture implementation  
 Reviewed: 2026-07-25  
-Repository baseline: `29373b4`, including the current uncommitted SnapLine work
+Companions:
+[ownership specification](./ownership-specification.md) ·
+[migration notes](./migration-notes.md) ·
+[planned re-architecture](./planned-rearchitecture.md)
 
-This document describes the SnapLine code as it exists in the current working
-tree. It is descriptive, not an endorsement of every current boundary. The
-companion [ownership specification](./ownership-specification.md) turns the
-desired framework-owned model into a proposed normative contract.
+This document describes the SnapLine code as it exists after the
+controlled-graph re-architecture. The
+[ownership specification](./ownership-specification.md) is the normative
+contract this implementation conforms to; the
+[migration notes](./migration-notes.md) cover the API delta for upgraders.
 
 ## Executive summary
 
-SnapLine currently has four layers:
+Topology — which nodes, connectors, and lines exist — is **always
+controlled**: the application document is the single source of truth, and
+there is no uncontrolled topology mode (vanilla consumers own the graph with
+a plain graph-owner module driving the same contract). SnapLine maintains an
+engine-scoped runtime mirror of that document plus everything the document
+does not need to contain: gestures, geometry, selection, and groups. User
+gestures never mutate settled topology locally; each gesture proposes one
+atomic `LineChangeRequest` that the application accepts, normalizes, or
+rejects by updating its records. Position and size stay SnapLine-owned —
+geometry is a visual cue, observed (not negotiated) through one batched
+`onGeometryChanged` callback.
 
-| Layer                       | Current responsibility                                                                                 |
-| --------------------------- | ------------------------------------------------------------------------------------------------------ |
-| Application/framework state | Renders node and connector collections; may own an `EdgeLike[]` document                               |
-| React/Svelte adapters       | Create and destroy core objects, render DOM, and translate callbacks into framework updates            |
-| SnapLine core               | Handles gestures, selection, geometry, grouping, connector policy, line objects, and mirror registries |
-| SnapEngine core             | Provides object lifecycle, input routing, collision, transforms, scheduling, and camera coordinates    |
+| Layer                       | Responsibility                                                                                                 |
+| --------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| Application/framework state | Canonical document: node/connector collections and the `LineRecord[]` line list; applies change requests        |
+| React/Svelte adapters       | Mount/destroy mirrors from collections, push canonical snapshots, render DOM, forward requests and observations |
+| SnapLine core               | Runtime mirrors, gesture mechanics, the line reconciler, selection, geometry, grouping, connector rules         |
+| SnapEngine core             | Object lifecycle, input routing, collision, transforms, frame scheduling, camera coordinates                    |
 
-Node and connector **existence** is already framework-led: mounting a
-`<Node>` or `<Connector>` creates a core object and unmounting it destroys the
-owned object. `NodeManager` mirrors the live core instances for queries and
-edge reconciliation.
-
-Line ownership is transitional:
-
-- Without `EdgeSyncController`, connector topology is authoritative.
-  `ConnectorComponent.connectToConnector()`, connection gestures, and
-  `deleteLine()` directly create and destroy `LineComponent` objects.
-- With `EdgeSyncController`, an application `EdgeLike[]` is treated as
-  canonical. SnapLine still creates and owns the `LineComponent` instances,
-  but `sync()` reconciles them to the application edge list and gesture
-  mutations are reported as application intents.
-
-That means the current package supports both an imperative topology model and
-a controlled-edge model at the same time. Most of the design ambiguity comes
-from the overlap between those modes.
+Node and connector **existence** is framework-mount-led: mounting a
+`<Node>`/`<Connector>` constructs the mirror, unmounting destroys it. Line
+**existence** is record-led: `attachControlledGraph()` installs a
+`LineReconciler` that converges settled `LineMirror`s onto the cached
+canonical `{ lines: LineRecord[] }` snapshot. Every mirror carries a stable
+domain id (`nodeId` / `connectorId` / `lineId`), supplied via `id`
+props/config or minted (`node-42`-style) for the mirror's lifetime.
 
 ## Layer and data flow
 
 ```mermaid
 flowchart TB
-  APP["Application / framework<br/><b>canonical nodes, connectors, and edges</b>"]
-  ADAPTER["React / Svelte adapters<br/><b>component lifecycle and ownership bridge</b>"]
-  MIRRORS["SnapLine runtime mirrors<br/><b>NodeComponent, ConnectorComponent, LineComponent</b>"]
-  STATE["SnapLine interaction state<br/><b>gestures, geometry, selection, and groups</b>"]
-  ENGINE["SnapEngine mechanics<br/><b>input, collision, transforms, and scheduling</b>"]
+  APP["Application document<br/><b>canonical nodes, connectors, LineRecord[]</b>"]
+  ADAPTER["React / Svelte adapters<br/><b>mount lifecycle + ControlledGraph bridge</b>"]
+  RECON["LineReconciler<br/><b>converges line mirrors onto the snapshot</b>"]
+  MIRRORS["Runtime mirrors<br/><b>NodeMirror, ConnectorMirror, LineMirror, GroupNodeMirror</b>"]
+  REGISTRY["GraphMirror (per engine)<br/><b>registries, ids, selection, groups, scheduler</b>"]
+  ENGINE["SnapEngine mechanics<br/><b>input, collision, transforms, scheduling</b>"]
   DOM["Framework-owned DOM"]
 
-  APP -->|"render records and provide edges[]"| ADAPTER
-  ADAPTER -->|"create, destroy, and reconcile"| MIRRORS
-  ENGINE -->|"events and measurements"| STATE
-  STATE -->|"transient updates"| MIRRORS
-  MIRRORS -->|"render callbacks and property writes"| DOM
+  APP -->|"render collections"| ADAPTER
+  ADAPTER -->|"construct / destroy mirrors"| MIRRORS
+  ADAPTER -->|"setCanonicalGraph({lines})"| RECON
+  RECON -->|"create / retarget / prune / settle"| MIRRORS
+  MIRRORS <-->|"register / index"| REGISTRY
+  ENGINE -->|"events and measurements"| MIRRORS
+  MIRRORS -->|"geometry writers, data-* writes"| DOM
   ADAPTER -->|"structural rendering"| DOM
-  MIRRORS -.->|"connect / disconnect intents"| APP
+  MIRRORS -.->|"one atomic LineChangeRequest per gesture"| APP
+  RECON -.->|"onDiagnosticsChanged"| APP
 ```
 
-The word “mirror” is important. Core objects contain interaction and geometry
-state that domain records do not need to contain, but their existence should
-follow the application records when the controlled model is in use.
+"Mirror" is the load-bearing word: runtime objects carry interaction and
+geometry state the document does not need, but their existence follows the
+application's records and mounted components.
 
-## Entity lifecycle
+## Entity lifecycles
 
-```mermaid
-flowchart TB
-  RECORD["Application: render node / connector record"]
-  CREATE["Framework: construct or attach core object"]
-  REGISTER["SnapLine: register live mirror in NodeManager"]
-  COMMIT["Framework: commit and bind DOM element"]
-  SYNC["Framework → SnapLine: syncDomGeometry()"]
-  INTERACT["SnapLine: apply transient interaction state"]
-  REPORT["SnapLine → application: emit commit callbacks"]
-  PERSIST["Application: persist props or collection update"]
-  RESYNC["Framework: resynchronize mirror"]
-  REMOVE["Application: remove record"]
-  DESTROY["Framework: destroy adapter-owned object and DOM"]
-  UNREGISTER["SnapLine: unregister mirror"]
+### Nodes and connectors (framework-mount-led)
 
-  RECORD --> CREATE --> REGISTER --> COMMIT --> SYNC
-  SYNC --> INTERACT --> REPORT --> PERSIST --> RESYNC
-  RESYNC --> REMOVE --> DESTROY --> UNREGISTER
-```
+1. The adapter renders a `Node`/`Connector` from application state and
+   constructs the mirror; the constructor registers it with the engine's
+   `GraphMirror` under its domain id (`config.id` or minted).
+2. The adapter assigns the committed DOM element and calls
+   `remeasureDomGeometry()` (nodes) / relies on the connector's scheduled
+   local-center measurement. A connector may stay headless (virtual) and use
+   surface strategies for hit testing and anchors.
+3. Connector registration schedules a reconciliation pass — a newly mounted
+   endpoint may make a latent canonical line representable.
+4. On unmount, `destroy()` unregisters the mirror; connector/node teardown
+   removes incident line mirrors with reason `"teardown"` and never emits a
+   document-deletion request (the canonical record stays latent).
 
-### Nodes
+Connector policy updates in place through `updateConfig()`; `name` is a
+construction-time key in the parent node's map. `bindElement()` attaches or
+detaches the optional visible port without destroying the logical connector.
 
-1. A React or Svelte `Node` adapter is rendered from application state.
-2. The adapter either accepts a supplied `NodeComponent` or constructs one.
-3. The constructor registers the node with SnapEngine and the per-engine
-   `NodeManager`.
-4. The adapter assigns the committed DOM element, sets the world transform,
-   and calls `syncDomGeometry()`.
-5. During a drag, core mutates `worldTransform` immediately and writes the DOM
-   transform. `onDragCommit` reports final positions for persistence.
-6. During resize, core updates collision state and fires `onSizeChange`; the
-   adapter renders width and height. `onResizeCommit` reports the settled box.
-7. On unmount, an adapter-owned node is destroyed and unregistered.
+### Lines: the controlled protocol
 
-The framework controls whether a node is mounted, but live position is locally
-owned by core during a gesture. The `x`, `y`, `width`, and `height` props can
-resynchronize core, although unchanged props do not by themselves reject and
-revert a completed local drag.
-
-### Connectors
-
-1. A connector is rendered inside a node.
-2. The adapter constructs or accepts a `ConnectorComponent`.
-3. `NodeComponent.addConnectorObject()` calls `assignToNode()`, which stores
-   the connector in the node’s name-keyed `_connectors` map and shares the
-   node property bag.
-4. The constructor also registers the connector in `NodeManager`.
-5. Connector policy and presentation-related configuration are updated in
-   place through `updateConfig()`.
-6. A visible connector binds a DOM element; a virtual connector remains a
-   logical object and uses surface strategies for hit testing and anchors.
-7. Destroying a connector removes all of its incoming and outgoing line
-   mirrors, unregisters it, and removes it from the parent map.
-
-Connector existence therefore follows framework rendering. Connector
-configuration is copied into the core mirror. The connector’s `name` is a
-construction-time key; metadata is currently the common place to carry domain
-node/port identity.
-
-### Lines
-
-Lines are not registered in `NodeManager`. They are organized as topology on
-connectors:
-
-- the source connector holds the line in `outgoingLines`;
-- the target connector holds the same object in `incomingLines`;
-- `LineComponent.start` points to the source;
-- `LineComponent.target` points to the target, or is `null` for a preview;
-- the source node exposes the flattened outgoing list to its adapter.
-
-The source node adapter renders one framework `Line` component per outgoing
-`LineComponent`. `onLinesChanged` copies the latest source list into React or
-Svelte state, so framework reconciliation owns the SVG DOM while SnapLine owns
-the list being mirrored.
-
-A line also carries transient rendering state: anchors, phase, candidate,
-preview position, optional payload, and render subscriptions.
-
-```mermaid
-flowchart TB
-  SN["Source NodeComponent"]
-  SC["Source ConnectorComponent"]
-  LINE["One shared LineComponent"]
-  TC["Target ConnectorComponent"]
-  TN["Target NodeComponent"]
-  LIST["Source node outgoing-line snapshot"]
-  VIEW["React / Svelte Line component"]
-  SVG["Framework-owned SVG"]
-
-  SN -->|"name-keyed connector map"| SC
-  SC -->|"outgoingLines contains"| LINE
-  LINE -->|"start"| SC
-  LINE -->|"target"| TC
-  TC -->|"incomingLines contains same object"| LINE
-  TC --> TN
-  SN -->|"getAllOutgoingLines()"| LIST
-  LIST -->|"onLinesChanged"| VIEW
-  VIEW --> SVG
-  LINE -->|"onRender()"| VIEW
-```
-
-### Groups
-
-`GroupNodeComponent` extends `NodeComponent`. Groups are also kept in the
-shared `global.data.groups` list.
-
-Membership is derived from measured geometry:
-
-- ordinary nodes use center containment;
-- nested groups require full-bounds containment;
-- the smallest eligible group wins by default;
-- a per-engine resolver may choose another eligible parent or no parent;
-- membership cycles are rejected;
-- group drag temporarily reparents transforms, not DOM.
-
-Group membership is therefore SnapLine-derived interaction state, not a
-framework graph-document relation in the current design.
-
-### Selection
-
-Selection is stored in `global.data.select`. `NodeComponent.setSelected()`
-updates that list, writes `data-selected`/`data-snapline-state`, and emits a
-selection callback. `RectSelectComponent` owns the selection gesture and
-collision box, while the framework adapter renders the visible rubber-band
-rectangle from `onRectChange`.
-
-Selection is not currently a controlled framework prop.
-
-## Controlled edge reconciliation
-
-`EdgeSyncController` is the current implementation of application-owned edge
-existence.
-
-### Inputs
+The application owns `LineRecord`s:
 
 ```ts
-interface EdgeSyncConfig {
-  engine: EngineLike;
-  identity(connector: ConnectorComponent): EdgeEndpoint | null;
-  getEdges(): readonly EdgeLike[];
-  callbacks?: {
-    onEdgeConnect?(event: EdgeConnectIntentEvent): void;
-    onEdgeDisconnect?(event: EdgeDisconnectIntentEvent): void;
-  };
+interface LineRecord {
+  id: LineId;
+  fromConnectorId: ConnectorId;
+  toConnectorId: ConnectorId;
+  payload?: unknown;
 }
 ```
 
-`identity()` maps a live connector mirror to `{ node, port }`. Returning
-`null` makes that connector and its lines unmanaged by the controller.
+`attachControlledGraph(engine, { onLineChangeRequest, onDiagnosticsChanged? })`
+installs the engine's `LineReconciler` and returns
+`{ setCanonicalGraph, flush, dispose }`. Canonical state is **pushed and
+cached**: `setCanonicalGraph({ lines })` stores the snapshot and schedules one
+coalesced pass. Internal triggers (connector register/unregister, batch
+close, request dispatch) replay the cached snapshot — reconciliation never
+pulls from the application.
 
-`getEdges()` is consulted fresh for every `sync()`. The controller does not
-store a second edge document.
+The gesture flow, end to end:
 
-### Reconciliation algorithm
+```mermaid
+sequenceDiagram
+  actor User
+  participant Conn as Source connector
+  participant Line as LineMirror
+  participant Rec as LineReconciler
+  participant Adapter as ControlledGraph adapter
+  participant App as Application document
 
-On `sync()`:
+  User->>Conn: pointerDown (arm) → drag threshold
+  Conn->>Line: createLine() — phase source-start → preview-free
+  loop Pointer drag
+    Conn->>Conn: resolve candidate (rules + isValidConnection, phase "candidate")
+    Conn->>Line: preview-free / preview-target, anchors via geometry writer
+  end
+  User->>Conn: drop
+  Conn->>Conn: validate drop (rules + both endpoints' isValidConnection, real LineMirror)
+  Conn->>Line: stageTarget() — phase "staged", no topology commitment
+  Conn->>Rec: dispatch ONE atomic LineChangeRequest
+  Rec->>Adapter: onLineChangeRequest(request)
+  Adapter->>App: application applies (or ignores) the request
+  Adapter->>Rec: post-request microtask push of live records
+  Rec->>Rec: decisive reconciliation pass
+  alt id adopted in the snapshot
+    Rec->>Line: settle staged mirror in place (strict recheck)
+  else id absent (rejected or ignored)
+    Rec->>Line: discard staged line — nothing was ever committed
+  end
+```
 
-1. Snapshot all registered connectors.
-2. Resolve each managed connector to an endpoint key.
-3. Snapshot the application edge list.
-4. Delete settled managed lines whose endpoint pair is absent from the
-   application list.
-5. Leave preview lines and unmanaged lines untouched.
-6. For every application edge whose endpoints are mounted, hydrate a missing
-   line with `connectToConnector({ origin: "hydration" })`.
-7. Leave edges with unmounted endpoints latent until a later sync.
+Key properties:
+
+- **One atomic request per gesture.**
+  `{ intent: "connect" | "disconnect" | "replace" | "reconnect", add:
+  ProposedLine[], remove: LineId[], update: LineEndpointUpdate[] }`. A
+  gesture-created line carries a SnapLine-minted `lineId` in `add`; a
+  reconnect arrives as an `update` of the existing id; capacity evictions on
+  a `replace-oldest` target ride the same request as `remove` entries
+  (intent `"replace"`) — never local deletes.
+- **Staging, not optimism.** The drop stages the outcome on the same mirror
+  (phase `"staged"`); the line is not in the target's incoming list and not
+  in the settled index. A gesture disconnect stages the detached line and
+  proposes `remove`; a rejected removal re-glues it from the unchanged
+  document.
+- **Adapters guarantee a post-request push.** Both `ControlledGraph`
+  components queue `setCanonicalGraph` with the live records in a microtask
+  ahead of the decisive pass, so acceptance, normalization, rejection, and
+  rejection-by-inaction all resolve from the next snapshot — rejection needs
+  no code path.
+- **Gestures are serial.** One in-flight request per engine
+  (`GraphMirror.pendingGestureRequest`); a second dispatch before the pass
+  warns about a stalled adapter push.
+- **No graph owner, no gesture.** A drop on an engine without an attached
+  reconciler warns and discards the preview — there is no document to
+  propose to.
+
+### The reconcile pass
+
+`LineReconciler.reconcile()` is one idempotent pass over the cached snapshot.
+It is read-only with respect to canonical state: it never emits a request and
+never rewrites, reorders, or deletes records.
 
 ```mermaid
 flowchart TD
-  START["sync() trigger"]
-  SNAP["Snapshot NodeManager connectors,<br/>identity mapping, and current edges[]"]
-  WALKLINES["Walk settled managed lines"]
-  LINECHECK{"Matching canonical edge?"}
-  KEEPLINE["Preserve existing line mirror"]
-  REMOVELINE["Delete mirror with<br/>reason: programmatic"]
-  WALKEDGES["Walk canonical edges"]
-  MOUNTED{"Both endpoints mounted?"}
-  EXISTS{"Matching settled line exists?"}
-  LATENT["Keep edge latent in application document"]
-  CREATELINE["Hydrate LineComponent<br/>without user intent"]
-  DONE["Mirror reconciled"]
+  START["reconcile() — coalesced trigger"]
+  DUP["Index records by id<br/>(duplicates: first wins + diagnostic)"]
+  PRUNE["Prune settled mirrors whose record is gone<br/>or whose fromConnectorId moved"]
+  EACH["For each canonical record"]
+  SETTLED{"Settled mirror<br/>with this id?"}
+  SAME{"Same target?"}
+  KEEP["Keep mirror, refresh payload"]
+  RETARGET["Retarget the SAME mirror<br/>(strict admission recheck)"]
+  STAGEDQ{"Staged preview<br/>with this id?"}
+  SETTLE["Settle staged mirror in place<br/>(strict recheck)"]
+  MOUNTED{"Both endpoints<br/>mounted?"}
+  LATENT["Latent — silent, retried on registration"]
+  CREATE["createSettledLineFromRecord()<br/>(strict admission, never evicts)"]
+  ERR["Rule/capacity refusal →<br/>derived ReconciliationError"]
+  SWEEP["Discard staged lines whose id<br/>the snapshot declined"]
+  REPORT["setReconciliationErrors →<br/>onDiagnosticsChanged if changed"]
 
-  START --> SNAP --> WALKLINES --> LINECHECK
-  LINECHECK -->|"yes"| KEEPLINE
-  LINECHECK -->|"no"| REMOVELINE
-  KEEPLINE --> WALKEDGES
-  REMOVELINE --> WALKEDGES
-  WALKEDGES --> MOUNTED
-  MOUNTED -->|"no"| LATENT --> DONE
-  MOUNTED -->|"yes"| EXISTS
-  EXISTS -->|"yes"| DONE
-  EXISTS -->|"no"| CREATELINE --> DONE
+  START --> DUP --> PRUNE --> EACH --> SETTLED
+  SETTLED -->|yes| SAME
+  SAME -->|yes| KEEP
+  SAME -->|no| RETARGET
+  SETTLED -->|no| STAGEDQ
+  STAGEDQ -->|yes| SETTLE
+  STAGEDQ -->|no| MOUNTED
+  MOUNTED -->|no| LATENT
+  MOUNTED -->|yes| CREATE
+  RETARGET -.->|refused| ERR
+  SETTLE -.->|refused| ERR
+  CREATE -.->|refused| ERR
+  KEEP --> SWEEP
+  LATENT --> SWEEP
+  SWEEP --> REPORT
 ```
 
-Connector registration asks the active controller to reconcile in a
-microtask, allowing latent document edges to rehydrate when endpoints mount.
-Connector teardown deletes line mirrors with reason `"teardown"` but does not
-ask the application to delete its edge record.
+Identity is stable across the pass: a `toConnectorId` change **retargets the
+same mirror**; a `fromConnectorId` change recreates under the same id (a
+line's start connector is fixed at construction). A mid-drag preview leaves
+its record latent. Records the mirror cannot represent are never evicted or
+rewritten — unmounted endpoints are silently latent and retried; rule or
+capacity violations become structured diagnostics.
 
-### Gesture connect
+## ConnectorRules and admission
 
-1. Pointer-down arms a connector.
-2. Crossing the drag threshold creates a preview `LineComponent` and adds it
-   to the source’s outgoing list.
-3. Dropping on a candidate calls the legacy `onConnectionRequest` seam.
-4. If allowed, `connectToConnector({ origin: "gesture" })` commits the local
-   topology.
-5. Connector callbacks fire.
-6. The active `EdgeSyncController` emits `onEdgeConnect`.
-7. The application is expected to update its edge document synchronously.
-8. The adapter queues `sync()` in a microtask. Accepted lines remain; rejected
-   lines are removed before the next paint when state updates synchronously.
-
-```mermaid
-flowchart TB
-  DRAG["User: drag source to target"]
-  PREVIEW["Connector: create preview LineComponent"]
-  DROP["User: drop on candidate"]
-  SETTLE["Connector: optimistically settle local topology"]
-  INTENT["EdgeSync: emit onEdgeConnect intent"]
-  DECIDE["Application: accept, reject, or normalize edges[]"]
-  SYNC["EdgeSync: read latest edges[] in queued microtask"]
-  ACCEPT{"Matching canonical edge exists?"}
-  KEEP["Preserve line mirror<br/>and render framework SVG"]
-  DELETE["Delete unmatched mirror<br/>and remove framework SVG"]
-
-  DRAG --> PREVIEW --> DROP --> SETTLE --> INTENT --> DECIDE --> SYNC --> ACCEPT
-  ACCEPT -->|"yes"| KEEP
-  ACCEPT -->|"no"| DELETE
+```ts
+interface ConnectorRules {
+  maxOutgoing: number | "unlimited"; // default "unlimited"; 0 = target-only
+  maxIncoming: number | "unlimited"; // default 1; 0 = source-only
+  reconnect: boolean;                // default true
+  allowParallel: boolean;            // default false; BOTH endpoints must allow
+  onFull: "reject" | "replace-oldest"; // default "reject"
+  isValidConnection?: (proposal: ConnectionProposal) => boolean;
+}
 ```
 
-### Gesture disconnect and replacement
+Limits normalize to numbers internally (`"unlimited"` → `Infinity`), and the
+roles are derived: `isSource` = `maxOutgoing !== 0`, `isTarget` =
+`maxIncoming !== 0`. `isValidConnection` is line-aware —
+`{ line, source, target, phase: "candidate" | "drop" }` — synchronous and
+side-effect free (candidate discovery calls it per pointer move), and either
+endpoint may veto.
 
-Picking up an existing connection detaches it locally and emits a gesture
-disconnect intent. Connecting to a full finite-capacity target deletes the
-oldest required incoming lines with reason `"replacement"` before committing
-the new line. The current controlled demo updates the document from the
-disconnect and connect callbacks in that order.
+Two admission paths share the structural rules but differ in policy:
 
-Replacement is therefore exposed as multiple ordered intents rather than one
-atomic application transaction.
+- **Gesture admission** (candidate discovery and drop): a full
+  `replace-oldest` target still admits — the evictions ride the request.
+- **Record admission** (create/retarget/settle from canonical records):
+  strict — capacity never evicts regardless of `onFull`, and refusal returns
+  a diagnostic code (`"capacity-exceeded"` / `"connection-rejected"`)
+  instead of throwing.
 
-## Current ownership matrix
+`canConnect(target, line?)` remains public as a read-only admission query.
 
-| Data or resource              | Current owner                            | Notes                                                                     |
-| ----------------------------- | ---------------------------------------- | ------------------------------------------------------------------------- |
-| Domain node records           | Application/framework                    | SnapLine does not define node factories or node types                     |
-| Mounted node instances        | Framework lifecycle + core mirror        | Adapter creates/destroys `NodeComponent`                                  |
-| Domain connector/port records | Application/framework                    | Usually expressed by connector children                                   |
-| Mounted connector instances   | Framework lifecycle + core mirror        | Stored in `NodeManager` and the parent node map                           |
-| Domain edges                  | Application only when `EdgeSync` is used | Otherwise no separate domain edge source is required                      |
-| Settled line topology         | Connector arrays                         | Derived from `edges` in controlled mode; authoritative in imperative mode |
-| Preview line                  | SnapLine                                 | Ephemeral gesture state, not a domain edge                                |
-| Node/connector/line DOM       | React/Svelte adapter                     | Core never structurally inserts, removes, or reparents framework DOM      |
-| Node live transform           | SnapLine during interaction              | Framework geometry props can resynchronize it                             |
-| Node persisted transform      | Application by convention                | Reported through drag commit callbacks                                    |
-| Node size DOM                 | Framework adapter                        | Core keeps collision size and emits size callbacks                        |
-| Connector geometry            | SnapLine                                 | Measured/cached from node and optional connector DOM                      |
-| Line geometry and anchors     | SnapLine                                 | Adapter subscribes through `line.onRender()`                              |
-| Selection                     | SnapLine shared state                    | Framework receives callbacks; not controlled                              |
-| Group membership              | SnapLine derived state                   | Framework receives deltas                                                 |
-| Connector policy              | Application config copied into core      | `canConnect`, capabilities, strategies, metadata                          |
-| Property propagation          | SnapLine                                 | Legacy name-keyed node property graph                                     |
+## Geometry ownership
 
-## Registries and organization
+Position and size are SnapLine-owned visual cues; live and settled geometry
+never round-trip the framework:
 
-### SnapEngine object table
+- During a drag, core mutates `worldTransform` and writes DOM transforms in
+  scheduled frame stages; group/multi-select drags move every drag root.
+- During a resize, core clamps, updates collision state, writes
+  width/height, remeasures connector centers, and re-glues lines
+  (`WRITE_1 → READ_2 → WRITE_2`). `onSizeChange` is the live observation.
+- One batched **`onGeometryChanged({ nodes: [{ node, x, y, width, height }] })`**
+  fires per settled gesture: a group or multi-select drag reports every
+  moved node in one event; a resize reports a single entry. The application
+  may persist the observation; ignoring it never reverts the mirror.
+- Line, selection, and placement geometry use single-owner
+  `bindGeometryWriter()` bindings that mutate retained SVG/DOM without
+  framework state; `onStateChange` carries semantic line state separately.
 
-All `BaseObject`/`ElementObject` instances also participate in SnapEngine’s
-general object table. Some SnapLine code still scans that table:
+## Selection and groups
 
-- connector candidate discovery;
-- group membership node enumeration.
+Selection is logically SnapLine-owned — core behaviors such as multi-node
+dragging need the selected set synchronously — and **engine-scoped** on
+`GraphMirror.selection`. `setSelected()` maintains the list, writes
+`data-selected`/`data-snapline-state`, and emits `onSelectionChange`. The
+framework is the visual owner; the consumer supplies pointer policy through
+`resolveSelectionMode` (SnapLine owns no modifier keys). `RectSelectController`
+owns the rubber-band gesture.
 
-### `NodeManager`
+Group membership is SnapLine-derived interaction state, computed from
+measured geometry: ordinary nodes use center containment, nested groups
+require full-bounds containment, the smallest eligible group wins by default,
+a per-engine `membershipResolver` may override, and cycles are rejected.
+Group drags carry members by transform parenting only — never DOM
+reparenting, never selection mutation. Membership refreshes when a drag or
+resize settles.
 
-`NodeManager` is lazy and per engine. It contains:
+## Registries
 
-- a `Set<NodeComponent>`;
-- a `Set<ConnectorComponent>`;
-- the optional active `edgeSync` controller.
+### GraphMirror (per engine)
 
-The public `getNodes()`, `getConnectors()`, and `getGroupNodes()` helpers now
-delegate to this registry. Registration-order snapshots are returned as
-copies.
+`getGraphMirror(engine)` lazy-creates the engine-scoped registry the first
+time any mirror registers (constructors register, `destroy()` unregisters —
+no adapter wiring). It holds:
 
-`NodeManager` does not currently track:
+- live sets: nodes, connectors; settled lines and preview lines separately
+  (every line starts as a preview; `settleLine`/`unsettleLine` move it);
+- domain-id indexes `nodesById` / `connectorsById` / `linesById` with a
+  **first-registration-wins** duplicate policy — a duplicate id never steals
+  the index entry; it stays unindexed with a `"duplicate-id"` diagnostic
+  until the conflict resolves, then promotes;
+- engine-scoped interaction state: `selection`, `groups`, `resizingNode`,
+  `parentGroups`, `membershipResolver`;
+- the `reconciler` slot (installed by `attachControlledGraph`) and the
+  coalescing reconciliation scheduler.
 
-- lines;
-- semantic IDs;
-- domain records;
-- selection;
-- group membership;
-- ownership of supplied versus adapter-created objects.
+Connector candidate discovery and public queries both read this registry —
+there is one enumeration mechanism.
 
-### Shared `global.data`
+### query(engine)
 
-`snapline-globals.ts` types the SnapLine fields on SnapEngine’s shared data bag:
+`query(engine)` returns the read-only `GraphQuery` facade:
+`nodes() / connectors() / groups() / lines()` snapshots, `node(id) /
+connector(id) / line(id)` domain-id lookups, and `diagnostics()`. It returns
+live mirrors (whose own mutation surface is constrained separately) and never
+exposes registry sets, topology arrays, or mutation methods. The standalone
+`getNodes` / `getConnectors` / `getGroupNodes` / `getSelectedNodes` helpers
+delegate to the same registry.
 
-- `select`;
-- `groups`;
-- `resizeHandles`;
-- `sourceSurfaces`;
-- `resizingNode`;
-- deprecated `allowCameraControl`;
-- the per-engine `nodeManagers` map.
+### What stays on global.data, and why
 
-The manager is engine-keyed, but several other lists are shared arrays and
-must be filtered by engine at their use sites. Selection currently has no
-engine-keyed container.
+`SnapLineSharedData` (typed by `snapline-globals.ts`) now holds only:
 
-```mermaid
-flowchart TB
-  GLOBAL["GlobalManager.data"]
-  TABLE["SnapEngine object table"]
-  MAP["nodeManagers: Map&lt;Engine, NodeManager&gt;"]
-  MANAGER["NodeManager for one engine<br/>• Set&lt;NodeComponent&gt;<br/>• Set&lt;ConnectorComponent&gt;<br/>• optional edgeSync controller"]
-  SHARED["Shared arrays:<br/>select, groups, resizeHandles,<br/>sourceSurfaces"]
-  LINES["Line topology on connector arrays"]
+- `resizeHandles` and `sourceSurfaces` — engine core's `input.ts` duck-reads
+  these to route pointerdowns to resize hitboxes and headless source
+  surfaces (engine core cannot import snapline, so the contract is
+  structural and lives on the shared bag);
+- the `graphMirrors` WeakMap keying each engine to its `GraphMirror`
+  (GlobalManager is application-wide; the WeakMap lets a destroyed engine
+  release its registry);
+- the deprecated `allowCameraControl` boolean for third-party camera
+  writers (in-repo gesture owners use `engine.input.claimPointer()`).
 
-  GLOBAL --> MAP --> MANAGER
-  MANAGER --> LINES
-  GLOBAL --> SHARED
-  TABLE -->|"still scanned by candidate discovery<br/>and group membership"| MANAGER
-```
+## Scheduler and batching
+
+All reconciliation triggers funnel through
+`GraphMirror.scheduleReconciliation()`: one microtask pass per burst, so a
+bulk mount of 100 nodes runs one pass, not one per connector.
+`beginBatch()` opens a nestable bulk boundary — no partial pass runs until
+the outermost idempotent `end()`, which schedules one final pass if anything
+went dirty; `runBatch(fn)` is the exception-safe scoped form. `flush()`
+(exposed on the `ControlledGraphHandle`) runs any pending or batch-deferred
+pass synchronously for vanilla consumers and tests. Gesture dispatch
+schedules the decisive pass behind the adapter's post-request push
+microtask.
+
+## Diagnostics
+
+Diagnostics are **derived, non-throwing state**: entries drop out when their
+cause resolves. `ReconciliationError` carries a code (`"duplicate-id"`,
+`"missing-node"`, `"missing-connector"`, `"capacity-exceeded"`,
+`"connection-rejected"`, `"identity-changed"`, `"unrepresentable-line"`),
+the offending domain ids, and a message. Sources:
+
+- registry duplicate-id conflicts (nodes, connectors, settled lines);
+- per-pass reconciliation errors: duplicate record ids in a snapshot, and
+  records refused by strict admission (preserved but unrepresented).
+
+They surface through `query(engine).diagnostics()` and through
+`onDiagnosticsChanged`, which fires only when the set actually changes.
+Unmounted endpoints are deliberately **not** diagnostics — a latent record is
+normal during progressive mount.
 
 ## Public API surface
 
-The package exports raw TypeScript source and is still pre-1.0. The root entry
-point currently exports the following API families.
+The packages export raw TypeScript source and are pre-1.0.
 
-### Core objects
+### Root exports (`@snap-engine/snapline`)
 
-| Export                   | Main public role                                                         |
-| ------------------------ | ------------------------------------------------------------------------ |
-| `NodeComponent`          | Node geometry, selection, resize, connector lookup, property propagation |
-| `ConnectorComponent`     | Port policy, hit testing, gestures, topology mutation, geometry          |
-| `LineComponent`          | Line endpoints, phase, anchors, payload, render subscription             |
-| `GroupNodeComponent`     | Derived membership and recursive group carry                             |
-| `RectSelectComponent`    | Rectangle selection state machine                                        |
-| `PlacementController<T>` | Headless placement preview/commit state machine                          |
-| `NodeManager`            | Live node/connector registry and edge-sync attachment                    |
-| `EdgeSyncController`     | Reconciles connector line mirrors to application edges                   |
+| Family | Exports |
+| --- | --- |
+| Mirrors | `NodeMirror`, `ConnectorMirror`, `LineMirror`, `GroupNodeMirror` |
+| Controllers | `RectSelectController`, `PlacementController` |
+| Controlled graph | `attachControlledGraph`; types `LineRecord`, `CanonicalGraphSnapshot`, `LineChangeRequest`, `ProposedLine`, `LineEndpointUpdate`, `ControlledGraphCallbacks`, `ControlledGraphHandle` |
+| Identity/diagnostics | types `NodeId`, `ConnectorId`, `LineId`, `ReconciliationError`, `GraphBatch` |
+| Queries | `query` (+ `GraphQuery`), `getNodes`, `getConnectors`, `getGroupNodes`, `getSelectedNodes`, `getParentGroup`, `setGroupMembershipResolver`, `resolveConnectorSourceAtPoint` |
+| Config/callback types | `NodeConfig`/`NodeCallbacks` (incl. `GeometryChangeEvent`), `ConnectorConfig`/`ConnectorRules`/`ConnectorCallbacks`/`ConnectionProposal`, line/group/select/placement types |
 
-### Queries and policy helpers
+Package subpaths: `./node`, `./connector`, `./line`, `./select`, `./group`,
+`./placement`, `./query`, `./graph-mirror`, `./line-reconciler`,
+`./geometry`.
 
-- `getNodes(engine)`
-- `getConnectors(engine)`
-- `getGroupNodes(engine)`
-- `getSelectedNodes(engine)`
-- `getParentGroup(node)`
-- `setGroupMembershipResolver(engine, resolver)`
-- `resolveConnectorSourceAtPoint(engine, position, node?)`
-- `getNodeManager(engine)`
+There is **no imperative public topology API**: `deleteLine()`,
+`deleteAllLines()`, `disconnectFromConnector()`, `createLine()`, and the
+record-driven settle/retarget/discard methods are `@internal`
+(reconciler/teardown-only), and connecting two connectors imperatively is
+not possible — applications create and remove lines by changing their
+records. `GraphMirror` and `LineReconciler` are internal classes reached
+only through `attachControlledGraph` and `query`. `LineMirror` state is
+getter-backed: `start`, `target`, `payload`, `phase`, `candidate`, and
+anchors are read-only publicly, and `LineMirrorPhase` is
+`source-start | preview-free | preview-target | drop | staged | connected`.
 
-### Important node configuration and callbacks
+### Adapters
 
-`NodeConfig` covers position locking, resizing, minimum size, resize handles,
-metadata, callbacks, and edge-pan behavior.
+Svelte (`@snap-engine/snapline-svelte`) and React
+(`@snap-engine/snapline-react`) export `Node`, `Group`, `Connector`, `Line`,
+`Select`, `Placement`, and **`ControlledGraph`** (React additionally exports
+the asset-base `Engine`, `NodeMirrorContext`, `useNodeHandle`, and prop/ref
+types). Adapter contracts:
 
-`NodeCallbacks` exposes:
+- `Node`/`Group` take `id` props (stable domain identity);
+- line lists key by `lineId`; `Line` renders `data-line-id`; SVG markers use
+  `arrow-${lineId}`;
+- `ControlledGraph` takes `{ lines, onLineChangeRequest,
+  onDiagnosticsChanged? }` and implements the guaranteed post-request push;
+- supplied core objects are not destroyed on unmount; adapter-created
+  objects are.
 
-- drag authorization and position resolution;
-- selection-mode resolution;
-- drag start/live/commit;
-- selection changes;
-- size, resize-handle, and resize-commit events;
-- outgoing line-list changes.
+## Ownership matrix
 
-Notable callable methods include `setSelected()`, `registerDragHandle()`,
-`syncDomGeometry()`, `setSizeState()`, `setSize()`, connector lookup,
-incoming/outgoing line queries, property propagation, and `destroy()`.
-
-### Important connector configuration and callbacks
-
-`ConnectorConfig` includes:
-
-- construction-time `name`;
-- legacy `maxConnectors` and `allowDragOut`;
-- independent source/target/reconnect/parallel capabilities;
-- surface hit-test and anchor strategies;
-- line class, collider radius, metadata, callbacks, and edge pan.
-
-`ConnectorCallbacks` exposes connection policy, the legacy
-`onConnectionRequest` domain seam, pointer/drag lifecycle, candidate changes,
-and connect/disconnect events.
-
-The imperative topology API includes:
-
-- `connectToConnector()`;
-- `disconnectFromConnector()`;
-- `deleteLine()` and `deleteAllLines()`;
-- `createLine()`;
-- direct `outgoingLines` and `incomingLines` getters;
-- `updateConfig()` and `bindElement()`;
-- geometry, hit-test, and anchor-resolution helpers.
-
-### Framework packages
-
-The Svelte package exports:
-
-- `Node`
-- `Group`
-- `Connector`
-- `Line`
-- `Select`
-- `Placement`
-- `EdgeSync`
-
-The React package exports the same component families plus:
-
-- the asset-base `Engine` and engine context helpers;
-- `NodeObjectContext`;
-- `useNodeHandle()`;
-- prop/ref types.
-
-Adapters accept caller-supplied core objects. Supplied objects are not
-destroyed on unmount; adapter-created objects are.
-
-## Important design tensions in the current code
-
-These are the main topics to resolve before treating the ownership model as
-settled.
-
-### 1. Controlled edges are optional
-
-The same connector mutation methods serve both as the imperative source of
-truth and as the implementation detail beneath a controlled mirror. There is
-no explicit controlled/uncontrolled mode on an engine or connector, so API
-callers must understand which authority model is active.
-
-```mermaid
-flowchart TB
-  API["Same ConnectorComponent mutation API"]
-  IMP["Imperative mode"]
-  CTRL["Controlled EdgeSync mode"]
-  TOPO["Connector arrays are canonical"]
-  DOC["Application edges[] are canonical"]
-  MIRROR["Connector arrays are only a mirror"]
-
-  API --> IMP --> TOPO
-  API --> CTRL --> DOC
-  DOC --> MIRROR
-```
-
-### 2. Two application edge-creation seams overlap
-
-`ConnectorCallbacks.onConnectionRequest` can create a domain edge and attach a
-payload before local connection. `EdgeSync.onEdgeConnect` separately asks the
-application to create the canonical edge after local connection. Using both
-can duplicate policy or mutation work.
-
-### 3. `EdgeLike` has no edge identity
-
-An edge is identified only by its source and target endpoint pair. As a
-result:
-
-- duplicate/parallel domain edges collapse during sync;
-- `capabilities.allowParallel` cannot be represented by controlled
-  `EdgeLike[]`;
-- a hydrated line has no standard stable edge ID or payload;
-- disconnect intents identify an endpoint pair, not a specific edge record.
-
-### 4. Hydration still applies connector mutation policy
-
-Document hydration calls `connectToConnector()`, which runs `canConnect`,
-parallel checks, and incoming-capacity replacement. A canonical document can
-therefore remain unrendered or be reduced/reordered by view-layer policy.
-This is a direct question for the ownership specification: are those rules
-gesture policy, document validity, or both?
-
-### 5. Topology internals are publicly mutable
-
-The connector returns its actual mutable incoming/outgoing arrays.
-`LineComponent.start`, `target`, `payload`, anchors, phase, and candidate are
-also public writable fields. `NodeComponent` retains several underscore-named
-members that are TypeScript-public. Consumers can bypass lifecycle callbacks
-and reconciliation invariants.
-
-### 6. There is no line registry or line query
-
-Nodes and connectors have a central mirror registry; lines are only discoverable
-by walking connector arrays or node outgoing lists. This makes engine-wide
-topology inspection and invariant checking asymmetric.
-
-### 7. Enumeration has two mechanisms
-
-Public queries use `NodeManager`, while connector target discovery and group
-membership still scan SnapEngine’s general object table. The manager is not
-yet the single internal organization boundary.
-
-### 8. Engine scoping is inconsistent
-
-`NodeManager` is engine-keyed, but selection and several interaction registries
-live directly on application-wide `global.data`. Some readers filter by
-engine; selected-node queries currently return the shared selection list.
-
-### 9. Geometry props are cooperative, not strictly controlled
-
-Core mutates transforms during interaction and adapters only rerun geometry
-effects when prop values change. If an application rejects a move by leaving
-its canonical coordinates unchanged, the mirror is not automatically reverted.
-
-### 10. Package exports lag root exports
-
-`EdgeSync` is exported from the React/Svelte root indexes, but the current
-package subpath maps do not expose `./EdgeSync`. The core root exports
-`EdgeSyncController`, `NodeManager`, and `getNodeManager`, while its documented
-subpath map does not include `./edge-sync` or `./node-manager`.
-
-### 11. Callback composition is not uniform
-
-Node and group adapters compose caller callbacks with adapter callbacks.
-Selection adapters directly replace `onRectChange`, which can hide a caller’s
-original handler. This is an adapter API consistency issue rather than a graph
-ownership issue, but it affects how safely applications observe the mirror.
+| Data or resource              | Owner                          | Notes                                                                  |
+| ----------------------------- | ------------------------------ | ---------------------------------------------------------------------- |
+| Domain node/connector records | Application/framework          | Expressed by mounting components with stable `id` props                |
+| Canonical line records        | Application                    | `LineRecord[]` pushed via `setCanonicalGraph`; SnapLine never edits it  |
+| Mounted mirrors               | Framework lifecycle            | Constructors register with `GraphMirror`; `destroy()` unregisters       |
+| Settled line mirrors          | LineReconciler                 | Derived from records; preserved by stable `lineId`                      |
+| Preview/staged lines          | SnapLine gesture               | Ephemeral; staged outcome awaits the canonical decision                 |
+| Gesture outcome               | Application                    | One atomic `LineChangeRequest`; adopt the proposed id to settle in place |
+| Node/connector/line DOM       | React/Svelte adapter           | Core writes transforms/`data-*` on existing elements only               |
+| Live + settled geometry       | SnapLine                       | Observed via batched `onGeometryChanged`; never round-trips             |
+| Connector policy              | Application config             | `ConnectorRules` + surface strategies, copied into the mirror           |
+| Selection                     | SnapLine, engine-scoped        | Framework owns visuals and pointer policy                               |
+| Group membership              | SnapLine derived state         | Computed from measured geometry; resolver overridable                   |
+| Diagnostics                   | SnapLine derived state         | Structured, non-throwing, auto-clearing                                 |
 
 ## Source map
 
-| Concern                        | Primary implementation                         |
-| ------------------------------ | ---------------------------------------------- |
-| Public exports                 | `assets/snapline/core/src/index.ts`            |
-| Node lifecycle and interaction | `assets/snapline/core/src/node.ts`             |
-| Connector policy and topology  | `assets/snapline/core/src/connector.ts`        |
-| Line state and geometry        | `assets/snapline/core/src/line.ts`             |
-| Live node/connector registry   | `assets/snapline/core/src/node-manager.ts`     |
-| Controlled edge reconciliation | `assets/snapline/core/src/edge-sync.ts`        |
-| Shared registries              | `assets/snapline/core/src/snapline-globals.ts` |
-| Engine queries                 | `assets/snapline/core/src/query.ts`            |
-| Svelte ownership bridge        | `assets/snapline/svelte/src/*.svelte`          |
-| React ownership bridge         | `assets/snapline/react/src/*.tsx`              |
-| Controlled-edge example        | `demo/svelte/src/demo/node_ui_edges/`          |
-| Controlled-edge browser tests  | `tests/e2e/snapline-edges.spec.ts`             |
+| Concern                                  | Primary implementation                          |
+| ---------------------------------------- | ----------------------------------------------- |
+| Public exports                           | `assets/snapline/core/src/index.ts`             |
+| Engine-scoped registry, ids, scheduler   | `assets/snapline/core/src/graph-mirror.ts`      |
+| Controlled line reconciliation, records  | `assets/snapline/core/src/line-reconciler.ts`   |
+| Connector rules, gestures, admission     | `assets/snapline/core/src/connector.ts`         |
+| Node lifecycle, drag/resize, geometry    | `assets/snapline/core/src/node.ts`              |
+| Line state, phases, anchors              | `assets/snapline/core/src/line.ts`              |
+| Groups and membership                    | `assets/snapline/core/src/group.ts`             |
+| Rectangle selection                      | `assets/snapline/core/src/select.ts`            |
+| Placement state machine                  | `assets/snapline/core/src/placement.ts`         |
+| Read-only query facade                   | `assets/snapline/core/src/query.ts`             |
+| Shared global.data + attachControlledGraph | `assets/snapline/core/src/snapline-globals.ts` |
+| Geometry writer type                     | `assets/snapline/core/src/geometry.ts`          |
+| Svelte adapters (incl. ControlledGraph)  | `assets/snapline/svelte/src/*.svelte`           |
+| React adapters (incl. ControlledGraph)   | `assets/snapline/react/src/*.tsx`               |
+| Controlled-graph demos                   | `demo/svelte/src/demo/node_ui_edges/`, `demo/react/` |
+| Unit tests                               | `tests/ut/snapline-graph-mirror.spec.ts`, `tests/ut/snapline-line-reconciler.spec.ts`, `tests/ut/snapline-connector-config.spec.ts` |
+| Browser tests                            | `tests/e2e/snapline-edges.spec.ts`, `tests/e2e/snapline-edges-react.spec.ts` |

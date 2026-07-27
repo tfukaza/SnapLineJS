@@ -1,5 +1,6 @@
 <script lang="ts">
   import { Engine } from "@snap-engine/asset-base-svelte";
+  import DemoGraph from "../node_ui_demo/DemoGraph.svelte";
   import ResizableNode from "./ResizableNode.svelte";
   import SimpleNode from "../node_ui_demo/SimpleNode.svelte";
 </script>
@@ -7,6 +8,7 @@
 <Engine id="node-ui-resize-canvas">
   <div id="node-ui-resize">
     <div id="sl-background"></div>
+    <DemoGraph />
     <!-- Node A is resizable (BR hitbox); Node B is a plain fixed node. Connect
          A's output to B's input, then resize A: its output connector moves and
          the line must stay glued. -->

@@ -3,18 +3,17 @@ import {
   useLayoutEffect,
   useImperativeHandle,
   useRef,
-  useState,
   type CSSProperties,
   type ReactNode,
 } from "react";
 import {
   DEFAULT_RESIZE_HANDLE_THICKNESS,
-  GroupNodeComponent,
+  GroupNodeMirror,
   type GroupCallbacks,
   type GroupContainEvent,
   type GroupMembershipEvent,
   type NodeCallbacks,
-  type NodeDragCommitEvent,
+  type GeometryChangeEvent,
   type NodeResizeEvent,
   type ResizeHandle,
   type SnapLineMetadata,
@@ -22,9 +21,11 @@ import {
 import { useSnapLineEngine } from "./Engine";
 
 export interface GroupProps {
+  /** Stable domain identity; minted when omitted (supply for persistence). */
+  id?: string;
   children?: ReactNode;
   className?: string;
-  groupObject?: GroupNodeComponent | null;
+  groupObject?: GroupNodeMirror | null;
   style?: CSSProperties;
   title?: string;
   /** Consumer-rendered header contents. `title` remains the fallback. */
@@ -44,12 +45,12 @@ export interface GroupProps {
   canContain?: (event: GroupContainEvent) => boolean;
   edgePan?: boolean;
   onMembershipChange?: (event: GroupMembershipEvent) => void;
-  onResizeCommit?: (event: NodeResizeEvent) => void;
-  onDragCommit?: (event: NodeDragCommitEvent) => void;
+  onGeometryChanged?: (event: GeometryChangeEvent) => void;
 }
 
-export const Group = forwardRef<GroupNodeComponent, GroupProps>(function Group(
+export const Group = forwardRef<GroupNodeMirror, GroupProps>(function Group(
   {
+    id,
     children,
     className = "",
     groupObject = null,
@@ -71,8 +72,7 @@ export const Group = forwardRef<GroupNodeComponent, GroupProps>(function Group(
     canContain,
     edgePan = true,
     onMembershipChange,
-    onResizeCommit,
-    onDragCommit,
+    onGeometryChanged,
   },
   ref,
 ) {
@@ -80,9 +80,10 @@ export const Group = forwardRef<GroupNodeComponent, GroupProps>(function Group(
   const boxDomRef = useRef<HTMLDivElement>(null);
   const headerRef = useRef<HTMLElement>(null);
   const ownsGroupRef = useRef(groupObject == null);
-  const groupRef = useRef<GroupNodeComponent | null>(groupObject);
+  const groupRef = useRef<GroupNodeMirror | null>(groupObject);
   if (!groupRef.current) {
-    groupRef.current = new GroupNodeComponent(engine, null, {
+    groupRef.current = new GroupNodeMirror(engine, null, {
+      id,
       width,
       height,
       minWidth,
@@ -98,23 +99,22 @@ export const Group = forwardRef<GroupNodeComponent, GroupProps>(function Group(
     });
   }
   const group = groupRef.current;
+  // Snapshot, not a live binding: after mount the engine owns the size, and a
+  // second writer on the same property is what splits it from the transform.
+  // Rendering it once keeps SSR and the first client paint correctly sized.
+  const initialSize = useRef({ width, height }).current;
 
-  // The box's width/height are framework-owned: seeded from props, updated
-  // live by core's onSizeChange during a resize drag.
-  const [box, setBox] = useState<{ w: number; h: number }>({ w: width, h: height });
   const latestRef = useRef({
     callbacks,
     groupCallbacks,
     onMembershipChange,
-    onResizeCommit,
-    onDragCommit,
+    onGeometryChanged,
   });
   latestRef.current = {
     callbacks,
     groupCallbacks,
     onMembershipChange,
-    onResizeCommit,
-    onDragCommit,
+    onGeometryChanged,
   };
 
   useImperativeHandle(ref, () => group, [group]);
@@ -122,7 +122,7 @@ export const Group = forwardRef<GroupNodeComponent, GroupProps>(function Group(
   useLayoutEffect(() => {
     if (boxDomRef.current) {
       group.element = boxDomRef.current;
-      group.syncDomGeometry();
+      group.remeasureDomGeometry();
     }
     const originalCallbacks = { ...group.callbacks };
     const originalGroupCallbacks = { ...group.groupCallbacks };
@@ -185,12 +185,12 @@ export const Group = forwardRef<GroupNodeComponent, GroupProps>(function Group(
         latestRef.current.groupCallbacks.onMembershipChange,
         latestRef.current.onMembershipChange,
       );
-    group.callbacks.onDragCommit = (event) =>
+    group.callbacks.onGeometryChanged = (event) =>
       invoke(
         event,
-        originalCallbacks.onDragCommit,
-        latestRef.current.callbacks.onDragCommit,
-        latestRef.current.onDragCommit,
+        originalCallbacks.onGeometryChanged,
+        latestRef.current.callbacks.onGeometryChanged,
+        latestRef.current.onGeometryChanged,
       );
     group.callbacks.onSizeChange = (event) => {
       invoke(
@@ -198,17 +198,9 @@ export const Group = forwardRef<GroupNodeComponent, GroupProps>(function Group(
         originalCallbacks.onSizeChange,
         latestRef.current.callbacks.onSizeChange,
       );
-      setBox({ w: event.width, h: event.height });
     };
-    group.callbacks.onResizeCommit = (event) =>
-      invoke(
-        event,
-        originalCallbacks.onResizeCommit,
-        latestRef.current.callbacks.onResizeCommit,
-        latestRef.current.onResizeCommit,
-      );
     // Header is the only move surface. setSizeState seeds the collision
-    // footprint (the DOM size is rendered from state above).
+    // footprint; core writes live resize geometry directly to this element.
     const unregisterHandle = headerRef.current
       ? group.registerDragHandle(headerRef.current)
       : undefined;
@@ -217,6 +209,7 @@ export const Group = forwardRef<GroupNodeComponent, GroupProps>(function Group(
       stage: "WRITE_3",
       queueId: `${group.id}-seed`,
     });
+    const boundElement = boxDomRef.current;
 
     return () => {
       unregisterHandle?.();
@@ -225,41 +218,32 @@ export const Group = forwardRef<GroupNodeComponent, GroupProps>(function Group(
         originalCallbacks.resolveSelectionMode;
       group.callbacks.onDragStart = originalCallbacks.onDragStart;
       group.callbacks.onDrag = originalCallbacks.onDrag;
-      group.callbacks.onDragCommit = originalCallbacks.onDragCommit;
-      group.callbacks.onSelectionChange =
-        originalCallbacks.onSelectionChange;
+      group.callbacks.onGeometryChanged = originalCallbacks.onGeometryChanged;
+      group.callbacks.onSelectionChange = originalCallbacks.onSelectionChange;
       group.callbacks.onResizeHandleChange =
         originalCallbacks.onResizeHandleChange;
       group.callbacks.onSizeChange = originalCallbacks.onSizeChange;
-      group.callbacks.onResizeCommit = originalCallbacks.onResizeCommit;
       group.groupCallbacks.onMembershipChange =
         originalGroupCallbacks.onMembershipChange;
       if (ownsGroupRef.current) {
-        group.destroy();
+        group.destroy(false);
+      } else if (boundElement) {
+        group.detachElement(boundElement);
       }
     };
   }, [group]);
 
+  // One effect for all four geometry props, committed through one engine task.
+  // Splitting position and size across two writers — React's renderer for the
+  // size, the engine's queue for the transform — lets them land in different
+  // frames, which paints the new size at the old position for one frame.
   useLayoutEffect(() => {
     group.worldTransform = { x, y };
-    group.schedule(() => group.writeTransformAndLines(), {
-      stage: "WRITE_2",
-      queueId: `${group.id}-transform`,
-    });
-  }, [group, x, y]);
+    group.setSizeState(width, height);
+    group.scheduleGeometryWrite();
+  }, [group, x, y, width, height]);
 
-  useLayoutEffect(() => {
-    setBox({ w: width, h: height });
-  }, [width, height]);
-
-  useLayoutEffect(() => {
-    if (!group.element) return;
-    group.setSizeState(box.w, box.h);
-    group.syncDomGeometry();
-  }, [group, box]);
-
-  const handleSize =
-    resizeHandleThickness ?? DEFAULT_RESIZE_HANDLE_THICKNESS;
+  const handleSize = resizeHandleThickness ?? DEFAULT_RESIZE_HANDLE_THICKNESS;
   return (
     <div
       ref={boxDomRef}
@@ -271,8 +255,8 @@ export const Group = forwardRef<GroupNodeComponent, GroupProps>(function Group(
         willChange: "transform",
         boxSizing: "border-box",
         pointerEvents: "none",
-        width: `${box.w}px`,
-        height: `${box.h}px`,
+        width: `${initialSize.width}px`,
+        height: `${initialSize.height}px`,
         ...style,
       }}
     >

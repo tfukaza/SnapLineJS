@@ -40,7 +40,7 @@ Set `resizable` to enable all eight handles, or pass an exact list:
   width={node.width}
   height={node.height}
   resizeHandles={["e", "se", "s"]}
-  onResizeCommit={(event) => saveSize(event)}
+  onGeometryChanged={(event) => saveGeometry(event)}
 />
 ```
 
@@ -51,13 +51,16 @@ Set `resizable` to enable all eight handles, or pass an exact list:
   width={node.width}
   height={node.height}
   resizeHandles={["e", "se", "s"]}
-  onResizeCommit={saveSize}
+  onGeometryChanged={saveGeometry}
 />
 ```
 
-Geometry props are hybrid-controlled: changed props resynchronize the object,
-while active drags update locally without waiting for an application render.
-Persist final values from `onDragCommit` and `onResizeCommit`.
+SnapLine owns live and settled geometry — position and size are visual cues
+that never wait for an application render; changed props still resynchronize
+the object deliberately. Persist final values from the batched
+`onGeometryChanged` event: a group or multi-select drag reports every moved
+node in one event (`{ nodes: [{ node, x, y, width, height }] }`), a resize
+reports a single entry.
 
 Register a specific header or handle with `registerDragHandle()` (Vanilla),
 `useNodeHandle()` (React), or the component’s exposed node object (Svelte) when

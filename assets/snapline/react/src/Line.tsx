@@ -1,8 +1,11 @@
-import { useEffect, useRef, useState, type CSSProperties } from "react";
-import type { LineComponent } from "@snap-engine/snapline";
+import { useLayoutEffect, useRef, type CSSProperties } from "react";
+import type {
+  LineMirror,
+  LineGeometrySnapshot,
+} from "@snap-engine/snapline";
 
 export interface LineProps {
-  line: LineComponent;
+  line: LineMirror;
   className?: string;
   pathClassName?: string;
   pathStyle?: CSSProperties;
@@ -10,35 +13,10 @@ export interface LineProps {
   data?: Record<string, string>;
 }
 
-interface LineState {
-  style: CSSProperties;
-  x1: number;
-  x2: number;
-  x3: number;
-  y1: number;
-  y2: number;
-  y3: number;
-}
-
-function getLineState(line: LineComponent): LineState {
-  const dx = line.endWorldX - line.worldTransform.x;
-  const dy = line.endWorldY - line.worldTransform.y;
-  return {
-    style: {
-      overflow: "visible",
-      pointerEvents: "none",
-      position: "absolute",
-      transform: `translate3d(${line.worldTransform.x}px, ${line.worldTransform.y}px, 0)`,
-      willChange: "transform",
-      zIndex: 1000,
-    },
-    x1: Math.abs(dx / 2),
-    y1: 0,
-    x2: dx - Math.abs(dx / 2),
-    y2: dy,
-    x3: dx,
-    y3: dy,
-  };
+function pathForGeometry(geometry: LineGeometrySnapshot): string {
+  const { x: dx, y: dy } = geometry.delta;
+  const x1 = Math.abs(dx / 2);
+  return `M 0,0 C ${x1}, 0 ${dx - x1}, ${dy} ${dx}, ${dy}`;
 }
 
 export function Line({
@@ -50,38 +28,45 @@ export function Line({
   data = {},
 }: LineProps) {
   const lineDomRef = useRef<SVGSVGElement>(null);
-  const [lineState, setLineState] = useState<LineState>(() =>
-    getLineState(line),
-  );
+  const pathRef = useRef<SVGPathElement>(null);
+  const initialGeometry = line.geometrySnapshot();
 
-  useEffect(() => {
-    if (lineDomRef.current) {
-      line.element = lineDomRef.current as unknown as HTMLElement;
-    }
-    const renderLine = () => {
-      setLineState(getLineState(line));
-    };
-    const cleanup = line.onRender(renderLine);
-    renderLine();
-    return cleanup;
+  useLayoutEffect(() => {
+    return line.bindGeometryWriter((geometry) => {
+      const svg = lineDomRef.current;
+      const path = pathRef.current;
+      if (!svg || !path) return;
+      svg.style.transform =
+        `translate3d(${geometry.start.x}px, ${geometry.start.y}px, 0)`;
+      path.setAttribute("d", pathForGeometry(geometry));
+    });
   }, [line]);
 
   return (
     <svg
       data-snapline-type="connector-line"
+      data-line-id={line.lineId}
       className={className}
       {...Object.fromEntries(
         Object.entries(data).map(([key, value]) => [`data-${key}`, value]),
       )}
       height="4"
       ref={lineDomRef}
-      style={lineState.style}
+      style={{
+        overflow: "visible",
+        pointerEvents: "none",
+        position: "absolute",
+        transform: `translate3d(${initialGeometry.start.x}px, ${initialGeometry.start.y}px, 0)`,
+        willChange: "transform",
+        zIndex: 1000,
+      }}
       width="4"
     >
       <path
+        ref={pathRef}
         className={pathClassName}
-        d={`M 0,0 C ${lineState.x1}, ${lineState.y1} ${lineState.x2}, ${lineState.y2} ${lineState.x3}, ${lineState.y3}`}
-        markerEnd={showArrow ? `url(#arrow-${line.id})` : undefined}
+        d={pathForGeometry(initialGeometry)}
+        markerEnd={showArrow ? `url(#arrow-${line.lineId})` : undefined}
         style={{
           fill: "none",
           stroke: "#545454",
@@ -92,7 +77,7 @@ export function Line({
         }}
       />
       {showArrow ? (
-        <marker id={`arrow-${line.id}`} viewBox="0 0 24 24" refX="0" refY="12" orient="auto">
+        <marker id={`arrow-${line.lineId}`} viewBox="0 0 24 24" refX="0" refY="12" orient="auto">
           <polygon points="4,4 20,12 4,22" fill="#545454" />
         </marker>
       ) : null}

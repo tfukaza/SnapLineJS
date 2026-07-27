@@ -8,25 +8,21 @@ import type {
   pointerUpProp,
 } from "@snap-engine/core";
 import { CircleCollider } from "@snap-engine/core/collision";
-import type { NodeComponent } from "./node";
-import { LineComponent } from "./line";
-import { getNodeManager } from "./snapline-globals";
+import type { NodeMirror } from "./node";
+import { LineMirror, type LineMirrorPhase } from "./line";
+import { getGraphMirror } from "./snapline-globals";
 import { getSourceSurfaces } from "./snapline-globals";
+import { mintDomainId } from "./graph-mirror";
+import type { LineChangeRequest } from "./line-reconciler";
 
 export type SnapLineMetadata = Record<string, unknown>;
-export type ConnectionOrigin = "gesture" | "programmatic" | "hydration";
+export type ConnectionOrigin = "gesture" | "hydration";
 export type DisconnectReason =
   | "gesture"
   | "replacement"
   | "programmatic"
   | "teardown";
 export type ConnectorRole = "source" | "target";
-export type ConnectorLinePhase =
-  | "source-start"
-  | "preview-free"
-  | "preview-target"
-  | "drop"
-  | "connected";
 
 export interface ConnectorPoint {
   x: number;
@@ -44,8 +40,8 @@ export interface ConnectorAnchor extends ConnectorPoint {
 
 /** Cached world-space bounds derived from the parent node's collision box. */
 export interface ConnectorGeometrySnapshot {
-  connector: ConnectorComponent;
-  node: NodeComponent;
+  connector: ConnectorMirror;
+  node: NodeMirror;
   x: number;
   y: number;
   width: number;
@@ -67,23 +63,23 @@ export interface ConnectorHit {
 }
 
 export interface ConnectorCandidate {
-  connector: ConnectorComponent;
+  connector: ConnectorMirror;
   hit: ConnectorHit;
 }
 
 export interface ConnectorSurfaceHitTestEvent {
-  connector: ConnectorComponent;
+  connector: ConnectorMirror;
   position: eventPosition;
   geometry: ConnectorGeometrySnapshot;
-  phase: ConnectorLinePhase;
+  phase: LineMirrorPhase;
 }
 
 export interface ConnectorAnchorEvent {
-  connector: ConnectorComponent;
-  peer: ConnectorComponent | null;
-  line: LineComponent;
+  connector: ConnectorMirror;
+  peer: ConnectorMirror | null;
+  line: LineMirror;
   role: ConnectorRole;
-  phase: ConnectorLinePhase;
+  phase: LineMirrorPhase;
   position: ConnectorPoint;
   geometry: ConnectorGeometrySnapshot;
   peerGeometry: ConnectorGeometrySnapshot | null;
@@ -102,31 +98,63 @@ export interface ConnectorSurfaceStrategy {
   ) => ConnectorAnchor | null | void;
 }
 
-export interface ConnectorCapabilities {
-  source: boolean;
-  target: boolean;
+/** `"unlimited"` is the explicit no-limit value (normalized to Infinity
+ * internally so capacity checks stay branch-free). */
+export type ConnectionLimit = number | "unlimited";
+
+export interface ConnectorRules {
+  /** Maximum outgoing lines (previews reserve a slot). 0 makes the connector
+   * target-only. Default `"unlimited"`. */
+  maxOutgoing: ConnectionLimit;
+  /** Maximum settled incoming lines. 0 makes the connector source-only.
+   * Default 1. */
+  maxIncoming: ConnectionLimit;
+  reconnect: boolean;
+  /** Both endpoints must allow parallel lines between the same pair. */
+  allowParallel: boolean;
+  /** Policy when a proposal would exceed `maxIncoming`: reject it (default)
+   * or evict the oldest incoming lines to make room. */
+  onFull: "reject" | "replace-oldest";
+  /** Line-aware admission predicate — synchronous and side-effect free
+   * (candidate discovery calls it repeatedly; rechecked on the final drop).
+   * Either endpoint's predicate may veto. */
+  isValidConnection?: (proposal: ConnectionProposal) => boolean;
+}
+
+/** Rules with limits normalized to numbers (Infinity = unlimited). */
+export interface ResolvedConnectorRules {
+  maxOutgoing: number;
   maxIncoming: number;
   reconnect: boolean;
   allowParallel: boolean;
+  onFull: "reject" | "replace-oldest";
+  isValidConnection: ((proposal: ConnectionProposal) => boolean) | null;
+}
+
+export interface ConnectionProposal {
+  line: LineMirror;
+  source: ConnectorMirror;
+  target: ConnectorMirror;
+  phase: "candidate" | "drop";
 }
 
 export interface ConnectorPairEvent {
-  source: ConnectorComponent;
-  target: ConnectorComponent;
+  source: ConnectorMirror;
+  target: ConnectorMirror;
 }
 
 export interface ConnectorCandidateEvent {
-  source: ConnectorComponent;
+  source: ConnectorMirror;
   /** Legacy convenience reference. */
-  candidate: ConnectorComponent | null;
+  candidate: ConnectorMirror | null;
   resolvedCandidate: ConnectorCandidate | null;
-  line: LineComponent | null;
+  line: LineMirror | null;
 }
 
 export interface ConnectorConnectionEvent extends ConnectorPairEvent {
-  connector: ConnectorComponent;
-  peer: ConnectorComponent;
-  line: LineComponent;
+  connector: ConnectorMirror;
+  peer: ConnectorMirror;
+  line: LineMirror;
   role: ConnectorRole;
   origin: ConnectionOrigin;
 }
@@ -137,7 +165,7 @@ export interface ConnectorDisconnectionEvent
 }
 
 export interface ConnectorDragEvent {
-  connector: ConnectorComponent;
+  connector: ConnectorMirror;
   position: eventPosition;
   pointerId: number;
 }
@@ -146,23 +174,7 @@ export interface ConnectorPointerEvent extends ConnectorDragEvent {
   originalEvent: PointerEvent;
 }
 
-export interface ConnectorConnectionRequestEvent extends ConnectorPairEvent {
-  line: LineComponent;
-  candidate: ConnectorCandidate;
-  position: eventPosition;
-}
-
-export type ConnectorConnectionRequestResult =
-  | false
-  | void
-  | { payload?: unknown };
-
 export interface ConnectorCallbacks {
-  canConnect?: (event: ConnectorPairEvent) => boolean;
-  /** Gesture-only and source-only canonical-model creation seam. */
-  onConnectionRequest?: (
-    event: ConnectorConnectionRequestEvent,
-  ) => ConnectorConnectionRequestResult;
   /** Fires when this connector claims a primary pointer, before drag threshold. */
   onPointerDown?: (event: ConnectorPointerEvent) => void;
   onDragStart?: (event: ConnectorDragEvent) => void;
@@ -179,14 +191,15 @@ enum ConnectorState {
 }
 
 export interface ConnectorConfig {
+  /**
+   * Stable application-facing identity (graph-global, one namespace across
+   * the whole graph). Minted by SnapLine when omitted; supply one for any
+   * graph that outlives this mirror (persistence, remounts, reloads).
+   */
+  id?: string;
   name?: string;
-  /** @deprecated Prefer capabilities.maxIncoming. */
-  maxConnectors?: number;
-  /** @deprecated Prefer capabilities.source/target. */
-  allowDragOut?: boolean;
-  capabilities?: Partial<ConnectorCapabilities>;
+  rules?: Partial<ConnectorRules>;
   surfaceStrategies?: readonly ConnectorSurfaceStrategy[];
-  lineClass?: typeof LineComponent;
   colliderRadius?: number;
   metadata?: SnapLineMetadata;
   callbacks?: ConnectorCallbacks;
@@ -206,50 +219,49 @@ interface ArmedConnection {
   pointerId: number;
   sourceHit: ConnectorHit | null;
   sourceStrategy: ConnectorSurfaceStrategy | null;
-  reconnectLine: LineComponent | null;
+  reconnectLine: LineMirror | null;
 }
 
-class ConnectorComponent extends ElementObject {
+class ConnectorMirror extends ElementObject {
+  /** Stable domain identity — supplied via `ConnectorConfig.id` or minted.
+   * Never the engine-internal `BaseObject.id`. */
+  readonly connectorId: string;
   #config: ConnectorConfig;
-  #capabilities: Readonly<ConnectorCapabilities>;
+  #rules: Readonly<ResolvedConnectorRules>;
   #name: string;
-  #prop: { [key: string]: any };
-  #outgoingLines: LineComponent[];
-  #incomingLines: LineComponent[];
+  #outgoingLines: LineMirror[];
+  #incomingLines: LineMirror[];
   #state: ConnectorState = ConnectorState.IDLE;
 
   #hitCircle: CircleCollider;
-  #targetConnector: ConnectorComponent | null = null;
+  #targetConnector: ConnectorMirror | null = null;
   #candidate: ConnectorResolvedHit | null = null;
-  #dragLine: LineComponent | null = null;
+  #dragLine: LineMirror | null = null;
   #edgePanPointerId: number | null = null;
   #localCenter: ConnectorPoint;
   #hasMeasuredCenter = false;
   #armed: ArmedConnection | null = null;
+  #gestureOrigin: "new" | "reconnect" | null = null;
   #cancelledPointers = new Set<number>();
   #callbacks: ConnectorCallbacks;
 
-  get parent(): NodeComponent {
-    return super.parent as NodeComponent;
+  get parent(): NodeMirror {
+    return super.parent as NodeMirror;
   }
 
   set parent(parent: BaseObject | null) {
     super.parent = parent;
   }
 
-  constructor(
-    engine: any,
-    parent: NodeComponent,
-    config: ConnectorConfig = {},
-  ) {
+  constructor(engine: any, parent: NodeMirror, config: ConnectorConfig = {}) {
     super(engine, parent as unknown as BaseObject);
 
-    this.#prop = {};
     this.#outgoingLines = [];
     this.#incomingLines = [];
     this.#config = { ...config };
-    this.#capabilities = Object.freeze(resolveCapabilities(this.#config));
+    this.#rules = Object.freeze(resolveRules(this.#config));
     this.#name = config.name || this.id || "";
+    this.connectorId = config.id ?? mintDomainId("connector", this.global);
     this.#callbacks = config.callbacks ?? {};
     this.#localCenter = { x: 0, y: 0 };
     this.transformMode = "none";
@@ -269,7 +281,7 @@ class ConnectorComponent extends ElementObject {
     );
     this.addCollider(this.#hitCircle);
     this.#syncSourceSurfaceRegistration();
-    getNodeManager(this.engine).registerConnector(this);
+    getGraphMirror(this.engine).registerConnector(this);
 
     this.event.dom.onAssignDom = () => {
       this.schedule(
@@ -290,16 +302,22 @@ class ConnectorComponent extends ElementObject {
     return this.#config;
   }
 
-  get capabilities(): Readonly<ConnectorCapabilities> {
-    return this.#capabilities;
+  get rules(): Readonly<ResolvedConnectorRules> {
+    return this.#rules;
+  }
+
+  /** Derived role: this connector may originate lines. */
+  get isSource(): boolean {
+    return this.#rules.maxOutgoing !== 0;
+  }
+
+  /** Derived role: this connector may receive lines. */
+  get isTarget(): boolean {
+    return this.#rules.maxIncoming !== 0;
   }
 
   get surfaceStrategies(): readonly ConnectorSurfaceStrategy[] {
     return this.#config.surfaceStrategies ?? [];
-  }
-
-  get prop(): { [key: string]: any } {
-    return this.#prop;
   }
 
   get metadata(): SnapLineMetadata {
@@ -314,19 +332,21 @@ class ConnectorComponent extends ElementObject {
     this.updateConfig({ callbacks });
   }
 
-  get outgoingLines(): LineComponent[] {
-    return this.#outgoingLines;
+  // Snapshots, never the internal arrays — topology mutation goes through
+  // connectToConnector/deleteLine/disconnectFromConnector.
+  get outgoingLines(): readonly LineMirror[] {
+    return [...this.#outgoingLines];
   }
 
-  get incomingLines(): LineComponent[] {
-    return this.#incomingLines;
+  get incomingLines(): readonly LineMirror[] {
+    return [...this.#incomingLines];
   }
 
-  get targetConnector(): ConnectorComponent | null {
+  get targetConnector(): ConnectorMirror | null {
     return this.#targetConnector;
   }
 
-  set targetConnector(value: ConnectorComponent | null) {
+  set targetConnector(value: ConnectorMirror | null) {
     const resolved = value
       ? {
           candidate: {
@@ -359,7 +379,7 @@ class ConnectorComponent extends ElementObject {
   updateConfig(config: ConnectorConfigUpdate): void {
     this.#config = { ...this.#config, ...config };
     this.#callbacks = this.#config.callbacks ?? {};
-    this.#capabilities = Object.freeze(resolveCapabilities(this.#config));
+    this.#rules = Object.freeze(resolveRules(this.#config));
     this.#hitCircle.radius = this.#config.colliderRadius ?? 30;
     this.#syncSourceSurfaceRegistration();
     this.scheduleAllLineWrites();
@@ -499,7 +519,7 @@ class ConnectorComponent extends ElementObject {
   ): void {
     if (prop.event.button !== 0) return;
     const currentIncomingLines = this.#liveIncomingLines();
-    if (this.#capabilities.reconnect && currentIncomingLines.length > 0) {
+    if (this.#rules.reconnect && currentIncomingLines.length > 0) {
       const line = currentIncomingLines[0];
       const source = line.start;
       this.engine.input.setPointerDragOwner(prop.event.pointerId, source);
@@ -511,7 +531,9 @@ class ConnectorComponent extends ElementObject {
       return;
     }
 
-    if (!this.#capabilities.source) return;
+    if (!this.isSource) return;
+    // A new preview reserves an outgoing slot; a full source cannot start one.
+    if (this.#liveOutgoingLines().length >= this.#rules.maxOutgoing) return;
     this.#arm(prop, {
       sourceHit: sourceHit?.candidate.hit ?? null,
       sourceStrategy: sourceHit?.strategy ?? this.#defaultAnchorStrategy(),
@@ -560,6 +582,7 @@ class ConnectorComponent extends ElementObject {
 
     const armed = this.#armed;
     let line = armed.reconnectLine;
+    this.#gestureOrigin = line ? "reconnect" : "new";
     if (line) {
       this.#detachLineForReconnect(line);
       line.clearTarget();
@@ -584,13 +607,14 @@ class ConnectorComponent extends ElementObject {
     line.setPhase("preview-free");
   }
 
+  /** @internal Reconciler/teardown-only: topology is always controlled —
+   * applications remove lines by removing their canonical records. */
   deleteLine(
-    i: number,
+    line: LineMirror,
     reason: DisconnectReason = "programmatic",
-  ): LineComponent | null {
-    if (this.#outgoingLines.length === 0 || i < 0) return null;
-    const line = this.#outgoingLines[i];
-    if (!line) return null;
+  ): LineMirror | null {
+    const index = this.#outgoingLines.indexOf(line);
+    if (index === -1) return null;
 
     const target = line.target;
     if (target) {
@@ -600,17 +624,18 @@ class ConnectorComponent extends ElementObject {
       this.#emitDisconnect(target, line, reason);
     }
     line.destroy(false);
-    this.#outgoingLines.splice(i, 1);
+    this.#outgoingLines.splice(index, 1);
     this.parent?.updateNodeLineList();
     return line;
   }
 
+  /** @internal Teardown-only. */
   deleteAllLines(reason: DisconnectReason = "programmatic"): void {
     for (const line of [...this.#outgoingLines]) {
-      this.deleteLine(this.#outgoingLines.indexOf(line), reason);
+      this.deleteLine(line, reason);
     }
     for (const line of [...this.#incomingLines]) {
-      line.start.deleteLine(line.start.outgoingLines.indexOf(line), reason);
+      line.start.deleteLine(line, reason);
     }
     this.#incomingLines = [];
   }
@@ -637,11 +662,9 @@ class ConnectorComponent extends ElementObject {
     }
   }
 
-  assignToNode(parent: NodeComponent): void {
+  assignToNode(parent: NodeMirror): void {
     this.parent = parent;
     const parentRef = this.parent;
-    parentRef._prop[this.#name] = null;
-    this.#prop = parentRef._prop;
     parentRef._connectors[this.#name] = this;
     this.#outgoingLines = [];
     this.#incomingLines = [];
@@ -650,20 +673,12 @@ class ConnectorComponent extends ElementObject {
     }
   }
 
-  createLine(): LineComponent {
-    const line = this.#config.lineClass
-      ? new this.#config.lineClass(this.engine, this)
-      : new LineComponent(this.engine, this);
+  /** @internal Gesture/reconciler-only: lines exist because canonical
+   * records (or in-flight gestures) say so. */
+  createLine(config: { id?: string } = {}): LineMirror {
+    const line = new LineMirror(this.engine, this, config);
     line.setSourceSurfaceContext(this.#defaultAnchorStrategy(), null);
     return line;
-  }
-
-  /** @deprecated Pointer-down now only arms; retained for source compatibility. */
-  startDragOutLine(prop: pointerDownProp): void {
-    this.armSurfaceGesture(
-      prop,
-      this.#resolveOwnSourceHit(prop.position, "source-start"),
-    );
   }
 
   findClosestConnector(): void {
@@ -683,7 +698,7 @@ class ConnectorComponent extends ElementObject {
 
   findClosestConnectorAtPoint(
     position: ConnectorPoint,
-  ): ConnectorComponent | null {
+  ): ConnectorMirror | null {
     return this.findCandidateAtPoint(position)?.connector ?? null;
   }
 
@@ -701,33 +716,72 @@ class ConnectorComponent extends ElementObject {
     return this.#resolveOwnSourceHit(position, "source-start");
   }
 
-  canConnectToConnector(connector: ConnectorComponent): boolean {
-    if (
-      connector.id === this.id ||
-      !this.#capabilities.source ||
-      !connector.#capabilities.target ||
-      connector.#capabilities.maxIncoming === 0
-    ) {
-      return false;
-    }
+  /**
+   * Imperative admission query. Structural rules always apply; the
+   * line-aware isValidConnection predicates run only when a line is given.
+   */
+  canConnect(target: ConnectorMirror, line: LineMirror | null = null): boolean {
+    return this.#admitsConnection(target, line, "drop");
+  }
 
-    const hasParallel = connector
+  #admitsConnection(
+    target: ConnectorMirror,
+    line: LineMirror | null,
+    phase: "candidate" | "drop",
+  ): boolean {
+    // Gestures admit an over-capacity target when its policy replaces
+    // (the evictions ride the atomic proposal); records never do.
+    if (this.#admitsEndpoints(target, line, true) !== true) return false;
+    return line ? this.#predicatesAdmit(target, line, phase) : true;
+  }
+
+  /**
+   * The one structural admission check: roles, capacity (the in-flight
+   * line never counts against itself), and the parallel rule.
+   */
+  #admitsEndpoints(
+    target: ConnectorMirror,
+    line: LineMirror | null,
+    allowReplacement: boolean,
+  ): true | "capacity-exceeded" | "connection-rejected" {
+    if (target.id === this.id || !this.isSource || !target.isTarget) {
+      return "connection-rejected";
+    }
+    const incoming = target
       .#liveIncomingLines()
-      .some((line) => line.start === this);
+      .filter((incomingLine) => incomingLine !== line);
+    const outgoing = this.#liveOutgoingLines().filter(
+      (outgoingLine) => outgoingLine !== line,
+    );
+    if (
+      (incoming.length >= target.#rules.maxIncoming &&
+        !(allowReplacement && target.#rules.onFull === "replace-oldest")) ||
+      outgoing.length >= this.#rules.maxOutgoing
+    ) {
+      return "capacity-exceeded";
+    }
+    const hasParallel = incoming.some(
+      (incomingLine) => incomingLine.start === this,
+    );
     if (
       hasParallel &&
-      !(
-        this.#capabilities.allowParallel &&
-        connector.#capabilities.allowParallel
-      )
+      !(this.#rules.allowParallel && target.#rules.allowParallel)
     ) {
-      return false;
+      return "connection-rejected";
     }
+    return true;
+  }
 
-    const event = { source: this, target: connector };
+  /** Both endpoints' line-aware predicates may veto. */
+  #predicatesAdmit(
+    target: ConnectorMirror,
+    line: LineMirror,
+    phase: "candidate" | "drop",
+  ): boolean {
+    const proposal: ConnectionProposal = { line, source: this, target, phase };
     return (
-      this.#callbacks.canConnect?.(event) !== false &&
-      connector.#callbacks.canConnect?.(event) !== false
+      this.#rules.isValidConnection?.(proposal) !== false &&
+      target.#rules.isValidConnection?.(proposal) !== false
     );
   }
 
@@ -768,9 +822,9 @@ class ConnectorComponent extends ElementObject {
   }
 
   hoverWhileDragging(
-    targetConnector: ConnectorComponent,
+    targetConnector: ConnectorMirror,
   ): [number, number] | void {
-    if (!(targetConnector instanceof ConnectorComponent) || !this.#dragLine) {
+    if (!(targetConnector instanceof ConnectorMirror) || !this.#dragLine) {
       return;
     }
     const anchor = targetConnector.resolveAnchor({
@@ -808,48 +862,102 @@ class ConnectorComponent extends ElementObject {
     line.setPhase("drop");
     line.setPreviewPosition(prop.end);
 
-    let connected = false;
-    if (candidate) {
-      let request: ConnectorConnectionRequestResult;
-      try {
-        request = this.#callbacks.onConnectionRequest?.({
-          source: this,
-          target: candidate.candidate.connector,
-          line,
-          candidate: candidate.candidate,
-          position: prop.end,
-        });
-      } catch (error) {
-        this.#discardDraggedLine(line, prop, false);
-        throw error;
-      }
-      if (request !== false) {
-        const connectionOptions: Parameters<
-          ConnectorComponent["connectToConnector"]
-        >[0] = {
-          target: candidate.candidate.connector,
-          line,
-          origin: "gesture",
-          candidate,
-        };
-        if (
-          request &&
-          typeof request === "object" &&
-          Object.prototype.hasOwnProperty.call(request, "payload")
-        ) {
-          connectionOptions.payload = request.payload;
-        }
-        connected = this.connectToConnector(connectionOptions);
-      }
+    const mirror = getGraphMirror(this.engine);
+    if (typeof mirror.reconciler?.dispatchLineChangeRequest === "function") {
+      this.#endControlledDrop(line, candidate, prop);
+      return;
     }
+    // Topology is always controlled: without a graph owner attached there
+    // is no document to propose to, so the gesture cannot produce a line.
+    console.warn(
+      "SnapLine: gesture on an engine with no graph owner — mount <ControlledGraph> (or attachControlledGraph) so gestures have a document to propose to.",
+    );
+    this.#discardDraggedLine(line, prop, false);
+  }
 
-    if (!connected) {
+  /**
+   * Controlled-mode drop: nothing mutates settled topology locally. The
+   * gesture stages its outcome on the line mirror and proposes one atomic
+   * LineChangeRequest; the post-request reconciliation pass settles or
+   * discards the staged state against the canonical decision.
+   */
+  #endControlledDrop(
+    line: LineMirror,
+    candidate: ConnectorResolvedHit | null,
+    prop: dragEndProp,
+  ): void {
+    const target = candidate?.candidate.connector ?? null;
+
+    if (
+      !candidate ||
+      !target ||
+      !this.#admitsConnection(target, line, "drop")
+    ) {
+      if (this.#gestureOrigin === "reconnect") {
+        // Gesture disconnect: propose the removal; the line stays visibly
+        // detached until the decision. A rejected removal re-glues it from
+        // the unchanged document.
+        line.stageForRemoval();
+        this.parent.updateNodeLineList();
+        this.#dispatchRequest({
+          intent: "disconnect",
+          add: [],
+          remove: [line.lineId],
+          update: [],
+        });
+        this.parent.scheduleLineWrites();
+        this.#callbacks.onDragEnd?.({
+          connector: this,
+          position: prop.end,
+          pointerId: prop.pointerId,
+          connected: false,
+        });
+        this.#resetGesture();
+        return;
+      }
       this.#discardDraggedLine(line, prop, false);
       return;
     }
 
-    candidate!.candidate.connector.#prop[candidate!.candidate.connector.#name] =
-      this.#prop[this.#name];
+    // Evictions ride the atomic proposal ("replace") — never local deletes.
+    const evictions: string[] = [];
+    const incoming = target
+      .#liveIncomingLines()
+      .filter((incomingLine) => incomingLine !== line);
+    const overflow = incoming.length - target.#rules.maxIncoming + 1;
+    if (overflow > 0) {
+      for (const evicted of incoming.slice(0, overflow)) {
+        evictions.push(evicted.lineId);
+      }
+    }
+
+    line.stageTarget(target, candidate.candidate, candidate.strategy);
+    this.parent.updateNodeLineList();
+
+    const request: LineChangeRequest =
+      this.#gestureOrigin === "reconnect"
+        ? {
+            intent: evictions.length > 0 ? "replace" : "reconnect",
+            add: [],
+            remove: evictions,
+            update: [{ id: line.lineId, toConnectorId: target.connectorId }],
+          }
+        : {
+            intent: evictions.length > 0 ? "replace" : "connect",
+            add: [
+              {
+                id: line.lineId,
+                fromConnectorId: this.connectorId,
+                toConnectorId: target.connectorId,
+                ...(line.payload !== undefined
+                  ? { payload: line.payload }
+                  : {}),
+              },
+            ],
+            remove: evictions,
+            update: [],
+          };
+    this.#dispatchRequest(request);
     this.parent.scheduleLineWrites();
     this.#callbacks.onDragEnd?.({
       connector: this,
@@ -860,11 +968,47 @@ class ConnectorComponent extends ElementObject {
     this.#resetGesture();
   }
 
-  _endLineDragCleanup(): void {
-    this.#resetGesture();
+  #dispatchRequest(request: LineChangeRequest): void {
+    const mirror = getGraphMirror(this.engine);
+    if (mirror.pendingGestureRequest) {
+      console.warn(
+        "SnapLine: a line-change request is already in flight; gestures are serial, so this indicates a stalled adapter push.",
+      );
+    }
+    mirror.pendingGestureRequest = true;
+    mirror.reconciler?.dispatchLineChangeRequest?.(request);
+    // The decisive pass runs after the adapter's post-request push — the
+    // adapter queues its push inside the dispatch above, ahead of this
+    // scheduled microtask.
+    mirror.scheduleReconciliation();
   }
 
-  startPickUpLine(line: LineComponent, prop: pointerDownProp): void {
+  /** @internal Reconciler-only: settle a staged gesture line onto its
+   * accepted target. Capacity and both predicates recheck strictly. */
+  settleStagedLineFromRecord(
+    line: LineMirror,
+    target: ConnectorMirror,
+  ): true | "capacity-exceeded" | "connection-rejected" {
+    const structural = this.#admitsEndpoints(target, line, false);
+    if (structural !== true) return structural;
+    if (!this.#predicatesAdmit(target, line, "drop")) {
+      return "connection-rejected";
+    }
+    this.#settlePreviewLine(line, target, null, "gesture", null);
+    return true;
+  }
+
+  /** @internal Reconciler-only: drop a staged line the canonical owner
+   * declined. No disconnect observation — no connect was ever observed. */
+  discardStagedLine(line: LineMirror): void {
+    const index = this.#outgoingLines.indexOf(line);
+    if (index === -1) return;
+    this.#outgoingLines.splice(index, 1);
+    line.destroy(false);
+    this.parent?.updateNodeLineList();
+  }
+
+  startPickUpLine(line: LineMirror, prop: pointerDownProp): void {
     this.engine.input.setPointerDragOwner(prop.event.pointerId, line.start);
     line.start.#arm(prop, {
       sourceHit: null,
@@ -873,62 +1017,21 @@ class ConnectorComponent extends ElementObject {
     });
   }
 
-  connectToConnector(options: {
-    target: ConnectorComponent;
-    line?: LineComponent | null;
-    origin?: ConnectionOrigin;
-    payload?: unknown;
-    candidate?: ConnectorResolvedHit | null;
-  }): boolean {
-    const {
-      target,
-      line: requestedLine = null,
-      origin = "programmatic",
-      candidate = null,
-    } = options;
-    let line = requestedLine;
-    const hasPayload = Object.prototype.hasOwnProperty.call(options, "payload");
-    if (line && line.start !== this) return false;
-
-    const alreadyConnected =
-      line?.target === target &&
-      this.#outgoingLines.includes(line) &&
-      target.#incomingLines.includes(line);
-    if (alreadyConnected && line) {
-      if (hasPayload) line.setPayload(options.payload);
-      line.connectTarget(
-        target,
-        candidate?.candidate ?? null,
-        candidate?.strategy ?? target.#defaultAnchorStrategy(),
-      );
-      line.writeTransform();
-      return true;
-    }
-
-    if (!this.canConnectToConnector(target)) return false;
-
-    const maxIncoming = target.#capabilities.maxIncoming;
-    if (maxIncoming > 0) {
-      const currentIncomingLines = target.#liveIncomingLines();
-      const removeCount = Math.max(
-        0,
-        currentIncomingLines.length - maxIncoming + 1,
-      );
-      for (const incomingLine of currentIncomingLines.slice(0, removeCount)) {
-        incomingLine.start.deleteLine(
-          incomingLine.start.outgoingLines.indexOf(incomingLine),
-          "replacement",
-        );
-      }
-    }
-
-    if (line == null) {
-      line = this.createLine();
-      this.#outgoingLines.unshift(line);
-    } else if (!this.#outgoingLines.includes(line)) {
-      this.#outgoingLines.unshift(line);
-    }
-
+  /**
+   * Settle a line that already sits in this connector's outgoing list onto
+   * its target: run the explicit replacement policy, detach any previous
+   * target, glue anchors, and emit. Validation happened before this point.
+   */
+  #settlePreviewLine(
+    line: LineMirror,
+    target: ConnectorMirror,
+    candidate: ConnectorResolvedHit | null,
+    origin: ConnectionOrigin,
+    payload: { value: unknown } | null,
+  ): void {
+    // No local eviction here: replace-oldest evictions ride the atomic
+    // request, and the reconciler prunes accepted removals before settling —
+    // by the time a line settles, its target has room by construction.
     const previousTarget = line.target;
     if (previousTarget) {
       previousTarget.#incomingLines = previousTarget.#incomingLines.filter(
@@ -939,7 +1042,7 @@ class ConnectorComponent extends ElementObject {
     }
 
     // Payload and anchors are authoritative before render/connect callbacks.
-    if (hasPayload) line.setPayload(options.payload);
+    if (payload) line.setPayload(payload.value);
     line.connectTarget(
       target,
       candidate?.candidate ?? null,
@@ -952,18 +1055,17 @@ class ConnectorComponent extends ElementObject {
 
     this.parent.updateNodeLineList();
     this.#emitConnect(target, line, origin);
-    this.parent.setProp(this.#name, this.#prop[this.#name]);
-    return true;
   }
 
+  /** @internal Reconciler/teardown-only. */
   disconnectFromConnector(
-    connector: ConnectorComponent,
+    connector: ConnectorMirror,
     reason: DisconnectReason = "programmatic",
   ): void {
-    const lineIndex = this.#outgoingLines.findIndex(
-      (line) => line.target === connector,
+    const line = this.#outgoingLines.find(
+      (outgoingLine) => outgoingLine.target === connector,
     );
-    if (lineIndex !== -1) this.deleteLine(lineIndex, reason);
+    if (line) this.deleteLine(line, reason);
   }
 
   resolveAnchor({
@@ -975,10 +1077,10 @@ class ConnectorComponent extends ElementObject {
     hit,
     strategy,
   }: {
-    line: LineComponent;
+    line: LineMirror;
     role: ConnectorRole;
-    phase: ConnectorLinePhase;
-    peer: ConnectorComponent | null;
+    phase: LineMirrorPhase;
+    peer: ConnectorMirror | null;
     position: ConnectorPoint;
     hit: ConnectorHit | null;
     strategy: ConnectorSurfaceStrategy | null;
@@ -1009,25 +1111,25 @@ class ConnectorComponent extends ElementObject {
     return cloneAnchor(this.center);
   }
 
-  destroy(): void {
+  destroy(removeElement: boolean = true): void {
     if (this.#edgePanPointerId != null) {
       this.engine.edgePanController?.stopEdgePan(this.#edgePanPointerId);
       this.#edgePanPointerId = null;
     }
     this.#resetGesture();
     this.deleteAllLines("teardown");
-    getNodeManager(this.engine).unregisterConnector(this);
+    getGraphMirror(this.engine).unregisterConnector(this);
     if (this.parent?._connectors[this.#name] === this) {
       delete this.parent._connectors[this.#name];
     }
     this.#removeSourceSurfaceRegistration();
     this.globalInput.pointerUp = null;
-    super.destroy();
+    super.destroy(removeElement);
   }
 
   #resolveOwnSourceHit(
     position: eventPosition,
-    phase: ConnectorLinePhase,
+    phase: LineMirrorPhase,
   ): ConnectorResolvedHit | null {
     const hits: ConnectorResolvedHit[] = [];
     for (const [strategyIndex, strategy] of this.surfaceStrategies.entries()) {
@@ -1058,7 +1160,7 @@ class ConnectorComponent extends ElementObject {
     for (const connector of registeredConnectors(this.engine)) {
       if (
         connector.engine !== this.engine ||
-        !this.canConnectToConnector(connector)
+        !this.#admitsConnection(connector, this.#dragLine, "candidate")
       ) {
         continue;
       }
@@ -1132,23 +1234,22 @@ class ConnectorComponent extends ElementObject {
     });
   }
 
-  #detachLineForReconnect(line: LineComponent): void {
+  #detachLineForReconnect(line: LineMirror): void {
     const target = line.target;
     if (!target) return;
     target.#incomingLines = target.#incomingLines.filter(
       (incomingLine) => incomingLine !== line,
     );
-    line.target = null;
+    line.detachTarget();
     this.#emitDisconnect(target, line, "gesture");
   }
 
   #discardDraggedLine(
-    line: LineComponent,
+    line: LineMirror,
     prop: dragEndProp,
     connected: boolean,
   ): void {
-    const index = this.#outgoingLines.indexOf(line);
-    if (index !== -1) this.deleteLine(index, "gesture");
+    if (this.#outgoingLines.includes(line)) this.deleteLine(line, "gesture");
     this.#callbacks.onDragEnd?.({
       connector: this,
       position: prop.end,
@@ -1169,6 +1270,7 @@ class ConnectorComponent extends ElementObject {
     this.#state = ConnectorState.IDLE;
     this.#armed = null;
     this.#dragLine = null;
+    this.#gestureOrigin = null;
     this.#setCandidate(null);
   }
 
@@ -1184,7 +1286,7 @@ class ConnectorComponent extends ElementObject {
     const sourceSurfaces = getSourceSurfaces(this.global);
     const index = sourceSurfaces.indexOf(this);
     const shouldRegister =
-      this.#capabilities.source &&
+      this.isSource &&
       this.surfaceStrategies.some((strategy) => strategy.sourceHitTest);
     if (shouldRegister && index === -1) {
       sourceSurfaces.push(this);
@@ -1203,13 +1305,61 @@ class ConnectorComponent extends ElementObject {
     return this.element != null || this.#hasMeasuredCenter;
   }
 
-  #liveIncomingLines(): LineComponent[] {
+  /**
+   * @internal Reconciler-only: create a settled mirror for a canonical line
+   * record. No gesture policy — capacity is strict (never evicts, regardless
+   * of onFull) and refusal reports a diagnostic code instead of throwing.
+   */
+  createSettledLineFromRecord(
+    target: ConnectorMirror,
+    record: { id: string; payload?: unknown },
+  ): LineMirror | "capacity-exceeded" | "connection-rejected" {
+    const structural = this.#admitsEndpoints(target, null, false);
+    if (structural !== true) return structural;
+
+    const line = this.createLine({ id: record.id });
+    if (!this.#predicatesAdmit(target, line, "drop")) {
+      line.destroy(false);
+      return "connection-rejected";
+    }
+    this.#outgoingLines.unshift(line);
+    this.#settlePreviewLine(line, target, null, "hydration", {
+      value: record.payload,
+    });
+    return line;
+  }
+
+  /**
+   * @internal Reconciler-only: move an existing settled line to a new
+   * canonical target, preserving the mirror. Strict capacity; never evicts.
+   */
+  retargetSettledLineFromRecord(
+    line: LineMirror,
+    target: ConnectorMirror,
+  ): true | "capacity-exceeded" | "connection-rejected" {
+    const structural = this.#admitsEndpoints(target, line, false);
+    if (structural !== true) return structural;
+    if (!this.#predicatesAdmit(target, line, "drop")) {
+      return "connection-rejected";
+    }
+    this.#settlePreviewLine(line, target, null, "hydration", null);
+    return true;
+  }
+
+  /** Strict structural admission for canonical records: roles, capacity
+   * without replacement, and the parallel rule. */
+
+  #liveIncomingLines(): LineMirror[] {
     return this.#incomingLines.filter((line) => !line.isDeleteRequested);
   }
 
+  #liveOutgoingLines(): LineMirror[] {
+    return this.#outgoingLines.filter((line) => !line.isDeleteRequested);
+  }
+
   #emitConnect(
-    target: ConnectorComponent,
-    line: LineComponent,
+    target: ConnectorMirror,
+    line: LineMirror,
     origin: ConnectionOrigin,
   ): void {
     this.#callbacks.onConnect?.({
@@ -1230,20 +1380,11 @@ class ConnectorComponent extends ElementObject {
       role: "target",
       origin,
     });
-    getNodeManager(this.engine).edgeSync?.notifyConnect({
-      source: this,
-      target,
-      connector: this,
-      peer: target,
-      line,
-      role: "source",
-      origin,
-    });
   }
 
   #emitDisconnect(
-    target: ConnectorComponent,
-    line: LineComponent,
+    target: ConnectorMirror,
+    line: LineMirror,
     reason: DisconnectReason,
   ): void {
     this.#callbacks.onDisconnect?.({
@@ -1264,28 +1405,23 @@ class ConnectorComponent extends ElementObject {
       role: "target",
       reason,
     });
-    getNodeManager(this.engine).edgeSync?.notifyDisconnect({
-      source: this,
-      target,
-      connector: this,
-      peer: target,
-      line,
-      role: "source",
-      reason,
-    });
   }
 }
 
-function resolveCapabilities(config: ConnectorConfig): ConnectorCapabilities {
-  const legacyMaxIncoming = config.maxConnectors ?? 1;
-  const legacySource = config.allowDragOut ?? false;
+function resolveRules(config: ConnectorConfig): ResolvedConnectorRules {
+  const rules = config.rules ?? {};
+  const toCount = (
+    limit: ConnectionLimit | undefined,
+    fallback: number,
+  ): number =>
+    limit === undefined ? fallback : limit === "unlimited" ? Infinity : limit;
   return {
-    source: config.capabilities?.source ?? legacySource,
-    target:
-      config.capabilities?.target ?? (!legacySource && legacyMaxIncoming !== 0),
-    maxIncoming: config.capabilities?.maxIncoming ?? legacyMaxIncoming,
-    reconnect: config.capabilities?.reconnect ?? true,
-    allowParallel: config.capabilities?.allowParallel ?? false,
+    maxOutgoing: toCount(rules.maxOutgoing, Infinity),
+    maxIncoming: toCount(rules.maxIncoming, 1),
+    reconnect: rules.reconnect ?? true,
+    allowParallel: rules.allowParallel ?? false,
+    onFull: rules.onFull ?? "reject",
+    isValidConnection: rules.isValidConnection ?? null,
   };
 }
 
@@ -1353,15 +1489,15 @@ function pickResolvedHit(
 export function resolveConnectorSourceAtPoint(
   engine: any,
   position: eventPosition,
-  node?: NodeComponent,
+  node?: NodeMirror,
 ): ConnectorResolvedHit | null {
   const hits: ConnectorResolvedHit[] = [];
   for (const surface of getSourceSurfaces(engine.global)) {
-    const connector = surface as ConnectorComponent;
+    const connector = surface as ConnectorMirror;
     if (
       connector.engine !== engine ||
       (node && connector.parent !== node) ||
-      !connector.capabilities.source
+      !connector.isSource
     ) {
       continue;
     }
@@ -1371,13 +1507,12 @@ export function resolveConnectorSourceAtPoint(
   return pickResolvedHit(hits);
 }
 
-function registeredConnectors(engine: any): ConnectorComponent[] {
-  const objectTable = engine.global?.getEngineObjectTable?.(engine);
-  if (!objectTable) return [];
-  return Object.values(objectTable).filter(
-    (object): object is ConnectorComponent =>
-      object instanceof ConnectorComponent && !object.isDeleteRequested,
+function registeredConnectors(engine: any): ConnectorMirror[] {
+  // The registry is the one connector source — no engine-object-table scan
+  // (this runs per pointer move during a connection drag).
+  return getGraphMirror(engine).connectors.filter(
+    (connector) => !connector.isDeleteRequested,
   );
 }
 
-export { ConnectorComponent };
+export { ConnectorMirror };

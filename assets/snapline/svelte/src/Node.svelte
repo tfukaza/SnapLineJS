@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { NodeComponent, LineComponent, DEFAULT_RESIZE_HANDLE_THICKNESS, type NodeCallbacks, type NodeDragCommitEvent, type NodeResizeEvent, type ResizeHandle, type SnapLineMetadata } from "@snap-engine/snapline";
+    import { NodeMirror, LineMirror, DEFAULT_RESIZE_HANDLE_THICKNESS, type NodeCallbacks, type GeometryChangeEvent, type NodeResizeEvent, type ResizeHandle, type SnapLineMetadata } from "@snap-engine/snapline";
     import type { Engine } from "@snap-engine/core";
     import Line from "./Line.svelte";
     import { onMount, setContext, getContext, onDestroy, tick, untrack } from "svelte";
@@ -7,6 +7,7 @@
     import { blur } from "svelte/transition";
 
     let {
+        id = undefined,
         className = "",
         LineSvelteComponent = Line,
         nodeObject = null,
@@ -23,15 +24,16 @@
         metadata = {},
         callbacks = {},
         edgePan = true,
-        onDragCommit = undefined,
-        onResizeCommit = undefined,
+        onGeometryChanged = undefined,
         onSizeChange = undefined,
         elementProps = {},
         children,
     }: {
+        /** Stable domain identity; minted when omitted (supply for persistence). */
+        id?: string;
         className?: string;
         LineSvelteComponent?: typeof Line;
-        nodeObject?: NodeComponent | null;
+        nodeObject?: NodeMirror | null;
         x?: number;
         y?: number;
         width?: number;
@@ -45,8 +47,7 @@
         metadata?: SnapLineMetadata;
         callbacks?: NodeCallbacks;
         edgePan?: boolean;
-        onDragCommit?: (event: NodeDragCommitEvent) => void;
-        onResizeCommit?: (event: NodeResizeEvent) => void;
+        onGeometryChanged?: (event: GeometryChangeEvent) => void;
         onSizeChange?: (event: NodeResizeEvent) => void;
         /** Framework-native attributes and events for the outer node element. */
         elementProps?: HTMLAttributes<HTMLDivElement>;
@@ -56,15 +57,10 @@
     let engine: Engine = getContext("engine");
     const ownsNode = nodeObject == null;
     if (!nodeObject) {
-         nodeObject = new NodeComponent(engine, null, { resizable, minWidth, minHeight, resizeHandleThickness, resizeHandles, resizeCursors, metadata, callbacks: {}, edgePan });
+         nodeObject = new NodeMirror(engine, null, { id, resizable, minWidth, minHeight, resizeHandleThickness, resizeHandles, resizeCursors, metadata, callbacks: {}, edgePan });
     }
-    let lineList: LineComponent[] = $state(nodeObject.getAllOutgoingLines());
+    let lineList: LineMirror[] = $state(nodeObject.getAllOutgoingLines());
 
-    // The element's width/height are framework-owned: core reports size changes
-    // (resize drag) via onSizeChange and this state renders them. Null until the
-    // first resize so CSS-declared sizes keep applying to non-resized nodes.
-    let boxW = $state<number | null>(width ?? null);
-    let boxH = $state<number | null>(height ?? null);
     let mounted = $state(false);
     let originalCallbacks: NodeCallbacks = {};
 
@@ -114,14 +110,10 @@
             invoke(event, originalCallbacks.onSelectionChange, callbacks.onSelectionChange);
         nodeObject.callbacks.onResizeHandleChange = (event) =>
             invoke(event, originalCallbacks.onResizeHandleChange, callbacks.onResizeHandleChange);
-        nodeObject.callbacks.onResizeCommit = (event) =>
-            invoke(event, originalCallbacks.onResizeCommit, callbacks.onResizeCommit, onResizeCommit);
-        nodeObject.callbacks.onDragCommit = (event) =>
-            invoke(event, originalCallbacks.onDragCommit, callbacks.onDragCommit, onDragCommit);
+        nodeObject.callbacks.onGeometryChanged = (event) =>
+            invoke(event, originalCallbacks.onGeometryChanged, callbacks.onGeometryChanged, onGeometryChanged);
         nodeObject.callbacks.onSizeChange = (event) => {
             invoke(event, originalCallbacks.onSizeChange, callbacks.onSizeChange, onSizeChange);
-            boxW = event.width;
-            boxH = event.height;
         };
         nodeObject.callbacks.onLinesChanged = (event) => {
             invoke(event, originalCallbacks.onLinesChanged, callbacks.onLinesChanged);
@@ -129,7 +121,7 @@
         };
         lineList = nodeObject.getAllOutgoingLines();
         void tick().then(() => {
-            if (mounted && nodeObject!.element) nodeObject!.syncDomGeometry();
+            if (mounted && nodeObject!.element) nodeObject!.remeasureDomGeometry();
         });
     });
 
@@ -140,14 +132,15 @@
         nodeObject.callbacks.resolveSelectionMode = originalCallbacks.resolveSelectionMode;
         nodeObject.callbacks.onDragStart = originalCallbacks.onDragStart;
         nodeObject.callbacks.onDrag = originalCallbacks.onDrag;
-        nodeObject.callbacks.onDragCommit = originalCallbacks.onDragCommit;
+        nodeObject.callbacks.onGeometryChanged = originalCallbacks.onGeometryChanged;
         nodeObject.callbacks.onSelectionChange = originalCallbacks.onSelectionChange;
         nodeObject.callbacks.onResizeHandleChange = originalCallbacks.onResizeHandleChange;
         nodeObject.callbacks.onLinesChanged = originalCallbacks.onLinesChanged;
         nodeObject.callbacks.onSizeChange = originalCallbacks.onSizeChange;
-        nodeObject.callbacks.onResizeCommit = originalCallbacks.onResizeCommit;
         if (ownsNode) {
-            nodeObject.destroy();
+            nodeObject.destroy(false);
+        } else if (nodeDOM) {
+            nodeObject.detachElement(nodeDOM);
         }
     });
 
@@ -165,18 +158,20 @@
         const nextWidth = width;
         const nextHeight = height;
         if (!mounted) return;
-        boxW = nextWidth ?? null;
-        boxH = nextHeight ?? null;
         const object = untrack(() => nodeObject!);
         void tick().then(() => {
             if (!mounted || !object.element) return;
-            object.syncDomGeometry();
+            if (nextWidth != null) object.element.style.width = `${nextWidth}px`;
+            if (nextHeight != null) object.element.style.height = `${nextHeight}px`;
+            if (nextWidth != null || nextHeight != null) {
+                object.setSizeState(
+                    nextWidth ?? object.hitBox.width,
+                    nextHeight ?? object.hitBox.height,
+                );
+            }
+            object.remeasureDomGeometry();
         });
     });
-
-    export function addSetPropCallback(name: string, callback: (prop: any) => void) {
-        nodeObject!.addSetPropCallback(callback, name);
-    }
 
     export function getNodeObject() {
         return nodeObject;
@@ -184,7 +179,7 @@
 </script>
 
 
-{#each lineList as line (line.id)}
+{#each lineList as line (line.lineId)}
     <LineSvelteComponent {line} />
 {/each}
 <div
@@ -193,8 +188,8 @@
     data-snapline-type="node"
     class={className}
     style="position: absolute; transform-origin: top left; will-change: transform;"
-    style:width={boxW != null ? `${boxW}px` : undefined}
-    style:height={boxH != null ? `${boxH}px` : undefined}
+    style:width={width != null ? `${width}px` : undefined}
+    style:height={height != null ? `${height}px` : undefined}
     transition:blur|global={{duration: 200}}
 >
     {@render children()}

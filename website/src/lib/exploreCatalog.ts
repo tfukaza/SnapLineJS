@@ -89,7 +89,10 @@ export const exploreEntries: readonly ExploreCatalogEntry[] = [
     name: "SnapLine",
     summary:
       "Experimental primitives for draggable node graphs, connectors, selections, and visual workflows.",
-    status: "coming-soon",
+    status: "available",
+    maturity: "early-beta",
+    href: "/snapline",
+    docsHref: "/docs/snapline/introduction",
     motif: "nodes",
     accent: "var(--color-accent)",
   },

@@ -16,12 +16,14 @@ APIs directly rather than adding compatibility shims.
 **Dependencies:** `@snap-engine/core`
 
 **Exports:**
-- `NodeComponent` - Graph node with connectors (opt-in eight-direction resize)
-- `ConnectorComponent` - Input/output connector
-- `LineComponent` - Visual connection line
-- `GroupNodeComponent` - Resizable box that carries the nodes inside it
-- `RectSelectComponent` - Rectangle selection tool
+- `NodeMirror` - Graph node with connectors (opt-in eight-direction resize)
+- `ConnectorMirror` - Input/output connector
+- `LineMirror` - Visual connection line
+- `GroupNodeMirror` - Resizable box that carries the nodes inside it
+- `RectSelectController` - Rectangle selection tool
 - `PlacementController` - Headless pointer-follow placement state machine
+- `attachControlledGraph` - Installs the controlled-graph bridge (LineReconciler)
+- `query` - Read-only `GraphQuery` facade over one engine's graph
 - `snapline-globals` - Typed accessors for the shared `global.data` registries
 
 ### @snap-engine/snapline-svelte
@@ -36,14 +38,16 @@ APIs directly rather than adding compatibility shims.
 - `Line.svelte` - Connection line component
 - `Select.svelte` - Rectangle selection component
 - `Placement.svelte` - Placement controller binding and preview
+- `ControlledGraph.svelte` - Controlled-graph bridge (canonical line records)
 
 ### @snap-engine/snapline-react
 **Location:** `react/src/`
 **Language:** React/TypeScript
 **Dependencies:** `@snap-engine/snapline`, `@snap-engine/core`
 
-Exports `Engine`, `Node`, `Group`, `Connector`, `Line`, `Select`, and
-`Placement`, with forwarded refs to core objects where applicable.
+Exports `Engine`, `Node`, `Group`, `Connector`, `Line`, `Select`,
+`Placement`, and `ControlledGraph`, with forwarded refs to core objects
+where applicable.
 
 ## File Structure
 
@@ -54,55 +58,78 @@ snapline/
 │   ├── tsconfig.json
 │   └── src/
 │       ├── index.ts
-│       ├── node.ts          # NodeComponent
-│       ├── connector.ts     # ConnectorComponent
-│       ├── line.ts          # LineComponent
-│       └── select.ts        # RectSelectComponent
-└── svelte/
+│       ├── node.ts              # NodeMirror
+│       ├── connector.ts         # ConnectorMirror + ConnectorRules
+│       ├── line.ts              # LineMirror
+│       ├── group.ts             # GroupNodeMirror
+│       ├── select.ts            # RectSelectController
+│       ├── placement.ts         # PlacementController
+│       ├── graph-mirror.ts      # GraphMirror (per-engine registry + scheduler)
+│       ├── line-reconciler.ts   # LineReconciler + LineRecord/LineChangeRequest
+│       ├── query.ts             # query() GraphQuery facade
+│       ├── geometry.ts          # GeometryWriter type
+│       └── snapline-globals.ts  # global.data accessors + attachControlledGraph
+├── svelte/
+│   ├── package.json
+│   ├── tsconfig.json
+│   └── src/
+│       ├── index.ts
+│       ├── Node.svelte
+│       ├── Group.svelte
+│       ├── Connector.svelte
+│       ├── Line.svelte
+│       ├── Select.svelte
+│       ├── Placement.svelte
+│       └── ControlledGraph.svelte
+└── react/
     ├── package.json
     ├── tsconfig.json
     └── src/
         ├── index.ts
-        ├── Node.svelte
-        ├── Connector.svelte
-        ├── Line.svelte
-        └── Select.svelte
+        ├── Engine.tsx
+        ├── Node.tsx
+        ├── Group.tsx
+        ├── Connector.tsx
+        ├── Line.tsx
+        ├── Select.tsx
+        ├── Placement.tsx
+        └── ControlledGraph.tsx
 ```
 
 ## Core Classes
 
-### NodeComponent
+### NodeMirror
 **Extends:** `ElementObject`
 **Purpose:** Draggable graph node with input/output connectors
 
 **Features:**
 - Multiple connectors
-- Property-based data flow
+- Stable domain identity (`nodeId` via `config.id`, minted when omitted)
 - Parent-child relationships
 - Transform hierarchy
 
 **Key Methods:**
-- `addConnector(name, connector)` - Register connector
-- `setProp(name, value)` - Set output property
-- `getProp(name)` - Get property value
-- `addSetPropCallback(callback, propName)` - React to property changes
+- `addConnectorObject(connector)` - Register connector
+- `getConnector(name)` - Look up a connector by name
+- `remeasureDomGeometry()` - Re-measure the box and re-glue lines
+- `setSize(width, height)` / `setSizeState(width, height)` - Drive size
 
-### ConnectorComponent
+### ConnectorMirror
 **Extends:** `BaseObject`
 **Purpose:** Connection point on a node
 
 **Configuration:**
-- `name: string` - Connector identifier
-- `maxConnectors: number` - Connection limit (-1 = unlimited, 0 = output-only)
-- `allowDragOut: boolean` - Can drag connections from this
+- `id?: string` - Stable graph-global `connectorId` (minted when omitted)
+- `name: string` - Construction-time key in the parent node's map
+- `rules?: Partial<ConnectorRules>` - Connection policy (see Connection Rules)
 
 **Features:**
-- Input/output mode
-- Connection limits
-- Drag permissions
+- Derived source/target roles (`isSource` = `maxOutgoing !== 0`, `isTarget` = `maxIncoming !== 0`)
+- Connection limits and admission predicates
+- Surface strategies for headless hit testing and anchors
 - Connection callbacks
 
-### LineComponent
+### LineMirror
 **Extends:** `ElementObject`
 **Purpose:** Visual connection between connectors
 
@@ -112,7 +139,7 @@ snapline/
 - Start/end world coordinates
 - Callback-based rendering
 
-### RectSelectComponent
+### RectSelectController
 **Extends:** `ElementObject`
 **Purpose:** Rectangle selection tool
 
@@ -129,7 +156,7 @@ snapline/
 **Props:**
 - `className?: string` - CSS class
 - `LineSvelteComponent?: Component` - Custom line component
-- `nodeObject?: NodeComponent` (bindable) - Node instance
+- `nodeObject?: NodeMirror` (bindable) - Node instance
 
 **Slots:**
 - Default: Node content and connectors
@@ -138,18 +165,18 @@ snapline/
 **Purpose:** Connector wrapper component
 
 **Props:**
+- `id?: string` - Stable graph-global connector identity
 - `name: string` - Connector identifier
-- `maxConnectors: number` - Connection limit
-- `allowDragOut: boolean` - Allow drag out
+- `rules?: Partial<ConnectorRules>` - Connection policy
 
 **Methods:**
-- `object(): ConnectorComponent` - Get underlying connector
+- `object(): ConnectorMirror` - Get underlying connector
 
 ### Line.svelte
 **Purpose:** Renders connection path
 
 **Props:**
-- `line: LineComponent` - Line instance
+- `line: LineMirror` - Line instance
 
 **Features:**
 - SVG path rendering
@@ -171,26 +198,38 @@ elements** — frameworks recover fine from property changes.
 
 Concretely:
 
-- **Node width/height** are framework-rendered: core fires
-  `callbacks.onSizeChange({node, width, height})` during a resize drag and the adapter binds
-  the size as state. Core only updates its collision hitboxes synchronously
-  (`setSizeState`). The connector/line re-glue closes itself through the
-  ResizeObserver after the framework's DOM write reflows.
+- **Node/group transforms and live width/height** are core-written during a
+  gesture. Resize uses `WRITE_1 → READ_2 → WRITE_2`: paint the box, remeasure
+  connectors, then re-glue lines. `onSizeChange` is the live observation and
+  the batched `onGeometryChanged({ nodes })` reports settled geometry the
+  framework may persist (geometry is SnapLine-owned; ignoring the event
+  never reverts the mirror).
+- **Position and size are one commit.** `#writeSizeGeometry` paints
+  `style.width`/`style.height` and the transform subtree in a single WRITE_1
+  task, from the values authored in a single tick — never re-read from state a
+  later measurement may have moved. Two consequences bind every contributor:
+  a DOM→state reconcile must not adopt the measured box while a gesture owns
+  the authored one (the rendered box is a frame behind, and pairing it with a
+  fresh transform makes the anchored edge jump), and **an adapter must not
+  write size through the framework renderer while scheduling the transform
+  through the engine** — two schedulers with no ordering contract land them in
+  different frames. Prop-driven adapter geometry therefore sets
+  `worldTransform` + `setSizeState(...)` and calls `scheduleGeometryWrite()`,
+  which routes both through that same single task.
 - **Initial node geometry** is explicit: after assigning a committed framework
-  element, adapters call `syncDomGeometry()`. ResizeObserver remains the
+  element, adapters call `remeasureDomGeometry()`. ResizeObserver remains the
   ongoing invalidation path, not the initial-mount handshake.
-- **The rubber-band selection box** is framework-rendered: core fires
-  `callbacks.onRectChange({x, y, width, height, visible})` and the adapter
-  draws (and can restyle/replace) the box. Deliberately NO flush handshake —
-  the box visual is not paint-atomic.
-- **Node drag transforms, `data-selected` attributes, and line SVG transforms**
-  stay engine-written (property writes on existing elements).
+- **Line, selection, and placement geometry** use
+  `bindGeometryWriter(...)`. Adapters mount static structure once; the writer
+  mutates retained SVG/DOM/graphics refs without framework state. Custom line
+  components must bind a geometry writer and clean it up on unmount.
+- **Semantic state stays separate:** line phase/payload/target changes use
+  `onStateChange`; geometry never requests a framework render.
 - **Adapters must render node/group elements with
   `position: absolute; transform-origin: top left`** (and ideally
   `will-change: transform`) — core no longer seeds base styles.
-- SnapLine has **no `flushMutation`/`settleMutation` equivalent and must not
-  grow one**: unlike SnapSort's FLIP pipeline, none of SnapLine's delegated
-  visuals are paint-atomic.
+- Adapter cleanup must detach elements or destroy objects with
+  `removeElement: false`; React/Svelte remain the sole structural DOM owners.
 
 ### Callback conventions
 
@@ -204,46 +243,71 @@ explicit origins/reasons so consumers never need teardown heuristics.
 
 SnapLine deliberately does not define port types, graph-document mutations,
 palette contents, or node factories. Consumers express those policies through
-metadata and predicates such as `canConnect`, `canContain`, and `canStart`.
+metadata and predicates such as `isValidConnection`, `canContain`, and
+`canStart`.
 `PlacementController` similarly computes preview/commit coordinates but leaves
 rendering and creation to framework adapters and consumer callbacks.
 Raw input/DOM plumbing stays on the `event.*` slots.
 
-### NodeManager (engine-scoped registry)
+### GraphMirror (engine-scoped registry)
 
-`core/src/node-manager.ts` is the per-engine registry of live SnapLine nodes
-and connectors, lazy-created by `getNodeManager(engine)` the first time any
-component registers (constructors register, `destroy()` unregisters — no
-adapter wiring). `query.ts` enumeration delegates to it, and it hosts
-engine-scoped facilities: the controlled-edges controller today, layout
-helpers that walk `nodes` tomorrow. GlobalManager is application-wide, so the
-managers live in `SnapLineSharedData.nodeManagers` keyed by engine.
+`core/src/graph-mirror.ts` is the per-engine registry of every live SnapLine
+mirror, lazy-created by `getGraphMirror(engine)` the first time any mirror
+registers (constructors register, `destroy()` unregisters — no adapter
+wiring). It holds the node/connector sets, the settled-line and preview-line
+sets, and the domain-id indexes (`nodesById`/`connectorsById`/`linesById`,
+first-registration-wins with `"duplicate-id"` diagnostics), plus the
+engine-scoped interaction state (`selection`, `groups`, `resizingNode`,
+`parentGroups`, `membershipResolver`), the installed reconciler slot, and
+the coalescing batch-aware reconciliation scheduler
+(`scheduleReconciliation`/`flush`/`beginBatch`/`runBatch`). GlobalManager is
+application-wide, so the registries live in the
+`SnapLineSharedData.graphMirrors` WeakMap keyed by engine. `query(engine)`
+is the public read-only facade over it: snapshot lists, `node(id)` /
+`connector(id)` / `line(id)` lookups, and `diagnostics()` — never registry
+sets or mutation methods; `query.ts` enumeration helpers delegate to the
+same registry.
 
-### Controlled edges (EdgeSyncController)
+### Controlled lines (ControlledGraph / LineReconciler)
 
-`core/src/edge-sync.ts` + the `EdgeSync` adapter components implement the
-controlled-edges contract: the CONSUMER's edge document is the only edge
-authority; SnapLine reconciles rendered lines to it (`sync()`, hydrating
-missing lines with origin `"hydration"`) and translates gestures into
-semantic intents (`onEdgeConnect` for gesture connects, `onEdgeDisconnect`
-for gesture and replacement disconnects). Programmatic, hydration, and
-teardown changes never forward as intents, and sync never forwards its own
-mutations (`#syncing` guard). Edges exist in exactly two representations —
-consumer document and rendered lines; `NodeManager` holds membership only and
-the controller stores no edges (`getEdges()` is consulted fresh). Intents fire
-synchronously inside the drop dispatch; adapters reconcile in a microtask of
-the same task, so accept and reject paths both resolve before the frame
-paints WITHOUT any paint-atomic flush contract (the no-flushMutation rule
-above still holds). Consumers should write their document synchronously
-inside intent handlers; deferred stores degrade to a one-frame pending state,
-never an inconsistent one.
+Topology is ALWAYS controlled: the CONSUMER's document is the only line
+authority, and there is no imperative public topology API (`deleteLine`,
+`createLine`, etc. are `@internal`; a gesture on an engine with no attached
+graph owner warns and discards the preview). `core/src/line-reconciler.ts`
+plus the `ControlledGraph` adapter components implement the contract:
+`attachControlledGraph(engine, { onLineChangeRequest, onDiagnosticsChanged? })`
+installs the `LineReconciler` and returns
+`{ setCanonicalGraph, flush, dispose }`. The app PUSHES its canonical
+`{ lines: LineRecord[] }` snapshot (stable ids); internal triggers
+(connector register/unregister, batch close) replay the cached snapshot
+through the mirror's coalescing scheduler. Each reconcile pass prunes
+mirrors whose record is gone (or whose `fromConnectorId` moved), preserves
+and retargets by stable `lineId`, settles or discards staged gesture lines,
+and creates settled mirrors for fully-mounted records — strict admission,
+never evicting: capacity/rule violations become derived diagnostics and
+unmounted endpoints stay silently latent. A gesture drop validates (rules +
+both endpoints' `isValidConnection` with the real `LineMirror`), stages the
+outcome on the same mirror (phase `"staged"`, no topology commitment), and
+dispatches ONE atomic `LineChangeRequest`
+(`{ intent: connect|disconnect|replace|reconnect, add, remove, update }` —
+`replace-oldest` evictions ride the request, never local deletes). Adapters
+GUARANTEE a post-request microtask push of the live records ahead of the
+decisive pass, so acceptance, normalization, rejection, and
+rejection-by-inaction all resolve from the next snapshot — adopting the
+proposed `lineId` settles the dragged line in place; rejection needs no code
+path. Consumers should write their document synchronously inside the request
+handler; deferred stores degrade to a one-frame pending state, never an
+inconsistent one.
 
 ### Shared global registries
 
 Everything SnapLine stores on the engine's shared `global.data` bag is declared
 in `core/src/snapline-globals.ts` (`SnapLineSharedData`) and accessed through
-its typed helpers. Engine core's `input.ts` reads `resizeHandles` duck-typed
-(it cannot import snapline) — keep the two shapes in sync.
+its typed helpers. It now holds only `resizeHandles` and `sourceSurfaces`
+(engine core's `input.ts` reads both duck-typed — it cannot import snapline —
+so keep the shapes in sync) plus the `graphMirrors` WeakMap keying each
+engine to its `GraphMirror`. Selection, groups, and `resizingNode` are
+engine-scoped state on `GraphMirror`, not global arrays.
 
 ### Pointer claims (camera blocking)
 
@@ -278,30 +342,42 @@ boolean remains readable by the camera for third-party writers only.
 - Equal-size group candidates use stable IDs as a deterministic tie-breaker;
   membership cycles are always rejected.
 - Carried group members are moved via transform parenting only — they are never
-  added to `global.data.select`, so a group drag does not alter the selection.
+  added to the engine's `GraphMirror.selection`, so a group drag does not
+  alter the selection.
 - `attachTransformToGroup`/`detachTransformFromGroup` are the public
   transform-only reparent seam used by the group carry.
 
 ## Key Concepts
 
-### Property System
-- Nodes have named properties
-- Connectors map to properties by name
-- Connected connectors share data through properties
-- Use `setProp()` to send, `addSetPropCallback()` to receive
-
 ### Connector Types
-- **Input:** `maxConnectors > 0`, `allowDragOut = false`
-- **Output:** `maxConnectors = 0 or -1`, `allowDragOut = true`
-- **Bidirectional:** Custom combinations
+
+Roles are derived from `ConnectorRules` limits — there are no role booleans:
+
+- **Target-only (input):** `{ maxOutgoing: 0 }`
+- **Source-only (output):** `{ maxIncoming: 0 }`
+- **Bidirectional:** both limits non-zero (`isSource` = `maxOutgoing !== 0`,
+  `isTarget` = `maxIncoming !== 0`)
 
 ### Connection Rules
-- `-1`: Unlimited connections
-- `0`: No incoming (output only)
-- `N`: Maximum N incoming connections
-- A new connection to a full finite input evicts the oldest live incoming
-  line(s) required to make room. Disconnect callbacks fire before the new
-  connect callbacks.
+
+`ConnectorConfig.rules` (all optional; limits are `number | "unlimited"`,
+normalized to `Infinity` internally):
+
+- `maxOutgoing` (default `"unlimited"`) - outgoing limit; previews reserve a slot
+- `maxIncoming` (default `1`) - settled incoming limit
+- `reconnect` (default `true`) - existing incoming lines can be picked up
+- `allowParallel` (default `false`) - BOTH endpoints must allow parallel lines
+- `onFull` (default `"reject"`) - a full target rejects, or `"replace-oldest"`
+  proposes evicting the oldest incoming lines INSIDE the gesture's atomic
+  `"replace"` request (never a local delete)
+- `isValidConnection(proposal)` - line-aware admission predicate
+  (`{ line, source, target, phase }`); synchronous and side-effect free
+  (candidate discovery calls it per pointer move, rechecked on drop and on
+  record admission); either endpoint may veto
+
+Canonical-record admission is strict: capacity never evicts regardless of
+`onFull`; a refused record stays in the document and surfaces as a
+diagnostic.
 
 ### Camera edge-pan
 
@@ -324,5 +400,6 @@ resize gestures intentionally do not edge-pan.
 
 - Connectors must be children of Node components
 - Line component injected via `LineSvelteComponent` prop
-- Data flows through property system
+- Dataflow belongs to the application graph: derive values from the same
+  records that drive `ControlledGraph` and render through framework state
 - All input handling automatic via SnapEngine

@@ -1,0 +1,35 @@
+---
+title: ControlledGraph API
+description: React controlled-graph bridge — canonical line records, change requests, diagnostics.
+order: 8
+sectionTitle: Reference
+sectionOrder: 3
+framework: react
+frameworkKey: controlled-graph
+---
+
+`ControlledGraph` declares your application the canonical owner of line
+topology. It renders nothing.
+
+| Prop | Meaning |
+| --- | --- |
+| `lines` | Your canonical `LineRecord[]` — `{ id, fromConnectorId, toConnectorId, payload? }` with stable ids |
+| `onLineChangeRequest` | Receives one atomic `LineChangeRequest` per gesture |
+| `onDiagnosticsChanged` | Receives the current `ReconciliationError[]` when it changes |
+
+A `LineChangeRequest` carries an `intent`
+(`"connect" | "disconnect" | "replace" | "reconnect"`) plus `add`
+(`ProposedLine[]` with SnapLine-minted ids), `remove` (`LineId[]`), `update`
+(endpoint retargets), and the `originalEvent`. Accept a proposal by applying
+it to your records in the handler's state update — adopting a proposed id
+settles the staged line in place. Reject it by leaving state unchanged; the
+staged line is then removed. The component pushes your updated `lines` prop
+back to the reconciler automatically after each request, so
+rejection-by-inaction needs no extra call.
+
+`ReconciliationError.code` is one of `"duplicate-id"` (a record id appears
+twice in the snapshot), `"capacity-exceeded"` (a record violates a
+connector's `maxIncoming`), or `"connection-rejected"` (an endpoint's
+`isValidConnection` vetoed the record). Errored records stay in your document
+and are retried when relevant state changes; records whose endpoints are not
+mounted stay silently latent.

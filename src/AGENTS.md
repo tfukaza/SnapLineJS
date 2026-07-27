@@ -189,6 +189,13 @@ object.schedule(callback, { stage: "READ_1" });
 object.schedule(callback, { stage: "WRITE_2" });
 ```
 
+**Stage guards:** writes (`writeDom`, `writeTransform`, `writeTransformRecursive`)
+are legal in the three WRITE stages *and* at `IDLE` — the gap between frames,
+where pointer handlers run — because a style write only invalidates layout.
+Reads (`readDom`, `readDomRecursive`) are frame-only: they force layout, so
+reading at `IDLE` thrashes. Calling a write synchronously from an input handler
+is therefore supported; calling a recursive read there is not.
+
 ## Build Configuration
 
 **Entry points (vite.config.mjs):**

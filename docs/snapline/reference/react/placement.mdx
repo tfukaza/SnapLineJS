@@ -1,7 +1,7 @@
 ---
 title: Placement API
 description: React Placement controller binding, preview renderer, and cancellation props.
-order: 3
+order: 7
 sectionTitle: Reference
 sectionOrder: 3
 framework: react
@@ -9,7 +9,10 @@ frameworkKey: placement
 ---
 
 Pass a core `PlacementController<T>` to `Placement`. Supply `children` as a
-render function when an active preview should be displayed.
+render function `(snapshot: PlacementSnapshot<T>) => ReactNode` that returns
+the preview content. The adapter mounts an absolute wrapper and the
+controller updates its transform, size, visibility, and `data-allowed`
+imperatively, so pointer movement does not render React.
 
 The component forwards pointer movement, primary commit, secondary-button
 cancel, outside cancel, and Escape cancel according to its boolean props.

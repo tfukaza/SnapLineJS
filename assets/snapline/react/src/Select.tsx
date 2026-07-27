@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState, type CSSProperties } from "react";
-import { RectSelectComponent, type SelectCallbacks, type SelectRect } from "@snap-engine/snapline";
+import { useLayoutEffect, useRef, type CSSProperties } from "react";
+import { RectSelectController, type SelectCallbacks } from "@snap-engine/snapline";
 import { useSnapLineEngine } from "./Engine";
 
 export interface SelectProps {
@@ -16,34 +16,33 @@ export function Select({
   callbacks = {},
 }: SelectProps) {
   const engine = useSnapLineEngine();
-  const selectRef = useRef<RectSelectComponent | null>(null);
+  const selectRef = useRef<RectSelectController | null>(null);
+  const selectDomRef = useRef<HTMLDivElement>(null);
 
   if (!selectRef.current) {
-    selectRef.current = new RectSelectComponent(engine, null, { callbacks });
+    selectRef.current = new RectSelectController(engine, null, { callbacks });
   }
   const select = selectRef.current;
 
-  // The selection box is framework-rendered: core reports the world-space rect
-  // via onRectChange and this state draws it, so consumers can restyle or
-  // replace the box (className/style props).
-  const [rect, setRect] = useState<SelectRect>({
-    x: 0,
-    y: 0,
-    width: 0,
-    height: 0,
-    visible: false,
-  });
-
-  useEffect(() => {
-    select.callbacks.onRectChange = (r: SelectRect) => setRect(r);
+  useLayoutEffect(() => {
+    const unbind = select.bindGeometryWriter((rect) => {
+      const element = selectDomRef.current;
+      if (!element) return;
+      element.style.display = rect.visible ? "block" : "none";
+      element.style.width = `${rect.width}px`;
+      element.style.height = `${rect.height}px`;
+      element.style.transform = `translate3d(${rect.x}px, ${rect.y}px, 0)`;
+    });
     return () => {
-      select.destroy();
+      unbind();
+      select.destroy(false);
     };
   }, [select]);
 
   return (
     <div
       id={id}
+      ref={selectDomRef}
       className={className}
       data-snapline-type="selection"
       style={{
@@ -53,10 +52,10 @@ export function Select({
         left: 0,
         transformOrigin: "top left",
         pointerEvents: "none",
-        display: rect.visible ? "block" : "none",
-        width: `${rect.width}px`,
-        height: `${rect.height}px`,
-        transform: `translate3d(${rect.x}px, ${rect.y}px, 0)`,
+        display: "none",
+        width: 0,
+        height: 0,
+        transform: "translate3d(0px, 0px, 0)",
         ...style,
       }}
     />

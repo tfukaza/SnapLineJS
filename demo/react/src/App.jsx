@@ -1,11 +1,11 @@
 import {
   Connector,
-  EdgeSync,
+  ControlledGraph,
   Group,
   Node,
   Select,
 } from "@snap-engine/snapline-react";
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { Engine as SnapEngine } from "@snap-engine/asset-base-react";
 import {
   DropSnapNestedDemo,
@@ -17,7 +17,27 @@ import {
 import "../demo.css";
 import AssetBaseReactDemo from "./AssetBaseReactDemo";
 
-function ResizableNode({ title, x, y }) {
+// The demo's canonical line document: topology is always controlled, so
+// even a sandbox owns its lines and accepts every atomic proposal.
+function DemoGraph() {
+  const [lines, setLines] = useState([]);
+  const applyRequest = useCallback((request) => {
+    setLines((current) => [
+      ...current
+        .filter((record) => !request.remove.includes(record.id))
+        .map((record) => {
+          const update = request.update.find((u) => u.id === record.id);
+          return update
+            ? { ...record, toConnectorId: update.toConnectorId }
+            : record;
+        }),
+      ...request.add,
+    ]);
+  }, []);
+  return <ControlledGraph lines={lines} onLineChangeRequest={applyRequest} />;
+}
+
+function ResizableNode({ title, id = title, x, y }) {
   return (
     <Node
       className="card node"
@@ -34,14 +54,14 @@ function ResizableNode({ title, x, y }) {
       <div className="node-body" style={{ flex: 1 }}>
         <div className="input-row">
           <div className="connector-wrapper">
-            <Connector name="input" maxConnectors={1} allowDragOut={false} />
+            <Connector id={`${id}:input`} name="input" rules={{ maxOutgoing: 0, maxIncoming: 1, onFull: "replace-oldest" }} />
           </div>
           <span>Input</span>
         </div>
         <div className="output-row">
           <span>Output</span>
           <div className="connector-wrapper">
-            <Connector name="output" maxConnectors={-1} allowDragOut={true} />
+            <Connector id={`${id}:output`} name="output" rules={{ maxIncoming: 0 }} />
           </div>
         </div>
       </div>
@@ -55,6 +75,7 @@ function SnapLineResizeDemo() {
       <SnapEngine id="node-ui-resize-canvas" className="snapline-canvas">
         <div id="node-ui-demo">
           <div id="sl-background" />
+          <DemoGraph />
           <ResizableNode title="Resizable A" x={120} y={140} />
           <SimpleNode title="Fixed B" x={560} y={200} />
         </div>
@@ -99,7 +120,7 @@ function SnapLineGroupDemo() {
   );
 }
 
-function SimpleNode({ title, x, y }) {
+function SimpleNode({ title, id = title, x, y }) {
   return (
     <Node className="card node" x={x} y={y}>
       <div className="node-header">
@@ -108,14 +129,14 @@ function SimpleNode({ title, x, y }) {
       <div className="node-body">
         <div className="input-row">
           <div className="connector-wrapper">
-            <Connector name="input" maxConnectors={1} allowDragOut={false} />
+            <Connector id={`${id}:input`} name="input" rules={{ maxOutgoing: 0, maxIncoming: 1, onFull: "replace-oldest" }} />
           </div>
           <span>Input</span>
         </div>
         <div className="output-row">
           <span>Output</span>
           <div className="connector-wrapper">
-            <Connector name="output" maxConnectors={-1} allowDragOut={true} />
+            <Connector id={`${id}:output`} name="output" rules={{ maxIncoming: 0 }} />
           </div>
         </div>
       </div>
@@ -182,7 +203,7 @@ export default function App() {
   return <SnapLineDemo />;
 }
 
-function EdgeSyncNode({ nodeId, title, x, y, maxIncoming = 1 }) {
+function GraphNode({ nodeId, title, x, y, maxIncoming = 1 }) {
   return (
     <Node className="card node" x={x} y={y}>
       <div className="node-header">
@@ -192,10 +213,9 @@ function EdgeSyncNode({ nodeId, title, x, y, maxIncoming = 1 }) {
         <div className="input-row">
           <div className="connector-wrapper">
             <Connector
+              id={`${nodeId}:input`}
               name="input"
-              maxConnectors={maxIncoming}
-              allowDragOut={false}
-              metadata={{ node: nodeId, port: "input" }}
+              rules={{ maxOutgoing: 0, maxIncoming: maxIncoming === -1 ? "unlimited" : maxIncoming, onFull: "replace-oldest" }}
             />
           </div>
           <span>Input</span>
@@ -204,10 +224,9 @@ function EdgeSyncNode({ nodeId, title, x, y, maxIncoming = 1 }) {
           <span>Output</span>
           <div className="connector-wrapper">
             <Connector
+              id={`${nodeId}:output`}
               name="output"
-              maxConnectors={-1}
-              allowDragOut={true}
-              metadata={{ node: nodeId, port: "output" }}
+              rules={{ maxIncoming: 0 }}
             />
           </div>
         </div>
@@ -217,35 +236,64 @@ function EdgeSyncNode({ nodeId, title, x, y, maxIncoming = 1 }) {
 }
 
 function SnapLineEdgesDemo() {
-  const [edges, setEdges] = useState([]);
+  const [lines, setLines] = useState([]);
   const [connectIntents, setConnectIntents] = useState(0);
   const [intentLog, setIntentLog] = useState([]);
 
-  const sameEdge = (a, b) =>
-    a.from.node === b.from.node &&
-    a.from.port === b.from.port &&
-    a.to.node === b.to.node &&
-    a.to.port === b.to.port;
-
-  const addEdge = (edge) =>
-    setEdges((current) =>
-      current.some((existing) => sameEdge(existing, edge))
+  const addDocLine = (record) =>
+    setLines((current) =>
+      current.some((existing) => existing.id === record.id)
         ? current
         : [
             ...current.filter(
-              (existing) =>
-                !(existing.to.node === edge.to.node && existing.to.port === edge.to.port),
+              (existing) => existing.toConnectorId !== record.toConnectorId,
             ),
-            edge,
+            record,
           ],
     );
 
-  const identity = (connector) => {
-    const metadata = connector.metadata;
-    return typeof metadata.node === "string" && typeof metadata.port === "string"
-      ? { node: metadata.node, port: metadata.port }
-      : null;
-  };
+  const handleRequest = useCallback((request) => {
+    const nodeOf = (connectorId) => connectorId.split(":")[0];
+    setLines((current) => {
+      const byId = new Map(current.map((record) => [record.id, record]));
+      const label = (record) =>
+        `${nodeOf(record.fromConnectorId)}->${nodeOf(record.toConnectorId)}`;
+      const removed = request.remove
+        .map((id) => (byId.has(id) ? label(byId.get(id)) : id))
+        .join(",");
+      const added = request.add.map(label).join(",");
+      const updated = request.update
+        .map((update) =>
+          byId.has(update.id)
+            ? label({ ...byId.get(update.id), toConnectorId: update.toConnectorId })
+            : update.id,
+        )
+        .join(",");
+      const entry =
+        request.intent === "connect"
+          ? `connect:${added}`
+          : request.intent === "disconnect"
+            ? `disconnect:${removed}`
+            : request.intent === "reconnect"
+              ? `reconnect:${updated}`
+              : `replace:-${removed}+${added || updated}`;
+      setIntentLog((log) => [...log, entry]);
+      if (request.add.length > 0) setConnectIntents((count) => count + 1);
+      // Accept the atomic proposal — adopting the proposed ids settles the
+      // staged lines in place.
+      return [
+        ...current
+          .filter((record) => !request.remove.includes(record.id))
+          .map((record) => {
+            const update = request.update.find((u) => u.id === record.id);
+            return update
+              ? { ...record, toConnectorId: update.toConnectorId }
+              : record;
+          }),
+        ...request.add,
+      ];
+    });
+  }, []);
 
   return (
     <main className="snapline-demo">
@@ -253,40 +301,27 @@ function SnapLineEdgesDemo() {
         <button
           data-testid="add-edge"
           onClick={() =>
-            addEdge({ from: { node: "a", port: "output" }, to: { node: "c", port: "input" } })
+            addDocLine({
+              id: "doc-a-c",
+              fromConnectorId: "a:output",
+              toConnectorId: "c:input",
+            })
           }
         >
           Add A→C
         </button>
         <span data-testid="connect-intents">{connectIntents}</span>
-        <span data-testid="edge-count">{edges.length}</span>
+        <span data-testid="edge-count">{lines.length}</span>
         <span data-testid="intent-log">{intentLog.join("|")}</span>
       </div>
       <SnapEngine id="node-ui-edges-canvas" className="snapline-canvas">
         <div id="node-ui-demo">
           <div id="sl-background" />
           <Select />
-          <EdgeSync
-            edges={edges}
-            identity={identity}
-            onEdgeConnect={({ from, to }) => {
-              setConnectIntents((count) => count + 1);
-              setIntentLog((log) => [...log, `connect:${from.node}->${to.node}`]);
-              addEdge({ from, to });
-            }}
-            onEdgeDisconnect={({ from, to, reason }) => {
-              setIntentLog((log) => [
-                ...log,
-                `disconnect(${reason}):${from.node}->${to.node}`,
-              ]);
-              setEdges((current) =>
-                current.filter((existing) => !sameEdge(existing, { from, to })),
-              );
-            }}
-          />
-          <EdgeSyncNode nodeId="a" title="Node A" x={120} y={120} />
-          <EdgeSyncNode nodeId="b" title="Node B" x={440} y={170} maxIncoming={1} />
-          <EdgeSyncNode nodeId="c" title="Node C" x={280} y={380} />
+          <ControlledGraph lines={lines} onLineChangeRequest={handleRequest} />
+          <GraphNode nodeId="a" title="Node A" x={120} y={120} />
+          <GraphNode nodeId="b" title="Node B" x={440} y={170} maxIncoming={1} />
+          <GraphNode nodeId="c" title="Node C" x={280} y={380} />
         </div>
       </SnapEngine>
     </main>
@@ -300,6 +335,7 @@ function SnapLineDemo() {
         <div id="node-ui-demo">
           <div id="sl-background" />
           <Select />
+          <DemoGraph />
           <SimpleNode title="Node A" x={120} y={120} />
           <SimpleNode title="Node B" x={440} y={170} />
           <SimpleNode title="Node C" x={280} y={360} />

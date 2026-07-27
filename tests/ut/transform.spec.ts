@@ -394,11 +394,26 @@ test.describe("ElementObject writeTransformRecursive", () => {
     expect(grandchild.writeCount).toBe(1);
   });
 
-  test("throws when invoked outside a write stage", () => {
+  test("throws when invoked during a read stage", () => {
     const engine = createEngine();
     const parent = new WriteSpyObject(engine);
     engine.global.currentStage = "READ_1";
-    expect(() => parent.writeTransformRecursive()).toThrow(/Invalid stage/);
+    expect(() => parent.writeTransformRecursive()).toThrow(/prohibited/);
+  });
+
+  // Pointer handlers run at IDLE, and committing geometry synchronously on
+  // pointerup is a supported pattern. Style writes only invalidate layout, so
+  // this matches writeTransform/writeDom; only recursive READS force layout.
+  test("permits a synchronous write at IDLE, matching writeTransform", () => {
+    const engine = createEngine();
+    const parent = new WriteSpyObject(engine);
+    const child = new WriteSpyObject(engine);
+    parent.appendChild(child);
+
+    engine.global.currentStage = "IDLE";
+    expect(() => parent.writeTransformRecursive()).not.toThrow();
+    expect(parent.writeCount).toBe(1);
+    expect(child.writeCount).toBe(1);
   });
 });
 

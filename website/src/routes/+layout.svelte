@@ -13,7 +13,32 @@
   let { children } = $props();
 
   const repositoryUrl = "https://github.com/tfukaza/SnapEngineJS";
-  const npmOrganizationUrl = "https://www.npmjs.com/org/snap-engine";
+  const assetEntries = [
+    {
+      assetHref: "/snapsort",
+      assetPath: "/snapsort",
+      description: "Unstyled components for sortable lists, kanban boards, and more.",
+      docsHref: "/docs/snapsort/introduction",
+      docsPathPrefix: "/docs/snapsort",
+      label: "SnapSort",
+    },
+    {
+      assetHref: "/#asset-snapzap",
+      assetPath: null,
+      description: "Zoom and pan made simple",
+      docsHref: null,
+      docsPathPrefix: null,
+      label: "SnapZap",
+    },
+    {
+      assetHref: "/snapline",
+      assetPath: "/snapline",
+      description: "Node-based UI",
+      docsHref: "/docs/snapline/introduction",
+      docsPathPrefix: "/docs/snapline",
+      label: "SnapLine",
+    },
+  ];
   type MenuName = "assets";
 
   let activeMenu = $state<MenuName | null>(null);
@@ -23,8 +48,12 @@
   let assetsMenuTrigger = $state<HTMLButtonElement | null>(null);
   const currentPath = $derived(page.url.pathname as string);
   const isHomePath = $derived(currentPath === "/");
-  const isAssetsPath = $derived(currentPath.startsWith("/snapsort"));
-  const isDocsPath = $derived(currentPath.startsWith("/docs"));
+  const isAssetsPath = $derived(
+    currentPath.startsWith("/snapsort") ||
+      currentPath.startsWith("/docs/snapsort") ||
+      currentPath.startsWith("/snapline") ||
+      currentPath.startsWith("/docs/snapline"),
+  );
   const isAboutPath = $derived(currentPath === "/about");
 
   function toggleMenu(menu: MenuName) {
@@ -61,35 +90,85 @@
   }
 </script>
 
-<nav class="nav-bar">
-  <div class="nav-left">
-    <a href="/" class="wordmark">SnapEngine</a>
-  </div>
-  <div class="nav-right">
-    <!-- <a href="#assets" class="nav-link">Assets</a> -->
-    <div class="docs-menu">
-      <a href="/docs/snapengine/introduction" class="nav-link docs-menu-trigger" aria-haspopup="true">
-        Docs
-        <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+<svelte:window onpointerdown={handleWindowPointerDown} onkeydown={handleWindowKeyDown} />
+
+<a class="skip-link button primary small" href="#main-content">Skip to content</a>
+
+<nav class="nav-bar" aria-label="Primary navigation" bind:this={navRoot}>
+  <a
+    href="/"
+    class="wordmark"
+    aria-current={isHomePath ? "page" : undefined}
+    onclick={closeNavigation}
+  >
+    SnapEngine
+  </a>
+
+  <button
+    bind:this={mobileNavTrigger}
+    type="button"
+    class="mobile-nav-trigger"
+    aria-label="Toggle navigation"
+    aria-expanded={mobileNavOpen}
+    aria-controls="primary-nav-links"
+    onclick={toggleMobileNav}
+  >
+    <span>Menu</span>
+    <span class="mobile-nav-icon" aria-hidden="true">{mobileNavOpen ? "×" : "≡"}</span>
+  </button>
+
+  <div id="primary-nav-links" class="nav-right" class:is-open={mobileNavOpen}>
+    <div class="nav-menu" class:is-open={activeMenu === "assets"}>
+      <button
+        bind:this={assetsMenuTrigger}
+        type="button"
+        class="nav-link nav-menu-trigger"
+        class:current={isAssetsPath}
+        aria-haspopup="true"
+        aria-expanded={activeMenu === "assets"}
+        aria-controls="assets-nav-menu"
+        onclick={() => toggleMenu("assets")}
+      >
+        Assets
+        <svg
+          class="nav-chevron"
+          width="12"
+          height="12"
+          viewBox="0 0 12 12"
+          fill="none"
+          aria-hidden="true"
+        >
           <path d="m3 4.5 3 3 3-3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
         </svg>
-      </a>
-      <div class="docs-dropdown card">
-        <a href="/docs/snapengine/introduction">SnapEngine</a>
-        <a href="/docs/snapsort/introduction">SnapSort</a>
-        <a href="/docs/snapline/introduction">SnapLine</a>
+      </button>
+      <div id="assets-nav-menu" class="nav-dropdown card">
+        {#each assetEntries as entry}
+          <div class="nav-dropdown-item">
+            <a
+              class="asset-page-link"
+              href={entry.assetHref}
+              aria-current={entry.assetPath === currentPath ? "page" : undefined}
+              onclick={closeNavigation}
+            >
+              <span>{entry.label}</span>
+              <small>{entry.description}</small>
+            </a>
+            {#if entry.docsHref && entry.docsPathPrefix}
+              <a
+                class="docs-page-link"
+                href={entry.docsHref}
+                aria-current={currentPath.startsWith(entry.docsPathPrefix) ? "page" : undefined}
+                onclick={closeNavigation}
+              >
+                Docs
+              </a>
+            {:else}
+              <span class="docs-page-link docs-page-link-disabled">Docs soon</span>
+            {/if}
+          </div>
+        {/each}
       </div>
     </div>
-
-    <a
-      href="/docs"
-      class="nav-link"
-      class:current={isDocsPath}
-      aria-current={isDocsPath ? "page" : undefined}
-      onclick={closeNavigation}
-    >
-      Docs
-    </a>
 
     <a
       href="/about"
@@ -147,7 +226,7 @@
           <a href="/#assets"><h4>Assets</h4></a>
           <span class="footer-link-disabled">SnapZap</span>
           <a href="/snapsort">SnapSort</a>
-          <a href="/docs/snapline/introduction">SnapLine</a>
+          <a href="/snapline">SnapLine</a>
         </div>
         {#if $debugLayoutFooterControl}
           <div class="footer-column footer-debug-column">
@@ -306,46 +385,65 @@
       opacity 150ms ease,
       visibility 150ms ease,
       transform 150ms ease;
+  }
 
-    > a,
-    > .nav-dropdown-disabled {
-      display: flex;
-      flex-direction: column;
-      gap: var(--size-2);
-      margin: 0;
-      padding: var(--size-8) var(--size-12);
-      border-radius: var(--size-8);
+  .nav-dropdown-item {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: var(--size-8);
+    border-radius: var(--size-8);
+    transition: background-color 150ms ease;
+
+    &:hover,
+    &:focus-within {
+      background: rgba(58, 42, 34, 0.05);
+    }
+
+    > a {
+      color: #5e4d44;
       text-decoration: none;
-
-      > span {
-        color: #5e4d44;
-        font-size: 0.9rem;
-        font-weight: 600;
-        line-height: 1.3;
-      }
-
-      > small {
-        color: var(--color-text-subtle);
-        font-size: 0.78rem;
-        font-weight: 400;
-        line-height: 1.35;
-      }
     }
 
     > a:hover,
     > a:focus-visible,
     > a[aria-current="page"] {
-      background: rgba(58, 42, 34, 0.05);
+      color: var(--color-action);
+    }
+  }
 
-      > span {
-        color: var(--color-action);
-      }
+  .asset-page-link {
+    display: flex;
+    flex-direction: column;
+    margin: 0;
+    padding: var(--size-8) var(--size-12);
+
+    > span {
+      font-size: 0.9rem;
+      font-weight: 600;
+      line-height: 1.3;
     }
 
-    > .nav-dropdown-disabled {
-      opacity: 0.72;
-      cursor: default;
+    > small {
+      max-width: 14rem;
+      color: var(--color-text-subtle);
+      font-size: 0.75rem;
+      font-weight: 400;
+      line-height: 1.3;
     }
+  }
+
+  .docs-page-link {
+    margin-right: var(--size-8);
+    padding: var(--size-8);
+    border-radius: var(--size-8);
+    font-size: 0.8rem;
+    font-weight: 600;
+  }
+
+  .docs-page-link-disabled {
+    color: var(--color-text-subtle);
+    cursor: default;
   }
 
   .github-link {

@@ -1,0 +1,26 @@
+---
+title: Select API
+description: React Select rectangle-selection props and callbacks.
+order: 5
+sectionTitle: Reference
+sectionOrder: 3
+framework: react
+frameworkKey: select
+---
+
+`Select` mounts a background rectangle-selection surface backed by a core
+`RectSelectController`.
+
+| Prop | Meaning |
+| --- | --- |
+| `callbacks` | `SelectCallbacks` — selection start and change events |
+| `className`, `style` | Presentation for the marquee element |
+| `id` | Element id (default `select-container`) |
+
+The marquee element carries `data-snapline-type="selection"`; its geometry is
+written imperatively by the controller, so style it with CSS rather than
+React state. Read the current selection at any time with
+`getSelectedNodes(engine)`.
+
+Per-node selection behavior (for example toggle-on-shift) is decided by the
+node's `resolveSelectionMode` callback, not by `Select`.

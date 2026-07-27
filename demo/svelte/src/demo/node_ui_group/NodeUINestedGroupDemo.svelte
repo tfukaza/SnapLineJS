@@ -1,7 +1,7 @@
 <script lang="ts">
   import { Engine } from "@snap-engine/asset-base-svelte";
   import { Group } from "@snap-engine/snapline-svelte";
-  import { GroupNodeComponent } from "@snap-engine/snapline";
+  import { GroupNodeMirror } from "@snap-engine/snapline";
   import SimpleNode from "../node_ui_demo/SimpleNode.svelte";
 
   function markMembership(
@@ -46,7 +46,7 @@
       width={450}
       height={300}
       canContain={({ node, centerContained }) =>
-        !(node instanceof GroupNodeComponent) && centerContained}
+        !(node instanceof GroupNodeMirror) && centerContained}
       onMembershipChange={(event) => markMembership("data-optout-member", event)}
     />
     <Group title="Rejected Group" x={780} y={560} width={180} height={180} />

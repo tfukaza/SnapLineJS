@@ -1,5 +1,5 @@
 export {
-  NodeComponent,
+  NodeMirror,
   DEFAULT_RESIZE_CURSORS,
   DEFAULT_RESIZE_HANDLE_THICKNESS,
   RESIZE_HANDLES,
@@ -7,11 +7,11 @@ export {
 export type {
   NodeConfig,
   NodeCallbacks,
-  NodeDragCommitEvent,
+  GeometryChangeEvent,
   NodeDragPositionEvent,
   NodeLinesEvent,
   NodePointerEvent,
-  NodePosition,
+  NodeGeometry,
   ResolvedNodeDragPosition,
   NodeResizeEvent,
   NodeResizeHandleEvent,
@@ -20,39 +20,45 @@ export type {
   ResizeHandle,
   SelectionMode,
 } from "./node";
-export { ConnectorComponent, resolveConnectorSourceAtPoint } from "./connector";
+export { ConnectorMirror, resolveConnectorSourceAtPoint } from "./connector";
 export type {
+  ConnectionLimit,
   ConnectionOrigin,
+  ConnectionProposal,
   ConnectorAnchor,
   ConnectorAnchorEvent,
   ConnectorCallbacks,
-  ConnectorCapabilities,
   ConnectorCandidateEvent,
   ConnectorCandidate,
   ConnectorConfig,
   ConnectorConfigUpdate,
   ConnectorConnectionEvent,
-  ConnectorConnectionRequestEvent,
-  ConnectorConnectionRequestResult,
   ConnectorDisconnectionEvent,
   ConnectorDragEvent,
   ConnectorGeometrySnapshot,
   ConnectorHit,
-  ConnectorLinePhase,
   ConnectorNormal,
   ConnectorPairEvent,
   ConnectorPoint,
   ConnectorPointerEvent,
   ConnectorResolvedHit,
   ConnectorRole,
+  ConnectorRules,
   ConnectorSurfaceHitTestEvent,
   ConnectorSurfaceStrategy,
   DisconnectReason,
+  ResolvedConnectorRules,
   SnapLineMetadata,
 } from "./connector";
-export { LineComponent } from "./line";
+export { LineMirror } from "./line";
+export type {
+  LineGeometrySnapshot,
+  LineMirrorPhase,
+  LineStateSnapshot,
+} from "./line";
+export type { GeometryWriter } from "./geometry";
 export {
-  GroupNodeComponent,
+  GroupNodeMirror,
   getParentGroup,
   setGroupMembershipResolver,
 } from "./group";
@@ -64,7 +70,7 @@ export type {
   GroupMembershipResolutionEvent,
   GroupMembershipResolver,
 } from "./group";
-export { RectSelectComponent } from "./select";
+export { RectSelectController } from "./select";
 export type {
   SelectCallbacks,
   SelectChangeEvent,
@@ -77,7 +83,9 @@ export {
   getGroupNodes,
   getNodes,
   getSelectedNodes,
+  query,
 } from "./query";
+export type { GraphQuery } from "./query";
 export { PlacementController } from "./placement";
 export type {
   PlacementAnchor,
@@ -85,19 +93,25 @@ export type {
   PlacementCancelEvent,
   PlacementConfig,
   PlacementEvent,
+  PlacementGeometrySnapshot,
   PlacementPoint,
   PlacementSize,
   PlacementSnapshot,
 } from "./placement";
-export { NodeManager } from "./node-manager";
-export type { EdgeSyncLike } from "./node-manager";
-export { getNodeManager } from "./snapline-globals";
-export { EdgeSyncController } from "./edge-sync";
 export type {
-  EdgeConnectIntentEvent,
-  EdgeDisconnectIntentEvent,
-  EdgeEndpoint,
-  EdgeLike,
-  EdgeSyncCallbacks,
-  EdgeSyncConfig,
-} from "./edge-sync";
+  NodeId,
+  ConnectorId,
+  LineId,
+  ReconciliationError,
+  GraphBatch,
+} from "./graph-mirror";
+export { attachControlledGraph } from "./snapline-globals";
+export type {
+  CanonicalGraphSnapshot,
+  ControlledGraphCallbacks,
+  ControlledGraphHandle,
+  LineChangeRequest,
+  LineEndpointUpdate,
+  LineRecord,
+  ProposedLine,
+} from "./line-reconciler";

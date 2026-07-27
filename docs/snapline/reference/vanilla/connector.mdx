@@ -1,0 +1,50 @@
+---
+title: Connector API
+description: Core ConnectorMirror configuration, rules and defaults, surfaces, and admission.
+order: 3
+sectionTitle: Reference
+sectionOrder: 3
+framework: vanilla
+frameworkKey: connector
+---
+
+`ConnectorMirror` owns a connector's connection rules, metadata, and
+gestures. Construct it with
+`new ConnectorMirror(engine, nodeMirror, config)` and register it via
+`nodeMirror.addConnectorObject(connector)`; bind a port element with
+`bindElement(element)` (or leave it virtual and rely on surface strategies).
+
+`ConnectorConfig` accepts `id`, `name` (the connector's key within its parent
+node), `rules`, `metadata`, `callbacks`, `edgePan`, `surfaceStrategies`,
+and `colliderRadius`. `updateConfig(...)` applies everything
+except the construction-time identities `id` and `name`.
+
+## Connection rules
+
+| Rule | Default | Meaning |
+| --- | --- | --- |
+| `maxOutgoing` | `"unlimited"` | Maximum outgoing lines (previews reserve a slot); `0` makes the connector target-only |
+| `maxIncoming` | `1` | Maximum settled incoming lines; `0` makes the connector source-only |
+| `reconnect` | `true` | Allow dragging a settled line's end to a new target |
+| `allowParallel` | `false` | Both endpoints must allow parallel lines between the same pair |
+| `onFull` | `"reject"` | Policy when a proposal would exceed `maxIncoming`: `"reject"` it, or `"replace-oldest"` to evict the oldest incoming lines |
+| `isValidConnection` | — | Line-aware admission predicate over a `ConnectionProposal` (`line`, `source`, `target`, `phase: "candidate" \| "drop"`); synchronous and side-effect free. Either endpoint may veto |
+
+Limits are `number | "unlimited"`; `"unlimited"` normalizes to `Infinity` in
+`ResolvedConnectorRules`. An omitted `rules` config yields an
+unlimited-outgoing, single-incoming connector that rejects extra incoming
+lines.
+
+## Surfaces and lookup
+
+`ConnectorSurfaceStrategy` supplies `sourceHitTest`, `targetHitTest`, and
+`resolveAnchor` for custom shapes. `resolveConnectorSourceAtPoint(engine,
+point)` resolves which connector a pointer position would start a line from.
+Enumerate connectors with `getConnectors(engine)` or
+`query(engine).connectors()`.
+
+> [!WARNING]
+> Topology methods on `ConnectorMirror` such as `createLine`, `deleteLine`,
+> `deleteAllLines`, and `disconnectFromConnector` are `@internal` even though
+> they appear in editor autocomplete. Change topology by updating canonical
+> `LineRecord`s through the controlled-graph handle.

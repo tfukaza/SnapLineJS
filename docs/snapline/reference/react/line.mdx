@@ -1,0 +1,36 @@
+---
+title: Line API
+description: React Line renderer props, geometry writer contract, and phases.
+order: 4
+sectionTitle: Reference
+sectionOrder: 3
+framework: react
+frameworkKey: line
+---
+
+`Line` is the default SVG renderer for a `LineMirror`. `Node` renders one per
+outgoing line; pass a custom component via `Node`'s `lineComponent` to replace
+it.
+
+| Prop | Meaning |
+| --- | --- |
+| `line` | The `LineMirror` to render (required) |
+| `className` | Class for the outer `<svg>` |
+| `pathClassName` | Class for the `<path>` (default `sl-connector-line`) |
+| `pathStyle` | Inline style object for the `<path>` |
+| `showArrow` | Render the arrowhead marker (default `true`) |
+| `data` | Extra `data-*` attributes for the `<svg>` |
+
+Custom renderers mount static structure and call
+`line.bindGeometryWriter(callback)` from a layout effect; the callback
+receives a `LineGeometrySnapshot` (`start`, `end`, `delta`) and mutates
+retained SVG, Canvas, or graphics refs directly — pointer movement never
+renders React. `line.geometrySnapshot()` provides initial geometry, and
+`LineRecord.payload` is available on the mirror for presentation decisions.
+
+A line moves through the `LineMirrorPhase` lifecycle: `"source-start"`,
+`"preview-free"`, `"preview-target"`, `"drop"`, `"staged"` (gesture completed
+locally, awaiting the canonical owner's decision), and `"connected"`.
+
+The rendered element carries `data-snapline-type="connector-line"` and
+`data-line-id` (the stable `lineId`, never the engine-internal object id).

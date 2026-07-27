@@ -18,7 +18,10 @@
     "./select": "./src/select.ts",
     "./group": "./src/group.ts",
     "./placement": "./src/placement.ts",
-    "./query": "./src/query.ts"
+    "./query": "./src/query.ts",
+    "./graph-mirror": "./src/graph-mirror.ts",
+    "./line-reconciler": "./src/line-reconciler.ts",
+    "./geometry": "./src/geometry.ts"
   },
   "files": [
     "src",

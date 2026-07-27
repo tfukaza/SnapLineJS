@@ -498,12 +498,10 @@ export class BaseObject extends CoreObject {
     }
   }
 
+  // Read-only: the id keys the global object table and render-queue task
+  // ids, so reassigning it after construction would orphan those entries.
   get id(): string {
     return this.#id;
-  }
-
-  set id(id: string) {
-    this.#id = id;
   }
 
   get parent(): BaseObject | null {
@@ -1304,10 +1302,14 @@ export class ElementObject extends BaseObject {
   // the transform graph) where the read walks public children (DOM layout nests
   // publicly). No reparenting or position mutation: each descendant's world value
   // is already current via the epoch cache, so writeTransform just paints it.
+  // IDLE is permitted here as it is for writeTransform/writeDom: style writes only
+  // invalidate layout. The read twin stays frame-only because it forces layout.
   writeTransformRecursive() {
-    const stage = this.global.currentStage as FrameWriteStages;
-    if (!["WRITE_1", "WRITE_2", "WRITE_3"].includes(stage)) {
-      throw new Error(`Invalid stage: ${stage}`);
+    const currentStage = this.global.currentStage;
+    if (!["WRITE_1", "WRITE_2", "WRITE_3", "IDLE"].includes(currentStage)) {
+      throw new Error(
+        `Writing transform during ${currentStage} is prohibited. Only WRITE_1, WRITE_2, WRITE_3, and IDLE are allowed.`,
+      );
     }
 
     this.writeTransform();
@@ -1323,25 +1325,43 @@ export class ElementObject extends BaseObject {
   }
 
   destroyDom(removeElement: boolean = true) {
+    const element = this.#element;
+    this.detachElement();
+    if (removeElement) {
+      element?.remove();
+    }
+    super.destroyDom();
+  }
+
+  /**
+   * Stop observing and routing input through the currently assigned element
+   * without removing framework-owned DOM.
+   *
+   * When `expectedElement` is supplied, a stale cleanup is ignored after a
+   * newer element has already been assigned.
+   */
+  detachElement(expectedElement?: HTMLElement): boolean {
+    if (expectedElement && this.#element !== expectedElement) {
+      return false;
+    }
     this.#resizeObserver?.disconnect();
+    this.#resizeObserver = null;
     this.#mutationObserver?.disconnect();
+    this.#mutationObserver = null;
     if (this.#inputAlias) {
       this.engine?.input.unregisterObjectElement(this, this.#inputAlias);
       this.#inputAlias = null;
     }
     if (this.#element) {
       this.engine?.input.unregisterObjectElement(this, this.#element);
-      if (removeElement) {
-        this.#element.remove();
-      }
     }
     this.#element = null;
-    super.destroyDom();
+    return true;
   }
 
   #assignElement(element: HTMLElement) {
     if (this.#element) {
-      this.destroyDom();
+      this.detachElement();
     }
 
     this.#element = element;

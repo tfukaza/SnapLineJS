@@ -11,10 +11,10 @@ npm install @snap-engine/core @snap-engine/snapline \
 
 ## Components
 
-`Node`, `Group`, `Connector`, `Line`, `Select`, and `Placement` are exported
+`Node`, `Group`, `Connector`, `Line`, `Select`, `Placement`, and `ControlledGraph` are exported
 from the package root. Component subpaths are also available as
 `Node.svelte`, `Group.svelte`, `Connector.svelte`, `Line.svelte`,
-`Select.svelte`, and `Placement.svelte`.
+`Select.svelte`, `Placement.svelte`, and `ControlledGraph.svelte`.
 
 ```svelte
 <script lang="ts">
@@ -35,7 +35,7 @@ Pass framework-native ARIA attributes or DOM event handlers to the outer node
 element through `Node`'s `elementProps`.
 
 `<Connector virtual>` creates a logical connector without a visible port.
-Combine it with `surfaceStrategies` and independent `capabilities` to make a
+Combine it with `surfaceStrategies` and symmetric `rules` limits to make a
 node border or another application-defined shape act as the connection surface.
 Application graph state remains authoritative; an opaque line payload can link
 a custom renderer back to the corresponding domain edge.

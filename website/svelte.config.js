@@ -30,8 +30,16 @@ const config = {
       remarkPlugins: [remarkAlerts, remarkFrameworkCodeBlocks],
       highlight: {
         highlighter: (code, lang = "plaintext") => {
+          // Unknown fence languages (mermaid diagrams in the design docs,
+          // etc.) must not break the whole docs build — fall back to plain
+          // text instead of letting shiki throw.
+          const resolvedLang = highlighter
+            .getLoadedLanguages()
+            .includes(lang)
+            ? lang
+            : "plaintext";
           const highlighted = highlighter.codeToHtml(code, {
-            lang,
+            lang: resolvedLang,
             theme: "custom-theme",
           });
           const html = escapeSvelte(

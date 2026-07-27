@@ -12,10 +12,9 @@
         <div class="input-row">
             <div class="connector-wrapper">
                 <Connector
+                    id={`${nodeId}:input`}
                     name="input"
-                    maxConnectors={maxIncoming}
-                    allowDragOut={false}
-                    metadata={{ node: nodeId, port: "input" }}
+                    rules={{ maxOutgoing: 0, maxIncoming: maxIncoming === -1 ? "unlimited" : maxIncoming, onFull: "replace-oldest" }}
                 />
             </div>
             <span>Input</span>
@@ -24,10 +23,9 @@
             <span>Output</span>
             <div class="connector-wrapper">
                 <Connector
+                    id={`${nodeId}:output`}
                     name="output"
-                    maxConnectors={-1}
-                    allowDragOut={true}
-                    metadata={{ node: nodeId, port: "output" }}
+                    rules={{ maxIncoming: 0 }}
                 />
             </div>
         </div>

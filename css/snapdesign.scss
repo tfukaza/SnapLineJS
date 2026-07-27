@@ -20,6 +20,7 @@ body {
   --color-primary: #ff5d0f;
   --color-action: #c94000;
   --color-action-hover: #a93600;
+  --color-selection: #ff5d0f;
   --color-secondary-1: #f34336;
   --color-accent: #ff0e56;
   --color-background: #ffffff;
@@ -68,8 +69,12 @@ body {
 }
 
 ::selection {
-  background: var(--color-primary);
+  background: var(--color-selection);
   color: #fff;
+  text-shadow:
+    0 0 3px rgb(255 255 255 / 90%),
+    0 0 8px rgb(255 255 255 / 65%),
+    0 0 14px rgb(255 93 15 / 90%);
 }
 
 .pixel-font {

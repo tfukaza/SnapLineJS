@@ -1,10 +1,17 @@
+---
+title: SnapLine ownership specification
+description: Internal design doc — the normative framework ownership contract.
+hidden: true
+---
+
 # SnapLine framework ownership specification
 
-Status: proposed review specification  
+Status: normative ownership contract — implemented by the controlled-graph
+re-architecture  
 Reviewed: 2026-07-25  
 Companion: [current architecture](./current-architecture.md)
 
-This document proposes the ownership contract implied by the project
+This document defines the ownership contract implied by the project
 direction:
 
 > The application/framework owns the source of truth for which nodes,
@@ -72,9 +79,9 @@ answer:
 
 A SnapLine runtime object associated with a domain entity:
 
-- `NodeComponent`;
-- `ConnectorComponent`;
-- settled `LineComponent`.
+- `NodeMirror`;
+- `ConnectorMirror`;
+- settled `LineMirror`.
 
 A mirror may contain interaction state and geometry that is absent from the
 domain document.
@@ -120,7 +127,7 @@ The application/framework MUST be the sole authority for committed node,
 connector, and edge existence.
 
 SnapLine MUST NOT treat a committed gesture result, registry entry, DOM
-element, connector array, or `LineComponent` as proof that a domain entity
+element, connector array, or `LineMirror` as proof that a domain entity
 exists.
 
 ### O2. Runtime mirrors
@@ -144,7 +151,7 @@ Core MAY update existing-element properties that are interaction outputs:
 - transforms;
 - `data-*` state attributes;
 - cursor and other transient property-level hints;
-- line-render subscription state.
+- high-frequency geometry through registered imperative writers.
 
 Core MUST NOT structurally move framework-owned node elements when groups
 carry them. Transform parenting is allowed.
@@ -177,15 +184,15 @@ copies of complete domain records.
 
 | Concern                      | Required authority                   | Allowed SnapLine mirror                                          |
 | ---------------------------- | ------------------------------------ | ---------------------------------------------------------------- |
-| Node existence               | Domain/framework collection          | `NodeComponent` while mounted                                    |
-| Connector existence          | Domain/framework node/port rendering | `ConnectorComponent` while mounted                               |
-| Edge existence               | Domain edge collection               | Settled `LineComponent` while resolvable                         |
-| Preview connection           | SnapLine gesture                     | Targetless preview `LineComponent`                               |
+| Node existence               | Domain/framework collection          | `NodeMirror` while mounted                                    |
+| Connector existence          | Domain/framework node/port rendering | `ConnectorMirror` while mounted                               |
+| Edge existence               | Domain edge collection               | Settled `LineMirror` while resolvable                         |
+| Preview connection           | SnapLine gesture                     | Targetless preview `LineMirror`                               |
 | Node persisted position/size | Domain/application                   | Live transform and collision box                                 |
 | Node live drag/resize        | SnapLine                             | Transient local geometry                                         |
-| Connector policy             | Application configuration            | Normalized core capabilities                                     |
-| Selection                    | Open decision                        | Current SnapLine mirror is acceptable if explicitly uncontrolled |
-| Group membership             | Open decision                        | Current geometry-derived mirror                                  |
+| Connector policy             | Application configuration            | Normalized core rules                                            |
+| Selection                    | SnapLine (decided)                   | Engine-scoped mirror state; framework owns visuals               |
+| Group membership             | SnapLine (decided)                   | Geometry-derived mirror state                                    |
 | DOM structure                | Framework adapter                    | Element handles only                                             |
 | Line path geometry           | SnapLine                             | Anchors, phase, candidate, render snapshot                       |
 
@@ -238,9 +245,10 @@ interface ConnectorIdentity {
 
 Connector display names and DOM positions MUST NOT be the only identity.
 
-The adapter MAY derive this identity from props. A generic core integration
-MAY provide an identity callback. Metadata is acceptable as an integration
-bridge but SHOULD NOT be the only long-term typed API.
+The adapter MAY derive this identity from props (as shipped: typed `id`
+props/config supplying the graph-global `connectorId`). Metadata is
+acceptable as an integration bridge but SHOULD NOT be the only long-term
+typed API.
 
 ### I3. Edge identity
 
@@ -291,7 +299,7 @@ When a framework node mounts, its mirror MUST register exactly once.
 When an adapter-owned node unmounts, its mirror MUST unregister and destroy
 exactly once.
 
-Supplying an externally owned `NodeComponent` MUST transfer neither domain
+Supplying an externally owned `NodeMirror` MUST transfer neither domain
 ownership nor destruction responsibility to the adapter.
 
 ### L2. Connector mount and unmount
@@ -398,9 +406,9 @@ MUST cancel cleanly.
 
 Gesture policy and document reconciliation MUST be distinct concepts.
 
-`canConnect`, target capacity, reconnect behavior, and snapping rules MAY
-reject or transform a proposed user intent. They MUST NOT silently rewrite the
-canonical document during hydration.
+`isValidConnection`, target capacity, reconnect behavior, and snapping rules
+MAY reject or transform a proposed user intent. They MUST NOT silently
+rewrite the canonical document during hydration.
 
 If a canonical edge cannot be represented, SnapLine MUST use one explicitly
 chosen policy:
@@ -424,24 +432,28 @@ Multiple same-task triggers SHOULD coalesce.
 ## Gesture requirements
 
 ```mermaid
-flowchart TB
-  BEGIN["User: begin connector drag"]
-  PREVIEW["SnapLine: create ephemeral preview"]
-  DROP["User: drop on candidate"]
-  INTENT["SnapLine: emit semantic connect intent"]
-  DECISION{"Application decision"}
-  ACCEPT["Accept / normalize:<br/>update canonical document"]
-  REJECT["Reject:<br/>leave document unchanged"]
-  DEFER["Defer:<br/>keep explicitly pending"]
-  READ["SnapLine: reconcile latest document"]
-  SETTLE["Preserve or create settled line mirror"]
-  REMOVE["Remove optimistic preview / mirror"]
-  LATER["Application: apply later decision"]
+sequenceDiagram
+  actor User
+  participant SL as SnapLine
+  participant App as Application + canonical document
 
-  BEGIN --> PREVIEW --> DROP --> INTENT --> DECISION
-  DECISION -->|"accepted"| ACCEPT --> READ --> SETTLE
-  DECISION -->|"rejected"| REJECT --> REMOVE
-  DECISION -->|"deferred"| DEFER --> LATER --> READ
+  User->>SL: Begin connector drag
+  SL->>SL: Create ephemeral preview
+  User->>SL: Drop on candidate
+  SL->>App: Emit semantic connect intent
+  alt Accepted or normalized
+    App->>App: Update canonical edge document
+    SL->>App: Read latest document
+    SL->>SL: Preserve or create settled line mirror
+  else Rejected
+    App->>App: Leave document unchanged
+    SL->>App: Read latest document
+    SL->>SL: Remove optimistic preview / mirror
+  else Deferred
+    App-->>SL: Keep result explicitly pending
+    App->>App: Apply later decision
+    SL->>App: Reconcile final document
+  end
 ```
 
 ### G1. Preview
@@ -523,12 +535,27 @@ Adapters MAY render from SnapLine’s line-mirror collection as long as:
 
 ### A3. Geometry
 
-Adapters MUST render node/group width and height.
+Adapters MUST render the initial node/group width and height.
 Core MAY update collision state synchronously and request a rendered size
 through callbacks.
 
-Adapters MUST call `syncDomGeometry()` after the committed element and
+Adapters MUST call `remeasureDomGeometry()` after the committed element and
 dimensions are available.
+
+An adapter MUST NOT write size through the framework renderer while routing the
+transform through the engine queue: they are separate schedulers with no
+ordering contract, so the two can be painted in different frames — visible as
+the new size at the old position for one frame whenever the anchored edge is
+the top or left one. Prop-driven geometry updates MUST therefore assign
+`worldTransform`, call `setSizeState(...)`, and then `scheduleGeometryWrite()`,
+which commits position and size in one task at one stage. Consequently a
+reactive `width`/`height` binding on the rendered element is a second writer
+and MUST be a one-time initial snapshot rather than a live binding.
+
+Core MUST paint the size authored in the same tick as the transform it is
+painted with. A DOM→state reconcile MUST NOT adopt the measured box while a
+gesture owns the authored one: the rendered box is one frame behind, and
+pairing it with a current transform moves the anchored edge.
 
 ### A4. Callback composition
 
@@ -604,10 +631,10 @@ The intended public API SHOULD separate four categories.
 
 Declarative policy and presentation hooks:
 
-- connector capabilities;
+- connector rules (`ConnectorRules`, including `isValidConnection`);
 - hit-test and anchor strategies;
 - drag/selection/resize policy;
-- metadata or typed domain identity;
+- typed domain identity (`id` props/config) and metadata;
 - line renderer selection.
 
 ### Intents and lifecycle events
@@ -639,89 +666,78 @@ Read-only snapshots:
 Commands SHOULD be explicit about authority:
 
 - interaction commands that change only transient state;
-- `sync()`/reconciliation commands;
-- unmanaged imperative topology commands for vanilla use.
+- reconciliation commands (`setCanonicalGraph()` pushes the canonical
+  snapshot; `flush()` runs a pending pass synchronously).
 
-An imperative `connect()` command MUST either be unavailable in controlled
-mode or clearly mean “emit an application intent,” not “override the
-canonical document.”
+As shipped there are no public imperative topology commands: the canonical
+document is the only way to create or remove lines, and gestures emit
+application requests rather than overriding the document.
 
-## Vanilla/unmanaged mode
+## Vanilla consumers
 
-Vanilla consumers may reasonably choose an imperative graph without a
-framework store. That mode can coexist with the controlled model if it is
-explicit.
-
-In unmanaged mode:
-
-- the consumer owns calling constructors and `destroy()`;
-- connector topology may be the source of truth;
-- imperative connect/disconnect commands are allowed;
-- DOM ownership remains with the consumer;
-- controlled-edge reconciliation is absent.
-
-Mixing controlled and unmanaged connectors on one engine MAY be supported, but
-the identity callback MUST clearly return `null` for unmanaged connectors and
-cross-boundary lines need an explicit policy.
-
-```mermaid
-flowchart TB
-  ENGINE["One SnapLine engine"]
-  CONTROLLED["Controlled graph partition"]
-  UNMANAGED["Unmanaged / imperative partition"]
-  DOC["Application document is canonical"]
-  ARRAYS["Connector topology is canonical"]
-  BOUNDARY{"Cross-partition line policy<br/>must be explicit"}
-
-  ENGINE --> CONTROLLED --> DOC
-  ENGINE --> UNMANAGED --> ARRAYS
-  CONTROLLED --> BOUNDARY
-  UNMANAGED --> BOUNDARY
-```
+The formerly proposed unmanaged/imperative mode was **eliminated during
+implementation** (decided): topology is always controlled, and every engine
+has exactly one authority model. A vanilla consumer owns the graph with a
+plain module — a mini emulated framework holding the records — driving the
+same `attachControlledGraph`/`setCanonicalGraph` contract (see the
+[migration notes](./migration-notes.md) for a complete example). The
+consumer still owns constructors, `destroy()`, and its DOM directly.
 
 ## Current conformance snapshot
 
-| Requirement area                    | Current status     | Comment                                                   |
-| ----------------------------------- | ------------------ | --------------------------------------------------------- |
-| Framework-owned node existence      | Mostly conforms    | Mount/unmount controls adapter-owned `NodeComponent`      |
-| Framework-owned connector existence | Mostly conforms    | Mount/unmount controls adapter-owned connector            |
-| Framework-owned structural DOM      | Conforms by design | Core performs property/transform writes only              |
-| Canonical application edges         | Partial            | Available only through optional `EdgeSync`                |
-| Fresh/idempotent edge sync          | Mostly conforms    | `getEdges()` is fresh and sync mutations suppress intents |
-| Latent edge remount                 | Mostly conforms    | Connector registration queues reconciliation              |
-| Preview isolation                   | Conforms           | Targetless drag lines are skipped by sync                 |
-| Stable edge identity                | Does not conform   | `EdgeLike` is endpoint-pair only                          |
-| Parallel controlled edges           | Does not conform   | Endpoint pairs collapse                                   |
-| Hydration/policy separation         | Does not conform   | Hydration uses `connectToConnector()` policy/capacity     |
-| Atomic replacement intent           | Does not conform   | Separate disconnect then connect events                   |
-| Read-only topology views            | Does not conform   | Connector arrays are returned directly                    |
-| Unified mirror registry             | Partial            | Manager tracks nodes/connectors; other scans and no lines |
-| Engine isolation                    | Partial            | Several shared registries are not engine-keyed            |
-| Strictly controlled geometry        | Not defined        | Current behavior is cooperative/local-first               |
-| Uniform callback composition        | Partial            | Node/group compose; selection replaces rect callback      |
-| Explicit controlled/unmanaged mode  | Does not conform   | Both authority models share the same mutation surface     |
+The controlled-graph re-architecture implements this specification in full.
+Stable-id records, atomic requests, hydration that never mutates the
+document, structured diagnostics, and engine scoping are all shipped:
 
-## Open decisions for review
+| Requirement area                    | Current status | Comment                                                                          |
+| ----------------------------------- | -------------- | -------------------------------------------------------------------------------- |
+| Framework-owned node existence      | Conforms       | Mount/unmount controls adapter-owned `NodeMirror`; stable `nodeId` via `id` prop  |
+| Framework-owned connector existence | Conforms       | Mount/unmount controls the mirror; graph-global `connectorId`                     |
+| Framework-owned structural DOM      | Conforms       | Core performs property/transform writes only                                      |
+| Canonical application lines         | Conforms       | Topology is always controlled: `attachControlledGraph` + pushed `LineRecord[]`    |
+| Fresh/idempotent reconciliation     | Conforms       | Cached pushed snapshot; coalesced idempotent passes never emit requests           |
+| Latent line remount                 | Conforms       | Connector registration schedules a pass; unmounted endpoints stay silently latent |
+| Preview isolation                   | Conforms       | Previews/staged lines live outside the settled index; never document-driven       |
+| Stable line identity                | Conforms       | `LineRecord.id`; mirrors preserved/retargeted by `lineId`; adapters key by it     |
+| Parallel controlled lines           | Conforms       | Stable ids plus `allowParallel` on both endpoints                                 |
+| Hydration/policy separation         | Conforms       | Strict record admission never evicts; refusals become structured diagnostics      |
+| Atomic replacement request          | Conforms       | One `LineChangeRequest`; evictions ride the `"replace"` intent                    |
+| Read-only topology views            | Conforms       | Snapshot getters; getter-backed `LineMirror`; topology mutators are `@internal`   |
+| Unified mirror registry             | Conforms       | `GraphMirror` indexes nodes, connectors, and settled lines; one enumeration path  |
+| Engine isolation                    | Conforms       | Selection, groups, `resizingNode`, and the reconciler are engine-scoped           |
+| Diagnostics                         | Conforms       | Derived `ReconciliationError`s via `onDiagnosticsChanged` / `query().diagnostics()` |
+| Geometry authority                  | Decided        | SnapLine-owned visual cue; one batched `onGeometryChanged` observation, no controlled-geometry mode |
+| Explicit authority model            | Conforms       | Exactly one model: always controlled; no imperative public topology surface       |
 
-1. Should controlled edges become the default and recommended mode, with the
-   current imperative topology API explicitly labeled unmanaged?
-2. Does every edge need a stable `edgeId`, or should SnapLine formally prohibit
-   parallel controlled edges?
-3. Should connector identity become a typed constructor/adapter prop instead
-   of an `identity(connector)` callback commonly backed by metadata?
-4. Should `NodeManager` remain public, become internal, or evolve into a
-   read-only graph-mirror service?
-5. Should settled lines be centrally registered and queryable by edge ID?
-6. Should hydration bypass gesture predicates and capacity, or report
-   structured document-invalid diagnostics?
-7. Should replacement and reconnect be atomic edge-change intents?
-8. Should `onConnectionRequest` be removed in favor of the controlled-edge
-   intent API, retained only for unmanaged mode, or merged with it?
-9. Are node positions and sizes controlled props, commit outputs, or both via
-   separate `value`/`defaultValue`-style APIs?
-10. Should selection and group membership remain SnapLine-owned derived state,
-    or also become optionally controlled application state?
-11. Can controlled and unmanaged connectors coexist on one engine, and may a
-    line cross that boundary?
-12. Which low-level methods and fields are genuinely public for 1.0, and which
-    should become private/internal before the API settles?
+## Open decisions — all decided and shipped
+
+Every question raised for review was decided during the re-architecture and
+is implemented:
+
+1. Controlled default? Decided further: topology is **always** controlled —
+   the imperative topology API was removed entirely, not merely labeled.
+2. Stable edge id? Yes — `LineRecord.id` is required, and parallel lines are
+   supported when both endpoints set `allowParallel`.
+3. Connector identity? Typed `id` props/config (graph-global `connectorId`);
+   the `identity(connector)` callback is gone.
+4. `NodeManager`? Became the internal `GraphMirror` registry with the public
+   read-only `GraphQuery` facade (`query(engine)`).
+5. Central line registry? Yes — settled lines index by `lineId` in
+   `GraphMirror`; `query(engine).line(id)` looks them up.
+6. Hydration policy? Strict admission that never evicts, with structured
+   `ReconciliationError` diagnostics; canonical records are never rewritten.
+7. Atomic replace/reconnect? Yes — one `LineChangeRequest` per gesture with
+   `"replace"`/`"reconnect"` intents; evictions ride the request.
+8. `onConnectionRequest`? Removed — veto moved to `isValidConnection`,
+   payload to canonical `LineRecord.payload`, mutation to the request
+   protocol.
+9. Geometry props? Neither controlled nor negotiated — geometry is
+   SnapLine-owned and observed through one batched `onGeometryChanged`.
+10. Selection and groups? They remain SnapLine-owned derived state,
+    engine-scoped on `GraphMirror` (framework owns the visuals).
+11. Mixed controlled/unmanaged engines? Moot — the unmanaged mode was
+    eliminated; vanilla consumers drive the same controlled contract from a
+    plain graph-owner module.
+12. Public surface? Topology mutators are `@internal`, `LineMirror` state is
+    getter-backed, and the public surface is mirror configs/callbacks,
+    `query`, and `attachControlledGraph`.

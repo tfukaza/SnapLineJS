@@ -4,6 +4,7 @@ import { GlobalManager } from "./global";
 import { InputControl } from "./input";
 import type { eventPosition } from "./input";
 import { BaseObject, FrameTask, detachAnimationFromOwner } from "./object";
+import { reportConsumerError } from "./errors";
 import type { CollisionEngine } from "./collision";
 import type { AnimationInterface } from "./animation";
 import type { DebugRenderer } from "./debug";
@@ -22,16 +23,6 @@ export interface EdgePanController {
 }
 
 const DEFAULT_ENGINE_CONFIG: EngineConfig = {};
-
-function reportFrameTaskError(error: unknown): void {
-  const reportedError =
-    error instanceof Error ? error : new Error(String(error));
-  if (typeof globalThis.reportError === "function") {
-    globalThis.reportError(reportedError);
-    return;
-  }
-  console.error(reportedError);
-}
 
 /**
  * Available engine event types that can be subscribed to.
@@ -398,7 +389,7 @@ class Engine {
             // One bad integration callback must not reject the shared frame
             // pipeline and permanently stop every engine's animation loop.
             // Surface the error globally, then continue with queued cleanup.
-            reportFrameTaskError(error);
+            reportConsumerError(error);
           }
         }
       }

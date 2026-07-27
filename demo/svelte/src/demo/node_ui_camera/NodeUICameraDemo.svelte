@@ -1,5 +1,6 @@
 <script lang="ts">
   import { Camera, Engine } from "@snap-engine/asset-base-svelte";
+  import DemoGraph from "../node_ui_demo/DemoGraph.svelte";
   import SimpleNode from "../node_ui_demo/SimpleNode.svelte";
 
   // The pan button is configurable via ?panButton= so the e2e suite can
@@ -31,6 +32,7 @@
   >
     <div id="node-ui-camera-layer">
       <div id="nuc-background"></div>
+      <DemoGraph />
       <SimpleNode title="Node A" x={120} y={120} />
       <SimpleNode title="Node B" x={440} y={170} />
       <SimpleNode title="Node C" x={280} y={360} />

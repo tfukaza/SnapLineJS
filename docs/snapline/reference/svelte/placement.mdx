@@ -1,7 +1,7 @@
 ---
 title: Placement API
 description: Svelte Placement controller binding, preview snippet, and cancellation props.
-order: 3
+order: 7
 sectionTitle: Reference
 sectionOrder: 3
 framework: svelte
@@ -9,8 +9,9 @@ frameworkKey: placement
 ---
 
 Pass a core `PlacementController<T>` to `Placement`. The component listens at
-window scope while the controller is active and optionally renders
-`preview(snapshot)`.
+window scope and renders `preview(snapshot)` inside an absolute wrapper. The
+controller mutates wrapper geometry and `data-allowed` directly, so the snippet
+must not apply pointer-follow transforms through Svelte state.
 
 `cancelOnOutside`, `cancelOnSecondaryButton`, and `cancelOnEscape` default to
 `true`. Creation and persistence belong in the controller’s `onCommit`

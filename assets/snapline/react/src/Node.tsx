@@ -14,24 +14,26 @@ import {
 } from "react";
 import {
   DEFAULT_RESIZE_HANDLE_THICKNESS,
-  LineComponent,
-  NodeComponent,
+  LineMirror,
+  NodeMirror,
   type ResizeHandle,
   type NodeCallbacks,
-  type NodeDragCommitEvent,
+  type GeometryChangeEvent,
   type NodeResizeEvent,
   type SnapLineMetadata,
 } from "@snap-engine/snapline";
 import { useSnapLineEngine } from "./Engine";
 import { Line } from "./Line";
 
-export const NodeObjectContext = createContext<NodeComponent | null>(null);
+export const NodeMirrorContext = createContext<NodeMirror | null>(null);
 
 export interface NodeProps {
+  /** Stable domain identity; minted when omitted (supply for persistence). */
+  id?: string;
   children: ReactNode;
   className?: string;
-  lineComponent?: ComponentType<{ line: LineComponent }>;
-  nodeObject?: NodeComponent | null;
+  lineComponent?: ComponentType<{ line: LineMirror }>;
+  nodeObject?: NodeMirror | null;
   style?: CSSProperties;
   x?: number;
   y?: number;
@@ -46,15 +48,15 @@ export interface NodeProps {
   metadata?: SnapLineMetadata;
   callbacks?: NodeCallbacks;
   edgePan?: boolean;
-  onDragCommit?: (event: NodeDragCommitEvent) => void;
-  onResizeCommit?: (event: NodeResizeEvent) => void;
+  onGeometryChanged?: (event: GeometryChangeEvent) => void;
   onSizeChange?: (event: NodeResizeEvent) => void;
   /** Framework-native attributes and events for the outer node element. */
   elementProps?: HTMLAttributes<HTMLDivElement>;
 }
 
-export const Node = forwardRef<NodeComponent, NodeProps>(function Node(
+export const Node = forwardRef<NodeMirror, NodeProps>(function Node(
   {
+    id,
     children,
     className = "",
     lineComponent: LineRenderer = Line,
@@ -73,8 +75,7 @@ export const Node = forwardRef<NodeComponent, NodeProps>(function Node(
     metadata = {},
     callbacks = {},
     edgePan = true,
-    onDragCommit,
-    onResizeCommit,
+    onGeometryChanged,
     onSizeChange,
     elementProps,
   },
@@ -83,9 +84,10 @@ export const Node = forwardRef<NodeComponent, NodeProps>(function Node(
   const engine = useSnapLineEngine();
   const nodeDomRef = useRef<HTMLDivElement>(null);
   const ownsNodeRef = useRef(nodeObject == null);
-  const nodeRef = useRef<NodeComponent | null>(nodeObject);
+  const nodeRef = useRef<NodeMirror | null>(nodeObject);
   if (!nodeRef.current) {
-    nodeRef.current = new NodeComponent(engine, null, {
+    nodeRef.current = new NodeMirror(engine, null, {
+      id,
       resizable,
       minWidth,
       minHeight,
@@ -98,23 +100,17 @@ export const Node = forwardRef<NodeComponent, NodeProps>(function Node(
     });
   }
   const node = nodeRef.current;
-  const [lineList, setLineList] = useState<LineComponent[]>(
+  const [lineList, setLineList] = useState<LineMirror[]>(
     node.getAllOutgoingLines(),
   );
-  // The element's width/height are framework-owned: core reports size changes
-  // (resize drag) via onSizeChange and this state renders them. Null until the
-  // first resize so CSS-declared sizes keep applying to non-resized nodes.
-  const [box, setBox] = useState<{ w: number; h: number } | null>(null);
   const latestRef = useRef({
     callbacks,
-    onDragCommit,
-    onResizeCommit,
+    onGeometryChanged,
     onSizeChange,
   });
   latestRef.current = {
     callbacks,
-    onDragCommit,
-    onResizeCommit,
+    onGeometryChanged,
     onSizeChange,
   };
 
@@ -123,7 +119,7 @@ export const Node = forwardRef<NodeComponent, NodeProps>(function Node(
   useLayoutEffect(() => {
     if (nodeDomRef.current) {
       node.element = nodeDomRef.current;
-      node.syncDomGeometry();
+      node.remeasureDomGeometry();
     }
     const original = { ...node.callbacks };
     const invoke = <Event,>(
@@ -193,23 +189,16 @@ export const Node = forwardRef<NodeComponent, NodeProps>(function Node(
         latestRef.current.callbacks.onSizeChange,
         latestRef.current.onSizeChange,
       );
-      setBox({ w: event.width, h: event.height });
     };
-    node.callbacks.onResizeCommit = (event) =>
+    node.callbacks.onGeometryChanged = (event) =>
       invoke(
         event,
-        original.onResizeCommit,
-        latestRef.current.callbacks.onResizeCommit,
-        latestRef.current.onResizeCommit,
-      );
-    node.callbacks.onDragCommit = (event) =>
-      invoke(
-        event,
-        original.onDragCommit,
-        latestRef.current.callbacks.onDragCommit,
-        latestRef.current.onDragCommit,
+        original.onGeometryChanged,
+        latestRef.current.callbacks.onGeometryChanged,
+        latestRef.current.onGeometryChanged,
       );
     setLineList([...node.getAllOutgoingLines()]);
+    const boundElement = nodeDomRef.current;
 
     return () => {
       node.callbacks.canStartDrag = original.canStartDrag;
@@ -217,14 +206,15 @@ export const Node = forwardRef<NodeComponent, NodeProps>(function Node(
       node.callbacks.resolveSelectionMode = original.resolveSelectionMode;
       node.callbacks.onDragStart = original.onDragStart;
       node.callbacks.onDrag = original.onDrag;
-      node.callbacks.onDragCommit = original.onDragCommit;
+      node.callbacks.onGeometryChanged = original.onGeometryChanged;
       node.callbacks.onSelectionChange = original.onSelectionChange;
       node.callbacks.onResizeHandleChange = original.onResizeHandleChange;
       node.callbacks.onLinesChanged = original.onLinesChanged;
       node.callbacks.onSizeChange = original.onSizeChange;
-      node.callbacks.onResizeCommit = original.onResizeCommit;
       if (ownsNodeRef.current) {
-        node.destroy();
+        node.destroy(false);
+      } else if (boundElement) {
+        node.detachElement(boundElement);
       }
     };
   }, [node]);
@@ -235,25 +225,21 @@ export const Node = forwardRef<NodeComponent, NodeProps>(function Node(
   }, [node, x, y]);
 
   useLayoutEffect(() => {
-    setBox(
-      width == null && height == null
-        ? null
-        : { w: width ?? node.hitBox.width, h: height ?? node.hitBox.height },
-    );
+    if (!node.element || (width == null && height == null)) return;
+    const nextWidth = width ?? node.hitBox.width;
+    const nextHeight = height ?? node.hitBox.height;
+    if (width != null) node.element.style.width = `${width}px`;
+    if (height != null) node.element.style.height = `${height}px`;
+    node.setSizeState(nextWidth, nextHeight);
+    node.remeasureDomGeometry();
   }, [node, width, height]);
-
-  useLayoutEffect(() => {
-    if (!node.element || !box) return;
-    node.setSizeState(box.w, box.h);
-    node.syncDomGeometry();
-  }, [node, box]);
 
   const handleSize =
     resizeHandleThickness ?? DEFAULT_RESIZE_HANDLE_THICKNESS;
   return (
-    <NodeObjectContext.Provider value={node}>
+    <NodeMirrorContext.Provider value={node}>
       {lineList.map((line) => (
-        <LineRenderer key={line.id} line={line} />
+        <LineRenderer key={line.lineId} line={line} />
       ))}
       <div
         {...elementProps}
@@ -264,7 +250,8 @@ export const Node = forwardRef<NodeComponent, NodeProps>(function Node(
           position: "absolute",
           transformOrigin: "top left",
           willChange: "transform",
-          ...(box ? { width: `${box.w}px`, height: `${box.h}px` } : null),
+          ...(width != null ? { width: `${width}px` } : null),
+          ...(height != null ? { height: `${height}px` } : null),
           ...style,
         }}
       >
@@ -294,13 +281,13 @@ export const Node = forwardRef<NodeComponent, NodeProps>(function Node(
           />
         ))}
       </div>
-    </NodeObjectContext.Provider>
+    </NodeMirrorContext.Provider>
   );
 });
 
 /** Callback ref for declaring any descendant as a node drag surface. */
 export function useNodeHandle(): RefCallback<HTMLElement> {
-  const node = useContext(NodeObjectContext);
+  const node = useContext(NodeMirrorContext);
   const cleanup = useRef<(() => void) | null>(null);
   return (element) => {
     cleanup.current?.();

@@ -20,23 +20,38 @@
   } = $props();
 
   let snapshot = $state<PlacementSnapshot<T>>(controller.snapshot);
+  let latestSnapshot = controller.snapshot;
 
   $effect(() => {
     const current = controller;
-    const previousOnChange = current.callbacks.onChange;
-    const onChange = (next: PlacementSnapshot<T>) => {
-      snapshot = next;
-      previousOnChange?.(next);
-    };
-    snapshot = current.snapshot;
-    current.callbacks.onChange = onChange;
-
-    return () => {
-      if (current.callbacks.onChange === onChange) {
-        current.callbacks.onChange = previousOnChange;
+    return current.onStateChange((next) => {
+      const previous = latestSnapshot;
+      latestSnapshot = next;
+      if (
+        previous.active !== next.active ||
+        previous.payload !== next.payload ||
+        previous.size !== next.size ||
+        (previous.position === null) !== (next.position === null)
+      ) {
+        snapshot = next;
       }
-    };
+    });
   });
+
+  function bindPlacementGeometry(element: HTMLDivElement) {
+    const cleanup = controller.bindGeometryWriter((geometry) => {
+      element.style.visibility = geometry.visible ? "visible" : "hidden";
+      element.style.transform = geometry.position
+        ? `translate3d(${geometry.position.x}px, ${geometry.position.y}px, 0)`
+        : "translate3d(0px, 0px, 0)";
+      if (geometry.size) {
+        element.style.width = `${geometry.size.width}px`;
+        element.style.height = `${geometry.size.height}px`;
+      }
+      element.dataset.allowed = String(geometry.allowed);
+    });
+    return { destroy: cleanup };
+  }
 
   function onPointerMove(event: PointerEvent): void {
     if (!controller.snapshot.active) return;
@@ -78,6 +93,13 @@
   onkeydown={onKeyDown}
 />
 
-{#if snapshot.active && preview}
-  {@render preview(snapshot)}
+{#if snapshot.active}
+  <div
+    use:bindPlacementGeometry
+    data-snapline-type="placement-preview"
+    data-allowed={String(snapshot.allowed)}
+    style="position: absolute; pointer-events: none; transform-origin: top left; visibility: hidden; will-change: transform;"
+  >
+    {@render preview?.(snapshot)}
+  </div>
 {/if}

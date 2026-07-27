@@ -25,36 +25,83 @@ npm install react react-dom @snap-engine/snapline-react
 ```svelte framework=svelte
 <script lang="ts">
   import { Engine } from "@snap-engine/asset-base-svelte";
-  import { Connector, Node, Select } from "@snap-engine/snapline-svelte";
+  import {
+    Connector,
+    ControlledGraph,
+    Node,
+    Select,
+  } from "@snap-engine/snapline-svelte";
+  import type { LineChangeRequest, LineRecord } from "@snap-engine/snapline";
+
+  // Your document owns the lines; each gesture proposes one atomic change.
+  let lines = $state<LineRecord[]>([]);
+  function applyRequest(request: LineChangeRequest) {
+    lines = [
+      ...lines
+        .filter((record) => !request.remove.includes(record.id))
+        .map((record) => {
+          const update = request.update.find((u) => u.id === record.id);
+          return update
+            ? { ...record, toConnectorId: update.toConnectorId }
+            : record;
+        }),
+      ...request.add,
+    ];
+  }
 </script>
 
 <Engine>
   <Select />
-  <Node x={80} y={90} className="node">
+  <ControlledGraph {lines} onLineChangeRequest={applyRequest} />
+  <Node id="source" x={80} y={90} className="node">
     <strong>Source</strong>
-    <Connector name="value" maxConnectors={-1} />
+    <Connector id="source:value" name="value" rules={{ maxIncoming: 0 }} />
   </Node>
-  <Node x={360} y={180} className="node">
+  <Node id="result" x={360} y={180} className="node">
     <strong>Result</strong>
-    <Connector name="value" maxConnectors={1} allowDragOut={false} />
+    <Connector id="result:value" name="value" rules={{ maxOutgoing: 0, maxIncoming: 1 }} />
   </Node>
 </Engine>
 ```
 
 ```tsx framework=react
-import { Connector, Engine, Node, Select } from "@snap-engine/snapline-react";
+import { useCallback, useState } from "react";
+import {
+  Connector,
+  ControlledGraph,
+  Engine,
+  Node,
+  Select,
+} from "@snap-engine/snapline-react";
+import type { LineChangeRequest, LineRecord } from "@snap-engine/snapline";
 
 export function Graph() {
+  // Your document owns the lines; each gesture proposes one atomic change.
+  const [lines, setLines] = useState<LineRecord[]>([]);
+  const applyRequest = useCallback((request: LineChangeRequest) => {
+    setLines((current) => [
+      ...current
+        .filter((record) => !request.remove.includes(record.id))
+        .map((record) => {
+          const update = request.update.find((u) => u.id === record.id);
+          return update
+            ? { ...record, toConnectorId: update.toConnectorId }
+            : record;
+        }),
+      ...request.add,
+    ]);
+  }, []);
   return (
     <Engine>
       <Select />
-      <Node x={80} y={90} className="node">
+      <ControlledGraph lines={lines} onLineChangeRequest={applyRequest} />
+      <Node id="source" x={80} y={90} className="node">
         <strong>Source</strong>
-        <Connector name="value" maxConnectors={-1} />
+        <Connector id="source:value" name="value" rules={{ maxIncoming: 0 }} />
       </Node>
-      <Node x={360} y={180} className="node">
+      <Node id="result" x={360} y={180} className="node">
         <strong>Result</strong>
-        <Connector name="value" maxConnectors={1} allowDragOut={false} />
+        <Connector id="result:value" name="value" rules={{ maxOutgoing: 0, maxIncoming: 1 }} />
       </Node>
     </Engine>
   );
@@ -64,25 +111,54 @@ export function Graph() {
 ```ts framework=vanilla
 import { Engine } from "@snap-engine/core";
 import { CollisionEngine } from "@snap-engine/core/collision";
-import { ConnectorComponent, NodeComponent } from "@snap-engine/snapline";
+import {
+  ConnectorMirror,
+  NodeMirror,
+  attachControlledGraph,
+  type LineRecord,
+} from "@snap-engine/snapline";
 
 const engine = new Engine();
 engine.setCollisionEngine(new CollisionEngine());
 engine.assignDom(document.querySelector("#graph")!);
 
-const source = new NodeComponent(engine, null);
+// A vanilla app owns the graph with a plain module: hold the records,
+// apply each atomic proposal, and push the latest snapshot back.
+let lines: LineRecord[] = [];
+const handle = attachControlledGraph(engine, {
+  onLineChangeRequest(request) {
+    lines = [
+      ...lines
+        .filter((record) => !request.remove.includes(record.id))
+        .map((record) => {
+          const update = request.update.find((u) => u.id === record.id);
+          return update
+            ? { ...record, toConnectorId: update.toConnectorId }
+            : record;
+        }),
+      ...request.add,
+    ];
+    handle.setCanonicalGraph({ lines });
+  },
+});
+handle.setCanonicalGraph({ lines });
+
+const source = new NodeMirror(engine, null, { id: "source" });
 source.element = document.querySelector("#source")!;
 source.worldTransform = { x: 80, y: 90 };
-source.syncDomGeometry();
+source.remeasureDomGeometry();
 
-const output = new ConnectorComponent(engine, source, {
+const output = new ConnectorMirror(engine, source, {
+  id: "source:value",
   name: "value",
-  maxConnectors: -1,
-  allowDragOut: true,
+  rules: { maxIncoming: 0 },
 });
 source.addConnectorObject(output);
 ```
 
 Adapters create and destroy core objects automatically unless you supply an
-existing object. Vanilla integrations assign committed DOM elements and call
-`syncDomGeometry()` after layout.
+existing object. Topology is always controlled: your line records are the
+single source of truth, gestures arrive as one atomic `LineChangeRequest`
+each, and adopting a proposed line's id settles the dragged line in place.
+Vanilla integrations assign committed DOM elements and call
+`remeasureDomGeometry()` after layout.
