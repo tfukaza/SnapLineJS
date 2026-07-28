@@ -1,59 +1,13 @@
-import type { LineMirror } from "./line";
+import type { LineMirror } from "../line";
 import type {
-  ConnectorId,
-  GraphMirror,
+  CanonicalGraphSnapshot,
+  ControlledGraphCallbacks,
+  LineChangeRequest,
   LineId,
+  LineRecord,
   ReconciliationError,
-} from "./graph-mirror";
-
-/** Canonical committed relationship, owned by the application. */
-export interface LineRecord {
-  id: LineId;
-  fromConnectorId: ConnectorId;
-  toConnectorId: ConnectorId;
-  payload?: unknown;
-}
-
-/** The application-pushed canonical document. Node and connector existence
- * stays framework-mount-led; the snapshot carries the line records. */
-export interface CanonicalGraphSnapshot {
-  lines: readonly LineRecord[];
-}
-
-/** A gesture-created line proposed to the canonical owner. The `id` is
- * minted by SnapLine; adopting it settles the staged mirror in place. */
-export interface ProposedLine {
-  id: LineId;
-  fromConnectorId: ConnectorId;
-  toConnectorId: ConnectorId;
-  payload?: unknown;
-}
-
-export interface LineEndpointUpdate {
-  id: LineId;
-  toConnectorId: ConnectorId;
-}
-
-/** One atomic proposal for the application to change canonical records. */
-export interface LineChangeRequest {
-  intent: "connect" | "disconnect" | "replace" | "reconnect";
-  add: readonly ProposedLine[];
-  remove: readonly LineId[];
-  update: readonly LineEndpointUpdate[];
-}
-
-export interface ControlledGraphCallbacks {
-  onLineChangeRequest(request: LineChangeRequest): void;
-  onDiagnosticsChanged?(diagnostics: readonly ReconciliationError[]): void;
-}
-
-/** What `attachControlledGraph()` hands the adapter. */
-export interface ControlledGraphHandle {
-  setCanonicalGraph(snapshot: CanonicalGraphSnapshot): void;
-  /** Run any pending reconciliation synchronously (vanilla/tests). */
-  flush(): void;
-  dispose(): void;
-}
+} from "../types";
+import type { GraphRegistry } from "./graph-registry";
 
 // Converges the engine's line mirrors onto the cached canonical snapshot.
 // Read-only with respect to canonical state: reconciliation never emits a
@@ -62,13 +16,13 @@ export interface ControlledGraphHandle {
 // endpoints not mounted; silent) or errored (rules violation; structured
 // diagnostic), and is retried when relevant state changes.
 export class LineReconciler {
-  #mirror: GraphMirror;
+  #mirror: GraphRegistry;
   #callbacks: ControlledGraphCallbacks;
   #snapshot: CanonicalGraphSnapshot = { lines: [] };
   #reconciling = false;
   #disposed = false;
 
-  constructor(mirror: GraphMirror, callbacks: ControlledGraphCallbacks) {
+  constructor(mirror: GraphRegistry, callbacks: ControlledGraphCallbacks) {
     this.#mirror = mirror;
     this.#callbacks = callbacks;
   }

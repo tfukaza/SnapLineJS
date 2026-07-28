@@ -1015,7 +1015,7 @@ class InputControl {
   // hitbox's object (collider.parent), so the whole gesture flows to it through
   // the normal owner dispatch. Synchronous point test — independent of the
   // frame-delayed collision sweep. The registry shape is declared in
-  // snapline's snapline-globals.ts (engine core cannot import snapline, hence
+  // snapline's internal/shared-data.ts (engine core cannot import snapline, hence
   // the structural type here) — keep the two in sync.
   #resolveResizeOwner(position: eventPosition): ElementObject | null {
     const handles = this.global?.data?.resizeHandles as
@@ -1038,7 +1038,7 @@ class InputControl {
   // Headless connector surfaces can extend beyond their parent node's DOM box.
   // SnapLine registers them in global.data so pointerdown ownership can be
   // resolved geometrically before composedPath routing. The registry shape is
-  // declared in snapline-globals.ts (engine core cannot import SnapLine).
+  // declared in internal/shared-data.ts (engine core cannot import SnapLine).
   #resolveSourceSurfaceOwner(position: eventPosition): ElementObject | null {
     const surfaces = this.global?.data?.sourceSurfaces as
       | Array<{

@@ -703,7 +703,7 @@ document, structured diagnostics, and engine scoping are all shipped:
 | Hydration/policy separation         | Conforms       | Strict record admission never evicts; refusals become structured diagnostics      |
 | Atomic replacement request          | Conforms       | One `LineChangeRequest`; evictions ride the `"replace"` intent                    |
 | Read-only topology views            | Conforms       | Snapshot getters; getter-backed `LineMirror`; topology mutators are `@internal`   |
-| Unified mirror registry             | Conforms       | `GraphMirror` indexes nodes, connectors, and settled lines; one enumeration path  |
+| Unified mirror registry             | Conforms       | `GraphRegistry` indexes nodes, connectors, and settled lines; one enumeration path  |
 | Engine isolation                    | Conforms       | Selection, groups, `resizingNode`, and the reconciler are engine-scoped           |
 | Diagnostics                         | Conforms       | Derived `ReconciliationError`s via `onDiagnosticsChanged` / `query().diagnostics()` |
 | Geometry authority                  | Decided        | SnapLine-owned visual cue; one batched `onGeometryChanged` observation, no controlled-geometry mode |
@@ -720,10 +720,10 @@ is implemented:
    supported when both endpoints set `allowParallel`.
 3. Connector identity? Typed `id` props/config (graph-global `connectorId`);
    the `identity(connector)` callback is gone.
-4. `NodeManager`? Became the internal `GraphMirror` registry with the public
+4. `NodeManager`? Became the internal `GraphRegistry` registry with the public
    read-only `GraphQuery` facade (`query(engine)`).
 5. Central line registry? Yes — settled lines index by `lineId` in
-   `GraphMirror`; `query(engine).line(id)` looks them up.
+   `GraphRegistry`; `query(engine).line(id)` looks them up.
 6. Hydration policy? Strict admission that never evicts, with structured
    `ReconciliationError` diagnostics; canonical records are never rewritten.
 7. Atomic replace/reconnect? Yes — one `LineChangeRequest` per gesture with
@@ -734,7 +734,7 @@ is implemented:
 9. Geometry props? Neither controlled nor negotiated — geometry is
    SnapLine-owned and observed through one batched `onGeometryChanged`.
 10. Selection and groups? They remain SnapLine-owned derived state,
-    engine-scoped on `GraphMirror` (framework owns the visuals).
+    engine-scoped on `GraphRegistry` (framework owns the visuals).
 11. Mixed controlled/unmanaged engines? Moot — the unmanaged mode was
     eliminated; vanilla consumers drive the same controlled contract from a
     plain graph-owner module.

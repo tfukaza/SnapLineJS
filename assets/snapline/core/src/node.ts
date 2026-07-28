@@ -11,8 +11,12 @@ import type {
   pointerMoveProp,
 } from "@snap-engine/core";
 import { RectCollider } from "@snap-engine/core/collision";
-import { getGraphMirror, getResizeHandles, snapData } from "./snapline-globals";
-import { mintDomainId } from "./graph-mirror";
+import {
+  getGraphRegistry,
+  getResizeHandles,
+  snapData,
+} from "./internal/shared-data";
+import { mintDomainId } from "./internal/graph-registry";
 import type { SnapLineMetadata } from "./connector";
 
 export type ResizeHandle = "n" | "ne" | "e" | "se" | "s" | "sw" | "w" | "nw";
@@ -400,7 +404,7 @@ class NodeMirror extends ElementObject {
     this.#config = mergeConfig(DEFAULT_NODE_CONFIG, config);
     this.#callbacks = this.#config.callbacks;
     this.nodeId = config.id ?? mintDomainId("node", this.global);
-    getGraphMirror(this.engine).registerNode(this);
+    getGraphRegistry(this.engine).registerNode(this);
     const resizeEnabled =
       config.resizable === true || config.resizeHandles !== undefined;
     this.#resizeHandles = !resizeEnabled
@@ -499,7 +503,7 @@ class NodeMirror extends ElementObject {
       selected: String(selected),
       "snapline-state": selected ? "focus" : "idle",
     };
-    const selectList = getGraphMirror(this.engine).selection;
+    const selectList = getGraphRegistry(this.engine).selection;
     if (selected) {
       if (!selectList.includes(this)) {
         selectList.push(this);
@@ -515,7 +519,7 @@ class NodeMirror extends ElementObject {
     this.#callbacks.onSelectionChange?.({
       node: this,
       selected,
-      selection: [...getGraphMirror(this.engine).selection],
+      selection: [...getGraphRegistry(this.engine).selection],
     });
   }
 
@@ -799,7 +803,7 @@ class NodeMirror extends ElementObject {
     this.engine.input.claimPointer(e.event.pointerId);
 
     this._hasMoved = false;
-    const selection = [...getGraphMirror(this.engine).selection];
+    const selection = [...getGraphRegistry(this.engine).selection];
     this.#selectedAtPointerDown = selection.includes(this);
     this.#pointerSelectionMode =
       this.#callbacks.resolveSelectionMode?.({
@@ -813,7 +817,7 @@ class NodeMirror extends ElementObject {
       this.#pointerSelectionMode === "replace" &&
       !this.#selectedAtPointerDown
     ) {
-      for (const node of [...getGraphMirror(this.engine).selection]) {
+      for (const node of [...getGraphRegistry(this.engine).selection]) {
         node.setSelected(false);
       }
       this.setSelected(true);
@@ -838,7 +842,7 @@ class NodeMirror extends ElementObject {
       this.#mouseDownY = prop.start.y;
       this._hasMoved = true;
       // Guard so releasing a resize over another node doesn't click-select it.
-      getGraphMirror(this.engine).resizingNode = this;
+      getGraphRegistry(this.engine).resizingNode = this;
       return;
     }
     if (!this.#config.lockPosition && this.#config.edgePan) {
@@ -849,7 +853,7 @@ class NodeMirror extends ElementObject {
         (position) => this.#moveSelectionToPointer(position),
       );
     }
-    const selected = [...getGraphMirror(this.engine).selection];
+    const selected = [...getGraphRegistry(this.engine).selection];
     this.#dragRoots = selected.filter(
       (node) =>
         !selected.some(
@@ -976,7 +980,7 @@ class NodeMirror extends ElementObject {
         this.#resizing = false;
         this.#resizeArmed = false;
         this.#activeResizeHandle = null;
-        getGraphMirror(this.engine).resizingNode = null;
+        getGraphRegistry(this.engine).resizingNode = null;
         this.#dragPointerId = null;
         // No target element: dragEndProp carries no originating event. activate()
         // still writes the node and container cursors, and the next pointermove
@@ -989,7 +993,7 @@ class NodeMirror extends ElementObject {
       // this an authored size the stylesheet refused would stick.
       this.remeasureDomGeometry();
       // A resized node's center may have moved into/out of a group.
-      for (const group of getGraphMirror(this.engine).groups) {
+      for (const group of getGraphRegistry(this.engine).groups) {
         if ((group as unknown) !== this) group.refreshMembership(true);
       }
       return;
@@ -1010,7 +1014,7 @@ class NodeMirror extends ElementObject {
     // membership on settle (never at group-drag-start), so the maintained set is
     // current before the next group drag. The graph mirror's type-only group
     // reference keeps node.ts free of any group value import.
-    for (const group of getGraphMirror(this.engine).groups) {
+    for (const group of getGraphRegistry(this.engine).groups) {
       group.refreshMembership(true);
     }
     this.emitGeometryChange();
@@ -1039,7 +1043,7 @@ class NodeMirror extends ElementObject {
   protected getDragCommitNodes(): NodeMirror[] {
     return this.#dragCommitNodes.length
       ? [...this.#dragCommitNodes]
-      : [...getGraphMirror(this.engine).selection];
+      : [...getGraphRegistry(this.engine).selection];
   }
 
   onUp(prop: pointerUpProp) {
@@ -1048,7 +1052,7 @@ class NodeMirror extends ElementObject {
     // pointerUp is dispatched to whatever is under the release point, which for a
     // resize may be a DIFFERENT node than the one being resized. Skip click-select
     // while any resize is settling so releasing a resize doesn't select this node.
-    if (getGraphMirror(this.engine).resizingNode) return;
+    if (getGraphRegistry(this.engine).resizingNode) return;
     if (this.#resizeArmed) {
       this.#resizeArmed = false;
       this.#activeResizeHandle = null;
@@ -1058,7 +1062,7 @@ class NodeMirror extends ElementObject {
 
     if (this._hasMoved == false) {
       if (this.#pointerSelectionMode === "replace") {
-        for (const node of [...getGraphMirror(this.engine).selection]) {
+        for (const node of [...getGraphRegistry(this.engine).selection]) {
           if (node !== this) node.setSelected(false);
         }
         this.setSelected(true);
@@ -1115,7 +1119,7 @@ class NodeMirror extends ElementObject {
       // disconnect — keep the reason contract honest for intent consumers.
       connector.deleteAllLines("teardown");
     }
-    getGraphMirror(this.engine).unregisterNode(this);
+    getGraphRegistry(this.engine).unregisterNode(this);
     this.setSelected(false);
     if (this.#resizeHitBoxes.size > 0) {
       const ownedHandles = new Set(this.#resizeHitBoxes.values());

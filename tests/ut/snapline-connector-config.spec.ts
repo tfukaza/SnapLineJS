@@ -7,7 +7,7 @@ import {
   PlacementController,
   type ConnectorSurfaceStrategy,
 } from "../../assets/snapline/core/src";
-import { getGraphMirror } from "../../assets/snapline/core/src/snapline-globals";
+import { getGraphRegistry } from "../../assets/snapline/core/src";
 
 import {
   createControlledHarness,
@@ -157,7 +157,7 @@ test("connector config updates stay live without replacing topology", () => {
     ],
   });
   handle.flush();
-  const existingLine = getGraphMirror(engine).line("cfg-line")!;
+  const existingLine = getGraphRegistry(engine).line("cfg-line")!;
   expect(source.outgoingLines).toEqual([existingLine]);
 
   const strategy: ConnectorSurfaceStrategy = {

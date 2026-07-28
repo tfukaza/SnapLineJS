@@ -15,7 +15,7 @@ Related:
 
 This document is a delta from the current implementation and contains only
 work that has not landed. Everything previously specified here — the
-vocabulary and `*Mirror` renames, stable domain identity, the `GraphMirror`
+vocabulary and `*Mirror` renames, stable domain identity, the `GraphRegistry`
 registry, engine scoping, `ConnectorRules`, the controlled line protocol
 (`attachControlledGraph` / `setCanonicalGraph` / `onLineChangeRequest`),
 batching, diagnostics, the `ControlledGraph` adapters, property-propagation

@@ -56,7 +56,6 @@ export type {
   LineMirrorPhase,
   LineStateSnapshot,
 } from "./line";
-export type { GeometryWriter } from "./geometry";
 export {
   GroupNodeMirror,
   getParentGroup,
@@ -92,20 +91,20 @@ export type {
   PlacementSize,
   PlacementSnapshot,
 } from "./placement";
-export type {
-  NodeId,
-  ConnectorId,
-  LineId,
-  ReconciliationError,
-  GraphBatch,
-} from "./graph-mirror";
-export { attachControlledGraph } from "./snapline-globals";
+export { attachControlledGraph } from "./controlled-graph";
+export { getGraphRegistry } from "./internal/shared-data";
 export type {
   CanonicalGraphSnapshot,
+  ConnectorId,
   ControlledGraphCallbacks,
   ControlledGraphHandle,
+  GeometryWriter,
+  GraphBatch,
   LineChangeRequest,
   LineEndpointUpdate,
+  LineId,
   LineRecord,
+  NodeId,
   ProposedLine,
-} from "./line-reconciler";
+  ReconciliationError,
+} from "./types";

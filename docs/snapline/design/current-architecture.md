@@ -56,7 +56,7 @@ flowchart TB
   ADAPTER["React / Svelte adapters<br/><b>mount lifecycle + ControlledGraph bridge</b>"]
   RECON["LineReconciler<br/><b>converges line mirrors onto the snapshot</b>"]
   MIRRORS["Runtime mirrors<br/><b>NodeMirror, ConnectorMirror, LineMirror, GroupNodeMirror</b>"]
-  REGISTRY["GraphMirror (per engine)<br/><b>registries, ids, selection, groups, scheduler</b>"]
+  REGISTRY["GraphRegistry (per engine)<br/><b>registries, ids, selection, groups, scheduler</b>"]
   ENGINE["SnapEngine mechanics<br/><b>input, collision, transforms, scheduling</b>"]
   DOM["Framework-owned DOM"]
 
@@ -82,7 +82,7 @@ application's records and mounted components.
 
 1. The adapter renders a `Node`/`Connector` from application state and
    constructs the mirror; the constructor registers it with the engine's
-   `GraphMirror` under its domain id (`config.id` or minted).
+   `GraphRegistry` under its domain id (`config.id` or minted).
 2. The adapter assigns the committed DOM element and calls
    `remeasureDomGeometry()` (nodes) / relies on the connector's scheduled
    local-center measurement. A connector may stay headless (virtual) and use
@@ -170,7 +170,7 @@ Key properties:
   rejection-by-inaction all resolve from the next snapshot — rejection needs
   no code path.
 - **Gestures are serial.** One in-flight request per engine
-  (`GraphMirror.pendingGestureRequest`); a second dispatch before the pass
+  (`GraphRegistry.pendingGestureRequest`); a second dispatch before the pass
   warns about a stalled adapter push.
 - **No graph owner, no gesture.** A drop on an engine without an attached
   reconciler warns and discards the preview — there is no document to
@@ -278,7 +278,7 @@ never round-trip the framework:
 
 Selection is logically SnapLine-owned — core behaviors such as multi-node
 dragging need the selected set synchronously — and **engine-scoped** on
-`GraphMirror.selection`. `setSelected()` maintains the list, writes
+`GraphRegistry.selection`. `setSelected()` maintains the list, writes
 `data-selected`/`data-snapline-state`, and emits `onSelectionChange`. The
 framework is the visual owner; the consumer supplies pointer policy through
 `resolveSelectionMode` (SnapLine owns no modifier keys). `RectSelectController`
@@ -294,9 +294,9 @@ resize settles.
 
 ## Registries
 
-### GraphMirror (per engine)
+### GraphRegistry (per engine)
 
-`getGraphMirror(engine)` lazy-creates the engine-scoped registry the first
+`getGraphRegistry(engine)` lazy-creates the engine-scoped registry the first
 time any mirror registers (constructors register, `destroy()` unregisters —
 no adapter wiring). It holds:
 
@@ -327,13 +327,13 @@ same registry reads and were removed.
 
 ### What stays on global.data, and why
 
-`SnapLineSharedData` (typed by `snapline-globals.ts`) now holds only:
+`SnapLineSharedData` (typed by `internal/shared-data.ts`) now holds only:
 
 - `resizeHandles` and `sourceSurfaces` — engine core's `input.ts` duck-reads
   these to route pointerdowns to resize hitboxes and headless source
   surfaces (engine core cannot import snapline, so the contract is
   structural and lives on the shared bag);
-- the `graphMirrors` WeakMap keying each engine to its `GraphMirror`
+- the `graphRegistries` WeakMap keying each engine to its `GraphRegistry`
   (GlobalManager is application-wide; the WeakMap lets a destroyed engine
   release its registry);
 - the deprecated `allowCameraControl` boolean for third-party camera
@@ -342,7 +342,7 @@ same registry reads and were removed.
 ## Scheduler and batching
 
 All reconciliation triggers funnel through
-`GraphMirror.scheduleReconciliation()`: one microtask pass per burst, so a
+`GraphRegistry.scheduleReconciliation()`: one microtask pass per burst, so a
 bulk mount of 100 nodes runs one pass, not one per connector.
 `beginBatch()` opens a nestable bulk boundary — no partial pass runs until
 the outermost idempotent `end()`, which schedules one final pass if anything
@@ -393,7 +393,7 @@ There is **no imperative public topology API**: `deleteLine()`,
 record-driven settle/retarget/discard methods are `@internal`
 (reconciler/teardown-only), and connecting two connectors imperatively is
 not possible — applications create and remove lines by changing their
-records. `GraphMirror` and `LineReconciler` are internal classes reached
+records. `GraphRegistry` and `LineReconciler` are internal classes reached
 only through `attachControlledGraph` and `query`. `LineMirror` state is
 getter-backed: `start`, `target`, `payload`, `phase`, `candidate`, and
 anchors are read-only publicly, and `LineMirrorPhase` is
@@ -421,7 +421,7 @@ types). Adapter contracts:
 | ----------------------------- | ------------------------------ | ---------------------------------------------------------------------- |
 | Domain node/connector records | Application/framework          | Expressed by mounting components with stable `id` props                |
 | Canonical line records        | Application                    | `LineRecord[]` pushed via `setCanonicalGraph`; SnapLine never edits it  |
-| Mounted mirrors               | Framework lifecycle            | Constructors register with `GraphMirror`; `destroy()` unregisters       |
+| Mounted mirrors               | Framework lifecycle            | Constructors register with `GraphRegistry`; `destroy()` unregisters       |
 | Settled line mirrors          | LineReconciler                 | Derived from records; preserved by stable `lineId`                      |
 | Preview/staged lines          | SnapLine gesture               | Ephemeral; staged outcome awaits the canonical decision                 |
 | Gesture outcome               | Application                    | One atomic `LineChangeRequest`; adopt the proposed id to settle in place |
@@ -437,7 +437,7 @@ types). Adapter contracts:
 | Concern                                  | Primary implementation                          |
 | ---------------------------------------- | ----------------------------------------------- |
 | Public exports                           | `assets/snapline/core/src/index.ts`             |
-| Engine-scoped registry, ids, scheduler   | `assets/snapline/core/src/graph-mirror.ts`      |
+| Engine-scoped registry, ids, scheduler   | `assets/snapline/core/src/internal/graph-registry.ts`      |
 | Controlled line reconciliation, records  | `assets/snapline/core/src/line-reconciler.ts`   |
 | Connector rules, gestures, admission     | `assets/snapline/core/src/connector.ts`         |
 | Node lifecycle, drag/resize, geometry    | `assets/snapline/core/src/node.ts`              |
@@ -446,7 +446,7 @@ types). Adapter contracts:
 | Rectangle selection                      | `assets/snapline/core/src/select.ts`            |
 | Placement state machine                  | `assets/snapline/core/src/placement.ts`         |
 | Read-only query facade                   | `assets/snapline/core/src/query.ts`             |
-| Shared global.data + attachControlledGraph | `assets/snapline/core/src/snapline-globals.ts` |
+| Shared global.data + attachControlledGraph | `assets/snapline/core/src/internal/shared-data.ts` |
 | Geometry writer type                     | `assets/snapline/core/src/geometry.ts`          |
 | Svelte adapters (incl. ControlledGraph)  | `assets/snapline/svelte/src/*.svelte`           |
 | React adapters (incl. ControlledGraph)   | `assets/snapline/react/src/*.tsx`               |

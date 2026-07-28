@@ -1,11 +1,6 @@
 import type { RectCollider } from "@snap-engine/core/collision";
 import type { eventPosition } from "@snap-engine/core";
-import { GraphMirror } from "./graph-mirror";
-import {
-  LineReconciler,
-  type ControlledGraphCallbacks,
-  type ControlledGraphHandle,
-} from "./line-reconciler";
+import { GraphRegistry } from "./graph-registry";
 
 /**
  * Structural source-surface contract shared with engine input. Keeping this
@@ -52,12 +47,12 @@ export interface SnapLineSharedData {
   allowCameraControl?: boolean;
   /**
    * Per-engine SnapLine registries. GlobalManager is application-wide, so the
-   * map is keyed by engine; `getGraphMirror` lazy-creates entries the first
+   * map is keyed by engine; `getGraphRegistry` lazy-creates entries the first
    * time a SnapLine mirror registers on that engine. WeakMap so a destroyed
    * engine releases its registry (and every mirror it indexes) — nothing ever
    * enumerates this map.
    */
-  graphMirrors?: WeakMap<object, GraphMirror>;
+  graphRegistries?: WeakMap<object, GraphRegistry>;
 }
 
 /** Typed view over the untyped global data bag (cast at the boundary). */
@@ -71,52 +66,28 @@ export function getResizeHandles(global: { data: any }): RectCollider[] {
   return data.resizeHandles;
 }
 
-export function getSourceSurfaces(global: {
-  data: any;
-}): SourceSurfaceOwner[] {
+export function getSourceSurfaces(global: { data: any }): SourceSurfaceOwner[] {
   const data = snapData(global);
   if (!data.sourceSurfaces) data.sourceSurfaces = [];
   return data.sourceSurfaces;
 }
 
-
-export function getGraphMirror(engine: {
+/** The per-engine registry, lazy-created on first access. */
+export function getGraphRegistry(engine: {
   global: { data: any } | null;
-}): GraphMirror {
+}): GraphRegistry {
   if (!engine.global) {
-    throw new Error("SnapLine: getGraphMirror requires an initialized engine.");
-  }
-  const data = snapData(engine.global);
-  if (!data.graphMirrors) data.graphMirrors = new WeakMap();
-  const key = engine as unknown as object;
-  let mirror = data.graphMirrors.get(key);
-  if (!mirror) {
-    mirror = new GraphMirror(engine);
-    data.graphMirrors.set(key, mirror);
-  }
-  return mirror;
-}
-
-/**
- * Attach the controlled-graph bridge: declares "controlled" authority,
- * installs the line reconciler, and returns the handle the application (or
- * adapter) pushes canonical snapshots through.
- */
-export function attachControlledGraph(
-  engine: { global: { data: any } | null },
-  callbacks: ControlledGraphCallbacks,
-): ControlledGraphHandle {
-  const mirror = getGraphMirror(engine);
-  if (mirror.reconciler) {
-    console.warn(
-      "SnapLine: replacing this engine's existing controlled-graph bridge.",
+    throw new Error(
+      "SnapLine: getGraphRegistry requires an initialized engine.",
     );
   }
-  const reconciler = new LineReconciler(mirror, callbacks);
-  mirror.reconciler = reconciler;
-  return {
-    setCanonicalGraph: (snapshot) => reconciler.setCanonicalGraph(snapshot),
-    flush: () => mirror.flush(),
-    dispose: () => reconciler.dispose(),
-  };
+  const data = snapData(engine.global);
+  if (!data.graphRegistries) data.graphRegistries = new WeakMap();
+  const key = engine as unknown as object;
+  let registry = data.graphRegistries.get(key);
+  if (!registry) {
+    registry = new GraphRegistry(engine);
+    data.graphRegistries.set(key, registry);
+  }
+  return registry;
 }

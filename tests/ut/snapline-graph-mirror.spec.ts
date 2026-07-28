@@ -4,7 +4,7 @@ import {
   GroupNodeMirror,
   NodeMirror,
 } from "../../assets/snapline/core/src";
-import { getGraphMirror } from "../../assets/snapline/core/src/snapline-globals";
+import { getGraphRegistry } from "../../assets/snapline/core/src";
 import {
   armGesture,
   createControlledHarness,
@@ -36,7 +36,7 @@ test("mirrors mint domain ids when none is supplied and honor supplied ids", () 
 
 test("the graph mirror indexes registrations and drops them on destroy", () => {
   const { engine } = createEngineHarness();
-  const mirror = getGraphMirror(engine);
+  const mirror = getGraphRegistry(engine);
   const node = new NodeMirror(engine, null, { id: "n1" });
   const connector = new ConnectorMirror(engine, node, {
     id: "c1",
@@ -58,7 +58,7 @@ test("the graph mirror indexes registrations and drops them on destroy", () => {
 
 test("duplicate ids never steal the index: first wins, diagnostic until resolved", () => {
   const { engine } = createEngineHarness();
-  const mirror = getGraphMirror(engine);
+  const mirror = getGraphRegistry(engine);
   const first = new NodeMirror(engine, null, { id: "dup" });
   const second = new NodeMirror(engine, null, { id: "dup" });
 
@@ -82,7 +82,7 @@ test("lines move preview -> settled -> preview and unregister on destroy", () =>
   const restore = installObserverStubs();
   try {
     const { engine, handle } = createControlledHarness();
-    const mirror = getGraphMirror(engine);
+    const mirror = getGraphRegistry(engine);
     const { source } = mountConnectedPair(engine);
 
     // A freshly minted line is a preview, not part of the settled graph.
@@ -121,8 +121,8 @@ test("each engine on a shared GlobalManager gets its own isolated registry", () 
   const nodeA = new NodeMirror(engine, null, { id: "shared-id" });
   const nodeB = new NodeMirror(sibling, null, { id: "shared-id" });
 
-  const mirrorA = getGraphMirror(engine);
-  const mirrorB = getGraphMirror(sibling);
+  const mirrorA = getGraphRegistry(engine);
+  const mirrorB = getGraphRegistry(sibling);
   expect(mirrorA).not.toBe(mirrorB);
   // Same domain id on different engines is not a conflict.
   expect(mirrorA.node("shared-id")).toBe(nodeA);
@@ -141,14 +141,14 @@ test("selection is engine-scoped and removal is identity-based", () => {
 
   nodeA.setSelected(true);
   nodeB.setSelected(true);
-  expect(getGraphMirror(engine).selection).toEqual([nodeA]);
-  expect(getGraphMirror(sibling).selection).toEqual([nodeB]);
+  expect(getGraphRegistry(engine).selection).toEqual([nodeA]);
+  expect(getGraphRegistry(sibling).selection).toEqual([nodeB]);
 
   // Identity-based removal: deselecting A must not evict the same-id node on
   // the sibling engine (the old shared list filtered by id).
   nodeA.setSelected(false);
-  expect(getGraphMirror(engine).selection).toEqual([]);
-  expect(getGraphMirror(sibling).selection).toEqual([nodeB]);
+  expect(getGraphRegistry(engine).selection).toEqual([]);
+  expect(getGraphRegistry(sibling).selection).toEqual([nodeB]);
 });
 
 test("group registries are engine-scoped", () => {
@@ -159,12 +159,12 @@ test("group registries are engine-scoped", () => {
     const groupA = new GroupNodeMirror(engine, null);
     const groupB = new GroupNodeMirror(sibling, null);
 
-    expect(getGraphMirror(engine).groups).toEqual([groupA]);
-    expect(getGraphMirror(sibling).groups).toEqual([groupB]);
+    expect(getGraphRegistry(engine).groups).toEqual([groupA]);
+    expect(getGraphRegistry(sibling).groups).toEqual([groupB]);
 
     groupA.destroy(false);
-    expect(getGraphMirror(engine).groups).toEqual([]);
-    expect(getGraphMirror(sibling).groups).toEqual([groupB]);
+    expect(getGraphRegistry(engine).groups).toEqual([]);
+    expect(getGraphRegistry(sibling).groups).toEqual([groupB]);
     groupB.destroy(false);
   } finally {
     restore();
@@ -196,7 +196,7 @@ test("a gesture without a graph owner warns and discards the preview", () => {
 
 test("the scheduler coalesces bursts and defers passes to the outermost batch end", async () => {
   const { engine } = createEngineHarness();
-  const mirror = getGraphMirror(engine);
+  const mirror = getGraphRegistry(engine);
   let passes = 0;
   mirror.reconciler = {
     reconcile: () => {

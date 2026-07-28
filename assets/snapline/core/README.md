@@ -13,19 +13,11 @@ node types, validation, persistence, and styling.
 npm install @snap-engine/core @snap-engine/snapline
 ```
 
-## Entry points
+## Entry point
 
-- `@snap-engine/snapline`
-- `@snap-engine/snapline/node`
-- `@snap-engine/snapline/connector`
-- `@snap-engine/snapline/line`
-- `@snap-engine/snapline/select`
-- `@snap-engine/snapline/group`
-- `@snap-engine/snapline/placement`
-- `@snap-engine/snapline/query`
-- `@snap-engine/snapline/graph-mirror`
-- `@snap-engine/snapline/line-reconciler`
-- `@snap-engine/snapline/geometry`
+`@snap-engine/snapline` — one entry point, no per-module subpaths. Everything
+public is re-exported from the package root; `core/src/internal/` is
+implementation detail and must not be deep-imported.
 
 ```ts
 import {

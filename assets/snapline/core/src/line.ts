@@ -7,9 +7,9 @@ import type {
   ConnectorPoint,
   ConnectorSurfaceStrategy,
 } from "./connector";
-import type { GeometryWriter } from "./geometry";
-import { getGraphMirror } from "./snapline-globals";
-import { mintDomainId } from "./graph-mirror";
+import type { GeometryWriter } from "./types";
+import { getGraphRegistry } from "./internal/shared-data";
+import { mintDomainId } from "./internal/graph-registry";
 
 /**
  * Explicit line lifetime. "staged" is a gesture that completed locally and
@@ -63,7 +63,7 @@ class LineMirror extends ElementObject {
     this.#start = parent as unknown as ConnectorMirror;
     this.transformMode = "direct";
     this.lineId = config.id ?? mintDomainId("line", this.global);
-    getGraphMirror(this.engine).registerLine(this);
+    getGraphRegistry(this.engine).registerLine(this);
   }
 
   // Read-only outside the mirror's own lifecycle operations.
@@ -127,13 +127,11 @@ class LineMirror extends ElementObject {
   }
 
   override destroy(removeElement: boolean = true): void {
-    getGraphMirror(this.engine).unregisterLine(this);
+    getGraphRegistry(this.engine).unregisterLine(this);
     super.destroy(removeElement);
   }
 
-  bindGeometryWriter(
-    writer: GeometryWriter<LineGeometrySnapshot>,
-  ): () => void {
+  bindGeometryWriter(writer: GeometryWriter<LineGeometrySnapshot>): () => void {
     this.#geometryWriter = writer;
     writer(this.geometrySnapshot());
     return () => {
@@ -219,7 +217,7 @@ class LineMirror extends ElementObject {
     this.#targetHit = candidate?.hit ?? this.#targetHit;
     this.#candidate = null;
     this.#phase = "connected";
-    getGraphMirror(this.engine).settleLine(this);
+    getGraphRegistry(this.engine).settleLine(this);
     this.updateAnchors();
     this.#emitStateChange();
   }
@@ -234,7 +232,7 @@ class LineMirror extends ElementObject {
     this.#targetStrategy = null;
     this.#targetHit = null;
     this.#phase = "preview-free";
-    getGraphMirror(this.engine).unsettleLine(this);
+    getGraphRegistry(this.engine).unsettleLine(this);
     if (changed) this.#emitStateChange();
   }
 

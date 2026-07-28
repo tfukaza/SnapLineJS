@@ -2,13 +2,8 @@ import type { ConnectorMirror } from "./connector";
 import type { GroupNodeMirror } from "./group";
 import type { LineMirror } from "./line";
 import type { NodeMirror } from "./node";
-import type {
-  ConnectorId,
-  LineId,
-  NodeId,
-  ReconciliationError,
-} from "./graph-mirror";
-import { getGraphMirror } from "./snapline-globals";
+import type { ConnectorId, LineId, NodeId, ReconciliationError } from "./types";
+import { getGraphRegistry } from "./internal/shared-data";
 
 type EngineLike = {
   global: {
@@ -39,7 +34,7 @@ export interface GraphQuery {
 
 /** The read-only query facade for one engine's graph. */
 export function query(engine: EngineLike): GraphQuery {
-  const mirror = getGraphMirror(engine);
+  const mirror = getGraphRegistry(engine);
   return {
     nodes: () => mirror.nodes,
     connectors: () => mirror.connectors,

@@ -23,8 +23,13 @@ APIs directly rather than adding compatibility shims.
 - `RectSelectController` - Rectangle selection tool
 - `PlacementController` - Headless pointer-follow placement state machine
 - `attachControlledGraph` - Installs the controlled-graph bridge (LineReconciler)
-- `query` - Read-only `GraphQuery` facade over one engine's graph
-- `snapline-globals` - Typed accessors for the shared `global.data` registries
+- `query` - Read-only `GraphQuery` facade over one engine's graph (the only
+  enumeration surface: `nodes` / `connectors` / `groups` / `selection` / `lines`)
+- `getGraphRegistry` - The per-engine `GraphRegistry`, lazy-created on first use
+
+Everything is reached through the package root (`@snap-engine/snapline`); the
+package declares a single `.` export and no per-module subpaths. Modules under
+`core/src/internal/` are implementation detail — do not deep-import them.
 
 ### @snap-engine/snapline-svelte
 **Location:** `svelte/src/`
@@ -64,11 +69,14 @@ snapline/
 │       ├── group.ts             # GroupNodeMirror
 │       ├── select.ts            # RectSelectController
 │       ├── placement.ts         # PlacementController
-│       ├── graph-mirror.ts      # GraphMirror (per-engine registry + scheduler)
-│       ├── line-reconciler.ts   # LineReconciler + LineRecord/LineChangeRequest
 │       ├── query.ts             # query() GraphQuery facade
-│       ├── geometry.ts          # GeometryWriter type
-│       └── snapline-globals.ts  # global.data accessors + attachControlledGraph
+│       ├── types.ts             # pure public types (identity, diagnostics,
+│       │                        #   GeometryWriter, controlled-graph contract)
+│       ├── controlled-graph.ts  # attachControlledGraph
+│       └── internal/            # not part of the public surface
+│           ├── graph-registry.ts   # GraphRegistry (per-engine registry + scheduler)
+│           ├── line-reconciler.ts  # LineReconciler
+│           └── shared-data.ts      # global.data accessors + getGraphRegistry
 ├── svelte/
 │   ├── package.json
 │   ├── tsconfig.json
@@ -249,10 +257,10 @@ metadata and predicates such as `isValidConnection`, `canContain`, and
 rendering and creation to framework adapters and consumer callbacks.
 Raw input/DOM plumbing stays on the `event.*` slots.
 
-### GraphMirror (engine-scoped registry)
+### GraphRegistry (engine-scoped registry)
 
-`core/src/graph-mirror.ts` is the per-engine registry of every live SnapLine
-mirror, lazy-created by `getGraphMirror(engine)` the first time any mirror
+`core/src/internal/graph-registry.ts` is the per-engine registry of every live SnapLine
+mirror, lazy-created by `getGraphRegistry(engine)` the first time any mirror
 registers (constructors register, `destroy()` unregisters — no adapter
 wiring). It holds the node/connector sets, the settled-line and preview-line
 sets, and the domain-id indexes (`nodesById`/`connectorsById`/`linesById`,
@@ -262,7 +270,7 @@ engine-scoped interaction state (`selection`, `groups`, `resizingNode`,
 the coalescing batch-aware reconciliation scheduler
 (`scheduleReconciliation`/`flush`/`beginBatch`/`runBatch`). GlobalManager is
 application-wide, so the registries live in the
-`SnapLineSharedData.graphMirrors` WeakMap keyed by engine. `query(engine)`
+`SnapLineSharedData.graphRegistries` WeakMap keyed by engine. `query(engine)`
 is the public read-only facade over it: snapshot lists, `node(id)` /
 `connector(id)` / `line(id)` lookups, and `diagnostics()` — never registry
 sets or mutation methods; `query.ts` enumeration helpers delegate to the
@@ -302,12 +310,12 @@ inconsistent one.
 ### Shared global registries
 
 Everything SnapLine stores on the engine's shared `global.data` bag is declared
-in `core/src/snapline-globals.ts` (`SnapLineSharedData`) and accessed through
+in `core/src/internal/shared-data.ts` (`SnapLineSharedData`) and accessed through
 its typed helpers. It now holds only `resizeHandles` and `sourceSurfaces`
 (engine core's `input.ts` reads both duck-typed — it cannot import snapline —
-so keep the shapes in sync) plus the `graphMirrors` WeakMap keying each
-engine to its `GraphMirror`. Selection, groups, and `resizingNode` are
-engine-scoped state on `GraphMirror`, not global arrays.
+so keep the shapes in sync) plus the `graphRegistries` WeakMap keying each
+engine to its `GraphRegistry`. Selection, groups, and `resizingNode` are
+engine-scoped state on `GraphRegistry`, not global arrays.
 
 ### Pointer claims (camera blocking)
 
@@ -342,7 +350,7 @@ boolean remains readable by the camera for third-party writers only.
 - Equal-size group candidates use stable IDs as a deterministic tie-breaker;
   membership cycles are always rejected.
 - Carried group members are moved via transform parenting only — they are never
-  added to the engine's `GraphMirror.selection`, so a group drag does not
+  added to the engine's `GraphRegistry.selection`, so a group drag does not
   alter the selection.
 - `attachTransformToGroup`/`detachTransformFromGroup` are the public
   transform-only reparent seam used by the group carry.

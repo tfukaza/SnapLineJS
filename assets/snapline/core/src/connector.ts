@@ -10,9 +10,9 @@ import type {
 import { CircleCollider } from "@snap-engine/core/collision";
 import type { NodeMirror } from "./node";
 import { LineMirror, cloneAnchor, type LineMirrorPhase } from "./line";
-import { getGraphMirror, getSourceSurfaces } from "./snapline-globals";
-import { mintDomainId } from "./graph-mirror";
-import type { LineChangeRequest } from "./line-reconciler";
+import { getGraphRegistry, getSourceSurfaces } from "./internal/shared-data";
+import { mintDomainId } from "./internal/graph-registry";
+import type { LineChangeRequest } from "./types";
 
 export type SnapLineMetadata = Record<string, unknown>;
 export type ConnectionOrigin = "gesture" | "hydration";
@@ -279,7 +279,7 @@ class ConnectorMirror extends ElementObject {
     );
     this.addCollider(this.#hitCircle);
     this.#syncSourceSurfaceRegistration();
-    getGraphMirror(this.engine).registerConnector(this);
+    getGraphRegistry(this.engine).registerConnector(this);
 
     this.event.dom.onAssignDom = () => {
       this.schedule(
@@ -753,7 +753,7 @@ class ConnectorMirror extends ElementObject {
     line.setPhase("drop");
     line.setPreviewPosition(prop.end);
 
-    const mirror = getGraphMirror(this.engine);
+    const mirror = getGraphRegistry(this.engine);
     if (typeof mirror.reconciler?.dispatchLineChangeRequest === "function") {
       this.#endControlledDrop(line, candidate, prop);
       return;
@@ -860,7 +860,7 @@ class ConnectorMirror extends ElementObject {
   }
 
   #dispatchRequest(request: LineChangeRequest): void {
-    const mirror = getGraphMirror(this.engine);
+    const mirror = getGraphRegistry(this.engine);
     if (mirror.pendingGestureRequest) {
       console.warn(
         "SnapLine: a line-change request is already in flight; gestures are serial, so this indicates a stalled adapter push.",
@@ -989,7 +989,7 @@ class ConnectorMirror extends ElementObject {
     }
     this.#resetGesture();
     this.deleteAllLines("teardown");
-    getGraphMirror(this.engine).unregisterConnector(this);
+    getGraphRegistry(this.engine).unregisterConnector(this);
     if (this.parent?._connectors[this.#name] === this) {
       delete this.parent._connectors[this.#name];
     }
@@ -1367,7 +1367,7 @@ export function resolveConnectorSourceAtPoint(
 function registeredConnectors(engine: any): ConnectorMirror[] {
   // The registry is the one connector source — no engine-object-table scan
   // (this runs per pointer move during a connection drag).
-  return getGraphMirror(engine).connectors.filter(
+  return getGraphRegistry(engine).connectors.filter(
     (connector) => !connector.isDeleteRequested,
   );
 }
