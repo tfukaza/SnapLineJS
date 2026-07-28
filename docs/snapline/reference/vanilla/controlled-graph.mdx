@@ -28,7 +28,7 @@ framework-mount-led; the snapshot carries only line records.
 `LineChangeRequest` per gesture: an `intent`
 (`"connect" | "disconnect" | "replace" | "reconnect"`) plus `add`
 (`ProposedLine[]` with SnapLine-minted ids), `remove` (`LineId[]`), `update`
-(`LineEndpointUpdate[]`), and the `originalEvent`. Apply the proposal to your
+(`LineEndpointUpdate[]`). Apply the proposal to your
 records and push them back through `setCanonicalGraph` — adopting a proposed
 id settles the staged line in place; pushing unchanged records rejects it.
 

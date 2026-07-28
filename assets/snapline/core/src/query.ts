@@ -29,6 +29,8 @@ export interface GraphQuery {
   groups(): readonly GroupNodeMirror[];
   /** Settled lines; gesture previews are not part of the settled graph. */
   lines(): readonly LineMirror[];
+  /** The settled selection, in selection order. */
+  selection(): readonly NodeMirror[];
   node(id: NodeId): NodeMirror | null;
   connector(id: ConnectorId): ConnectorMirror | null;
   line(id: LineId): LineMirror | null;
@@ -43,35 +45,10 @@ export function query(engine: EngineLike): GraphQuery {
     connectors: () => mirror.connectors,
     groups: () => [...mirror.groups],
     lines: () => mirror.lines,
+    selection: () => [...mirror.selection],
     node: (id) => mirror.node(id),
     connector: (id) => mirror.connector(id),
     line: (id) => mirror.line(id),
     diagnostics: () => mirror.diagnostics(),
   };
-}
-
-// Enumeration delegates to the per-engine GraphMirror registry (components
-// register in their constructors), replacing the old engine-object-table
-// scans. Public signatures unchanged.
-
-export function getNodes(engine: EngineLike): readonly NodeMirror[] {
-  return getGraphMirror(engine).nodes;
-}
-
-export function getConnectors(
-  engine: EngineLike,
-): readonly ConnectorMirror[] {
-  return getGraphMirror(engine).connectors;
-}
-
-export function getGroupNodes(
-  engine: EngineLike,
-): readonly GroupNodeMirror[] {
-  return [...getGraphMirror(engine).groups];
-}
-
-export function getSelectedNodes(
-  engine: EngineLike,
-): readonly NodeMirror[] {
-  return [...getGraphMirror(engine).selection];
 }

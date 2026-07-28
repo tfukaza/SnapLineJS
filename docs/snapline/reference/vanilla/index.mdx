@@ -28,10 +28,10 @@ atomic proposal to your records.
 
 ## Query helpers
 
-`getNodes`, `getConnectors`, `getGroupNodes`, and `getSelectedNodes` return
-engine-scoped snapshots; `query(engine)` exposes the read-only `GraphQuery`
+`query(engine)` is the single enumeration surface: a read-only `GraphQuery`
 facade with collection snapshots (`nodes()` / `connectors()` / `groups()` /
-`lines()` — settled lines only, and the only public way to enumerate them),
+`selection()` / `lines()` — settled lines only, and the only public way to
+enumerate them),
 identity lookups (`node(id)` / `connector(id)` / `line(id)`), and
 `diagnostics()`. `getParentGroup` returns settled ownership.
 

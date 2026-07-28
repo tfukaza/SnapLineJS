@@ -288,10 +288,6 @@ class GroupNodeMirror extends NodeMirror {
     this.#members = members;
   }
 
-  writeTransformAndLines(): void {
-    super.writeTransformAndLines();
-  }
-
   allowsMembership(node: NodeMirror): boolean {
     const box = this.hitBox.getWorldBoundsSnapshot();
     const nodeBounds = node.hitBox.getWorldBoundsSnapshot();

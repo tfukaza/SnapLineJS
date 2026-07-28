@@ -21,7 +21,7 @@ frameworkKey: select
 The marquee element carries `data-snapline-type="selection"`; its geometry is
 written imperatively by the controller, so style it with CSS rather than
 Svelte state. Read the current selection at any time with
-`getSelectedNodes(engine)`.
+`query(engine).selection()`.
 
 Per-node selection behavior (for example toggle-on-shift) is decided by the
 node's `resolveSelectionMode` callback, not by `Select`.

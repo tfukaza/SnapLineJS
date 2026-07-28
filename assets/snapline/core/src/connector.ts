@@ -9,9 +9,8 @@ import type {
 } from "@snap-engine/core";
 import { CircleCollider } from "@snap-engine/core/collision";
 import type { NodeMirror } from "./node";
-import { LineMirror, type LineMirrorPhase } from "./line";
-import { getGraphMirror } from "./snapline-globals";
-import { getSourceSurfaces } from "./snapline-globals";
+import { LineMirror, cloneAnchor, type LineMirrorPhase } from "./line";
+import { getGraphMirror, getSourceSurfaces } from "./snapline-globals";
 import { mintDomainId } from "./graph-mirror";
 import type { LineChangeRequest } from "./line-reconciler";
 
@@ -234,7 +233,6 @@ class ConnectorMirror extends ElementObject {
   #state: ConnectorState = ConnectorState.IDLE;
 
   #hitCircle: CircleCollider;
-  #targetConnector: ConnectorMirror | null = null;
   #candidate: ConnectorResolvedHit | null = null;
   #dragLine: LineMirror | null = null;
   #edgePanPointerId: number | null = null;
@@ -328,47 +326,14 @@ class ConnectorMirror extends ElementObject {
     return this.#callbacks;
   }
 
-  set callbacks(callbacks: ConnectorCallbacks) {
-    this.updateConfig({ callbacks });
-  }
-
   // Snapshots, never the internal arrays — topology mutation goes through
-  // connectToConnector/deleteLine/disconnectFromConnector.
+  // the reconciler-only lifecycle operations, never these accessors.
   get outgoingLines(): readonly LineMirror[] {
     return [...this.#outgoingLines];
   }
 
   get incomingLines(): readonly LineMirror[] {
     return [...this.#incomingLines];
-  }
-
-  get targetConnector(): ConnectorMirror | null {
-    return this.#targetConnector;
-  }
-
-  set targetConnector(value: ConnectorMirror | null) {
-    const resolved = value
-      ? {
-          candidate: {
-            connector: value,
-            hit: {
-              anchor: value.center,
-              distance: 0,
-            },
-          },
-          strategy: value.#defaultAnchorStrategy(),
-          strategyIndex: -1,
-        }
-      : null;
-    this.#setCandidate(resolved);
-  }
-
-  get numIncomingLines(): number {
-    return this.#incomingLines.length;
-  }
-
-  get numOutgoingLines(): number {
-    return this.#outgoingLines.length;
   }
 
   /**
@@ -477,34 +442,6 @@ class ConnectorMirror extends ElementObject {
       x: localCenterX - localLeft,
       y: localCenterY - localTop,
     };
-  }
-
-  requestDomGeometrySync(): boolean {
-    if (!this.element?.isConnected || !this.parent) return false;
-
-    this.schedule(
-      () => {
-        if (!this.element?.isConnected || !this.parent) return;
-        this.measureLocalCenter("READ_1");
-      },
-      {
-        stage: "READ_1",
-        queueId: `${this.id}-dom-geometry`,
-      },
-    );
-    for (const line of [...this.#outgoingLines, ...this.#incomingLines]) {
-      line.schedule(
-        () => {
-          line.moveLineToConnectorTransform();
-          line.writeTransform();
-        },
-        {
-          stage: "WRITE_1",
-          queueId: `${line.id}-dom-geometry`,
-        },
-      );
-    }
-    return true;
   }
 
   onCursorDown(prop: pointerDownProp): void {
@@ -644,7 +581,7 @@ class ConnectorMirror extends ElementObject {
     for (const line of [...this.#outgoingLines, ...this.#incomingLines]) {
       line.schedule(
         () => {
-          line.moveLineToConnectorTransform();
+          line.updateAnchors();
           line.writeTransform();
         },
         {
@@ -652,13 +589,6 @@ class ConnectorMirror extends ElementObject {
           queueId: `${line.id}-transform`,
         },
       );
-    }
-  }
-
-  writeAllLinesNow(): void {
-    for (const line of [...this.#outgoingLines, ...this.#incomingLines]) {
-      line.moveLineToConnectorTransform();
-      line.writeTransform();
     }
   }
 
@@ -679,27 +609,6 @@ class ConnectorMirror extends ElementObject {
     const line = new LineMirror(this.engine, this, config);
     line.setSourceSurfaceContext(this.#defaultAnchorStrategy(), null);
     return line;
-  }
-
-  findClosestConnector(): void {
-    if (!this.#dragLine) {
-      this.#setCandidate(null);
-      return;
-    }
-    const position = {
-      ...this.#dragLine.endAnchor,
-      cameraX: this.#dragLine.endAnchor.x,
-      cameraY: this.#dragLine.endAnchor.y,
-      screenX: this.#dragLine.endAnchor.x,
-      screenY: this.#dragLine.endAnchor.y,
-    };
-    this.#setCandidate(this.#resolveTargetAtPoint(position, "preview-target"));
-  }
-
-  findClosestConnectorAtPoint(
-    position: ConnectorPoint,
-  ): ConnectorMirror | null {
-    return this.findCandidateAtPoint(position)?.connector ?? null;
   }
 
   findCandidateAtPoint(
@@ -819,24 +728,6 @@ class ConnectorMirror extends ElementObject {
       stage: "WRITE_2",
       queueId: `${this.#dragLine.id}-transform`,
     });
-  }
-
-  hoverWhileDragging(
-    targetConnector: ConnectorMirror,
-  ): [number, number] | void {
-    if (!(targetConnector instanceof ConnectorMirror) || !this.#dragLine) {
-      return;
-    }
-    const anchor = targetConnector.resolveAnchor({
-      line: this.#dragLine,
-      role: "target",
-      phase: "preview-target",
-      peer: this,
-      position: this.geometry.center,
-      hit: this.#candidate?.candidate.hit ?? null,
-      strategy: this.#candidate?.strategy ?? null,
-    });
-    return [anchor.x, anchor.y];
   }
 
   endDragOutLine(prop: dragEndProp): void {
@@ -1008,15 +899,6 @@ class ConnectorMirror extends ElementObject {
     this.parent?.updateNodeLineList();
   }
 
-  startPickUpLine(line: LineMirror, prop: pointerDownProp): void {
-    this.engine.input.setPointerDragOwner(prop.event.pointerId, line.start);
-    line.start.#arm(prop, {
-      sourceHit: null,
-      sourceStrategy: null,
-      reconnectLine: line,
-    });
-  }
-
   /**
    * Settle a line that already sits in this connector's outgoing list onto
    * its target: run the explicit replacement policy, detach any previous
@@ -1055,17 +937,6 @@ class ConnectorMirror extends ElementObject {
 
     this.parent.updateNodeLineList();
     this.#emitConnect(target, line, origin);
-  }
-
-  /** @internal Reconciler/teardown-only. */
-  disconnectFromConnector(
-    connector: ConnectorMirror,
-    reason: DisconnectReason = "programmatic",
-  ): void {
-    const line = this.#outgoingLines.find(
-      (outgoingLine) => outgoingLine.target === connector,
-    );
-    if (line) this.deleteLine(line, reason);
   }
 
   resolveAnchor({
@@ -1221,7 +1092,6 @@ class ConnectorMirror extends ElementObject {
       return;
     }
     this.#candidate = candidate;
-    this.#targetConnector = candidate?.candidate.connector ?? null;
     this.#dragLine?.setCandidate(
       candidate?.candidate ?? null,
       candidate?.strategy ?? null,
@@ -1346,9 +1216,6 @@ class ConnectorMirror extends ElementObject {
     return true;
   }
 
-  /** Strict structural admission for canonical records: roles, capacity
-   * without replacement, and the parallel rule. */
-
   #liveIncomingLines(): LineMirror[] {
     return this.#incomingLines.filter((line) => !line.isDeleteRequested);
   }
@@ -1439,16 +1306,6 @@ function normalizeHit(
 
 function isFinitePoint(point: ConnectorPoint): boolean {
   return Number.isFinite(point.x) && Number.isFinite(point.y);
-}
-
-function cloneAnchor(anchor: ConnectorAnchor): ConnectorAnchor {
-  return {
-    x: anchor.x,
-    y: anchor.y,
-    ...(anchor.normal
-      ? { normal: { x: anchor.normal.x, y: anchor.normal.y } }
-      : {}),
-  };
 }
 
 function asEventPosition(position: ConnectorPoint): eventPosition {

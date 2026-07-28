@@ -47,9 +47,9 @@ separate. A custom line renderer should mount its SVG/Canvas structure once,
 bind a writer, and call the returned cleanup function when it unmounts.
 
 When another interaction system applies transient transforms inside a node,
-call `connector.requestDomGeometrySync()` for each affected connector. The
-request is coalesced into the next read/write cycle and updates every connected
-line without coupling SnapLine to the external system.
+call `node.remeasureDomGeometry()`. The remeasure is coalesced into the next
+read/write cycle and re-glues every connected line without coupling SnapLine to
+the external system.
 
 Surface strategies decouple connection hit testing from visible connector
 elements. They can activate from a node border, rank shape-specific target

@@ -40,7 +40,6 @@ export interface LineChangeRequest {
   add: readonly ProposedLine[];
   remove: readonly LineId[];
   update: readonly LineEndpointUpdate[];
-  originalEvent?: PointerEvent;
 }
 
 export interface ControlledGraphCallbacks {
@@ -96,7 +95,6 @@ export class LineReconciler {
     if (this.#reconciling || this.#disposed) return;
     this.#reconciling = true;
     const mirror = this.#mirror;
-    mirror.reconcilerActive = true;
     const errors: ReconciliationError[] = [];
     try {
       // Canonical records by id — duplicates never silently collapse.
@@ -204,7 +202,6 @@ export class LineReconciler {
       }
     } finally {
       this.#reconciling = false;
-      mirror.reconcilerActive = false;
       mirror.pendingGestureRequest = false;
     }
 

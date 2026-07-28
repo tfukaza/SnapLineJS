@@ -40,7 +40,8 @@ test("line geometry writers are imperative, replaceable, and separate from state
 
   // A stale framework cleanup must not detach the newer renderer.
   unbindFirst();
-  line.setLinePosition(10, 20, 35, 45);
+  line.setLineStartAnchor({ x: 10, y: 20 });
+  line.setLineEndAnchor({ x: 35, y: 45 });
   expect(firstWrites).toEqual([0]);
   expect(secondWrites).toEqual([0]);
   expect(states).toEqual(["source-start"]);

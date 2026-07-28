@@ -78,13 +78,7 @@ export type {
   SelectRect,
   SelectStartEvent,
 } from "./select";
-export {
-  getConnectors,
-  getGroupNodes,
-  getNodes,
-  getSelectedNodes,
-  query,
-} from "./query";
+export { query } from "./query";
 export type { GraphQuery } from "./query";
 export { PlacementController } from "./placement";
 export type {

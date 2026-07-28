@@ -87,14 +87,6 @@ class LineMirror extends ElementObject {
     return this.#endAnchor;
   }
 
-  get endWorldX(): number {
-    return this.#endAnchor.x;
-  }
-
-  get endWorldY(): number {
-    return this.#endAnchor.y;
-  }
-
   get phase(): LineMirrorPhase {
     return this.#phase;
   }
@@ -246,46 +238,6 @@ class LineMirror extends ElementObject {
     if (changed) this.#emitStateChange();
   }
 
-  setLineStartAtConnector(): void {
-    const peer = this.target ?? this.candidate?.connector ?? null;
-    const peerGeometry = peer?.geometry ?? null;
-    const position =
-      peerGeometry?.center ?? this.#previewPosition ?? this.endAnchor;
-    const anchor = this.start.resolveAnchor({
-      line: this,
-      role: "source",
-      phase: this.phase,
-      peer,
-      position,
-      hit: this.#sourceHit,
-      strategy: this.#sourceStrategy,
-    });
-    this.setLineStartAnchor(anchor);
-  }
-
-  setLineEndAtConnector(): void {
-    const target = this.target ?? this.candidate?.connector ?? null;
-    if (!target) return;
-    const anchor = target.resolveAnchor({
-      line: this,
-      role: "target",
-      phase: this.phase,
-      peer: this.start,
-      position: this.start.geometry.center,
-      hit: this.#targetHit,
-      strategy: this.#targetStrategy,
-    });
-    this.setLineEndAnchor(anchor);
-  }
-
-  setLineStart(startPositionX: number, startPositionY: number): void {
-    this.setLineStartAnchor({ x: startPositionX, y: startPositionY });
-  }
-
-  setLineEnd(endWorldX: number, endWorldY: number): void {
-    this.setLineEndAnchor({ x: endWorldX, y: endWorldY });
-  }
-
   setLineStartAnchor(anchor: ConnectorAnchor): void {
     this.#startAnchor = cloneAnchor(anchor);
     this.worldTransform = { x: anchor.x, y: anchor.y };
@@ -293,16 +245,6 @@ class LineMirror extends ElementObject {
 
   setLineEndAnchor(anchor: ConnectorAnchor): void {
     this.#endAnchor = cloneAnchor(anchor);
-  }
-
-  setLinePosition(
-    startWorldX: number,
-    startWorldY: number,
-    endWorldX: number,
-    endWorldY: number,
-  ): void {
-    this.setLineStart(startWorldX, startWorldY);
-    this.setLineEnd(endWorldX, endWorldY);
   }
 
   updateAnchors(): void {
@@ -347,16 +289,12 @@ class LineMirror extends ElementObject {
     this.setLineEndAnchor(targetAnchor);
   }
 
-  moveLineToConnectorTransform(): void {
-    this.updateAnchors();
-  }
-
   writeTransform(): void {
     this.#geometryWriter?.(this.geometrySnapshot());
   }
 }
 
-function cloneAnchor(anchor: ConnectorAnchor): ConnectorAnchor {
+export function cloneAnchor(anchor: ConnectorAnchor): ConnectorAnchor {
   return {
     x: anchor.x,
     y: anchor.y,

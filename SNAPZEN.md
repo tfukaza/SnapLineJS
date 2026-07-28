@@ -10,5 +10,5 @@
 - The engine owns the representation.
 - When representation must change due to data mutation, request the engine to update.
 
-- No external dependancies.
+- No external dependencies.
 - Prioritize code maintainability, reliability, feature set, browser support, bundle size, in that order.

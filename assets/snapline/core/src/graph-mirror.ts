@@ -16,14 +16,7 @@ export type LineId = string;
  * represent. Derived state: entries drop out when their cause resolves.
  */
 export interface ReconciliationError {
-  code:
-    | "duplicate-id"
-    | "missing-node"
-    | "missing-connector"
-    | "capacity-exceeded"
-    | "connection-rejected"
-    | "identity-changed"
-    | "unrepresentable-line";
+  code: "duplicate-id" | "capacity-exceeded" | "connection-rejected";
   lineId?: LineId;
   nodeId?: NodeId;
   connectorId?: ConnectorId;
@@ -83,11 +76,6 @@ export class GraphMirror {
   // attachControlledGraph(); the connector emit sites and the scheduler
   // reach it through this slot.
   reconciler: GraphReconcilerLike | null = null;
-
-  /** @internal True while a reconciler pass mutates topology on the
-   * canonical document's behalf — those mutations bypass the authority gate
-   * on imperative commands. */
-  reconcilerActive = false;
 
   /** @internal One in-flight gesture request per engine (gestures are
    * serial); cleared by the next reconciliation pass. */

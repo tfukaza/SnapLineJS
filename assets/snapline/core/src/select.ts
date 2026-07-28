@@ -80,7 +80,6 @@ class RectSelectController extends ElementObject {
 
     this.#selectHitBox = new RectCollider(engine, this, 0, 0, 0, 0);
     this.#selectHitBox.localTransform = { x: 0, y: 0 };
-    this.#selectHitBox.event.collider.onCollide = this.onCollideNode;
 
     this.addCollider(this.#selectHitBox);
 
@@ -217,7 +216,6 @@ class RectSelectController extends ElementObject {
     if (wasDragging) this.#fireRect(0, 0, false);
   }
 
-  onCollideNode(_hitBox: Collider, _node: Collider): void {}
 }
 
 export { RectSelectController };

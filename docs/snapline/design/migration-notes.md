@@ -79,8 +79,9 @@ endpoint-pair edge matching are replaced by the controlled-graph protocol:
 
 ## Imperative topology API removal
 
-`connectToConnector()`, `deleteLine()`, `disconnectFromConnector()`,
-`deleteAllLines()`, and `createLine()` are no longer public. Create and
+`connectToConnector()`, `deleteLine()`, `deleteAllLines()`, and `createLine()`
+are no longer public (`disconnectFromConnector()` has been removed
+outright). Create and
 remove lines by changing your records; `canConnect(target, line?)` remains
 as a read-only admission query. A gesture on an engine with no attached
 graph owner warns and discards the preview.

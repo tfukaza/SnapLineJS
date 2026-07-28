@@ -20,7 +20,7 @@ topology. It renders nothing.
 A `LineChangeRequest` carries an `intent`
 (`"connect" | "disconnect" | "replace" | "reconnect"`) plus `add`
 (`ProposedLine[]` with SnapLine-minted ids), `remove` (`LineId[]`), `update`
-(endpoint retargets), and the `originalEvent`. Accept a proposal by applying
+(endpoint retargets). Accept a proposal by applying
 it to your records — adopting a proposed id settles the staged line in place.
 Reject it by leaving your records unchanged; the staged line is then removed.
 The component pushes your updated `lines` prop back to the reconciler

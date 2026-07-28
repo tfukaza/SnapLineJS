@@ -466,10 +466,6 @@ class NodeMirror extends ElementObject {
     return this.#callbacks;
   }
 
-  set callbacks(callbacks: NodeCallbacks) {
-    this.#callbacks = callbacks;
-  }
-
   get metadata(): SnapLineMetadata {
     return this.#config.metadata;
   }
@@ -537,7 +533,7 @@ class NodeMirror extends ElementObject {
       ...this.getAllIncomingLines(),
     ]);
     for (const line of lines) {
-      line.moveLineToConnectorTransform();
+      line.updateAnchors();
       line.writeTransform();
     }
   }
@@ -733,14 +729,6 @@ class NodeMirror extends ElementObject {
   writeTransformAndLines(): void {
     this.writeTransform();
     this.writeLinesNow();
-  }
-
-  // Called when a parent (e.g. a group) cascades a transform write down the
-  // transform graph: paint this node + recurse to its transform-children, then
-  // re-glue this node's own lines (the pure-transform cascade can't, since a
-  // line's two ends live on two different nodes).
-  writeTransformRecursive(): void {
-    super.writeTransformRecursive();
   }
 
   // Transform-only (re)parenting used by group carry: the public/DOM graph is
@@ -1052,18 +1040,6 @@ class NodeMirror extends ElementObject {
     return this.#dragCommitNodes.length
       ? [...this.#dragCommitNodes]
       : [...getGraphMirror(this.engine).selection];
-  }
-
-  setUpPosition(prop: dragEndProp) {
-    const [dx, dy] = [
-      prop.end.x - this.#mouseDownX,
-      prop.end.y - this.#mouseDownY,
-    ];
-    this.worldTransform = {
-      x: this.#dragStartX + dx,
-      y: this.#dragStartY + dy,
-    };
-    this.scheduleTransformAndLines();
   }
 
   onUp(prop: pointerUpProp) {

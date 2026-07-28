@@ -320,9 +320,10 @@ there is one enumeration mechanism.
 `nodes() / connectors() / groups() / lines()` snapshots, `node(id) /
 connector(id) / line(id)` domain-id lookups, and `diagnostics()`. It returns
 live mirrors (whose own mutation surface is constrained separately) and never
-exposes registry sets, topology arrays, or mutation methods. The standalone
-`getNodes` / `getConnectors` / `getGroupNodes` / `getSelectedNodes` helpers
-delegate to the same registry.
+exposes registry sets, topology arrays, or mutation methods. It is the only
+enumeration surface — the standalone `getNodes` / `getConnectors` /
+`getGroupNodes` / `getSelectedNodes` helpers were one-line duplicates of the
+same registry reads and were removed.
 
 ### What stays on global.data, and why
 
@@ -355,9 +356,9 @@ microtask.
 
 Diagnostics are **derived, non-throwing state**: entries drop out when their
 cause resolves. `ReconciliationError` carries a code (`"duplicate-id"`,
-`"missing-node"`, `"missing-connector"`, `"capacity-exceeded"`,
-`"connection-rejected"`, `"identity-changed"`, `"unrepresentable-line"`),
-the offending domain ids, and a message. Sources:
+`"capacity-exceeded"`, `"connection-rejected"`), the offending domain ids, and
+a message. The union lists exactly the codes that are emitted; four further
+codes that were declared but never produced have been removed. Sources:
 
 - registry duplicate-id conflicts (nodes, connectors, settled lines);
 - per-pass reconciliation errors: duplicate record ids in a snapshot, and
@@ -380,15 +381,15 @@ The packages export raw TypeScript source and are pre-1.0.
 | Controllers | `RectSelectController`, `PlacementController` |
 | Controlled graph | `attachControlledGraph`; types `LineRecord`, `CanonicalGraphSnapshot`, `LineChangeRequest`, `ProposedLine`, `LineEndpointUpdate`, `ControlledGraphCallbacks`, `ControlledGraphHandle` |
 | Identity/diagnostics | types `NodeId`, `ConnectorId`, `LineId`, `ReconciliationError`, `GraphBatch` |
-| Queries | `query` (+ `GraphQuery`), `getNodes`, `getConnectors`, `getGroupNodes`, `getSelectedNodes`, `getParentGroup`, `setGroupMembershipResolver`, `resolveConnectorSourceAtPoint` |
+| Queries | `query` (+ `GraphQuery`), `getParentGroup`, `setGroupMembershipResolver`, `resolveConnectorSourceAtPoint` |
 | Config/callback types | `NodeConfig`/`NodeCallbacks` (incl. `GeometryChangeEvent`), `ConnectorConfig`/`ConnectorRules`/`ConnectorCallbacks`/`ConnectionProposal`, line/group/select/placement types |
 
-Package subpaths: `./node`, `./connector`, `./line`, `./select`, `./group`,
-`./placement`, `./query`, `./graph-mirror`, `./line-reconciler`,
-`./geometry`.
+The package has a single entry point (`.`). The per-module subpath exports were
+removed: they gave every symbol a second import path with no consumers, which
+the "only one way to do something" rule forbids.
 
 There is **no imperative public topology API**: `deleteLine()`,
-`deleteAllLines()`, `disconnectFromConnector()`, `createLine()`, and the
+`deleteAllLines()`, `createLine()`, and the
 record-driven settle/retarget/discard methods are `@internal`
 (reconciler/teardown-only), and connecting two connectors imperatively is
 not possible — applications create and remove lines by changing their

@@ -14,7 +14,6 @@ import {
   type GroupMembershipEvent,
   type NodeCallbacks,
   type GeometryChangeEvent,
-  type NodeResizeEvent,
   type ResizeHandle,
   type SnapLineMetadata,
 } from "@snap-engine/snapline";

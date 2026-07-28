@@ -19,6 +19,6 @@ receives a `SelectRect` (`x`, `y`, `width`, `height`, `visible`) and writes
 element geometry directly, returning a cleanup function. Destroy the
 controller with `destroy(false)` when tearing down.
 
-Read the settled selection with `getSelectedNodes(engine)`. Per-node
+Read the settled selection with `query(engine).selection()`. Per-node
 selection behavior (replace, toggle, append) is decided by each node's
 `resolveSelectionMode` callback.

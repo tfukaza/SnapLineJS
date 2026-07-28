@@ -40,11 +40,10 @@ lines.
 `ConnectorSurfaceStrategy` supplies `sourceHitTest`, `targetHitTest`, and
 `resolveAnchor` for custom shapes. `resolveConnectorSourceAtPoint(engine,
 point)` resolves which connector a pointer position would start a line from.
-Enumerate connectors with `getConnectors(engine)` or
-`query(engine).connectors()`.
+Enumerate connectors with `query(engine).connectors()`.
 
 > [!WARNING]
 > Topology methods on `ConnectorMirror` such as `createLine`, `deleteLine`,
-> `deleteAllLines`, and `disconnectFromConnector` are `@internal` even though
+> and `deleteAllLines` are `@internal` even though
 > they appear in editor autocomplete. Change topology by updating canonical
 > `LineRecord`s through the controlled-graph handle.
