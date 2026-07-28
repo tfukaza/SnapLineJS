@@ -189,9 +189,9 @@ test("a gesture without a graph owner warns and discards the preview", () => {
   // gesture cannot produce a line.
   expect(source.outgoingLines).toEqual([]);
   expect(target.incomingLines).toEqual([]);
-  expect(warnings.some((message) => message.includes("no graph owner"))).toBe(
-    true,
-  );
+  expect(
+    warnings.some((message) => message.includes("no ControlledGraph attached")),
+  ).toBe(true);
 });
 
 test("the scheduler coalesces bursts and defers passes to the outermost batch end", async () => {

@@ -48,6 +48,7 @@ export type {
   ConnectorSurfaceHitTestEvent,
   ConnectorSurfaceStrategy,
   DisconnectReason,
+  DragEndOutcome,
   NewLineEvent,
   NewLineResolver,
   ResolvedConnectorRules,

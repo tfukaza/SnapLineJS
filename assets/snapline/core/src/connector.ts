@@ -23,6 +23,21 @@ export type DisconnectReason =
   | "teardown";
 export type ConnectorRole = "source" | "target";
 
+/**
+ * How a line drag ended. "empty-space" and "refused" were previously
+ * indistinguishable — both simply reported `connected: false` — but only the
+ * first means the user gestured toward a node that does not exist yet.
+ */
+export type DragEndOutcome =
+  /** Settled onto an admitting target. */
+  | "connected"
+  /** Dropped over a target that declined (capacity, predicate, or roles). */
+  | "refused"
+  /** Dropped where no connector was resolved at all. */
+  | "empty-space"
+  /** The gesture was cancelled (pointer cancel, teardown). */
+  | "cancelled";
+
 export interface ConnectorPoint {
   x: number;
   y: number;
@@ -180,7 +195,14 @@ export interface ConnectorCallbacks {
   onCandidateChange?: (event: ConnectorCandidateEvent) => void;
   onConnect?: (event: ConnectorConnectionEvent) => void;
   onDisconnect?: (event: ConnectorDisconnectionEvent) => void;
-  onDragEnd?: (event: ConnectorDragEvent & { connected: boolean }) => void;
+  onDragEnd?: (
+    event: ConnectorDragEvent & {
+      connected: boolean;
+      /** Why the drag ended — distinguishes an empty-space drop from a
+       * refusal, which `connected` alone cannot. */
+      outcome: DragEndOutcome;
+    },
+  ) => void;
 }
 
 enum ConnectorState {
@@ -764,7 +786,7 @@ class ConnectorMirror extends ElementObject {
     }
 
     if (this.#cancelledPointers.has(prop.pointerId)) {
-      this.#discardDraggedLine(line, prop, false);
+      this.#discardDraggedLine(line, prop, false, "cancelled");
       return;
     }
 
@@ -781,9 +803,9 @@ class ConnectorMirror extends ElementObject {
     // Topology is always controlled: without a graph owner attached there
     // is no document to propose to, so the gesture cannot produce a line.
     console.warn(
-      "SnapLine: gesture on an engine with no graph owner — mount <ControlledGraph> (or attachControlledGraph) so gestures have a document to propose to.",
+      "SnapLine: gesture on an engine with no ControlledGraph attached — mount <ControlledGraph> (or call attachControlledGraph) so gestures have a document to propose to.",
     );
-    this.#discardDraggedLine(line, prop, false);
+    this.#discardDraggedLine(line, prop, false, "cancelled");
   }
 
   /**
@@ -798,12 +820,19 @@ class ConnectorMirror extends ElementObject {
     prop: dragEndProp,
   ): void {
     const target = candidate?.candidate.connector ?? null;
+    // "Nothing under the pointer" and "something under the pointer that said
+    // no" are different answers, and only the first one means the user asked
+    // for a node that does not exist yet.
+    const outcome: DragEndOutcome =
+      !candidate || !target
+        ? "empty-space"
+        : this.#admitsConnection(target, line, "drop")
+          ? "connected"
+          : "refused";
 
-    if (
-      !candidate ||
-      !target ||
-      !this.#admitsConnection(target, line, "drop")
-    ) {
+    // The candidate/target checks are redundant with `outcome` but keep the
+    // non-null narrowing for everything below.
+    if (outcome !== "connected" || !candidate || !target) {
       if (this.#gestureOrigin === "reconnect") {
         // Gesture disconnect: propose the removal; the line stays visibly
         // detached until the decision. A rejected removal re-glues it from
@@ -822,11 +851,12 @@ class ConnectorMirror extends ElementObject {
           position: prop.end,
           pointerId: prop.pointerId,
           connected: false,
+          outcome,
         });
         this.#resetGesture();
         return;
       }
-      this.#discardDraggedLine(line, prop, false);
+      this.#discardDraggedLine(line, prop, false, outcome);
       return;
     }
 
@@ -875,6 +905,7 @@ class ConnectorMirror extends ElementObject {
       position: prop.end,
       pointerId: prop.pointerId,
       connected: true,
+      outcome: "connected",
     });
     this.#resetGesture();
   }
@@ -1137,6 +1168,7 @@ class ConnectorMirror extends ElementObject {
     line: LineMirror,
     prop: dragEndProp,
     connected: boolean,
+    outcome: DragEndOutcome,
   ): void {
     if (this.#outgoingLines.includes(line)) this.deleteLine(line, "gesture");
     this.#callbacks.onDragEnd?.({
@@ -1144,6 +1176,7 @@ class ConnectorMirror extends ElementObject {
       position: prop.end,
       pointerId: prop.pointerId,
       connected,
+      outcome,
     });
     this.#resetGesture();
   }
