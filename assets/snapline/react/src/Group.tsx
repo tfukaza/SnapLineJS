@@ -44,7 +44,7 @@ export interface GroupProps {
   canContain?: (event: GroupContainEvent) => boolean;
   edgePan?: boolean;
   onMembershipChange?: (event: GroupMembershipEvent) => void;
-  onGeometryChanged?: (event: GeometryChangeEvent) => void;
+  onGeometryCommit?: (event: GeometryChangeEvent) => void;
 }
 
 export const Group = forwardRef<GroupNodeMirror, GroupProps>(function Group(
@@ -71,7 +71,7 @@ export const Group = forwardRef<GroupNodeMirror, GroupProps>(function Group(
     canContain,
     edgePan = true,
     onMembershipChange,
-    onGeometryChanged,
+    onGeometryCommit,
   },
   ref,
 ) {
@@ -107,13 +107,13 @@ export const Group = forwardRef<GroupNodeMirror, GroupProps>(function Group(
     callbacks,
     groupCallbacks,
     onMembershipChange,
-    onGeometryChanged,
+    onGeometryCommit,
   });
   latestRef.current = {
     callbacks,
     groupCallbacks,
     onMembershipChange,
-    onGeometryChanged,
+    onGeometryCommit,
   };
 
   useImperativeHandle(ref, () => group, [group]);
@@ -184,12 +184,12 @@ export const Group = forwardRef<GroupNodeMirror, GroupProps>(function Group(
         latestRef.current.groupCallbacks.onMembershipChange,
         latestRef.current.onMembershipChange,
       );
-    group.callbacks.onGeometryChanged = (event) =>
+    group.callbacks.onGeometryCommit = (event) =>
       invoke(
         event,
-        originalCallbacks.onGeometryChanged,
-        latestRef.current.callbacks.onGeometryChanged,
-        latestRef.current.onGeometryChanged,
+        originalCallbacks.onGeometryCommit,
+        latestRef.current.callbacks.onGeometryCommit,
+        latestRef.current.onGeometryCommit,
       );
     group.callbacks.onSizeChange = (event) => {
       invoke(
@@ -217,7 +217,7 @@ export const Group = forwardRef<GroupNodeMirror, GroupProps>(function Group(
         originalCallbacks.resolveSelectionMode;
       group.callbacks.onDragStart = originalCallbacks.onDragStart;
       group.callbacks.onDrag = originalCallbacks.onDrag;
-      group.callbacks.onGeometryChanged = originalCallbacks.onGeometryChanged;
+      group.callbacks.onGeometryCommit = originalCallbacks.onGeometryCommit;
       group.callbacks.onSelectionChange = originalCallbacks.onSelectionChange;
       group.callbacks.onResizeHandleChange =
         originalCallbacks.onResizeHandleChange;

@@ -579,16 +579,7 @@ class ConnectorMirror extends ElementObject {
 
   scheduleAllLineWrites(): void {
     for (const line of [...this.#outgoingLines, ...this.#incomingLines]) {
-      line.schedule(
-        () => {
-          line.updateAnchors();
-          line.writeTransform();
-        },
-        {
-          stage: "WRITE_2",
-          queueId: `${line.id}-transform`,
-        },
-      );
+      line.invalidateGeometry();
     }
   }
 

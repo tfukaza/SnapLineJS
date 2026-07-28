@@ -38,7 +38,7 @@ Two decisions were amended from the original plan (both user-directed):
 2. **Geometry authority modes were dropped.** Position and size are visual
    cues owned by SnapLine; there is no controlled-geometry variant and no
    `onGeometryChangeRequest`. D8 reduced to the consolidation: one batched
-   `onGeometryChanged` observation replaces `onDragCommit` +
+   `onGeometryCommit` observation replaces `onDragCommit` +
    `onResizeCommit`.
 
 ## Status: complete

@@ -48,7 +48,7 @@ export interface NodeProps {
   metadata?: SnapLineMetadata;
   callbacks?: NodeCallbacks;
   edgePan?: boolean;
-  onGeometryChanged?: (event: GeometryChangeEvent) => void;
+  onGeometryCommit?: (event: GeometryChangeEvent) => void;
   onSizeChange?: (event: NodeResizeEvent) => void;
   /** Framework-native attributes and events for the outer node element. */
   elementProps?: HTMLAttributes<HTMLDivElement>;
@@ -75,7 +75,7 @@ export const Node = forwardRef<NodeMirror, NodeProps>(function Node(
     metadata = {},
     callbacks = {},
     edgePan = true,
-    onGeometryChanged,
+    onGeometryCommit,
     onSizeChange,
     elementProps,
   },
@@ -105,12 +105,12 @@ export const Node = forwardRef<NodeMirror, NodeProps>(function Node(
   );
   const latestRef = useRef({
     callbacks,
-    onGeometryChanged,
+    onGeometryCommit,
     onSizeChange,
   });
   latestRef.current = {
     callbacks,
-    onGeometryChanged,
+    onGeometryCommit,
     onSizeChange,
   };
 
@@ -190,12 +190,12 @@ export const Node = forwardRef<NodeMirror, NodeProps>(function Node(
         latestRef.current.onSizeChange,
       );
     };
-    node.callbacks.onGeometryChanged = (event) =>
+    node.callbacks.onGeometryCommit = (event) =>
       invoke(
         event,
-        original.onGeometryChanged,
-        latestRef.current.callbacks.onGeometryChanged,
-        latestRef.current.onGeometryChanged,
+        original.onGeometryCommit,
+        latestRef.current.callbacks.onGeometryCommit,
+        latestRef.current.onGeometryCommit,
       );
     setLineList([...node.getAllOutgoingLines()]);
     const boundElement = nodeDomRef.current;
@@ -206,7 +206,7 @@ export const Node = forwardRef<NodeMirror, NodeProps>(function Node(
       node.callbacks.resolveSelectionMode = original.resolveSelectionMode;
       node.callbacks.onDragStart = original.onDragStart;
       node.callbacks.onDrag = original.onDrag;
-      node.callbacks.onGeometryChanged = original.onGeometryChanged;
+      node.callbacks.onGeometryCommit = original.onGeometryCommit;
       node.callbacks.onSelectionChange = original.onSelectionChange;
       node.callbacks.onResizeHandleChange = original.onResizeHandleChange;
       node.callbacks.onLinesChanged = original.onLinesChanged;

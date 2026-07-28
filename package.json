@@ -46,6 +46,7 @@
     "test:camera-control": "playwright test -c tests/e2e/camera-control.playwright.config.ts",
     "test:camera-control-react": "playwright test -c tests/e2e/camera-control-react.playwright.config.ts",
     "test:asset-base-react": "playwright test -c tests/e2e/asset-base-react.playwright.config.ts",
+    "test:snapline-ut": "playwright test tests/ut/snapline-*.spec.ts --project=chromium",
     "test:snapline": "playwright test -c tests/e2e/snapline.playwright.config.ts",
     "test:snapline-edges": "playwright test -c tests/e2e/snapline-edges.playwright.config.ts",
     "test:snapline-camera": "playwright test -c tests/e2e/snapline-camera.playwright.config.ts",

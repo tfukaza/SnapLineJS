@@ -23,7 +23,7 @@ frameworkKey: node
 | `resizeCursors` | Per-handle cursor overrides |
 | `metadata` | `SnapLineMetadata` attached to the node |
 | `callbacks` | `NodeCallbacks` object (drag, selection, resize, lines) |
-| `onGeometryChanged` | Convenience callback; batched final geometry for persistence |
+| `onGeometryCommit` | Convenience callback; batched final geometry for persistence |
 | `onSizeChange` | Convenience callback for resize events |
 | `edgePan` | Pan the camera when dragging near the viewport edge (default `true`) |
 | `lineComponent` | Custom line renderer for this node's outgoing lines (defaults to `Line`) |
@@ -37,7 +37,7 @@ dedicated drag surface.
 
 Callback props stay current across renders and compose with callbacks already
 present on a supplied core object. During a live pointer gesture, core writes
-retained element geometry directly; the batched `onGeometryChanged` reports
+retained element geometry directly; the batched `onGeometryCommit` reports
 final values for application persistence.
 
 The rendered element carries `data-snapline-type="node"` and

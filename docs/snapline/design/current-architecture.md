@@ -31,7 +31,7 @@ gestures never mutate settled topology locally; each gesture proposes one
 atomic `LineChangeRequest` that the application accepts, normalizes, or
 rejects by updating its records. Position and size stay SnapLine-owned —
 geometry is a visual cue, observed (not negotiated) through one batched
-`onGeometryChanged` callback.
+`onGeometryCommit` callback.
 
 | Layer                       | Responsibility                                                                                                 |
 | --------------------------- | -------------------------------------------------------------------------------------------------------------- |
@@ -266,7 +266,7 @@ never round-trip the framework:
 - During a resize, core clamps, updates collision state, writes
   width/height, remeasures connector centers, and re-glues lines
   (`WRITE_1 → READ_2 → WRITE_2`). `onSizeChange` is the live observation.
-- One batched **`onGeometryChanged({ nodes: [{ node, x, y, width, height }] })`**
+- One batched **`onGeometryCommit({ nodes: [{ node, x, y, width, height }] })`**
   fires per settled gesture: a group or multi-select drag reports every
   moved node in one event; a resize reports a single entry. The application
   may persist the observation; ignoring it never reverts the mirror.
@@ -426,7 +426,7 @@ types). Adapter contracts:
 | Preview/staged lines          | SnapLine gesture               | Ephemeral; staged outcome awaits the canonical decision                 |
 | Gesture outcome               | Application                    | One atomic `LineChangeRequest`; adopt the proposed id to settle in place |
 | Node/connector/line DOM       | React/Svelte adapter           | Core writes transforms/`data-*` on existing elements only               |
-| Live + settled geometry       | SnapLine                       | Observed via batched `onGeometryChanged`; never round-trips             |
+| Live + settled geometry       | SnapLine                       | Observed via batched `onGeometryCommit`; never round-trips             |
 | Connector policy              | Application config             | `ConnectorRules` + surface strategies, copied into the mirror           |
 | Selection                     | SnapLine, engine-scoped        | Framework owns visuals and pointer policy                               |
 | Group membership              | SnapLine derived state         | Computed from measured geometry; resolver overridable                   |

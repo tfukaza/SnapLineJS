@@ -7,7 +7,7 @@ import type {
   ConnectorPoint,
   ConnectorSurfaceStrategy,
 } from "./connector";
-import type { GeometryWriter } from "./types";
+import type { GeometryInvalidationObserver, GeometryWriter } from "./types";
 import { getGraphRegistry } from "./internal/shared-data";
 import { mintDomainId } from "./internal/graph-registry";
 
@@ -51,6 +51,7 @@ class LineMirror extends ElementObject {
   #phase: LineMirrorPhase = "source-start";
   #candidate: ConnectorCandidate | null = null;
   #geometryWriter: GeometryWriter<LineGeometrySnapshot> | null = null;
+  #geometryObservers = new Set<GeometryInvalidationObserver<LineMirror>>();
   #stateCallbacks = new Set<(state: LineStateSnapshot) => void>();
   #sourceStrategy: ConnectorSurfaceStrategy | null = null;
   #sourceHit: ConnectorHit | null = null;
@@ -137,6 +138,39 @@ class LineMirror extends ElementObject {
     return () => {
       if (this.#geometryWriter === writer) this.#geometryWriter = null;
     };
+  }
+
+  /**
+   * Subscribe to "this line's geometry is about to change".
+   *
+   * Fires **synchronously, during input dispatch, before any frame task is
+   * queued** — not at paint time. It deliberately hands over no geometry:
+   * schedule your own task at whatever stage suits you and read
+   * `geometrySnapshot()` there.
+   *
+   * ```ts
+   * const stop = line.onGeometryInvalidated(() =>
+   *   line.schedule(place, { stage: "WRITE_3", queueId: "label" }),
+   * );
+   * ```
+   *
+   * The line itself paints at `WRITE_2` (and resolves its anchors inside that
+   * same task), so `WRITE_3` sees this frame's position while `WRITE_1` and
+   * `READ_2` still see the previous frame's. Choosing that is the caller's
+   * job, which is why no stage is implied here.
+   *
+   * Unlike {@link bindGeometryWriter} — the single owner that paints the line —
+   * any number of observers may subscribe. There is no priming call: nothing
+   * has been invalidated at subscribe time, so read `geometrySnapshot()`
+   * directly for the initial position.
+   *
+   * @returns an unsubscribe function.
+   */
+  onGeometryInvalidated(
+    observer: GeometryInvalidationObserver<LineMirror>,
+  ): () => void {
+    this.#geometryObservers.add(observer);
+    return () => this.#geometryObservers.delete(observer);
   }
 
   onStateChange(callback: (state: LineStateSnapshot) => void): () => void {
@@ -243,6 +277,46 @@ class LineMirror extends ElementObject {
 
   setLineEndAnchor(anchor: ConnectorAnchor): void {
     this.#endAnchor = cloneAnchor(anchor);
+  }
+
+  /**
+   * The deferred re-glue: notify observers now, paint next WRITE_2.
+   *
+   * Coalesces on `(objectId, queueId)`, so many invalidations in one frame
+   * collapse to a single write task.
+   */
+  invalidateGeometry(): void {
+    this.#notifyGeometryInvalidated();
+    this.schedule(
+      () => {
+        this.updateAnchors();
+        this.writeTransform();
+      },
+      { stage: "WRITE_2", queueId: `${this.id}-transform` },
+    );
+  }
+
+  /**
+   * The synchronous re-glue, for callers already inside a WRITE stage
+   * (settle, prop-driven node moves). Observers still fire first, so a
+   * subscriber's own scheduled task is queued before the paint happens.
+   */
+  invalidateGeometryNow(): void {
+    this.#notifyGeometryInvalidated();
+    this.updateAnchors();
+    this.writeTransform();
+  }
+
+  #notifyGeometryInvalidated(): void {
+    for (const observer of this.#geometryObservers) {
+      // A third-party observer must never be able to stop the line painting
+      // or starve its peers.
+      try {
+        observer(this);
+      } catch (error) {
+        console.error("SnapLine: a line geometry observer threw.", error);
+      }
+    }
   }
 
   updateAnchors(): void {

@@ -25,7 +25,7 @@
         canContain = undefined,
         edgePan = true,
         onMembershipChange = undefined,
-        onGeometryChanged = undefined,
+        onGeometryCommit = undefined,
         children = undefined,
     }: {
         /** Stable domain identity; minted when omitted (supply for persistence). */
@@ -50,7 +50,7 @@
         canContain?: (event: GroupContainEvent) => boolean;
         edgePan?: boolean;
         onMembershipChange?: (event: GroupMembershipEvent) => void;
-        onGeometryChanged?: (event: GeometryChangeEvent) => void;
+        onGeometryCommit?: (event: GeometryChangeEvent) => void;
         children?: any;
     } = $props();
 
@@ -121,8 +121,8 @@
         groupObject!.callbacks.onSizeChange = (event) => {
             invoke(event, originalCallbacks.onSizeChange, callbacks.onSizeChange);
         };
-        groupObject!.callbacks.onGeometryChanged = (event) =>
-            invoke(event, originalCallbacks.onGeometryChanged, callbacks.onGeometryChanged, onGeometryChanged);
+        groupObject!.callbacks.onGeometryCommit = (event) =>
+            invoke(event, originalCallbacks.onGeometryCommit, callbacks.onGeometryCommit, onGeometryCommit);
         // Header is the only move surface; wait a tick so the alias wins over the
         // element registration. The geometry effect seeds the collision footprint
         // and schedules the first paint once `mounted` flips.
@@ -146,7 +146,7 @@
         groupObject!.callbacks.resolveSelectionMode = originalCallbacks.resolveSelectionMode;
         groupObject!.callbacks.onDragStart = originalCallbacks.onDragStart;
         groupObject!.callbacks.onDrag = originalCallbacks.onDrag;
-        groupObject!.callbacks.onGeometryChanged = originalCallbacks.onGeometryChanged;
+        groupObject!.callbacks.onGeometryCommit = originalCallbacks.onGeometryCommit;
         groupObject!.callbacks.onSelectionChange = originalCallbacks.onSelectionChange;
         groupObject!.callbacks.onResizeHandleChange = originalCallbacks.onResizeHandleChange;
         groupObject!.callbacks.onSizeChange = originalCallbacks.onSizeChange;

@@ -24,7 +24,7 @@
         metadata = {},
         callbacks = {},
         edgePan = true,
-        onGeometryChanged = undefined,
+        onGeometryCommit = undefined,
         onSizeChange = undefined,
         elementProps = {},
         children,
@@ -47,7 +47,7 @@
         metadata?: SnapLineMetadata;
         callbacks?: NodeCallbacks;
         edgePan?: boolean;
-        onGeometryChanged?: (event: GeometryChangeEvent) => void;
+        onGeometryCommit?: (event: GeometryChangeEvent) => void;
         onSizeChange?: (event: NodeResizeEvent) => void;
         /** Framework-native attributes and events for the outer node element. */
         elementProps?: HTMLAttributes<HTMLDivElement>;
@@ -110,8 +110,8 @@
             invoke(event, originalCallbacks.onSelectionChange, callbacks.onSelectionChange);
         nodeObject.callbacks.onResizeHandleChange = (event) =>
             invoke(event, originalCallbacks.onResizeHandleChange, callbacks.onResizeHandleChange);
-        nodeObject.callbacks.onGeometryChanged = (event) =>
-            invoke(event, originalCallbacks.onGeometryChanged, callbacks.onGeometryChanged, onGeometryChanged);
+        nodeObject.callbacks.onGeometryCommit = (event) =>
+            invoke(event, originalCallbacks.onGeometryCommit, callbacks.onGeometryCommit, onGeometryCommit);
         nodeObject.callbacks.onSizeChange = (event) => {
             invoke(event, originalCallbacks.onSizeChange, callbacks.onSizeChange, onSizeChange);
         };
@@ -132,7 +132,7 @@
         nodeObject.callbacks.resolveSelectionMode = originalCallbacks.resolveSelectionMode;
         nodeObject.callbacks.onDragStart = originalCallbacks.onDragStart;
         nodeObject.callbacks.onDrag = originalCallbacks.onDrag;
-        nodeObject.callbacks.onGeometryChanged = originalCallbacks.onGeometryChanged;
+        nodeObject.callbacks.onGeometryCommit = originalCallbacks.onGeometryCommit;
         nodeObject.callbacks.onSelectionChange = originalCallbacks.onSelectionChange;
         nodeObject.callbacks.onResizeHandleChange = originalCallbacks.onResizeHandleChange;
         nodeObject.callbacks.onLinesChanged = originalCallbacks.onLinesChanged;

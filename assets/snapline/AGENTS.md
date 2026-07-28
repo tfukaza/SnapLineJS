@@ -209,7 +209,7 @@ Concretely:
 - **Node/group transforms and live width/height** are core-written during a
   gesture. Resize uses `WRITE_1 → READ_2 → WRITE_2`: paint the box, remeasure
   connectors, then re-glue lines. `onSizeChange` is the live observation and
-  the batched `onGeometryChanged({ nodes })` reports settled geometry the
+  the batched `onGeometryCommit({ nodes })` reports settled geometry the
   framework may persist (geometry is SnapLine-owned; ignoring the event
   never reverts the mirror).
 - **Position and size are one commit.** `#writeSizeGeometry` paints

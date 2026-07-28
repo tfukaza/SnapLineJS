@@ -26,7 +26,7 @@ Position and size stay SnapLine-owned — geometry is a visual cue, observed
 | `ConnectorLinePhase` | `LineMirrorPhase` (adds `"staged"`) |
 | `syncDomGeometry()` | `remeasureDomGeometry()` |
 | `onLinesChanged` | unchanged name; payload is `LineMirror`s |
-| `onDragCommit` + `onResizeCommit` | one batched `onGeometryChanged({ nodes })` |
+| `onDragCommit` + `onResizeCommit` | one batched `onGeometryCommit({ nodes })` |
 | `NodePosition` / `NodeDragCommitEvent` | `NodeGeometry` / `GeometryChangeEvent` |
 | `EdgeId` / `EdgeRecord` / `EdgeLike` / `EdgeEndpoint` | `LineId` / `LineRecord` (stable-id, no endpoint-pair keying) |
 
@@ -130,7 +130,7 @@ values from your own document (the same records that drive
 
 ## Geometry
 
-`onGeometryChanged({ nodes: [{ node, x, y, width, height }] })` fires once
+`onGeometryCommit({ nodes: [{ node, x, y, width, height }] })` fires once
 per settled drag (every moved node of a group/multi-select drag in one
 event) or resize (single entry). SnapLine owns live and settled geometry;
 persist the observation if you want it back after a reload — ignoring it

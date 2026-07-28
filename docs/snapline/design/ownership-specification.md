@@ -706,7 +706,7 @@ document, structured diagnostics, and engine scoping are all shipped:
 | Unified mirror registry             | Conforms       | `GraphRegistry` indexes nodes, connectors, and settled lines; one enumeration path  |
 | Engine isolation                    | Conforms       | Selection, groups, `resizingNode`, and the reconciler are engine-scoped           |
 | Diagnostics                         | Conforms       | Derived `ReconciliationError`s via `onDiagnosticsChanged` / `query().diagnostics()` |
-| Geometry authority                  | Decided        | SnapLine-owned visual cue; one batched `onGeometryChanged` observation, no controlled-geometry mode |
+| Geometry authority                  | Decided        | SnapLine-owned visual cue; one batched `onGeometryCommit` observation, no controlled-geometry mode |
 | Explicit authority model            | Conforms       | Exactly one model: always controlled; no imperative public topology surface       |
 
 ## Open decisions — all decided and shipped
@@ -732,7 +732,7 @@ is implemented:
    payload to canonical `LineRecord.payload`, mutation to the request
    protocol.
 9. Geometry props? Neither controlled nor negotiated — geometry is
-   SnapLine-owned and observed through one batched `onGeometryChanged`.
+   SnapLine-owned and observed through one batched `onGeometryCommit`.
 10. Selection and groups? They remain SnapLine-owned derived state,
     engine-scoped on `GraphRegistry` (framework owns the visuals).
 11. Mixed controlled/unmanaged engines? Moot — the unmanaged mode was

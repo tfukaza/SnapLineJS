@@ -18,6 +18,7 @@ import {
 } from "./internal/shared-data";
 import { mintDomainId } from "./internal/graph-registry";
 import type { SnapLineMetadata } from "./connector";
+import type { GeometryInvalidationObserver } from "./types";
 
 export type ResizeHandle = "n" | "ne" | "e" | "se" | "s" | "sw" | "w" | "nw";
 
@@ -188,7 +189,7 @@ export interface NodeCallbacks {
   /** Settled geometry after a drag or resize — SnapLine owns live and
    * settled position/size; the consumer may persist this observation, and
    * ignoring it does not revert the mirror. */
-  onGeometryChanged?: (event: GeometryChangeEvent) => void;
+  onGeometryCommit?: (event: GeometryChangeEvent) => void;
   onSelectionChange?: (event: NodeSelectionEvent) => void;
   /** Observes live size updates; core writes the retained element geometry. */
   onSizeChange?: (event: NodeResizeEvent) => void;
@@ -381,6 +382,7 @@ class NodeMirror extends ElementObject {
   // The size last authored through setSizeState, kept apart from #hitBox (which
   // tracks what the browser actually rendered) so a write always paints the
   // value its own tick authored.
+  #geometryObservers = new Set<GeometryInvalidationObserver<NodeMirror>>();
   #authoredWidth = 0;
   #authoredHeight = 0;
   #hasAuthoredSize = false;
@@ -537,8 +539,7 @@ class NodeMirror extends ElementObject {
       ...this.getAllIncomingLines(),
     ]);
     for (const line of lines) {
-      line.updateAnchors();
-      line.writeTransform();
+      line.invalidateGeometryNow();
     }
   }
 
@@ -559,7 +560,12 @@ class NodeMirror extends ElementObject {
       stage: "WRITE_2",
       queueId: `${this.id}-transform`,
     });
-    for (const node of this.#transformNodeTree()) node.scheduleLineWrites();
+    // Every node in the transform tree moves, not just this one — multi-select
+    // peers and group-carried members included — so each gets its own signal.
+    for (const node of this.#transformNodeTree()) {
+      node.notifyGeometryInvalidated();
+      node.scheduleLineWrites();
+    }
   }
 
   // Re-measure the node box + each connector's local center (READ_1) and re-glue
@@ -602,6 +608,57 @@ class NodeMirror extends ElementObject {
     for (const connector of Object.values(this._connectors)) {
       connector.measureLocalCenter(stage);
     }
+  }
+
+  /**
+   * Subscribe to "this node's geometry is about to change".
+   *
+   * Fires **synchronously, during input dispatch, before any frame task is
+   * queued** — for drags (including camera edge-pan, multi-select peers, and
+   * group-carried members, none of which `onDrag` reports) and for resizes.
+   * It hands over no geometry: schedule your own task at the stage you want
+   * and read {@link geometrySnapshot} there.
+   *
+   * Distinct from `onGeometryCommit`, which fires once per gesture with the
+   * settled result. This one fires every frame, before the paint.
+   *
+   * @returns an unsubscribe function.
+   */
+  onGeometryInvalidated(
+    observer: GeometryInvalidationObserver<NodeMirror>,
+  ): () => void {
+    this.#geometryObservers.add(observer);
+    return () => this.#geometryObservers.delete(observer);
+  }
+
+  /** @internal Fired by the scheduling entry points, before they queue. */
+  notifyGeometryInvalidated(): void {
+    for (const observer of this.#geometryObservers) {
+      // A third-party observer must never be able to stop the node painting
+      // or starve its peers.
+      try {
+        observer(this);
+      } catch (error) {
+        console.error("SnapLine: a node geometry observer threw.", error);
+      }
+    }
+  }
+
+  /**
+   * This node's position and **authored** size.
+   *
+   * Deliberately not sourced from `hitBox`: that is DOM truth, which a
+   * ResizeObserver-scheduled READ_1 overwrites with the *previously rendered*
+   * box. Reading it mid-gesture pairs last frame's height with this frame's
+   * `y`. Position and size here always come from the same authoring tick.
+   */
+  geometrySnapshot(): { x: number; y: number; width: number; height: number } {
+    return {
+      x: this.worldTransform.x,
+      y: this.worldTransform.y,
+      width: this.#authoredWidth,
+      height: this.#authoredHeight,
+    };
   }
 
   // State-only half of a size change: clamps to min and synchronously updates
@@ -654,6 +711,7 @@ class NodeMirror extends ElementObject {
   }
 
   #scheduleSizeGeometryWrite(): void {
+    this.notifyGeometryInvalidated();
     this.schedule(() => this.#writeSizeGeometry(), {
       stage: "WRITE_1",
       queueId: `${this.id}-size`,
@@ -960,7 +1018,7 @@ class NodeMirror extends ElementObject {
     }
     if (this.#resizing) {
       // The teardown runs in `finally` because everything above it calls out:
-      // #writeSizeGeometry touches the DOM and onGeometryChanged is consumer
+      // #writeSizeGeometry touches the DOM and onGeometryCommit is consumer
       // code. A throw that skipped these resets would strand `resizingNode`,
       // which permanently disables click-selection (see onUp), and would leave
       // the resize cursor pinned with no path back to a hover recompute.
@@ -973,7 +1031,7 @@ class NodeMirror extends ElementObject {
         // query the committed handle/box. Keep the coalesced frame write for the
         // hot path, but make the final retained geometry observable now.
         this.#writeSizeGeometry();
-        this.#callbacks.onGeometryChanged?.({
+        this.#callbacks.onGeometryCommit?.({
           nodes: [this.#geometryOf(this)],
         });
       } finally {
@@ -1025,7 +1083,7 @@ class NodeMirror extends ElementObject {
   }
 
   protected emitGeometryChange(): void {
-    this.#callbacks.onGeometryChanged?.({
+    this.#callbacks.onGeometryCommit?.({
       nodes: this.getDragCommitNodes().map((node) => this.#geometryOf(node)),
     });
   }

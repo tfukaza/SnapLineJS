@@ -40,7 +40,7 @@ Set `resizable` to enable all eight handles, or pass an exact list:
   width={node.width}
   height={node.height}
   resizeHandles={["e", "se", "s"]}
-  onGeometryChanged={(event) => saveGeometry(event)}
+  onGeometryCommit={(event) => saveGeometry(event)}
 />
 ```
 
@@ -51,14 +51,14 @@ Set `resizable` to enable all eight handles, or pass an exact list:
   width={node.width}
   height={node.height}
   resizeHandles={["e", "se", "s"]}
-  onGeometryChanged={saveGeometry}
+  onGeometryCommit={saveGeometry}
 />
 ```
 
 SnapLine owns live and settled geometry — position and size are visual cues
 that never wait for an application render; changed props still resynchronize
 the object deliberately. Persist final values from the batched
-`onGeometryChanged` event: a group or multi-select drag reports every moved
+`onGeometryCommit` event: a group or multi-select drag reports every moved
 node in one event (`{ nodes: [{ node, x, y, width, height }] }`), a resize
 reports a single entry.
 

@@ -98,6 +98,7 @@ export type {
   ConnectorId,
   ControlledGraphCallbacks,
   ControlledGraphHandle,
+  GeometryInvalidationObserver,
   GeometryWriter,
   GraphBatch,
   LineChangeRequest,

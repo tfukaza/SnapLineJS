@@ -12,7 +12,7 @@ Wrap components in `Engine` from `@snap-engine/asset-base-svelte`.
 
 | Component   | Important props                                                                                        |
 | ----------- | ------------------------------------------------------------------------------------------------------ |
-| [`Node`](/docs/snapline/reference/svelte/node)      | `id`, `nodeObject`, `x`, `y`, `width`, `height`, resize configuration, callbacks, `onGeometryChanged`, `onSizeChange`, `edgePan`, `metadata`, `LineSvelteComponent`, `className`, `elementProps` |
+| [`Node`](/docs/snapline/reference/svelte/node)      | `id`, `nodeObject`, `x`, `y`, `width`, `height`, resize configuration, callbacks, `onGeometryCommit`, `onSizeChange`, `edgePan`, `metadata`, `LineSvelteComponent`, `className`, `elementProps` |
 | [`Connector`](/docs/snapline/reference/svelte/connector) | `id`, `name`, `rules`, `virtual`, `surfaceStrategies`, `colliderRadius`, metadata, callbacks |
 | [`Line`](/docs/snapline/reference/svelte/line)      | `line`, SVG presentation                                                                               |
 | [`Select`](/docs/snapline/reference/svelte/select)    | `callbacks`, `className`                                                                               |
@@ -39,4 +39,4 @@ without replacing the logical connector or its lines. `name` and
 
 Changed geometry props resynchronize the object deliberately. During a live
 pointer gesture core writes retained element geometry directly; the batched
-`onGeometryChanged` reports final values for application persistence.
+`onGeometryCommit` reports final values for application persistence.

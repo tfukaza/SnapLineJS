@@ -22,6 +22,17 @@ export type LineId = string;
 export type GeometryWriter<T> = (geometry: Readonly<T>) => void;
 
 /**
+ * Notified the moment core determines an object's geometry will change this
+ * frame — synchronously during input dispatch, before anything is queued.
+ *
+ * It carries no geometry on purpose. The subscriber schedules its own task at
+ * the stage it wants (`schedule(cb, { stage, queueId })`) and reads the
+ * object's `geometrySnapshot()` there, rather than having core pick a write
+ * phase on its behalf.
+ */
+export type GeometryInvalidationObserver<T> = (source: T) => void;
+
+/**
  * Structured, non-throwing report of a graph state the registry cannot
  * represent. Derived state: entries drop out when their cause resolves.
  */
