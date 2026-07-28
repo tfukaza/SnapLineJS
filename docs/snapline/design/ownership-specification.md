@@ -562,6 +562,37 @@ pairing it with a current transform moves the anchored edge.
 Adapter-required callbacks MUST compose with consumer callbacks. An adapter
 MUST NOT silently replace and hide a consumer lifecycle callback.
 
+### A7. Change requests carry their own answer
+
+The controlled bridge MUST obtain the application's decision from the return
+value of `onLineChangeRequest`, not from a subsequent push. Adapters MUST NOT
+depend on framework flush timing to deliver that decision.
+
+Exactly one decisive reconciliation pass MUST run per request, including one
+the application rejects; rejection is returning the list unchanged. The
+handler MUST be synchronous, because the staged preview is resolved by the
+pass that follows the call.
+
+Adapters MUST expose an imperative handle for canonical changes with **no**
+originating request (hydration, undo/redo, collaboration).
+
+### A8. Observation is not painting
+
+A geometry sink that *draws* (`bindGeometryWriter`) MUST remain single-owner.
+Passive observation MUST use a separate multicast channel
+(`onGeometryInvalidated`).
+
+That channel MUST fire synchronously at input dispatch, before any frame task
+is queued, and MUST NOT carry geometry — the subscriber chooses its own render
+stage and reads `geometrySnapshot()` there. Core MUST NOT select a write phase
+on the subscriber's behalf.
+
+An observer that throws MUST NOT prevent the paint or starve other observers.
+
+Adapters MUST NOT wrap this channel in a prop: the mirror is already available
+to any component that renders it, and a prop would be a second way to do the
+same thing.
+
 ### A5. Supplied objects
 
 When an adapter accepts a caller-supplied core object, the ownership and
@@ -707,6 +738,10 @@ document, structured diagnostics, and engine scoping are all shipped:
 | Engine isolation                    | Conforms       | Selection, groups, `resizingNode`, and the reconciler are engine-scoped           |
 | Diagnostics                         | Conforms       | Derived `ReconciliationError`s via `onDiagnosticsChanged` / `query().diagnostics()` |
 | Geometry authority                  | Decided        | SnapLine-owned visual cue; one batched `onGeometryCommit` observation, no controlled-geometry mode |
+| Request carries its own answer      | Conforms       | `onLineChangeRequest` returns the next `LineRecord[]`; adopted synchronously, one decisive pass per request |
+| Non-request canonical pushes        | Conforms       | Imperative handle on both adapters (`setLines` / ref) plus vanilla `setCanonicalGraph` |
+| Observation vs painting             | Conforms       | Single-owner `bindGeometryWriter`; multicast `onGeometryInvalidated` fired pre-queue, carrying no geometry |
+| Node existence                      | Conforms       | Framework-mount-led; no node-change channel — `onDragEnd`'s `outcome` reports the empty-space drop and the app mounts |
 | Explicit authority model            | Conforms       | Exactly one model: always controlled; no imperative public topology surface       |
 
 ## Open decisions — all decided and shipped

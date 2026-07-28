@@ -135,7 +135,7 @@ class RectSelectController extends ElementObject {
     this.#baselineSelection = new Set(getGraphRegistry(this.engine).selection);
     if (this.#selectionMode === "replace") {
       // setSelected(false) removes each node from the engine's selection.
-      for (let node of [...getGraphRegistry(this.engine).selection]) {
+      for (const node of [...getGraphRegistry(this.engine).selection]) {
         node.setSelected(false);
       }
     }
@@ -159,7 +159,7 @@ class RectSelectController extends ElementObject {
       otherObject: Collider,
     ) => {
       if (otherObject.parent instanceof NodeMirror) {
-        let node = otherObject.parent as NodeMirror;
+        const node = otherObject.parent as NodeMirror;
         node.setSelected(
           this.#selectionMode === "toggle"
             ? !this.#baselineSelection.has(node)
@@ -176,7 +176,7 @@ class RectSelectController extends ElementObject {
       otherObject: Collider,
     ) => {
       if (otherObject.parent instanceof NodeMirror) {
-        let node = otherObject.parent as NodeMirror;
+        const node = otherObject.parent as NodeMirror;
         node.setSelected(this.#baselineSelection.has(node));
         this.#callbacks.onSelectionChange?.({
           select: this,
@@ -188,11 +188,11 @@ class RectSelectController extends ElementObject {
 
   onGlobalCursorMove(prop: pointerMoveProp): void {
     if (this.#state === "dragging") {
-      let [boxOriginX, boxOriginY] = [
+      const [boxOriginX, boxOriginY] = [
         Math.min(this.#mouseDownX, prop.position.x),
         Math.min(this.#mouseDownY, prop.position.y),
       ];
-      let [boxWidth, boxHeight] = [
+      const [boxWidth, boxHeight] = [
         Math.abs(prop.position.x - this.#mouseDownX),
         Math.abs(prop.position.y - this.#mouseDownY),
       ];

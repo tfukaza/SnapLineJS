@@ -8,6 +8,34 @@ SnapLine is experimental and published as synchronized core, Svelte, and React
 packages. Breaking changes are allowed before 1.0 and should replace obsolete
 APIs directly rather than adding compatibility shims.
 
+## Design rules (from `SNAPZEN.md`)
+
+`SNAPZEN.md` at the repo root is the tie-breaker for every API decision here.
+The three that come up constantly, and what they have already decided:
+
+1. **Explicit verbosity over magic abstraction. Expose the primitives; let
+   developers combine them.** This is why `onGeometryInvalidated` hands over
+   no geometry and picks no write stage — a callback fired from inside
+   `writeTransform()` would silently decide the subscriber runs in WRITE_2,
+   with nothing in the signature saying so.
+2. **There should only be one way to do something.** This is why the per-line
+   renderer resolver has two levels and not four, why the package has one
+   entry point instead of eleven subpaths, why `query()` is the only
+   enumeration surface, and why there is no adapter prop wrapping
+   `onGeometryInvalidated`.
+3. **The developer owns the data; when it must change, ask permission. The
+   engine owns the representation.** This is the whole controlled-graph
+   protocol — and why there is no `onNodeChangeRequest`: the application
+   decides when a node exists, so SnapLine reports the empty-space drop and
+   the application mounts the node and adds the record.
+
+**There are no such thing as sensible defaults.** When a hook seeds
+application data, its absence is meaningful — see `ResolvedNodeConfig`, which
+keeps `resolveNewLine` optional rather than defaulting it to a no-op.
+
+A convenience API that duplicates an existing primitive should be rejected on
+these grounds, not merely debated.
+
 ## Packages
 
 ### @snap-engine/snapline
@@ -161,10 +189,21 @@ snapline/
 ### Node.svelte
 **Purpose:** Node wrapper component
 
-**Props:**
-- `className?: string` - CSS class
-- `LineSvelteComponent?: Component` - Custom line component
-- `nodeObject?: NodeMirror` (bindable) - Node instance
+**Props** (React's `Node` mirrors these; the notable naming difference is
+Svelte's `LineSvelteComponent` vs React's `lineComponent`, forced by Svelte 5
+requiring PascalCase for dynamic components):
+
+- Identity/DOM: `id`, `className`, `elementProps`, `nodeObject` (bindable)
+- Geometry: `x`, `y`, `width`, `height`
+- Resize: `resizable`, `minWidth`, `minHeight`, `resizeHandleThickness`,
+  `resizeHandles`, `resizeCursors`
+- Rendering: `LineSvelteComponent` (one renderer for all this node's lines),
+  `resolveLineComponent(line)` (per-line override, resolved at render time)
+- Data: `metadata`, `resolveNewLine` (seeds payload onto a line this node's
+  connectors create)
+- Callbacks: `callbacks` (the whole `NodeCallbacks` dictionary), plus the
+  convenience props `onGeometryCommit` and `onSizeChange`
+- `edgePan`
 
 **Slots:**
 - Default: Node content and connectors
@@ -233,6 +272,16 @@ Concretely:
   components must bind a geometry writer and clean it up on unmount.
 - **Semantic state stays separate:** line phase/payload/target changes use
   `onStateChange`; geometry never requests a framework render.
+- **Observation is separate from painting.** `bindGeometryWriter` is
+  single-owner (binding a second writer replaces the first — it is the thing
+  that draws). Anything that merely *watches* geometry uses
+  `onGeometryInvalidated` on `LineMirror`/`NodeMirror`: multicast, and it
+  fires synchronously at input dispatch **before any frame task is queued**,
+  carrying no geometry. Subscribers schedule their own task
+  (`schedule(cb, { stage, queueId })`) and read `geometrySnapshot()` there.
+  Core does not pick a write phase on a consumer's behalf — a line paints at
+  WRITE_2, so an overlay wanting this frame's position schedules WRITE_3.
+  Never add an adapter prop that wraps this; the mirror is already in hand.
 - **Adapters must render node/group elements with
   `position: absolute; transform-origin: top left`** (and ideally
   `will-change: transform`) — core no longer seeds base styles.
@@ -240,6 +289,18 @@ Concretely:
   `removeElement: false`; React/Svelte remain the sole structural DOM owners.
 
 ### Callback conventions
+
+Two shapes, and they are not interchangeable. **Notification** callbacks are
+`on*` and return `void`. **Registrars** are also `on*` but return an
+unsubscribe function and are backed by a `Set`, so any number of consumers may
+attach: `LineMirror.onStateChange`, `PlacementController.onStateChange`, and
+`onGeometryInvalidated` on line and node. **Value-returning policy** hooks are
+named `can*`/`resolve*`/`isValidConnection` — plus the one deliberate
+exception, `ControlledGraphCallbacks.onLineChangeRequest`, which returns the
+next canonical line list because the return value *is* the protocol.
+
+Tense matters: `onGeometryInvalidated` fires every frame before the paint;
+`onGeometryCommit` fires once, at rest, after a gesture.
 
 Domain/lifecycle callbacks live in `EventProxyFactory` dictionaries —
 Configuration owns plain callback objects. Node callbacks report drag,

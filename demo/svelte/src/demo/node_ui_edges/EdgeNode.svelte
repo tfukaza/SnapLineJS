@@ -1,10 +1,18 @@
 <script lang="ts">
     import { Node, Connector, Line } from "@snap-engine/snapline-svelte";
 
-    let { nodeId, title, x = 0, y = 0, maxIncoming = 1 } = $props();
+    let { nodeId, title, x = 0, y = 0, maxIncoming = 1, resizable = false } = $props();
 </script>
 
-<Node className="card node" LineSvelteComponent={Line} {x} {y}>
+<Node
+    className="card node"
+    LineSvelteComponent={Line}
+    {x}
+    {y}
+    {resizable}
+    minWidth={160}
+    minHeight={110}
+>
     <div class="node-header">
         <h3>{title}</h3>
     </div>

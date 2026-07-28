@@ -43,3 +43,78 @@ decisions.
 
 Enumerate settled lines with `query(engine).lines()` (gesture previews are not
 part of the settled graph); look one up with `query(engine).line(id)`.
+
+## Where a line's DOM lives
+
+**SnapLine never holds it.** A `LineRecord` is pure data, and
+`LineMirror.writeTransform()` is overridden to call the bound geometry writer
+instead of touching an element — so the framework component closes over its
+own refs and core only ever hands it numbers. A `LineMirror` extends
+`ElementObject` deliberately (it needs `transformMode`, `schedule`,
+transform-graph membership, and the polymorphic `writeTransform()` that the
+connector's line writes call) but never binds an `element`.
+
+## Watching a line move from outside
+
+`bindGeometryWriter` is **single-owner**: it is the thing that paints the
+line, and binding a second writer replaces the first. To *watch* geometry —
+say, to keep a label glued to a line — use `onGeometryInvalidated`, which is
+multicast and passive.
+
+It fires **synchronously the moment core decides the geometry will change**,
+during input dispatch, before any frame task is queued. It hands over no
+geometry on purpose: you schedule your own task at whatever stage suits you
+and read `geometrySnapshot()` there.
+
+```ts
+const stop = line.onGeometryInvalidated(() =>
+  line.schedule(place, { stage: "WRITE_3", queueId: "label" }),
+);
+
+function place() {
+  const g = line.geometrySnapshot();
+  el.style.transform =
+    `translate(${g.start.x + g.delta.x / 2}px, ${g.start.y + g.delta.y / 2}px)`;
+}
+```
+
+There is no priming call — nothing has been invalidated when you subscribe —
+so read `geometrySnapshot()` directly for the initial position. It returns an
+unsubscribe function. A throwing observer is isolated: it cannot stop the line
+painting or starve other observers.
+
+### Choosing a stage
+
+The frame runs `READ_1 → collisions → WRITE_1 → READ_2 → WRITE_2 → animations
+→ READ_3 → WRITE_3`. A line paints at **WRITE_2**, and resolves its anchors
+inside that same task.
+
+| Your stage | What `geometrySnapshot()` returns |
+| --- | --- |
+| `WRITE_1`, `READ_2` | The **previous** frame's anchors |
+| `WRITE_2` | Undefined ordering against the line's own write — avoid |
+| `READ_3`, `WRITE_3` | This frame's anchors |
+
+Because `schedule()` coalesces on `(objectId, queueId)`, reusing a stable
+`queueId` collapses many invalidations in one frame into a single task.
+
+This channel covers node drags, resizes, camera edge-pan, multi-select carry,
+and group carry, because every one of them routes through the same line-write
+scheduling. `NodeMirror` has the same `onGeometryInvalidated` if you need to
+follow a node rather than a line; read its `geometrySnapshot()` (authored
+position and size) rather than `hitBox`, which is DOM truth and can lag by a
+frame mid-gesture.
+
+**Caveat:** the snapshot is `start`, `end`, and `delta` in world space. The
+default renderer's cubic Bezier is computed in the adapter, not in core, and
+for that curve the midpoint of the chord happens to be the midpoint of the
+curve — so `start + delta / 2` is exact today. A custom renderer can change
+the path, and an observer cannot know.
+
+## Semantic state
+
+`line.onStateChange(callback)` is a separate, multicast channel carrying
+`{ phase, target, candidate, payload }`. It fires on semantic changes only —
+never on movement — so a renderer can restyle a free preview differently from
+a settled line without re-rendering every frame. It primes immediately with
+the current state and returns an unsubscribe.

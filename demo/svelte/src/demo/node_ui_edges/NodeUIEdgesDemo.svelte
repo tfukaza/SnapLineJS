@@ -1,14 +1,25 @@
 <script lang="ts">
   import { Engine } from "@snap-engine/asset-base-svelte";
   import { ControlledGraph, Select } from "@snap-engine/snapline-svelte";
-  import { applyLineChange } from "@snap-engine/snapline";
-  import type { LineChangeRequest, LineRecord } from "@snap-engine/snapline";
+  import { applyLineChange, query } from "@snap-engine/snapline";
+  import type {
+    LineChangeRequest,
+    LineMirror,
+    LineRecord,
+  } from "@snap-engine/snapline";
+  import type { Engine as CoreEngine } from "@snap-engine/core";
   import EdgeNode from "./EdgeNode.svelte";
+  import LineLabel from "./LineLabel.svelte";
 
   // The application-owned line document: the single source of truth.
   // Connector ids are `${node}:${port}`; line ids are stable.
   let lines = $state.raw<LineRecord[]>([]);
   let graph: ControlledGraph;
+  let engine = $state<CoreEngine | null>(null);
+  // An overlay library discovers lines through the read-only query facade
+  // rather than holding records. Settled mirrors appear one reconciliation
+  // pass after the document changes, hence the microtask.
+  let lineMirrors = $state<LineMirror[]>([]);
 
   // Changes with no originating request (toolbar buttons, the test hook) have
   // to be pushed; only a gesture's return value reaches SnapLine on its own.
@@ -80,6 +91,13 @@
     ]);
   }
 
+  $effect(() => {
+    void lines;
+    queueMicrotask(() => {
+      if (engine) lineMirrors = [...query(engine).lines()];
+    });
+  });
+
   // Test hook: lets the e2e mutate the document mid-drag without a second
   // pointer interaction breaking the gesture.
   $effect(() => {
@@ -126,13 +144,23 @@
   <span data-testid="intent-log">{intentLog.join("|")}</span>
 </div>
 
-<Engine id="node-ui-edges-canvas">
+<Engine bind:engine id="node-ui-edges-canvas">
   <div id="node-ui-edges">
     <div id="sl-background"></div>
     <Select />
+    {#each lineMirrors as mirror (mirror.lineId)}
+      <LineLabel line={mirror} />
+    {/each}
     <ControlledGraph bind:this={graph} onLineChangeRequest={handleRequest} />
     <EdgeNode nodeId="a" title="Node A" x={120} y={120} />
-    <EdgeNode nodeId="b" title="Node B" x={440} y={170} maxIncoming={1} />
+    <EdgeNode
+      nodeId="b"
+      title="Node B"
+      x={440}
+      y={170}
+      maxIncoming={1}
+      resizable
+    />
     {#if showNodeC}
       <EdgeNode nodeId="c" title="Node C" x={280} y={380} />
     {/if}
