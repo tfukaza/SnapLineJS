@@ -17,6 +17,7 @@ import {
   LineMirror,
   NodeMirror,
   type ResizeHandle,
+  type NewLineResolver,
   type NodeCallbacks,
   type GeometryChangeEvent,
   type NodeResizeEvent,
@@ -32,7 +33,25 @@ export interface NodeProps {
   id?: string;
   children: ReactNode;
   className?: string;
+  /** One renderer for every line leaving this node. */
   lineComponent?: ComponentType<{ line: LineMirror }>;
+  /**
+   * Picks a renderer per line, so a data edge and a control edge leaving the
+   * same node can look different. Falls back to `lineComponent` when it
+   * returns nothing.
+   *
+   * Resolved at render time, not at line creation: hydration never runs the
+   * creation callback (a reloaded graph builds its lines through the
+   * reconciler), so resolving from the line is what makes a line you just drew
+   * and the same line after a refresh render identically. Branch on
+   * serializable data you put in the payload — never store a component
+   * reference in a record.
+   */
+  resolveLineComponent?: (
+    line: LineMirror,
+  ) => ComponentType<{ line: LineMirror }> | null | undefined;
+  /** Seeds application data onto a line a drag from this node creates. */
+  resolveNewLine?: NewLineResolver;
   nodeObject?: NodeMirror | null;
   style?: CSSProperties;
   x?: number;
@@ -60,6 +79,8 @@ export const Node = forwardRef<NodeMirror, NodeProps>(function Node(
     children,
     className = "",
     lineComponent: LineRenderer = Line,
+    resolveLineComponent,
+    resolveNewLine,
     nodeObject = null,
     style,
     x = 0,
@@ -97,6 +118,7 @@ export const Node = forwardRef<NodeMirror, NodeProps>(function Node(
       metadata,
       callbacks: {},
       edgePan,
+      resolveNewLine,
     });
   }
   const node = nodeRef.current;
@@ -239,7 +261,12 @@ export const Node = forwardRef<NodeMirror, NodeProps>(function Node(
   return (
     <NodeMirrorContext.Provider value={node}>
       {lineList.map((line) => (
-        <LineRenderer key={line.lineId} line={line} />
+        <LineForLine
+          key={line.lineId}
+          line={line}
+          resolve={resolveLineComponent}
+          fallback={LineRenderer}
+        />
       ))}
       <div
         {...elementProps}
@@ -293,4 +320,20 @@ export function useNodeHandle(): RefCallback<HTMLElement> {
     cleanup.current?.();
     cleanup.current = element && node ? node.registerDragHandle(element) : null;
   };
+}
+
+/** Per-line renderer resolution, evaluated at render time. */
+function LineForLine({
+  line,
+  resolve,
+  fallback: Fallback,
+}: {
+  line: LineMirror;
+  resolve?: (
+    line: LineMirror,
+  ) => ComponentType<{ line: LineMirror }> | null | undefined;
+  fallback: ComponentType<{ line: LineMirror }>;
+}) {
+  const Resolved = resolve?.(line) ?? Fallback;
+  return <Resolved line={line} />;
 }

@@ -39,7 +39,9 @@ interface Frame {
 }
 
 /** Read the live ghost spacer element's bounding rect from the page. */
-async function readGhost(page: Page): Promise<{ top: number; height: number } | null> {
+async function readGhost(
+  page: Page,
+): Promise<{ top: number; height: number } | null> {
   return page.evaluate(() => {
     const el = document.querySelector(".ghost") as HTMLElement | null;
     if (!el) return null;
@@ -59,7 +61,9 @@ test.describe("Snapsort drag ghost should track the cursor without flickering", 
     const chosenLog: string[] = [];
     page.on("console", (msg) => {
       const text = msg.text();
-      const m = text.match(/✔ chosen\s+container=(\S+)\s+idx=(\d+)\s+ghost=\(([-\d]+),([-\d]+)\)/);
+      const m = text.match(
+        /✔ chosen\s+container=(\S+)\s+idx=(\d+)\s+ghost=\(([-\d]+),([-\d]+)\)/,
+      );
       if (m) {
         lastChosen = `container=${m[1]} idx=${m[2]} ghost=(${m[3]},${m[4]})`;
         chosenLog.push(lastChosen);
@@ -70,7 +74,10 @@ test.describe("Snapsort drag ghost should track the cursor without flickering", 
 
     // Use the "Flat List" container: a pure column of Item A..D with no sub-containers,
     // which isolates the dragged-item-gap reflow that caused the flicker.
-    const items = page.locator(".snapsort-container").first().locator(".snapsort-item");
+    const items = page
+      .locator(".snapsort-container")
+      .first()
+      .locator(".snapsort-item");
     await expect(items.first()).toBeVisible();
     const first = items.first();
     const box = await first.boundingBox();
@@ -94,7 +101,13 @@ test.describe("Snapsort drag ghost should track the cursor without flickering", 
     await page.waitForTimeout(50);
 
     const frames: Frame[] = [];
-    const shotAt = new Set([1, Math.floor(steps / 4), Math.floor(steps / 2), Math.floor((3 * steps) / 4), steps]);
+    const shotAt = new Set([
+      1,
+      Math.floor(steps / 4),
+      Math.floor(steps / 2),
+      Math.floor((3 * steps) / 4),
+      steps,
+    ]);
     for (let i = 1; i <= steps; i++) {
       const mouseY = startY + pxPerStep * i;
       // Move in a couple of sub-steps for a smooth pointer path between samples.
@@ -110,7 +123,9 @@ test.describe("Snapsort drag ghost should track the cursor without flickering", 
         chosen: lastChosen,
       });
       if (shotAt.has(i)) {
-        await page.screenshot({ path: path.join(OUT_DIR, `drag-step-${i}.png`) });
+        await page.screenshot({
+          path: path.join(OUT_DIR, `drag-step-${i}.png`),
+        });
       }
     }
 
@@ -123,7 +138,9 @@ test.describe("Snapsort drag ghost should track the cursor without flickering", 
     );
 
     // ---- Assertions ----
-    const valid = frames.filter((f) => f.ghostCenterY !== null) as Required<Frame>[];
+    const valid = frames.filter(
+      (f) => f.ghostCenterY !== null,
+    ) as Required<Frame>[];
     // The ghost must exist during the drag.
     expect(valid.length).toBeGreaterThan(steps * 0.7);
 
@@ -134,14 +151,19 @@ test.describe("Snapsort drag ghost should track the cursor without flickering", 
       ...valid.map((f) => Math.abs((f.ghostCenterY as number) - f.mouseY)),
     );
     expect
-      .soft(maxOffset, `max |ghostCenterY - mouseY| = ${maxOffset.toFixed(1)}px`)
+      .soft(
+        maxOffset,
+        `max |ghostCenterY - mouseY| = ${maxOffset.toFixed(1)}px`,
+      )
       .toBeLessThan(itemH * 1.5);
 
     // (2) No flicker: as the cursor moves monotonically down, the ghost center should be
     // (near-)monotonic. Count meaningful downward->upward reversals (> 4px to ignore jitter).
     let reversals = 0;
     for (let i = 1; i < valid.length; i++) {
-      const dy = (valid[i].ghostCenterY as number) - (valid[i - 1].ghostCenterY as number);
+      const dy =
+        (valid[i].ghostCenterY as number) -
+        (valid[i - 1].ghostCenterY as number);
       if (dy < -4) reversals++;
     }
     expect

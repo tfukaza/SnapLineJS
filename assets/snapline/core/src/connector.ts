@@ -204,7 +204,30 @@ export interface ConnectorConfig {
   callbacks?: ConnectorCallbacks;
   /** Allows this connector gesture to use the engine's configured edge pan. */
   edgePan?: boolean;
+  /** Overrides the parent node's `resolveNewLine` for this connector only. */
+  resolveNewLine?: NewLineResolver;
 }
+
+/** Context for seeding a brand-new line at drag start. */
+export interface NewLineEvent {
+  connector: ConnectorMirror;
+  node: NodeMirror;
+}
+
+/**
+ * Seeds application data onto a line the moment a drag creates it.
+ *
+ * Runs **once per gesture, only for genuinely new lines** — never for a
+ * reconnect, whose payload the application already owns. Must be synchronous.
+ * Whatever it returns becomes `LineMirror.payload`, so a renderer can style
+ * the preview, and it rides into `request.add` at drop, so the settled record
+ * carries the same data without the reducer deriving it again.
+ *
+ * Keep the value **serializable**: it round-trips through your document.
+ * Store a discriminator like `{ kind: "data" }` and map that to a component
+ * in `resolveLineComponent`, never a component reference itself.
+ */
+export type NewLineResolver = (event: NewLineEvent) => unknown;
 
 export type ConnectorConfigUpdate = Partial<Omit<ConnectorConfig, "name">>;
 
@@ -526,6 +549,12 @@ class ConnectorMirror extends ElementObject {
     } else {
       line = this.createLine();
       line.setSourceSurfaceContext(armed.sourceStrategy, armed.sourceHit);
+      // Seed app data onto a genuinely new line. This branch structurally
+      // cannot run for a reconnect, so it can never clobber payload the
+      // application already owns. The payload rides into request.add at drop,
+      // so preview and settled line agree without deriving it twice.
+      const seed = this.#resolveNewLine();
+      if (seed) line.setPayload(seed({ connector: this, node: this.parent }));
       this.#outgoingLines.unshift(line);
     }
 
@@ -848,6 +877,11 @@ class ConnectorMirror extends ElementObject {
       connected: true,
     });
     this.#resetGesture();
+  }
+
+  /** Connector-level override, else the parent node's resolver. */
+  #resolveNewLine(): NewLineResolver | null {
+    return this.#config.resolveNewLine ?? this.parent?.resolveNewLine ?? null;
   }
 
   #dispatchRequest(request: LineChangeRequest): void {

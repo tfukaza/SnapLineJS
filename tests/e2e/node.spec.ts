@@ -160,9 +160,9 @@ test("clicking an output connector does not create a preview line", async ({
   const outputCenter = await centerOf(output);
   await page.mouse.click(outputCenter.x, outputCenter.y);
 
-  await expect(page.locator("[data-snapline-type='connector-line']")).toHaveCount(
-    0,
-  );
+  await expect(
+    page.locator("[data-snapline-type='connector-line']"),
+  ).toHaveCount(0);
 });
 
 test("clicking an occupied input does not disconnect its line", async ({
@@ -178,9 +178,9 @@ test("clicking an occupied input does not disconnect its line", async ({
   const input = nodeB.locator("[data-snapline-name='input']");
 
   await dragFromTo(page, await centerOf(output), await centerOf(input));
-  await expect(page.locator("[data-snapline-type='connector-line']")).toHaveCount(
-    1,
-  );
+  await expect(
+    page.locator("[data-snapline-type='connector-line']"),
+  ).toHaveCount(1);
 
   const inputCenter = await centerOf(input);
   await page.mouse.click(inputCenter.x, inputCenter.y);
@@ -231,9 +231,9 @@ test("replaces the oldest line when a finite input is full", async ({
   const outputC = nodeC.locator("[data-snapline-name='output']");
 
   await dragFromTo(page, await centerOf(outputA), await centerOf(input));
-  await expect(page.locator("[data-snapline-type='connector-line']")).toHaveCount(
-    1,
-  );
+  await expect(
+    page.locator("[data-snapline-type='connector-line']"),
+  ).toHaveCount(1);
 
   await dragFromTo(page, await centerOf(outputC), await centerOf(input));
   const lines = page.locator("[data-snapline-type='connector-line']");
@@ -273,7 +273,10 @@ test("evicts only the oldest lines needed for a larger finite capacity", async (
     endpointsOf(lines.nth(0)),
     endpointsOf(lines.nth(1)),
   ]);
-  const expectedStarts = await Promise.all([centerOf(outputB), centerOf(outputC)]);
+  const expectedStarts = await Promise.all([
+    centerOf(outputB),
+    centerOf(outputC),
+  ]);
   for (const endpoint of endpoints) {
     expectPointCloseTo(endpoint.end, await centerOf(input));
   }
@@ -356,18 +359,18 @@ test("disconnects a line by picking it up from the input connector", async ({
   const inputCenter = await centerOf(input);
 
   await dragFromTo(page, await centerOf(output), inputCenter);
-  await expect(page.locator("[data-snapline-type='connector-line']")).toHaveCount(
-    1,
-  );
+  await expect(
+    page.locator("[data-snapline-type='connector-line']"),
+  ).toHaveCount(1);
 
   await dragFromTo(page, inputCenter, {
     x: inputCenter.x + 180,
     y: inputCenter.y + 120,
   });
 
-  await expect(page.locator("[data-snapline-type='connector-line']")).toHaveCount(
-    0,
-  );
+  await expect(
+    page.locator("[data-snapline-type='connector-line']"),
+  ).toHaveCount(0);
 });
 
 test("drops an output drag without creating a line when there is no target", async ({
@@ -380,15 +383,14 @@ test("drops an output drag without creating a line when there is no target", asy
     nodeA.locator("[data-snapline-name='output']"),
   );
 
-  await dragFromTo(
-    page,
-    outputCenter,
-    { x: outputCenter.x + 160, y: outputCenter.y - 120 },
-  );
+  await dragFromTo(page, outputCenter, {
+    x: outputCenter.x + 160,
+    y: outputCenter.y - 120,
+  });
 
-  await expect(page.locator("[data-snapline-type='connector-line']")).toHaveCount(
-    0,
-  );
+  await expect(
+    page.locator("[data-snapline-type='connector-line']"),
+  ).toHaveCount(0);
 });
 
 test("selects nodes with the rectangle selector", async ({ page }) => {

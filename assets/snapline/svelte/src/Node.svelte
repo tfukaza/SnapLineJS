@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { NodeMirror, LineMirror, DEFAULT_RESIZE_HANDLE_THICKNESS, type NodeCallbacks, type GeometryChangeEvent, type NodeResizeEvent, type ResizeHandle, type SnapLineMetadata } from "@snap-engine/snapline";
+    import { NodeMirror, LineMirror, DEFAULT_RESIZE_HANDLE_THICKNESS, type NodeCallbacks, type NewLineResolver, type GeometryChangeEvent, type NodeResizeEvent, type ResizeHandle, type SnapLineMetadata } from "@snap-engine/snapline";
     import type { Engine } from "@snap-engine/core";
     import Line from "./Line.svelte";
     import { onMount, setContext, getContext, onDestroy, tick, untrack } from "svelte";
@@ -10,6 +10,8 @@
         id = undefined,
         className = "",
         LineSvelteComponent = Line,
+        resolveLineComponent = undefined,
+        resolveNewLine = undefined,
         nodeObject = null,
         x = 0,
         y = 0,
@@ -32,7 +34,23 @@
         /** Stable domain identity; minted when omitted (supply for persistence). */
         id?: string;
         className?: string;
+        /** One renderer for every line leaving this node. */
         LineSvelteComponent?: typeof Line;
+        /**
+         * Picks a renderer per line, so a data edge and a control edge leaving
+         * the same node can look different. Falls back to
+         * `LineSvelteComponent` when it returns nothing.
+         *
+         * Resolved at render time, not at line creation: hydration never runs
+         * the creation callback (a reloaded graph builds its lines through the
+         * reconciler), so resolving from the line is what makes a line you just
+         * drew and the same line after a refresh render identically. Branch on
+         * serializable data you put in the payload — never store a component
+         * reference in a record.
+         */
+        resolveLineComponent?: (line: LineMirror) => typeof Line | null | undefined;
+        /** Seeds application data onto a line a drag from this node creates. */
+        resolveNewLine?: NewLineResolver;
         nodeObject?: NodeMirror | null;
         x?: number;
         y?: number;
@@ -57,7 +75,7 @@
     let engine: Engine = getContext("engine");
     const ownsNode = nodeObject == null;
     if (!nodeObject) {
-         nodeObject = new NodeMirror(engine, null, { id, resizable, minWidth, minHeight, resizeHandleThickness, resizeHandles, resizeCursors, metadata, callbacks: {}, edgePan });
+         nodeObject = new NodeMirror(engine, null, { id, resizable, minWidth, minHeight, resizeHandleThickness, resizeHandles, resizeCursors, metadata, callbacks: {}, edgePan, resolveNewLine });
     }
     let lineList: LineMirror[] = $state(nodeObject.getAllOutgoingLines());
 
@@ -180,7 +198,8 @@
 
 
 {#each lineList as line (line.lineId)}
-    <LineSvelteComponent {line} />
+    {@const LineFor = resolveLineComponent?.(line) ?? LineSvelteComponent}
+    <LineFor {line} />
 {/each}
 <div
     {...elementProps}

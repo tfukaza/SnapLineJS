@@ -149,10 +149,7 @@ test("stationary second touch after a one-finger pan does not zoom the camera", 
     buttons: 0,
   });
 
-  expect(scaleAfterStationaryPinch).toBeCloseTo(
-    scaleBeforeStationaryPinch,
-    3,
-  );
+  expect(scaleAfterStationaryPinch).toBeCloseTo(scaleBeforeStationaryPinch, 3);
 });
 
 test("pinch pans from the center point between two fingers", async ({
@@ -223,14 +220,8 @@ test("pinch pans from the center point between two fingers", async ({
     buttons: 0,
   });
 
-  expect(transformAfterPan.x - transformBeforePan.x).toBeCloseTo(
-    movement.x,
-    1,
-  );
-  expect(transformAfterPan.y - transformBeforePan.y).toBeCloseTo(
-    movement.y,
-    1,
-  );
+  expect(transformAfterPan.x - transformBeforePan.x).toBeCloseTo(movement.x, 1);
+  expect(transformAfterPan.y - transformBeforePan.y).toBeCloseTo(movement.y, 1);
 });
 
 test("pinch zoom keeps the original world points under both fingers", async ({

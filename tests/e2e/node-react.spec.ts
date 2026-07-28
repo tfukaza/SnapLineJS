@@ -29,32 +29,34 @@ async function waitForAnimationFrame(page: Page) {
 }
 
 async function lineEndpoints(page: Page) {
-  return page.locator("[data-snapline-type='connector-line']").evaluate((svg) => {
-    const rect = svg.getBoundingClientRect();
-    const transform = new DOMMatrixReadOnly(getComputedStyle(svg).transform);
-    const path = svg.querySelector("path");
-    const numbers =
-      path
-        ?.getAttribute("d")
-        ?.match(/-?\d+(?:\.\d+)?/g)
-        ?.map(Number) ?? [];
-    const startPoint = new DOMPoint(numbers[0] ?? 0, numbers[1] ?? 0);
-    const endPoint = new DOMPoint(numbers[6] ?? 0, numbers[7] ?? 0);
-    const transformedStart = startPoint.matrixTransform(transform);
-    const transformedEnd = endPoint.matrixTransform(transform);
-    const layoutOffsetX = rect.left - transformedStart.x;
-    const layoutOffsetY = rect.top - transformedStart.y;
-    return {
-      start: {
-        x: transformedStart.x + layoutOffsetX,
-        y: transformedStart.y + layoutOffsetY,
-      },
-      end: {
-        x: transformedEnd.x + layoutOffsetX,
-        y: transformedEnd.y + layoutOffsetY,
-      },
-    };
-  });
+  return page
+    .locator("[data-snapline-type='connector-line']")
+    .evaluate((svg) => {
+      const rect = svg.getBoundingClientRect();
+      const transform = new DOMMatrixReadOnly(getComputedStyle(svg).transform);
+      const path = svg.querySelector("path");
+      const numbers =
+        path
+          ?.getAttribute("d")
+          ?.match(/-?\d+(?:\.\d+)?/g)
+          ?.map(Number) ?? [];
+      const startPoint = new DOMPoint(numbers[0] ?? 0, numbers[1] ?? 0);
+      const endPoint = new DOMPoint(numbers[6] ?? 0, numbers[7] ?? 0);
+      const transformedStart = startPoint.matrixTransform(transform);
+      const transformedEnd = endPoint.matrixTransform(transform);
+      const layoutOffsetX = rect.left - transformedStart.x;
+      const layoutOffsetY = rect.top - transformedStart.y;
+      return {
+        start: {
+          x: transformedStart.x + layoutOffsetX,
+          y: transformedStart.y + layoutOffsetY,
+        },
+        end: {
+          x: transformedEnd.x + layoutOffsetX,
+          y: transformedEnd.y + layoutOffsetY,
+        },
+      };
+    });
 }
 
 function expectPointCloseTo(
@@ -70,7 +72,9 @@ test.beforeEach(async ({ page }) => {
   await page.goto("/");
 });
 
-test("renders the React SnapLine demo nodes and connectors", async ({ page }) => {
+test("renders the React SnapLine demo nodes and connectors", async ({
+  page,
+}) => {
   await expect(page.locator("[data-snapline-type='node']")).toHaveCount(3);
   await expect(page.locator("[data-snapline-type='connector']")).toHaveCount(6);
   await expect(page.locator("[data-snapline-type='selection']")).toHaveCount(1);
@@ -88,9 +92,9 @@ test("connects two React SnapLine nodes", async ({ page }) => {
 
   await dragFromTo(page, await centerOf(output), await centerOf(input));
 
-  await expect(page.locator("[data-snapline-type='connector-line']")).toHaveCount(
-    1,
-  );
+  await expect(
+    page.locator("[data-snapline-type='connector-line']"),
+  ).toHaveCount(1);
 });
 
 test("keeps a React line endpoint aligned while the target node is moving", async ({

@@ -1,10 +1,10 @@
 import { expect, test } from "@playwright/test";
-import {
-  ConnectorMirror,
-  NodeMirror,
-} from "../../assets/snapline/core/src";
+import { ConnectorMirror, NodeMirror } from "../../assets/snapline/core/src";
 import { getGraphRegistry } from "../../assets/snapline/core/src";
-import { attachControlledGraph, type LineChangeRequest } from "../../assets/snapline/core/src";
+import {
+  attachControlledGraph,
+  type LineChangeRequest,
+} from "../../assets/snapline/core/src";
 import {
   armGesture,
   createControlledHarness as controlledHarness,

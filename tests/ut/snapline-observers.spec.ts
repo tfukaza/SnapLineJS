@@ -2,8 +2,14 @@ import { expect, test } from "@playwright/test";
 import { ConnectorMirror, NodeMirror } from "../../assets/snapline/core/src";
 
 import {
+  armGesture,
+  createControlledHarness,
   createEngineHarness,
+  driveGestureDrop,
+  eventPositionAt,
   installObserverStubs,
+  nearTargetStrategy,
+  startGestureDrag,
 } from "../helpers/snapline-harness";
 
 /** Tasks queued for one object at one stage, keyed by their queueId. */
@@ -168,4 +174,109 @@ test("a resize signals the node, and its snapshot reports authored size", () => 
   } finally {
     restoreObservers();
   }
+});
+
+test("resolveNewLine seeds a genuinely new line and rides into the request", () => {
+  const { engine, handle, requests, respondWith } = createControlledHarness();
+  respondWith((request, current) => [...current, ...request.add]);
+  const sourceNode = new NodeMirror(engine, null, {
+    resolveNewLine: ({ connector }) => ({ kind: `from:${connector.name}` }),
+  });
+  const targetNode = new NodeMirror(engine, null);
+  const source = new ConnectorMirror(engine, sourceNode, {
+    id: "seed-out",
+    name: "source",
+    rules: { maxIncoming: 0 },
+    surfaceStrategies: [nearTargetStrategy],
+  });
+  const target = new ConnectorMirror(engine, targetNode, {
+    id: "seed-in",
+    name: "target",
+    rules: { maxOutgoing: 0 },
+    surfaceStrategies: [nearTargetStrategy],
+  });
+  sourceNode.addConnectorObject(source);
+  targetNode.addConnectorObject(target);
+
+  armGesture(source, 1);
+  startGestureDrag(source, 1);
+  const line = source.outgoingLines[0];
+  // Seeded before any request exists — this is the only thing a preview
+  // renderer can read mid-drag.
+  expect(line.payload).toEqual({ kind: "from:source" });
+
+  driveGestureDrop(source, 100, 1);
+  expect(requests).toHaveLength(1);
+  expect(requests[0].add[0].payload).toEqual({ kind: "from:source" });
+
+  handle.flush();
+  expect(target.incomingLines).toHaveLength(1);
+});
+
+test("a connector-level resolveNewLine overrides the node's", () => {
+  const { engine } = createEngineHarness();
+  const node = new NodeMirror(engine, null, {
+    resolveNewLine: () => "from-node",
+  });
+  const plain = new ConnectorMirror(engine, node, {
+    name: "plain",
+    rules: { maxIncoming: 0 },
+  });
+  const special = new ConnectorMirror(engine, node, {
+    name: "special",
+    rules: { maxIncoming: 0 },
+    resolveNewLine: () => "from-connector",
+  });
+  node.addConnectorObject(plain);
+  node.addConnectorObject(special);
+
+  armGesture(plain, 2);
+  startGestureDrag(plain, 2);
+  armGesture(special, 3);
+  startGestureDrag(special, 3);
+  expect(plain.outgoingLines[0].payload).toBe("from-node");
+  expect(special.outgoingLines[0].payload).toBe("from-connector");
+});
+
+test("a reconnect never re-seeds — the payload stays app-owned", () => {
+  const { engine, handle, respondWith } = createControlledHarness();
+  respondWith((request, current) => [...current, ...request.add]);
+  let seeds = 0;
+  const sourceNode = new NodeMirror(engine, null, {
+    resolveNewLine: () => `seed-${++seeds}`,
+  });
+  const targetNode = new NodeMirror(engine, null);
+  const source = new ConnectorMirror(engine, sourceNode, {
+    id: "rc-out",
+    name: "source",
+    rules: { maxIncoming: 0 },
+    surfaceStrategies: [nearTargetStrategy],
+  });
+  const target = new ConnectorMirror(engine, targetNode, {
+    id: "rc-in",
+    name: "target",
+    rules: { maxOutgoing: 0, reconnect: true },
+    surfaceStrategies: [nearTargetStrategy],
+  });
+  sourceNode.addConnectorObject(source);
+  targetNode.addConnectorObject(target);
+
+  armGesture(source, 4);
+  startGestureDrag(source, 4);
+  driveGestureDrop(source, 100, 4);
+  handle.flush();
+  const line = source.outgoingLines[0];
+  expect(line.payload).toBe("seed-1");
+
+  // Picking the settled line back up must not run the seeder again.
+  target.armSurfaceGesture(
+    {
+      position: eventPositionAt(0, 0),
+      event: { button: 0, pointerId: 5 },
+    } as any,
+    null,
+  );
+  driveGestureDrop(source, 100, 5);
+  expect(seeds).toBe(1);
+  expect(line.payload).toBe("seed-1");
 });

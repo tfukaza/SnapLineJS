@@ -17,7 +17,7 @@ import {
   snapData,
 } from "./internal/shared-data";
 import { mintDomainId } from "./internal/graph-registry";
-import type { SnapLineMetadata } from "./connector";
+import type { NewLineResolver, SnapLineMetadata } from "./connector";
 import type { GeometryInvalidationObserver } from "./types";
 
 export type ResizeHandle = "n" | "ne" | "e" | "se" | "s" | "sw" | "w" | "nw";
@@ -69,6 +69,12 @@ export interface NodeConfig {
   callbacks?: NodeCallbacks;
   /** Allows this node gesture to use the engine's configured edge pan. */
   edgePan?: boolean;
+  /**
+   * Seeds application data onto a line a drag from any of this node's
+   * connectors creates. One place for all its ports; the event carries the
+   * connector so it can branch. A connector may override it.
+   */
+  resolveNewLine?: NewLineResolver;
 }
 
 /** Shared by core hitboxes and adapter resize-handle visuals. */
@@ -76,7 +82,17 @@ export const DEFAULT_RESIZE_HANDLE_THICKNESS = 14;
 
 // `id` is identity, not configuration — read once in the constructor, never
 // defaulted or merged.
-const DEFAULT_NODE_CONFIG: Required<Omit<NodeConfig, "id">> = {
+/**
+ * Config with every defaultable field resolved. `resolveNewLine` stays
+ * optional: it seeds application data, and there is no sensible default for
+ * that — its absence is the meaningful state.
+ */
+export type ResolvedNodeConfig = Required<
+  Omit<NodeConfig, "id" | "resolveNewLine">
+> &
+  Pick<NodeConfig, "resolveNewLine">;
+
+const DEFAULT_NODE_CONFIG: ResolvedNodeConfig = {
   lockPosition: false,
   resizable: false,
   minWidth: 0,
@@ -361,7 +377,7 @@ class NodeMirror extends ElementObject {
   /** Stable domain identity — supplied via `NodeConfig.id` or minted. Never
    * the engine-internal `BaseObject.id`. */
   readonly nodeId: string;
-  #config: Required<Omit<NodeConfig, "id">>;
+  #config: ResolvedNodeConfig;
   /** @internal Name-keyed live connectors; written by ConnectorMirror's
    * assignToNode/destroy — the one deliberate cross-class field. */
   _connectors: { [key: string]: ConnectorMirror };
@@ -464,12 +480,17 @@ class NodeMirror extends ElementObject {
     // ownership note in assets/snapline/AGENTS.md).
   }
 
-  get config(): Required<Omit<NodeConfig, "id">> {
+  get config(): ResolvedNodeConfig {
     return this.#config;
   }
 
   get callbacks(): NodeCallbacks {
     return this.#callbacks;
+  }
+
+  /** The resolver a drag from this node's connectors seeds new lines with. */
+  get resolveNewLine(): NewLineResolver | null {
+    return this.#config.resolveNewLine ?? null;
   }
 
   get metadata(): SnapLineMetadata {

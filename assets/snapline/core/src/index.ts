@@ -18,6 +18,7 @@ export type {
   NodeSelectionEvent,
   NodeSelectionModeEvent,
   ResizeHandle,
+  ResolvedNodeConfig,
   SelectionMode,
 } from "./node";
 export { ConnectorMirror, resolveConnectorSourceAtPoint } from "./connector";
@@ -47,6 +48,8 @@ export type {
   ConnectorSurfaceHitTestEvent,
   ConnectorSurfaceStrategy,
   DisconnectReason,
+  NewLineEvent,
+  NewLineResolver,
   ResolvedConnectorRules,
   SnapLineMetadata,
 } from "./connector";

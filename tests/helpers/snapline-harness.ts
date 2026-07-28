@@ -191,6 +191,16 @@ export function armGesture(connector: ConnectorMirror, pointerId = 7): void {
 }
 
 /** Drive dragStart + dragEnd on the gesture owner, dropping at `dropX`. */
+/** Cross the drag threshold without dropping, so the preview line exists. */
+export function startGestureDrag(owner: ConnectorMirror, pointerId = 7): void {
+  const event = { button: 0, pointerId } as any;
+  (owner as any).event.input.dragStart({
+    start: eventPositionAt(0, 0),
+    pointerId,
+    event,
+  });
+}
+
 export function driveGestureDrop(
   owner: ConnectorMirror,
   dropX: number,
