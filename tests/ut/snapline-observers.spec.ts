@@ -280,3 +280,77 @@ test("a reconnect never re-seeds — the payload stays app-owned", () => {
   expect(seeds).toBe(1);
   expect(line.payload).toBe("seed-1");
 });
+
+test("empty-space vs refused drops are distinguishable, and spawn-on-drop works from app code", () => {
+  const { engine, handle, respondWith } = createControlledHarness();
+  respondWith((_request, current) => current); // reject: gestures never auto-commit
+  const sourceNode = new NodeMirror(engine, null);
+  const fullNode = new NodeMirror(engine, null);
+  const source = new ConnectorMirror(engine, sourceNode, {
+    id: "spawn-out",
+    name: "source",
+    rules: { maxIncoming: 0 },
+    surfaceStrategies: [nearTargetStrategy],
+  });
+  // A role-ineligible connector is filtered out during candidate resolution,
+  // so dropping on one is genuinely a miss. A *refusal* is a connector that
+  // resolves as a candidate and then declines at drop — which is what the
+  // predicate's two-phase contract exists for.
+  const refuser = new ConnectorMirror(engine, fullNode, {
+    id: "spawn-refuse",
+    name: "refuser",
+    rules: {
+      maxOutgoing: 0,
+      maxIncoming: 1,
+      isValidConnection: ({ phase }) => phase !== "drop",
+    },
+    surfaceStrategies: [nearTargetStrategy],
+  });
+  sourceNode.addConnectorObject(source);
+  fullNode.addConnectorObject(refuser);
+
+  const outcomes: string[] = [];
+  source.updateConfig({
+    callbacks: { onDragEnd: (event) => outcomes.push(event.outcome) },
+  });
+
+  // Drop far away — nearTargetStrategy misses beyond x=500.
+  armGesture(source, 1);
+  startGestureDrag(source, 1);
+  driveGestureDrop(source, 900, 1);
+  expect(outcomes).toEqual(["empty-space"]);
+
+  // Drop on a connector that cannot accept: a refusal, not a miss.
+  armGesture(source, 2);
+  startGestureDrag(source, 2);
+  driveGestureDrop(source, 100, 2);
+  expect(outcomes).toEqual(["empty-space", "refused"]);
+
+  // The spawn flow the "empty-space" branch enables: the app mounts the node
+  // and pushes the line itself. The record is latent until the connector
+  // registers, then converges with no extra wiring.
+  handle.setCanonicalGraph({
+    lines: [
+      {
+        id: "spawned",
+        fromConnectorId: "spawn-out",
+        toConnectorId: "spawned:input",
+      },
+    ],
+  });
+  handle.flush();
+  expect(source.outgoingLines).toEqual([]); // latent — nothing to draw yet
+
+  const spawnedNode = new NodeMirror(engine, null);
+  const spawnedIn = new ConnectorMirror(engine, spawnedNode, {
+    id: "spawned:input",
+    name: "input",
+    rules: { maxOutgoing: 0, maxIncoming: 1 },
+  });
+  spawnedNode.addConnectorObject(spawnedIn);
+  handle.flush();
+
+  expect(source.outgoingLines).toHaveLength(1);
+  expect(source.outgoingLines[0].lineId).toBe("spawned");
+  expect(spawnedIn.incomingLines).toHaveLength(1);
+});
