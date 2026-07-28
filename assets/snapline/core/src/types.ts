@@ -87,7 +87,24 @@ export interface LineChangeRequest {
 }
 
 export interface ControlledGraphCallbacks {
-  onLineChangeRequest(request: LineChangeRequest): void;
+  /**
+   * One atomic proposal per gesture. **Return the line list that should now be
+   * canonical** — the bridge hands it straight to the reconciler, so exactly
+   * one decisive pass runs per request whether you accept, normalize, or
+   * reject.
+   *
+   * ```ts
+   * onLineChangeRequest: (r) => (lines = applyLineChange(lines, r))
+   * ```
+   *
+   * To reject, return the list unchanged (`return lines`). The return type is
+   * non-optional on purpose: "I reject" and "I forgot to return anything" used
+   * to be the same code, and this makes the second one a type error.
+   *
+   * Must be synchronous — the staged preview line is resolved by the pass that
+   * follows this call.
+   */
+  onLineChangeRequest(request: LineChangeRequest): readonly LineRecord[];
   onDiagnosticsChanged?(diagnostics: readonly ReconciliationError[]): void;
 }
 

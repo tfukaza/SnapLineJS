@@ -1,7 +1,7 @@
 <script lang="ts">
   import { Engine } from "@snap-engine/asset-base-svelte";
   import type { Engine as CoreEngine } from "@snap-engine/core";
-  import { PlacementController } from "@snap-engine/snapline";
+  import { PlacementController, applyLineChange } from "@snap-engine/snapline";
   import {
     Connector,
     Group,
@@ -10,7 +10,7 @@
     Select,
   } from "@snap-engine/snapline-svelte";
   import { ControlledGraph } from "@snap-engine/snapline-svelte";
-  import type { LineChangeRequest, LineRecord } from "@snap-engine/snapline";
+  import type { LineRecord } from "@snap-engine/snapline";
   import ClientDemoFrame from "$lib/components/ClientDemoFrame.svelte";
 
   let {
@@ -23,20 +23,7 @@
   let engine = $state<CoreEngine | null>(null);
   // Topology is always controlled: the demo owns its line document and
   // accepts every atomic proposal.
-  let lines = $state<LineRecord[]>([]);
-  function applyRequest(request: LineChangeRequest): void {
-    lines = [
-      ...lines
-        .filter((record) => !request.remove.includes(record.id))
-        .map((record) => {
-          const update = request.update.find((entry) => entry.id === record.id);
-          return update
-            ? { ...record, toConnectorId: update.toConnectorId }
-            : record;
-        }),
-      ...request.add,
-    ];
-  }
+  let lines = $state.raw<LineRecord[]>([]);
   let placement = $state<PlacementController<string> | null>(null);
   let placedNodes = $state<Array<{ id: number; x: number; y: number }>>([]);
   let nextPlacedId = 1;
@@ -97,7 +84,9 @@
           {/each}
         </div>
         {#if mode === "connections"}
-          <ControlledGraph {lines} onLineChangeRequest={applyRequest} />
+          <ControlledGraph
+            onLineChangeRequest={(request) => (lines = applyLineChange(lines, request))}
+          />
           <Node className="doc-node card shallow" x={55} y={80}>
             <strong>Source</strong>
             <span>Drag the port</span>

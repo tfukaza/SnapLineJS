@@ -53,7 +53,7 @@ The `EdgeSync` component/controller, its `identity()` callback, and
 endpoint-pair edge matching are replaced by the controlled-graph protocol:
 
 ```svelte
-<ControlledGraph {lines} onLineChangeRequest={applyRequest} />
+<ControlledGraph onLineChangeRequest={(r) => (lines = applyLineChange(lines, r))} />
 ```
 
 - `lines: readonly LineRecord[]` — your document's records, each
@@ -69,9 +69,11 @@ endpoint-pair edge matching are replaced by the controlled-graph protocol:
   SnapLine-minted `LineId`; keeping it in the record you add settles the
   dragged line in place (no flicker, same mirror). Substituting your own id
   works but recreates the mirror.
-- Rejection needs no code path: apply nothing and the staged line is
-  discarded on the next pass (the adapter guarantees a post-request push of
-  your latest records).
+- **Return the next list.** `onLineChangeRequest` returns the records that
+  should now be canonical; the bridge adopts them directly, so there is no
+  push to remember. Rejection is `return lines` — the staged line is
+  discarded on the decisive pass. The return type is required, so forgetting
+  to return is a type error rather than a silent rejection.
 - Diagnostics: records the mirror cannot represent (missing endpoints stay
   silently latent; capacity/rule violations) surface through
   `onDiagnosticsChanged` / `query(engine).diagnostics()` — canonical records

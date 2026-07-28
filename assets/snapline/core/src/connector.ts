@@ -851,18 +851,12 @@ class ConnectorMirror extends ElementObject {
   }
 
   #dispatchRequest(request: LineChangeRequest): void {
-    const mirror = getGraphRegistry(this.engine);
-    if (mirror.pendingGestureRequest) {
-      console.warn(
-        "SnapLine: a line-change request is already in flight; gestures are serial, so this indicates a stalled adapter push.",
-      );
-    }
-    mirror.pendingGestureRequest = true;
-    mirror.reconciler?.dispatchLineChangeRequest?.(request);
-    // The decisive pass runs after the adapter's post-request push — the
-    // adapter queues its push inside the dispatch above, ahead of this
-    // scheduled microtask.
-    mirror.scheduleReconciliation();
+    // The dispatch itself adopts the application's returned line list, so the
+    // decisive pass this schedules always sees the app's answer — including
+    // rejection, which returns the list unchanged.
+    const registry = getGraphRegistry(this.engine);
+    registry.reconciler?.dispatchLineChangeRequest?.(request);
+    registry.scheduleReconciliation();
   }
 
   /** @internal Reconciler-only: settle a staged gesture line onto its

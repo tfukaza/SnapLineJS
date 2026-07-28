@@ -18,7 +18,7 @@ Wrap components in `Engine` from `@snap-engine/asset-base-svelte`.
 | [`Select`](/docs/snapline/reference/svelte/select)    | `callbacks`, `className`                                                                               |
 | [`Group`](/docs/snapline/reference/svelte/group)     | Node geometry plus `title`, `headerContent`, `canContain`, membership callbacks                        |
 | [`Placement`](/docs/snapline/reference/svelte/placement) | `controller`, cancellation options, `preview` snippet                                                  |
-| [`ControlledGraph`](/docs/snapline/reference/svelte/controlled-graph) | `lines` (your `LineRecord`s), `onLineChangeRequest`, `onDiagnosticsChanged`                      |
+| [`ControlledGraph`](/docs/snapline/reference/svelte/controlled-graph) | `onLineChangeRequest` (returns the next `LineRecord[]`), `onDiagnosticsChanged`                  |
 
 `getNodeObject()` exposes the underlying object from `Node` and `Group`;
 `Connector.object()` exposes its connector; `Select.getSelectObject()`

@@ -18,7 +18,7 @@ frameworkKey: overview
 | [`Select`](/docs/snapline/reference/react/select)    | callbacks and presentation                                                                              |
 | [`Group`](/docs/snapline/reference/react/group)     | node geometry, header content, membership policy and callbacks                                          |
 | [`Placement`](/docs/snapline/reference/react/placement) | controller, cancellation behavior, render function                                                      |
-| [`ControlledGraph`](/docs/snapline/reference/react/controlled-graph) | `lines` (your `LineRecord`s), `onLineChangeRequest`, `onDiagnosticsChanged`                       |
+| [`ControlledGraph`](/docs/snapline/reference/react/controlled-graph) | `onLineChangeRequest` (returns the next `LineRecord[]`), `onDiagnosticsChanged`                   |
 
 `Node` and `Group` forward refs to their core objects. `Connector` exposes a
 `ConnectorRef`, and `useNodeHandle()` returns a callback ref for a dedicated

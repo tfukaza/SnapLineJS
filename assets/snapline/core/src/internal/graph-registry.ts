@@ -59,10 +59,6 @@ export class GraphRegistry {
   // reach it through this slot.
   reconciler: GraphReconcilerLike | null = null;
 
-  /** @internal One in-flight gesture request per engine (gestures are
-   * serial); cleared by the next reconciliation pass. */
-  pendingGestureRequest = false;
-
   #reconciliationQueued = false;
   #batchDepth = 0;
   #batchDirty = false;

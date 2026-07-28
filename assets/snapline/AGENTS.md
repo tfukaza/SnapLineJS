@@ -298,10 +298,11 @@ both endpoints' `isValidConnection` with the real `LineMirror`), stages the
 outcome on the same mirror (phase `"staged"`, no topology commitment), and
 dispatches ONE atomic `LineChangeRequest`
 (`{ intent: connect|disconnect|replace|reconnect, add, remove, update }` —
-`replace-oldest` evictions ride the request, never local deletes). Adapters
-GUARANTEE a post-request microtask push of the live records ahead of the
-decisive pass, so acceptance, normalization, rejection, and
-rejection-by-inaction all resolve from the next snapshot — adopting the
+`replace-oldest` evictions ride the request, never local deletes). `onLineChangeRequest`
+RETURNS the line list that should now be canonical, and the bridge adopts it
+synchronously — so exactly one decisive pass runs per request, acceptance and
+rejection alike, with no dependence on when a framework flushes state.
+Rejection is returning the list unchanged; adopting the
 proposed `lineId` settles the dragged line in place; rejection needs no code
 path. Consumers should write their document synchronously inside the request
 handler; deferred stores degrade to a one-frame pending state, never an

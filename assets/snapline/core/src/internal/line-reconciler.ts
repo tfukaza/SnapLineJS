@@ -39,9 +39,19 @@ export class LineReconciler {
     if (this.#mirror.reconciler === this) this.#mirror.reconciler = null;
   }
 
-  /** Forward a gesture's atomic proposal to the application. */
+  /**
+   * Forward a gesture's atomic proposal to the application and adopt whatever
+   * it returns as the new canonical state.
+   *
+   * Synchronous and unconditional, which is what makes the protocol's
+   * invariants structural rather than timed: exactly one decisive pass per
+   * request (including a rejected one, since the end-of-pass sweep is
+   * snapshot-driven, not flag-driven), and no dependence on when a framework
+   * happens to flush its state.
+   */
   dispatchLineChangeRequest(request: LineChangeRequest): void {
-    this.#callbacks.onLineChangeRequest(request);
+    const lines = this.#callbacks.onLineChangeRequest(request);
+    this.setCanonicalGraph({ lines });
   }
 
   /** One pass: prune, preserve/retarget by stable id, create, report. */
@@ -156,7 +166,6 @@ export class LineReconciler {
       }
     } finally {
       this.#reconciling = false;
-      mirror.pendingGestureRequest = false;
     }
 
     if (mirror.setReconciliationErrors(errors)) {

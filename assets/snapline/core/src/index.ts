@@ -91,7 +91,7 @@ export type {
   PlacementSize,
   PlacementSnapshot,
 } from "./placement";
-export { attachControlledGraph } from "./controlled-graph";
+export { applyLineChange, attachControlledGraph } from "./controlled-graph";
 export { getGraphRegistry } from "./internal/shared-data";
 export type {
   CanonicalGraphSnapshot,

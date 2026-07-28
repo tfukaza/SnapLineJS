@@ -1,12 +1,21 @@
 <script lang="ts">
   import { Engine } from "@snap-engine/asset-base-svelte";
   import { ControlledGraph, Select } from "@snap-engine/snapline-svelte";
+  import { applyLineChange } from "@snap-engine/snapline";
   import type { LineChangeRequest, LineRecord } from "@snap-engine/snapline";
   import EdgeNode from "./EdgeNode.svelte";
 
   // The application-owned line document: the single source of truth.
   // Connector ids are `${node}:${port}`; line ids are stable.
-  let lines = $state<LineRecord[]>([]);
+  let lines = $state.raw<LineRecord[]>([]);
+  let graph: ControlledGraph;
+
+  // Changes with no originating request (toolbar buttons, the test hook) have
+  // to be pushed; only a gesture's return value reaches SnapLine on its own.
+  function commit(next: LineRecord[]): void {
+    lines = next;
+    graph?.setLines(next);
+  }
   let connectIntents = $state(0);
   let disconnectIntents = $state(0);
   let intentLog = $state<string[]>([]);
@@ -47,37 +56,28 @@
     }
   }
 
-  function handleRequest(request: LineChangeRequest): void {
+  function handleRequest(request: LineChangeRequest): readonly LineRecord[] {
     intentLog = [...intentLog, describe(request)];
     if (request.add.length > 0) connectIntents += 1;
     if (request.intent === "disconnect") disconnectIntents += 1;
-    if (rejectConnects && request.add.length > 0) return; // reject: no doc change
+    // Rejection is returning the document unchanged — explicit, and no longer
+    // spelled the same way as forgetting to return at all.
+    if (rejectConnects && request.add.length > 0) return lines;
     // Accept the atomic proposal — adopting the proposed ids settles the
     // staged lines in place.
-    lines = [
-      ...lines
-        .filter((record) => !request.remove.includes(record.id))
-        .map((record) => {
-          const update = request.update.find(
-            (entry) => entry.id === record.id,
-          );
-          return update
-            ? { ...record, toConnectorId: update.toConnectorId }
-            : record;
-        }),
-      ...request.add,
-    ];
+    return (lines = applyLineChange(lines, request));
   }
 
   function addDocLine(record: LineRecord): void {
     if (lines.some((existing) => existing.id === record.id)) return;
-    // Single-capacity inputs replace at the document level.
-    lines = [
+    // Single-capacity inputs replace at the document level. This is the app's
+    // own policy, not a request being applied, so it goes through commit().
+    commit([
       ...lines.filter(
         (existing) => existing.toConnectorId !== record.toConnectorId,
       ),
       record,
-    ];
+    ]);
   }
 
   // Test hook: lets the e2e mutate the document mid-drag without a second
@@ -107,9 +107,9 @@
   >Add A→C</button>
   <button
     data-testid="remove-edge"
-    onclick={() => (lines = lines.slice(0, -1))}
+    onclick={() => commit(lines.slice(0, -1))}
   >Remove last</button>
-  <button data-testid="reset-doc" onclick={() => (lines = [])}>Reset</button>
+  <button data-testid="reset-doc" onclick={() => commit([])}>Reset</button>
   <button
     data-testid="reject-connects"
     aria-pressed={rejectConnects}
@@ -130,7 +130,7 @@
   <div id="node-ui-edges">
     <div id="sl-background"></div>
     <Select />
-    <ControlledGraph {lines} onLineChangeRequest={handleRequest} />
+    <ControlledGraph bind:this={graph} onLineChangeRequest={handleRequest} />
     <EdgeNode nodeId="a" title="Node A" x={120} y={120} />
     <EdgeNode nodeId="b" title="Node B" x={440} y={170} maxIncoming={1} />
     {#if showNodeC}

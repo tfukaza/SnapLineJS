@@ -140,8 +140,8 @@ sequenceDiagram
   Conn->>Line: stageTarget() — phase "staged", no topology commitment
   Conn->>Rec: dispatch ONE atomic LineChangeRequest
   Rec->>Adapter: onLineChangeRequest(request)
-  Adapter->>App: application applies (or ignores) the request
-  Adapter->>Rec: post-request microtask push of live records
+  Adapter->>App: application applies (or rejects) the request
+  App-->>Rec: returns the next LineRecord[] (adopted synchronously)
   Rec->>Rec: decisive reconciliation pass
   alt id adopted in the snapshot
     Rec->>Line: settle staged mirror in place (strict recheck)
@@ -164,14 +164,12 @@ Key properties:
   in the settled index. A gesture disconnect stages the detached line and
   proposes `remove`; a rejected removal re-glues it from the unchanged
   document.
-- **Adapters guarantee a post-request push.** Both `ControlledGraph`
-  components queue `setCanonicalGraph` with the live records in a microtask
-  ahead of the decisive pass, so acceptance, normalization, rejection, and
-  rejection-by-inaction all resolve from the next snapshot — rejection needs
-  no code path.
-- **Gestures are serial.** One in-flight request per engine
-  (`GraphRegistry.pendingGestureRequest`); a second dispatch before the pass
-  warns about a stalled adapter push.
+- **The request returns the next document.** `onLineChangeRequest` returns
+  the line list that should now be canonical, and the bridge hands it
+  straight to `setCanonicalGraph`. Exactly one decisive pass runs per
+  request, acceptance and rejection alike; rejection is returning the list
+  unchanged. This replaced an adapter-guaranteed post-request microtask push
+  whose correctness rested on framework flush timing.
 - **No graph owner, no gesture.** A drop on an engine without an attached
   reconciler warns and discards the preview — there is no document to
   propose to.
@@ -348,9 +346,8 @@ bulk mount of 100 nodes runs one pass, not one per connector.
 the outermost idempotent `end()`, which schedules one final pass if anything
 went dirty; `runBatch(fn)` is the exception-safe scoped form. `flush()`
 (exposed on the `ControlledGraphHandle`) runs any pending or batch-deferred
-pass synchronously for vanilla consumers and tests. Gesture dispatch
-schedules the decisive pass behind the adapter's post-request push
-microtask.
+pass synchronously for vanilla consumers and tests. Gesture dispatch adopts
+the handler's returned list and then schedules the decisive pass.
 
 ## Diagnostics
 
@@ -410,8 +407,9 @@ types). Adapter contracts:
 - `Node`/`Group` take `id` props (stable domain identity);
 - line lists key by `lineId`; `Line` renders `data-line-id`; SVG markers use
   `arrow-${lineId}`;
-- `ControlledGraph` takes `{ lines, onLineChangeRequest,
-  onDiagnosticsChanged? }` and implements the guaranteed post-request push;
+- `ControlledGraph` takes `{ onLineChangeRequest, onDiagnosticsChanged? }`;
+  the handler returns the next line list. Non-request pushes go through the
+  component's imperative handle (`bind:this` in Svelte, a ref in React);
 - supplied core objects are not destroyed on unmount; adapter-created
   objects are.
 

@@ -100,10 +100,12 @@ and apply each gesture's atomic proposal:
 
 ```svelte
 <ControlledGraph
-  lines={doc.lines}
-  onLineChangeRequest={(request) => applyToDocument(request)}
+  onLineChangeRequest={(request) => (doc.lines = applyLineChange(doc.lines, request))}
 />
 ```
+
+The handler returns the list that should now be canonical; the bridge adopts
+it directly.
 
 A gesture-created line carries a SnapLine-minted stable id in
 `request.add[0].id`; keeping that id in the record you store settles the

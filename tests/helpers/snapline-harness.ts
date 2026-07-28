@@ -3,7 +3,9 @@ import {
   NodeMirror,
   attachControlledGraph,
   type ConnectorSurfaceStrategy,
+  type ControlledGraphHandle,
   type LineChangeRequest,
+  type LineRecord,
   type ReconciliationError,
 } from "../../assets/snapline/core/src";
 
@@ -114,16 +116,60 @@ export function installObserverStubs(): () => void {
   };
 }
 
-/** Engine + attached controlled-graph bridge with request/diagnostic logs. */
+/**
+ * Engine + attached controlled-graph bridge with request/diagnostic logs.
+ *
+ * Stands in for an application document: the handler must now return the next
+ * line list synchronously, so the harness tracks one. The default answer is
+ * rejection — return the document unchanged — and `respondWith` installs an
+ * accept/normalize policy. Pushes through the returned handle update the
+ * tracked document too, so a later gesture rejects against what the test
+ * actually loaded rather than against an empty list.
+ */
 export function createControlledHarness() {
   const { engine, global } = createEngineHarness();
   const requests: LineChangeRequest[] = [];
   const diagnosticsLog: (readonly ReconciliationError[])[] = [];
-  const handle = attachControlledGraph(engine, {
-    onLineChangeRequest: (request) => requests.push(request),
+  let doc: readonly LineRecord[] = [];
+  let respond:
+    | ((
+        request: LineChangeRequest,
+        current: readonly LineRecord[],
+      ) => readonly LineRecord[])
+    | null = null;
+
+  const bridge = attachControlledGraph(engine, {
+    onLineChangeRequest: (request) => {
+      requests.push(request);
+      if (respond) doc = respond(request, doc);
+      return doc;
+    },
     onDiagnosticsChanged: (diagnostics) => diagnosticsLog.push(diagnostics),
   });
-  return { engine, global, handle, requests, diagnosticsLog };
+
+  const handle: ControlledGraphHandle = {
+    ...bridge,
+    setCanonicalGraph: (snapshot) => {
+      doc = snapshot.lines;
+      bridge.setCanonicalGraph(snapshot);
+    },
+  };
+
+  return {
+    engine,
+    global,
+    handle,
+    requests,
+    diagnosticsLog,
+    respondWith: (
+      fn: (
+        request: LineChangeRequest,
+        current: readonly LineRecord[],
+      ) => readonly LineRecord[],
+    ) => {
+      respond = fn;
+    },
+  };
 }
 
 export function eventPositionAt(x: number, y: number) {
