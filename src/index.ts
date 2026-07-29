@@ -24,7 +24,12 @@ import type {
   InputControlConfig,
   eventPosition,
 } from "./input";
-import { getDomProperty, cloneDomProperty, EventProxyFactory } from "./util";
+import {
+  getDomProperty,
+  cloneDomProperty,
+  EventProxyFactory,
+  mergeDefined,
+} from "./util";
 import { Camera } from "./camera";
 import type { CameraConfig } from "./camera";
 
@@ -40,6 +45,7 @@ export {
   getDomProperty,
   cloneDomProperty,
   EventProxyFactory,
+  mergeDefined,
   type pointerDownProp,
   type pointerMoveProp,
   type pointerUpProp,

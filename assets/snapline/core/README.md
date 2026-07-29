@@ -2,7 +2,7 @@
 
 Framework-neutral node graph interaction primitives for SnapEngine.
 
-SnapLine provides draggable and resizable nodes, connector policy, SVG line
+SnapLine provides draggable nodes with explicit DOM resize regions, connector policy, SVG line
 geometry, rectangle selection, exclusive nested groups, engine queries, and
 headless palette placement. Applications retain ownership of graph documents,
 node types, validation, persistence, and styling.
@@ -23,6 +23,7 @@ implementation detail and must not be deep-imported.
 import {
   GroupNodeMirror,
   NodeMirror,
+  ResizeRegionMirror,
   getParentGroup,
   setGroupMembershipResolver,
 } from "@snap-engine/snapline";
@@ -30,6 +31,10 @@ import {
 
 After assigning a Vanilla-rendered element, call `remeasureDomGeometry()`. Svelte
 and React adapters perform that synchronization automatically.
+
+Resizing is opt-in: create a `ResizeRegionMirror` child and assign its DOM
+element. The application owns that element's hit area, position, cursor,
+hover behavior, and visuals.
 
 Live gesture geometry stays outside framework state. Nodes and groups write
 their retained element transforms and resize dimensions directly. Line,

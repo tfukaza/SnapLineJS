@@ -1,7 +1,9 @@
 <script lang="ts">
-    import { Node, Connector, Line } from "@snap-engine/snapline-svelte";
+    import { Node, Connector, Line, ResizeRegion } from "@snap-engine/snapline-svelte";
+    import type { ResizeHandle } from "@snap-engine/snapline";
 
-    let { title = "Node", id = title, x = 0, y = 0, resizable = false, resizeHandles = undefined } = $props();
+    let { title = "Node", id = title, x = 0, y = 0, handles = [] }:
+        { title?: string; id?: string; x?: number; y?: number; handles?: readonly ResizeHandle[] } = $props();
     let nodeComponent: any = $state(null);
 </script>
 
@@ -11,8 +13,6 @@
     LineSvelteComponent={Line}
     {x}
     {y}
-    {resizable}
-    {resizeHandles}
     minWidth={140}
     minHeight={90}
 >
@@ -27,6 +27,9 @@
             <div class="cw"><Connector id={`${id}:output`} name="output" rules={{ maxIncoming: 0 }} /></div>
         </div>
     </div>
+    {#each handles as handle}
+        <ResizeRegion {handle} class="resize-region" />
+    {/each}
 </Node>
 
 <style>
@@ -39,7 +42,6 @@
         box-shadow: 0 2px 4px rgba(0, 0, 0, 0.12);
         display: flex;
         flex-direction: column;
-        overflow: hidden;
     }
     .rnode-header {
         padding: 8px 10px;
@@ -72,8 +74,42 @@
         width: 14px;
         height: 14px;
     }
-    :global(.rnode .snapline-node-resize) {
-        background: rgb(80 130 255 / 55%);
-        border-radius: 0 0 8px 0;
+    :global(.rnode .resize-region) {
+        --thickness: 14px;
+        position: absolute;
+        z-index: 2;
+    }
+    :global(.rnode .resize-region[data-handle="n"]),
+    :global(.rnode .resize-region[data-handle="s"]) {
+        left: var(--thickness);
+        right: var(--thickness);
+        height: var(--thickness);
+        cursor: ns-resize;
+    }
+    :global(.rnode .resize-region[data-handle="e"]),
+    :global(.rnode .resize-region[data-handle="w"]) {
+        top: var(--thickness);
+        bottom: var(--thickness);
+        width: var(--thickness);
+        cursor: ew-resize;
+    }
+    :global(.rnode .resize-region[data-handle^="n"]) { top: calc(var(--thickness) / -2); }
+    :global(.rnode .resize-region[data-handle^="s"]) { bottom: calc(var(--thickness) / -2); }
+    :global(.rnode .resize-region[data-handle$="e"]) { right: calc(var(--thickness) / -2); }
+    :global(.rnode .resize-region[data-handle$="w"]) { left: calc(var(--thickness) / -2); }
+    :global(.rnode .resize-region[data-handle="ne"]),
+    :global(.rnode .resize-region[data-handle="se"]),
+    :global(.rnode .resize-region[data-handle="sw"]),
+    :global(.rnode .resize-region[data-handle="nw"]) {
+        width: var(--thickness);
+        height: var(--thickness);
+    }
+    :global(.rnode .resize-region[data-handle="ne"]),
+    :global(.rnode .resize-region[data-handle="sw"]) {
+        cursor: nesw-resize;
+    }
+    :global(.rnode .resize-region[data-handle="nw"]),
+    :global(.rnode .resize-region[data-handle="se"]) {
+        cursor: nwse-resize;
     }
 </style>

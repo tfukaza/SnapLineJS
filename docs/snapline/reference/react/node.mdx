@@ -1,6 +1,6 @@
 ---
 title: Node API
-description: React Node props, callbacks, resize configuration, ref, and hooks.
+description: React Node props, callbacks, geometry, ref, and hooks.
 order: 2
 sectionTitle: Reference
 sectionOrder: 3
@@ -16,11 +16,7 @@ frameworkKey: node
 | `id` | Stable domain identity; minted when omitted — supply it for persistence |
 | `nodeObject` | Adopt an existing `NodeMirror` instead of creating one |
 | `x`, `y`, `width`, `height` | World geometry; changed props resynchronize the object |
-| `resizable` | Enable resize handles (default `false`) |
 | `minWidth`, `minHeight` | Resize floor |
-| `resizeHandles` | `true` for all handles, or a subset of `"n" \| "ne" \| "e" \| "se" \| "s" \| "sw" \| "w" \| "nw"` |
-| `resizeHandleThickness` | Handle hit area in pixels (default 14) |
-| `resizeCursors` | Per-handle cursor overrides |
 | `metadata` | `SnapLineMetadata` attached to the node |
 | `callbacks` | `NodeCallbacks` object (drag, selection, resize, lines) |
 | `onGeometryCommit` | Convenience callback; batched final geometry for persistence |
@@ -34,6 +30,10 @@ frameworkKey: node
 `NodeMirrorContext` provides the owning `NodeMirror` to descendants, and
 `useNodeHandle()` returns a callback ref that marks an element as the node's
 dedicated drag surface.
+
+Resizing is opt-in by composition: render a `ResizeRegion` descendant for
+each direction you support. The region is the real DOM hit area; position,
+dimensions, cursor, visuals, and native hover events are application-owned.
 
 Callback props stay current across renders and compose with callbacks already
 present on a supplied core object. During a live pointer gesture, core writes

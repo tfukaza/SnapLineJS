@@ -1,6 +1,6 @@
 <script lang="ts">
   import { Engine } from "@snap-engine/asset-base-svelte";
-  import { Group } from "@snap-engine/snapline-svelte";
+  import { Group, ResizeRegion } from "@snap-engine/snapline-svelte";
   import SimpleNode from "../node_ui_demo/SimpleNode.svelte";
 
   // The framework hands the member NodeMirror to these callbacks; a consumer
@@ -29,7 +29,9 @@
       width={520}
       height={460}
       {onMembershipChange}
-    />
+    >
+      <ResizeRegion handle="se" class="group-resize-region" />
+    </Group>
     <SimpleNode title="Node A" x={100} y={110} />
     <SimpleNode title="Node C" x={100} y={300} />
     <SimpleNode title="Node B" x={640} y={120} />
@@ -57,7 +59,13 @@
     border-radius: 8px 8px 0 0;
     font: 600 13px sans-serif;
   }
-  :global(.snapline-group-resize) {
+  :global(.group-resize-region) {
+    position: absolute;
+    right: -7px;
+    bottom: -7px;
+    width: 14px;
+    height: 14px;
+    cursor: nwse-resize;
     background: rgb(120 160 255 / 60%);
     border-radius: 0 0 8px 0;
   }

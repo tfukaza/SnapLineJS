@@ -1,9 +1,4 @@
-export {
-  NodeMirror,
-  DEFAULT_RESIZE_CURSORS,
-  DEFAULT_RESIZE_HANDLE_THICKNESS,
-  RESIZE_HANDLES,
-} from "./node";
+export { NodeMirror, ResizeRegionMirror, RESIZE_HANDLES } from "./node";
 export type {
   NodeConfig,
   NodeCallbacks,
@@ -14,7 +9,6 @@ export type {
   NodeGeometry,
   ResolvedNodeDragPosition,
   NodeResizeEvent,
-  NodeResizeHandleEvent,
   NodeSelectionEvent,
   NodeSelectionModeEvent,
   ResizeHandle,

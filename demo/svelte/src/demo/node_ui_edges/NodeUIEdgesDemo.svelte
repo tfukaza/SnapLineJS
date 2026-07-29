@@ -159,7 +159,7 @@
       x={440}
       y={170}
       maxIncoming={1}
-      resizable
+      canResize
     />
     {#if showNodeC}
       <EdgeNode nodeId="c" title="Node C" x={280} y={380} />

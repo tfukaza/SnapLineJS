@@ -1,10 +1,11 @@
 <script lang="ts">
-    import { NodeMirror, LineMirror, DEFAULT_RESIZE_HANDLE_THICKNESS, type NodeCallbacks, type NewLineResolver, type GeometryChangeEvent, type NodeResizeEvent, type ResizeHandle, type SnapLineMetadata } from "@snap-engine/snapline";
+    import { NodeMirror, LineMirror, type NodeCallbacks, type NewLineResolver, type GeometryChangeEvent, type NodeResizeEvent, type SnapLineMetadata } from "@snap-engine/snapline";
     import type { Engine } from "@snap-engine/core";
     import Line from "./Line.svelte";
     import { onMount, setContext, getContext, onDestroy, tick, untrack } from "svelte";
     import type { HTMLAttributes } from "svelte/elements";
     import { blur } from "svelte/transition";
+    import { resizeRegionOwnerContext } from "./resize-region-context";
 
     let {
         id = undefined,
@@ -17,12 +18,8 @@
         y = 0,
         width = undefined,
         height = undefined,
-        resizable = false,
         minWidth = undefined,
         minHeight = undefined,
-        resizeHandleThickness = undefined,
-        resizeHandles = undefined,
-        resizeCursors = undefined,
         metadata = {},
         callbacks = {},
         edgePan = true,
@@ -56,12 +53,8 @@
         y?: number;
         width?: number;
         height?: number;
-        resizable?: boolean;
         minWidth?: number;
         minHeight?: number;
-        resizeHandleThickness?: number;
-        resizeHandles?: true | readonly ResizeHandle[];
-        resizeCursors?: Partial<Record<ResizeHandle, string>>;
         metadata?: SnapLineMetadata;
         callbacks?: NodeCallbacks;
         edgePan?: boolean;
@@ -75,7 +68,7 @@
     let engine: Engine = getContext("engine");
     const ownsNode = nodeObject == null;
     if (!nodeObject) {
-         nodeObject = new NodeMirror(engine, null, { id, resizable, minWidth, minHeight, resizeHandleThickness, resizeHandles, resizeCursors, metadata, callbacks: {}, edgePan, resolveNewLine });
+         nodeObject = new NodeMirror(engine, null, { id, minWidth, minHeight, metadata, callbacks: {}, edgePan, resolveNewLine });
     }
     let lineList: LineMirror[] = $state(nodeObject.getAllOutgoingLines());
 
@@ -95,6 +88,7 @@
     }
 
     setContext("nodeObject", nodeObject);
+    setContext(resizeRegionOwnerContext, nodeObject);
 
     onMount(() => {
         mounted = true;
@@ -126,8 +120,6 @@
             invoke(event, originalCallbacks.onDrag, callbacks.onDrag);
         nodeObject.callbacks.onSelectionChange = (event) =>
             invoke(event, originalCallbacks.onSelectionChange, callbacks.onSelectionChange);
-        nodeObject.callbacks.onResizeHandleChange = (event) =>
-            invoke(event, originalCallbacks.onResizeHandleChange, callbacks.onResizeHandleChange);
         nodeObject.callbacks.onGeometryCommit = (event) =>
             invoke(event, originalCallbacks.onGeometryCommit, callbacks.onGeometryCommit, onGeometryCommit);
         nodeObject.callbacks.onSizeChange = (event) => {
@@ -152,7 +144,6 @@
         nodeObject.callbacks.onDrag = originalCallbacks.onDrag;
         nodeObject.callbacks.onGeometryCommit = originalCallbacks.onGeometryCommit;
         nodeObject.callbacks.onSelectionChange = originalCallbacks.onSelectionChange;
-        nodeObject.callbacks.onResizeHandleChange = originalCallbacks.onResizeHandleChange;
         nodeObject.callbacks.onLinesChanged = originalCallbacks.onLinesChanged;
         nodeObject.callbacks.onSizeChange = originalCallbacks.onSizeChange;
         if (ownsNode) {
@@ -212,47 +203,4 @@
     transition:blur|global={{duration: 200}}
 >
     {@render children()}
-    {#each nodeObject.resizeHandles as handle}
-        <div
-            class="snapline-node-resize"
-            data-snapline-part="node-resize"
-            data-handle={handle}
-            style:--snapline-resize-thickness={`${resizeHandleThickness ?? DEFAULT_RESIZE_HANDLE_THICKNESS}px`}
-        ></div>
-    {/each}
 </div>
-
-
-<style>
-    .snapline-node-resize {
-        position: absolute;
-        pointer-events: none;
-    }
-    .snapline-node-resize[data-handle="n"],
-    .snapline-node-resize[data-handle="s"] {
-        right: var(--snapline-resize-thickness);
-        left: var(--snapline-resize-thickness);
-        height: var(--snapline-resize-thickness);
-    }
-    .snapline-node-resize[data-handle="e"],
-    .snapline-node-resize[data-handle="w"] {
-        top: var(--snapline-resize-thickness);
-        bottom: var(--snapline-resize-thickness);
-        width: var(--snapline-resize-thickness);
-    }
-    .snapline-node-resize[data-handle="n"],
-    .snapline-node-resize[data-handle^="n"] { top: calc(var(--snapline-resize-thickness) / -2); }
-    .snapline-node-resize[data-handle="s"],
-    .snapline-node-resize[data-handle^="s"] { bottom: calc(var(--snapline-resize-thickness) / -2); }
-    .snapline-node-resize[data-handle="e"],
-    .snapline-node-resize[data-handle$="e"] { right: calc(var(--snapline-resize-thickness) / -2); }
-    .snapline-node-resize[data-handle="w"],
-    .snapline-node-resize[data-handle$="w"] { left: calc(var(--snapline-resize-thickness) / -2); }
-    .snapline-node-resize[data-handle="ne"],
-    .snapline-node-resize[data-handle="se"],
-    .snapline-node-resize[data-handle="sw"],
-    .snapline-node-resize[data-handle="nw"] {
-        width: var(--snapline-resize-thickness);
-        height: var(--snapline-resize-thickness);
-    }
-</style>

@@ -1,4 +1,3 @@
-import type { RectCollider } from "@snap-engine/core/collision";
 import type { eventPosition } from "@snap-engine/core";
 import { GraphRegistry } from "./graph-registry";
 
@@ -28,14 +27,11 @@ export interface SourceSurfaceOwner {
  * every reader/writer goes through the typed accessors below instead of
  * re-deriving the shape inline.
  *
- * NOTE for engine core: `input.ts#resolveResizeOwner` reads `resizeHandles`
- * and `input.ts#resolveSourceSurfaceOwner` reads `sourceSurfaces` duck-typed
- * (engine core cannot import snapline); keep their structural types in sync
- * with this declaration.
+ * NOTE for engine core: `input.ts#resolveSourceSurfaceOwner` reads
+ * `sourceSurfaces` duck-typed (engine core cannot import snapline); keep its
+ * structural type in sync with this declaration.
  */
 export interface SnapLineSharedData {
-  /** Registered resize hitboxes; input.ts routes pointerdowns over them. */
-  resizeHandles?: RectCollider[];
   /** Registered headless source surfaces; input.ts routes pointerdowns to them. */
   sourceSurfaces?: SourceSurfaceOwner[];
   /**
@@ -58,12 +54,6 @@ export interface SnapLineSharedData {
 /** Typed view over the untyped global data bag (cast at the boundary). */
 export function snapData(global: { data: any }): SnapLineSharedData {
   return global.data as SnapLineSharedData;
-}
-
-export function getResizeHandles(global: { data: any }): RectCollider[] {
-  const data = snapData(global);
-  if (!data.resizeHandles) data.resizeHandles = [];
-  return data.resizeHandles;
 }
 
 export function getSourceSurfaces(global: { data: any }): SourceSurfaceOwner[] {

@@ -3,6 +3,7 @@ import {
   ConnectorMirror,
   GroupNodeMirror,
   NodeMirror,
+  ResizeRegionMirror,
 } from "../../assets/snapline/core/src";
 import { getGraphRegistry } from "../../assets/snapline/core/src";
 import {
@@ -54,6 +55,21 @@ test("the graph mirror indexes registrations and drops them on destroy", () => {
   expect(mirror.connector("c1")).toBeNull();
   expect(mirror.nodes).not.toContain(node);
   expect(mirror.connectors).not.toContain(connector);
+});
+
+test("resize regions are ordinary child objects with node-owned teardown", () => {
+  const { engine } = createEngineHarness();
+  const node = new NodeMirror(engine, null);
+  const east = new ResizeRegionMirror(engine, node, "e");
+  const secondEast = new ResizeRegionMirror(engine, node, "e");
+
+  expect(east.parent).toBe(node);
+  expect(node.children).toEqual(expect.arrayContaining([east, secondEast]));
+  expect(east.handle).toBe("e");
+
+  node.destroy(false);
+  expect(east.isDeleteRequested).toBe(true);
+  expect(secondEast.isDeleteRequested).toBe(true);
 });
 
 test("duplicate ids never steal the index: first wins, diagnostic until resolved", () => {

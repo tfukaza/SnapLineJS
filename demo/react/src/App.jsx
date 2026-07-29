@@ -3,9 +3,10 @@ import {
   ControlledGraph,
   Group,
   Node,
+  ResizeRegion,
   Select,
 } from "@snap-engine/snapline-react";
-import { applyLineChange } from "@snap-engine/snapline";
+import { applyLineChange, RESIZE_HANDLES } from "@snap-engine/snapline";
 import { useCallback, useRef, useState } from "react";
 import { Engine as SnapEngine } from "@snap-engine/asset-base-react";
 import {
@@ -39,7 +40,6 @@ function ResizableNode({ title, id = title, x, y }) {
       className="card node"
       x={x}
       y={y}
-      resizable
       minWidth={140}
       minHeight={90}
       style={{ display: "flex", flexDirection: "column" }}
@@ -73,8 +73,57 @@ function ResizableNode({ title, id = title, x, y }) {
           </div>
         </div>
       </div>
+      <ResizeRegions />
     </Node>
   );
+}
+
+function ResizeRegions({ handles = RESIZE_HANDLES }) {
+  const thickness = 14;
+  return handles.map((handle) => {
+    const north = handle.startsWith("n");
+    const south = handle.startsWith("s");
+    const east = handle.endsWith("e");
+    const west = handle.endsWith("w");
+    const corner = handle.length === 2;
+    return (
+      <ResizeRegion
+        key={handle}
+        handle={handle}
+        style={{
+          position: "absolute",
+          zIndex: 2,
+          ...(handle === "n" || handle === "s"
+            ? {
+                left: thickness,
+                right: thickness,
+                height: thickness,
+                cursor: "ns-resize",
+              }
+            : null),
+          ...(handle === "e" || handle === "w"
+            ? {
+                top: thickness,
+                bottom: thickness,
+                width: thickness,
+                cursor: "ew-resize",
+              }
+            : null),
+          ...(corner ? { width: thickness, height: thickness } : null),
+          ...(north ? { top: -thickness / 2 } : null),
+          ...(south ? { bottom: -thickness / 2 } : null),
+          ...(east ? { right: -thickness / 2 } : null),
+          ...(west ? { left: -thickness / 2 } : null),
+          ...(handle === "ne" || handle === "sw"
+            ? { cursor: "nesw-resize" }
+            : null),
+          ...(handle === "nw" || handle === "se"
+            ? { cursor: "nwse-resize" }
+            : null),
+        }}
+      />
+    );
+  });
 }
 
 function SnapLineResizeDemo() {
@@ -118,7 +167,9 @@ function SnapLineGroupDemo() {
               borderRadius: "8px",
             }}
             onMembershipChange={updateMembers}
-          />
+          >
+            <ResizeRegions handles={["se"]} />
+          </Group>
           <SimpleNode title="Node A" x={100} y={110} />
           <SimpleNode title="Node C" x={100} y={300} />
           <SimpleNode title="Node B" x={640} y={120} />

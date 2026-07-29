@@ -1,4 +1,4 @@
-import { BaseObject, ElementObject } from "@snap-engine/core";
+import { BaseObject, ElementObject, mergeDefined } from "@snap-engine/core";
 import { ConnectorMirror, resolveConnectorSourceAtPoint } from "./connector";
 import { LineMirror } from "./line";
 import type {
@@ -8,14 +8,9 @@ import type {
   dragProp,
   dragEndProp,
   eventPosition,
-  pointerMoveProp,
 } from "@snap-engine/core";
 import { RectCollider } from "@snap-engine/core/collision";
-import {
-  getGraphRegistry,
-  getResizeHandles,
-  snapData,
-} from "./internal/shared-data";
+import { getGraphRegistry } from "./internal/shared-data";
 import { mintDomainId } from "./internal/graph-registry";
 import type { NewLineResolver, SnapLineMetadata } from "./connector";
 import type { GeometryInvalidationObserver } from "./types";
@@ -33,17 +28,6 @@ export const RESIZE_HANDLES: readonly ResizeHandle[] = [
   "nw",
 ];
 
-export const DEFAULT_RESIZE_CURSORS: Readonly<Record<ResizeHandle, string>> = {
-  n: "ns-resize",
-  ne: "nesw-resize",
-  e: "ew-resize",
-  se: "nwse-resize",
-  s: "ns-resize",
-  sw: "nesw-resize",
-  w: "ew-resize",
-  nw: "nwse-resize",
-};
-
 export interface NodeConfig {
   /**
    * Stable application-facing identity (graph-global). Minted by SnapLine
@@ -52,19 +36,8 @@ export interface NodeConfig {
    */
   id?: string;
   lockPosition?: boolean;
-  /** Enables resize handles. All four sides and corners are enabled by default. */
-  resizable?: boolean;
   minWidth?: number;
   minHeight?: number;
-  /**
-   * Total thickness of each virtual edge/corner resize hitbox. Half of the
-   * hitbox sits inside the node boundary and half outside.
-   */
-  resizeHandleThickness?: number;
-  /** Enabled handles. `true` means all eight; an array enables only those handles. */
-  resizeHandles?: true | readonly ResizeHandle[];
-  /** Per-handle CSS cursor overrides. */
-  resizeCursors?: Partial<Record<ResizeHandle, string>>;
   metadata?: SnapLineMetadata;
   callbacks?: NodeCallbacks;
   /** Allows this node gesture to use the engine's configured edge pan. */
@@ -77,11 +50,6 @@ export interface NodeConfig {
   resolveNewLine?: NewLineResolver;
 }
 
-/** Shared by core hitboxes and adapter resize-handle visuals. */
-export const DEFAULT_RESIZE_HANDLE_THICKNESS = 14;
-
-// `id` is identity, not configuration — read once in the constructor, never
-// defaulted or merged.
 /**
  * Config with every defaultable field resolved. `resolveNewLine` stays
  * optional: it seeds application data, and there is no sensible default for
@@ -94,34 +62,17 @@ export type ResolvedNodeConfig = Required<
 
 const DEFAULT_NODE_CONFIG: ResolvedNodeConfig = {
   lockPosition: false,
-  resizable: false,
   minWidth: 0,
   minHeight: 0,
-  resizeHandleThickness: DEFAULT_RESIZE_HANDLE_THICKNESS,
-  resizeHandles: true,
-  resizeCursors: {},
   metadata: {},
   callbacks: {},
   edgePan: true,
 };
 
-/** Object-spread merge that ignores undefined values (adapters forward
- * possibly-undefined props, which must not shadow the defaults). */
-export function mergeConfig<T extends object>(
-  defaults: T,
-  config: Partial<T>,
-): T {
-  const merged = { ...defaults };
-  for (const key of Object.keys(config) as (keyof T)[]) {
-    const value = config[key];
-    if (value !== undefined) merged[key] = value as T[keyof T];
-  }
-  return merged;
-}
-
-/** Consumer policy and lifecycle surfaces. Callbacks receive event objects so
- * new context can be added without growing positional signatures. */
-/** One node's settled geometry — the app persists what it wants. */
+/**
+ * Node geometry maintained by SnapLine during drag or resize.
+ * After that, this is committed to the frontend framework.
+ */
 export interface NodeGeometry {
   node: NodeMirror;
   x: number;
@@ -130,8 +81,7 @@ export interface NodeGeometry {
   height: number;
 }
 
-/** Batched geometry observation: a group/multi-select drag stays one event
- * (every moved node in `nodes`); a resize reports a single entry. */
+/** Batched geometry observation for group/multi-select drag. */
 export interface GeometryChangeEvent {
   nodes: readonly NodeGeometry[];
 }
@@ -166,12 +116,6 @@ export interface NodeResizeEvent {
   height: number;
 }
 
-export interface NodeResizeHandleEvent {
-  node: NodeMirror;
-  handle: ResizeHandle | null;
-  cursor: string | null;
-}
-
 export interface NodeSelectionEvent {
   node: NodeMirror;
   selected: boolean;
@@ -193,184 +137,32 @@ export interface NodeLinesEvent {
 }
 
 export interface NodeCallbacks {
+  /** Determines if a drag gesture should start. */
   canStartDrag?: (event: NodePointerEvent) => boolean;
-  /** Resolves a proposed live node position before its world transform changes. */
+  /** Allow node position to be overridden during drag, e.g. to implement snap-to-grid. */
   resolveDragPosition?: (
     event: NodeDragPositionEvent,
   ) => ResolvedNodeDragPosition;
-  /** Consumer-defined pointer selection policy; SnapLine owns no modifier keys. */
+  /** Override if and how nodes get selected or deselected. */
   resolveSelectionMode?: (event: NodeSelectionModeEvent) => SelectionMode;
+  /** Called when selected status of a node changes. */
+  onSelectionChange?: (event: NodeSelectionEvent) => void;
   onDragStart?: (event: NodePointerEvent) => void;
   onDrag?: (event: NodePointerEvent) => void;
-  /** Settled geometry after a drag or resize — SnapLine owns live and
-   * settled position/size; the consumer may persist this observation, and
-   * ignoring it does not revert the mirror. */
-  onGeometryCommit?: (event: GeometryChangeEvent) => void;
-  onSelectionChange?: (event: NodeSelectionEvent) => void;
   /** Observes live size updates; core writes the retained element geometry. */
   onSizeChange?: (event: NodeResizeEvent) => void;
-  /** The resize handle currently hovered, or null after leaving it. */
-  onResizeHandleChange?: (event: NodeResizeHandleEvent) => void;
-  /** The set of outgoing lines changed — the adapter re-renders its line list. */
+  /**
+   * Called when drag or resize finishes.
+   * Frontend frameworks should read the committed geometry from the event
+   * and update its state accordingly.
+   */
+  onGeometryCommit?: (event: GeometryChangeEvent) => void;
+  /**
+   * Called when a line was added, removed, or changed.
+   * This differs from handleLineChangeRequest in that it can also be called
+   * for temporary lines that are not committed to application state.
+   */
   onLinesChanged?: (event: NodeLinesEvent) => void;
-}
-
-const CORNER_HANDLES = new Set<ResizeHandle>(["ne", "se", "sw", "nw"]);
-class ResizeHandleCollider extends RectCollider {
-  readonly handle: ResizeHandle;
-  readonly cursor: string;
-
-  constructor(
-    engine: any,
-    parent: NodeMirror,
-    handle: ResizeHandle,
-    cursor: string,
-  ) {
-    super(engine, parent, 0, 0, 0, 0);
-    this.handle = handle;
-    this.cursor = cursor;
-  }
-}
-
-class ResizeHoverController extends BaseObject {
-  #count = 0;
-  #node: NodeMirror | null = null;
-  #handle: ResizeHandleCollider | null = null;
-  #target: HTMLElement | null = null;
-  #previousNodeCursor = "";
-  #previousContainerCursor = "";
-  #previousTargetCursor = "";
-  // Whether this controller currently owns the cursor it wrote. Restoration is
-  // gated on it so clear() is idempotent and never clobbers a cursor the
-  // application set on the container itself.
-  #applied = false;
-
-  constructor(engine: any) {
-    super(engine, null);
-    this.event.global.pointerMove = this.#onPointerMove;
-  }
-
-  retain(): void {
-    this.#count++;
-  }
-
-  release(node: NodeMirror): void {
-    this.#count--;
-    if (this.#node === node) this.clear();
-    if (this.#count <= 0) {
-      resizeHoverControllers.delete(this.engine);
-      // destroy() clears, so a cursor written for some other node cannot be
-      // stranded on the container when the last node releases.
-      this.destroy();
-    }
-  }
-
-  activate(handle: ResizeHandleCollider, target?: EventTarget | null): void {
-    const node = handle.parent as NodeMirror;
-    const element = target instanceof HTMLElement ? target : null;
-    if (this.#handle === handle && this.#target === element) return;
-    this.#restoreCss();
-    const nodeElement = node.element;
-    const container = this.engine.containerElement as HTMLElement | null;
-    this.#node = node;
-    this.#handle = handle;
-    this.#target = element;
-    this.#previousNodeCursor = nodeElement?.style.cursor ?? "";
-    this.#previousContainerCursor = container?.style.cursor ?? "";
-    this.#previousTargetCursor = element?.style.cursor ?? "";
-    nodeElement?.setAttribute("data-snapline-resize-handle", handle.handle);
-    if (nodeElement) nodeElement.style.cursor = handle.cursor;
-    if (container) container.style.cursor = handle.cursor;
-    if (element) element.style.cursor = handle.cursor;
-    this.#applied = true;
-    node.callbacks.onResizeHandleChange?.({
-      node,
-      handle: handle.handle,
-      cursor: handle.cursor,
-    });
-  }
-
-  clear(): void {
-    const node = this.#node;
-    // Not gated on `node`: the container cursor outlives any single node, so
-    // restoring it must not depend on one still being tracked.
-    this.#restoreCss();
-    this.#node = null;
-    this.#handle = null;
-    this.#target = null;
-    node?.callbacks.onResizeHandleChange?.({
-      node,
-      handle: null,
-      cursor: null,
-    });
-  }
-
-  #restoreCss(): void {
-    if (!this.#applied) return;
-    this.#applied = false;
-    const nodeElement = this.#node?.element;
-    const container = this.engine.containerElement as HTMLElement | null;
-    nodeElement?.removeAttribute("data-snapline-resize-handle");
-    if (nodeElement) nodeElement.style.cursor = this.#previousNodeCursor;
-    if (container) container.style.cursor = this.#previousContainerCursor;
-    if (this.#target) this.#target.style.cursor = this.#previousTargetCursor;
-  }
-
-  #onPointerMove(prop: pointerMoveProp): void {
-    const handle = findResizeHandle(this.engine, prop.position);
-    if (!handle) {
-      this.clear();
-      return;
-    }
-    this.activate(handle, prop.event?.target);
-  }
-
-  destroy(): void {
-    // BaseObject.destroy does not unsubscribe global callbacks. Left attached,
-    // a destroyed controller keeps handling pointerMove, so a remount (HMR,
-    // React StrictMode) leaves two controllers writing the cursor — and the
-    // second captures the first's write as its "previous" value, permanently
-    // poisoning restoration.
-    this.event.global.pointerMove = null;
-    this.clear();
-    super.destroy();
-  }
-}
-
-const resizeHoverControllers = new WeakMap<object, ResizeHoverController>();
-
-function hoverController(engine: any): ResizeHoverController {
-  let controller = resizeHoverControllers.get(engine);
-  if (!controller) {
-    controller = new ResizeHoverController(engine);
-    resizeHoverControllers.set(engine, controller);
-  }
-  return controller;
-}
-
-function findResizeHandle(
-  engine: any,
-  position: eventPosition,
-  node?: NodeMirror,
-): ResizeHandleCollider | null {
-  let winner: ResizeHandleCollider | null = null;
-  for (const collider of getResizeHandles(engine.global)) {
-    if (
-      !(collider instanceof ResizeHandleCollider) ||
-      collider.engine !== engine
-    )
-      continue;
-    if (node && collider.parent !== node) continue;
-    if (!collider.containsWorldPoint(position.x, position.y)) continue;
-    if (
-      !winner ||
-      CORNER_HANDLES.has(collider.handle) ||
-      !CORNER_HANDLES.has(winner.handle)
-    ) {
-      winner = collider;
-    }
-  }
-  return winner;
 }
 
 class NodeMirror extends ElementObject {
@@ -388,10 +180,7 @@ class NodeMirror extends ElementObject {
   #mouseDownX: number;
   #mouseDownY: number;
   _hasMoved: boolean;
-  #resizeHitBoxes = new Map<ResizeHandle, ResizeHandleCollider>();
-  #resizeHandles: readonly ResizeHandle[];
-  #resizeHandleThickness: number;
-  #resizeHoverController: ResizeHoverController | null = null;
+  #resizeRegions = new Set<ResizeRegionMirror>();
   #activeResizeHandle: ResizeHandle | null = null;
   /** Read by GroupNodeMirror to distinguish a resize from a move drag. */
   #resizing = false;
@@ -419,21 +208,10 @@ class NodeMirror extends ElementObject {
 
   constructor(engine: any, parent: BaseObject | null, config: NodeConfig = {}) {
     super(engine, parent);
-    this.#config = mergeConfig(DEFAULT_NODE_CONFIG, config);
+    this.#config = mergeDefined(DEFAULT_NODE_CONFIG, config);
     this.#callbacks = this.#config.callbacks;
     this.nodeId = config.id ?? mintDomainId("node", this.global);
     getGraphRegistry(this.engine).registerNode(this);
-    const resizeEnabled =
-      config.resizable === true || config.resizeHandles !== undefined;
-    this.#resizeHandles = !resizeEnabled
-      ? []
-      : config.resizeHandles !== undefined
-        ? config.resizeHandles === true
-          ? RESIZE_HANDLES
-          : [...new Set(config.resizeHandles)]
-        : RESIZE_HANDLES;
-    this.#resizeHandleThickness =
-      config.resizeHandleThickness ?? DEFAULT_RESIZE_HANDLE_THICKNESS;
 
     this._connectors = {};
     this.#dragStartX = this.worldTransform.x;
@@ -449,26 +227,6 @@ class NodeMirror extends ElementObject {
     this.event.input.pointerUp = this.onUp;
     this.#hitBox = new RectCollider(this.engine, this, 0, 0, 0, 0);
     this.addCollider(this.#hitBox);
-
-    // Resize surfaces are virtual colliders. Engine input resolves them before
-    // DOM ownership, so handles can straddle the element and work for groups
-    // whose body intentionally has pointer-events:none.
-    if (this.#resizeHandles.length > 0) {
-      this.#resizeHoverController = hoverController(this.engine);
-      this.#resizeHoverController.retain();
-      for (const handle of this.#resizeHandles) {
-        const collider = new ResizeHandleCollider(
-          this.engine,
-          this,
-          handle,
-          this.#config.resizeCursors[handle] ?? DEFAULT_RESIZE_CURSORS[handle],
-        );
-        this.#resizeHitBoxes.set(handle, collider);
-        this.addCollider(collider);
-        getResizeHandles(this.global).push(collider);
-      }
-      this.#positionResizeHitBoxes(0, 0);
-    }
 
     this._hasMoved = false;
 
@@ -497,17 +255,19 @@ class NodeMirror extends ElementObject {
     return this.#config.metadata;
   }
 
-  get resizeHandles(): readonly ResizeHandle[] {
-    return this.#resizeHandles;
-  }
-
-  get resizeHandleThickness(): number {
-    return this.#resizeHandleThickness;
-  }
-
   registerDragHandle(element: HTMLElement): () => void {
     this.#dragHandles.add(element);
     return () => this.#dragHandles.delete(element);
+  }
+
+  /** @internal Tracks resize-region children for deterministic node teardown. */
+  attachResizeRegion(region: ResizeRegionMirror): void {
+    this.#resizeRegions.add(region);
+  }
+
+  /** @internal Removes a resize-region child that is being destroyed. */
+  detachResizeRegion(region: ResizeRegionMirror): void {
+    this.#resizeRegions.delete(region);
   }
 
   /** The node's collision footprint (world = worldTransform + width/height).
@@ -608,10 +368,9 @@ class NodeMirror extends ElementObject {
     this.scheduleLineWrites();
   }
 
-  // Reconciles state with what the browser actually rendered: the node box, the
-  // resize hitboxes derived from it, and each connector's local center. Shared
-  // by the ResizeObserver (READ_1) and the post-write re-measure (READ_2) so the
-  // two cannot drift apart.
+  // Reconciles state with what the browser actually rendered: the node box and
+  // each connector's local center. Shared by the ResizeObserver (READ_1) and
+  // the post-write re-measure (READ_2) so the two cannot drift apart.
   #syncMeasuredGeometry(stage: "READ_1" | "READ_2"): void {
     if (!this.element) return;
     const property = this.readDom({ unapplyTransform: false }, stage);
@@ -624,7 +383,6 @@ class NodeMirror extends ElementObject {
     if (!this.#resizing) {
       this.#hitBox.width = property.width;
       this.#hitBox.height = property.height;
-      this.#positionResizeHitBoxes(property.width, property.height);
     }
     for (const connector of Object.values(this._connectors)) {
       connector.measureLocalCenter(stage);
@@ -683,8 +441,8 @@ class NodeMirror extends ElementObject {
   }
 
   // State-only half of a size change: clamps to min and synchronously updates
-  // the collision footprint + resize hitbox so hit testing and group
-  // containment stay correct mid-drag. `setSize` adds the scheduled DOM write;
+  // the collision footprint so hit testing and group containment stay correct
+  // mid-drag. `setSize` adds the scheduled DOM write;
   // adapters can use this method alone when seeding external dimensions.
   setSizeState(width: number, height: number): void {
     const w = Math.max(this.#config.minWidth, width);
@@ -697,7 +455,6 @@ class NodeMirror extends ElementObject {
     this.#hasAuthoredSize = true;
     this.#hitBox.width = w;
     this.#hitBox.height = h;
-    this.#positionResizeHitBoxes(w, h);
   }
 
   // Drives live resize geometry directly. The framework observes and persists
@@ -754,29 +511,6 @@ class NodeMirror extends ElementObject {
       this.element.style.height = `${this.#authoredHeight}px`;
     }
     this.writeTransformRecursive();
-  }
-
-  #positionResizeHitBoxes(width: number, height: number): void {
-    const t = Math.max(0, this.#resizeHandleThickness);
-    const half = t / 2;
-    const horizontalLength = Math.max(0, width - t);
-    const verticalLength = Math.max(0, height - t);
-    const geometry: Record<ResizeHandle, [number, number, number, number]> = {
-      n: [half, -half, horizontalLength, t],
-      ne: [width - half, -half, t, t],
-      e: [width - half, half, t, verticalLength],
-      se: [width - half, height - half, t, t],
-      s: [half, height - half, horizontalLength, t],
-      sw: [-half, height - half, t, t],
-      w: [-half, half, t, verticalLength],
-      nw: [-half, -half, t, t],
-    };
-    for (const [handle, collider] of this.#resizeHitBoxes) {
-      const [x, y, colliderWidth, colliderHeight] = geometry[handle];
-      collider.localTransform = { x, y };
-      collider.width = colliderWidth;
-      collider.height = colliderHeight;
-    }
   }
 
   // Applies one side/corner resize while keeping the opposite edges fixed.
@@ -837,42 +571,42 @@ class NodeMirror extends ElementObject {
       return;
     }
 
-    // Resize is a separate primitive from node dragging and remains available
-    // even when the consumer registered a narrow drag handle.
-    const resizeHandle = findResizeHandle(this.engine, e.position, this);
-    this.#resizeArmed = resizeHandle != null;
-    this.#activeResizeHandle = resizeHandle?.handle ?? null;
-    if (resizeHandle) {
-      this.#resizeHoverController?.activate(resizeHandle, e.event.target);
-    } else {
-      const source = resolveConnectorSourceAtPoint(
-        this.engine,
-        e.position,
-        this,
+    const source = resolveConnectorSourceAtPoint(this.engine, e.position, this);
+    if (source) {
+      this.engine.input.setPointerDragOwner(
+        e.event.pointerId,
+        source.candidate.connector,
       );
-      if (source) {
-        this.engine.input.setPointerDragOwner(
-          e.event.pointerId,
-          source.candidate.connector,
-        );
-        source.candidate.connector.armSurfaceGesture(e, source);
-        return;
-      }
+      source.candidate.connector.armSurfaceGesture(e, source);
+      return;
     }
     const target = e.event.target as Node | null;
     const dragAllowed =
-      this.#resizeArmed ||
-      ((this.#dragHandles.size === 0 ||
+      (this.#dragHandles.size === 0 ||
         [...this.#dragHandles].some(
           (handle) => target && handle.contains(target),
         )) &&
-        this.#callbacks.canStartDrag?.({
-          node: this,
-          pointerId: e.event.pointerId,
-          position: e.position,
-          originalEvent: e.event,
-        }) !== false);
+      this.#callbacks.canStartDrag?.({
+        node: this,
+        pointerId: e.event.pointerId,
+        position: e.position,
+        originalEvent: e.event,
+      }) !== false;
     if (!dragAllowed) return;
+    this.#authorizePointer(e);
+  }
+
+  /** @internal Called by a ResizeRegionMirror on pointer down. */
+  armResize(e: pointerDownProp, handle: ResizeHandle): void {
+    this.#dragPointerId = null;
+    if (e.event.button !== 0) return;
+    this.#resizeArmed = true;
+    this.#activeResizeHandle = handle;
+    this.engine.input.setPointerDragOwner(e.event.pointerId, this);
+    this.#authorizePointer(e);
+  }
+
+  #authorizePointer(e: pointerDownProp): void {
     this.#dragPointerId = e.event.pointerId;
 
     // Claim the pointer from the very first pointer event: waiting for the
@@ -1041,8 +775,7 @@ class NodeMirror extends ElementObject {
       // The teardown runs in `finally` because everything above it calls out:
       // #writeSizeGeometry touches the DOM and onGeometryCommit is consumer
       // code. A throw that skipped these resets would strand `resizingNode`,
-      // which permanently disables click-selection (see onUp), and would leave
-      // the resize cursor pinned with no path back to a hover recompute.
+      // which permanently disables click-selection (see onUp).
       try {
         this.#applyResizeDrag(
           prop.end.x - this.#mouseDownX,
@@ -1061,10 +794,6 @@ class NodeMirror extends ElementObject {
         this.#activeResizeHandle = null;
         getGraphRegistry(this.engine).resizingNode = null;
         this.#dragPointerId = null;
-        // No target element: dragEndProp carries no originating event. activate()
-        // still writes the node and container cursors, and the next pointermove
-        // re-activates with a target because #target differs.
-        this.#refreshResizeHover(prop.end);
       }
       // Settle #hitBox against what actually rendered. The gesture suppressed
       // that reconciliation, and the release write often authors the previous
@@ -1135,7 +864,7 @@ class NodeMirror extends ElementObject {
     if (this.#resizeArmed) {
       this.#resizeArmed = false;
       this.#activeResizeHandle = null;
-      this.#refreshResizeHover(prop.position, prop.event.target);
+      this.#dragPointerId = null;
       return;
     }
 
@@ -1179,15 +908,6 @@ class NodeMirror extends ElementObject {
     );
   }
 
-  #refreshResizeHover(
-    position: eventPosition,
-    target?: EventTarget | null,
-  ): void {
-    this.#resizeHoverController?.clear();
-    const handle = findResizeHandle(this.engine, position);
-    if (handle) this.#resizeHoverController?.activate(handle, target);
-  }
-
   destroy(removeElement: boolean = true) {
     if (this.#edgePanPointerId != null) {
       this.engine.edgePanController?.stopEdgePan(this.#edgePanPointerId);
@@ -1200,18 +920,55 @@ class NodeMirror extends ElementObject {
     }
     getGraphRegistry(this.engine).unregisterNode(this);
     this.setSelected(false);
-    if (this.#resizeHitBoxes.size > 0) {
-      const ownedHandles = new Set(this.#resizeHitBoxes.values());
-      snapData(this.global).resizeHandles = getResizeHandles(
-        this.global,
-      ).filter((handle) => !ownedHandles.has(handle as ResizeHandleCollider));
-      this.#resizeHoverController?.release(this);
-      this.#resizeHoverController = null;
-      this.#resizeHitBoxes.clear();
-    }
+    for (const region of [...this.#resizeRegions]) region.destroy(false);
+    this.#resizeRegions.clear();
     this._connectors = {};
     super.destroy(removeElement);
   }
 }
 
-export { NodeMirror };
+/**
+ * A developer-owned DOM resize surface represented as a normal SnapEngine
+ * child object. Assign its `element`; CSS and native hover behavior remain
+ * entirely application-owned.
+ */
+class ResizeRegionMirror extends ElementObject {
+  readonly handle: ResizeHandle;
+  readonly node: NodeMirror;
+
+  constructor(engine: any, node: NodeMirror, handle: ResizeHandle) {
+    if (!RESIZE_HANDLES.includes(handle)) {
+      throw new Error(`Unknown resize handle: ${handle}`);
+    }
+    super(engine, node);
+    this.node = node;
+    this.handle = handle;
+    this.transformMode = "none";
+    this.event.input.pointerDown = this.#onPointerDown;
+    this.event.input.pointerUp = this.#onPointerUp;
+    node.attachResizeRegion(this);
+  }
+
+  #onPointerDown(prop: pointerDownProp): void {
+    if (prop.event.button !== 0) return;
+    this.node.armResize(prop, this.handle);
+    try {
+      this.element?.setPointerCapture(prop.event.pointerId);
+    } catch {
+      // Pointer capture may fail if application code detached the region while
+      // handling pointerdown. Engine document routing still settles the gesture.
+    }
+  }
+
+  #onPointerUp(prop: pointerUpProp): void {
+    this.node.onUp(prop);
+  }
+
+  destroy(removeElement: boolean = true): void {
+    if (this.isDeleteRequested) return;
+    this.node.detachResizeRegion(this);
+    super.destroy(removeElement);
+  }
+}
+
+export { NodeMirror, ResizeRegionMirror };

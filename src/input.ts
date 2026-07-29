@@ -533,9 +533,8 @@ class InputControl {
 
     const position = this.#getCoordinates(event.clientX, event.clientY);
     const domOwner = this.#getTargetOwner(event);
-    // A visible connector is an explicit hit target and takes precedence over
-    // any wider virtual surface beneath it. Other DOM owners (nodes, camera
-    // layers, backgrounds) yield to a matching headless source surface.
+    // A visible connector is an explicit hit target. Other DOM owners (nodes,
+    // camera layers, backgrounds) yield to a matching headless source surface.
     const visibleConnectorOwner =
       domOwner &&
       typeof (
@@ -545,12 +544,8 @@ class InputControl {
       ).resolveSourceHit === "function"
         ? domOwner
         : null;
-    // A resize-hitbox hit supersedes the DOM owner under it, and covers the case
-    // where the pointer is inside the (virtual) hitbox but outside the node's DOM
-    // box (so DOM routing would miss it). Explicit `object` still wins.
     const owner =
       object ??
-      this.#resolveResizeOwner(position) ??
       visibleConnectorOwner ??
       this.#resolveSourceSurfaceOwner(position) ??
       domOwner;
@@ -1010,31 +1005,6 @@ class InputControl {
     }
   }
 
-  // Colliders never appear in composedPath, so a registered resize hitbox is
-  // resolved geometrically: if the pointerdown is inside one, the owner is the
-  // hitbox's object (collider.parent), so the whole gesture flows to it through
-  // the normal owner dispatch. Synchronous point test — independent of the
-  // frame-delayed collision sweep. The registry shape is declared in
-  // snapline's internal/shared-data.ts (engine core cannot import snapline, hence
-  // the structural type here) — keep the two in sync.
-  #resolveResizeOwner(position: eventPosition): ElementObject | null {
-    const handles = this.global?.data?.resizeHandles as
-      | Array<{
-          engine: unknown;
-          parent: unknown;
-          containsWorldPoint(x: number, y: number): boolean;
-        }>
-      | undefined;
-    if (!handles) return null;
-    for (const collider of handles) {
-      if (collider.engine !== this.#engine) continue;
-      if (collider.containsWorldPoint(position.x, position.y)) {
-        return collider.parent as ElementObject;
-      }
-    }
-    return null;
-  }
-
   // Headless connector surfaces can extend beyond their parent node's DOM box.
   // SnapLine registers them in global.data so pointerdown ownership can be
   // resolved geometrically before composedPath routing. The registry shape is
@@ -1139,11 +1109,11 @@ class InputControl {
       return true;
     }
 
-    // Some interaction owners are deliberately headless. Virtual connectors,
-    // resize handles, and similar surfaces are selected geometrically by a
-    // DOM-backed parent and then explicitly assigned with
-    // setPointerDragOwner(). They still belong to the engine even though they
-    // do not have an element to discover through composedPath().
+    // Some interaction owners are deliberately headless. Virtual connectors
+    // and similar surfaces are selected geometrically by a DOM-backed parent
+    // and then explicitly assigned with setPointerDragOwner(). They still
+    // belong to the engine even though they do not have an element to discover
+    // through composedPath().
     //
     // Keep DOM hit discovery separate (#getTargetOwner still only walks the
     // element map), but allow direct dispatch to a live object registered with

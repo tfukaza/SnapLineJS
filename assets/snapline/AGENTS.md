@@ -44,10 +44,11 @@ these grounds, not merely debated.
 **Dependencies:** `@snap-engine/core`
 
 **Exports:**
-- `NodeMirror` - Graph node with connectors (opt-in eight-direction resize)
+- `NodeMirror` - Graph node with connectors and DOM-region resizing
+- `ResizeRegionMirror` - Developer-owned DOM resize surface parented to a node
 - `ConnectorMirror` - Input/output connector
 - `LineMirror` - Visual connection line
-- `GroupNodeMirror` - Resizable box that carries the nodes inside it
+- `GroupNodeMirror` - Group box that carries the nodes inside it
 - `RectSelectController` - Rectangle selection tool
 - `PlacementController` - Headless pointer-follow placement state machine
 - `attachControlledGraph` - Installs the controlled-graph bridge (LineReconciler)
@@ -67,6 +68,7 @@ package declares a single `.` export and no per-module subpaths. Modules under
 **Exports:**
 - `Node.svelte` - Node component
 - `Group.svelte` - Exclusive nested group component
+- `ResizeRegion.svelte` - Developer-styled DOM resize surface
 - `Connector.svelte` - Connector component
 - `Line.svelte` - Connection line component
 - `Select.svelte` - Rectangle selection component
@@ -78,7 +80,7 @@ package declares a single `.` export and no per-module subpaths. Modules under
 **Language:** React/TypeScript
 **Dependencies:** `@snap-engine/snapline`, `@snap-engine/core`
 
-Exports `Engine`, `Node`, `Group`, `Connector`, `Line`, `Select`,
+Exports `Engine`, `Node`, `Group`, `ResizeRegion`, `Connector`, `Line`, `Select`,
 `Placement`, and `ControlledGraph`, with forwarded refs to core objects
 where applicable.
 
@@ -112,6 +114,7 @@ snapline/
 │       ├── index.ts
 │       ├── Node.svelte
 │       ├── Group.svelte
+│       ├── ResizeRegion.svelte
 │       ├── Connector.svelte
 │       ├── Line.svelte
 │       ├── Select.svelte
@@ -125,6 +128,7 @@ snapline/
         ├── Engine.tsx
         ├── Node.tsx
         ├── Group.tsx
+        ├── ResizeRegion.tsx
         ├── Connector.tsx
         ├── Line.tsx
         ├── Select.tsx
@@ -195,8 +199,8 @@ requiring PascalCase for dynamic components):
 
 - Identity/DOM: `id`, `className`, `elementProps`, `nodeObject` (bindable)
 - Geometry: `x`, `y`, `width`, `height`
-- Resize: `resizable`, `minWidth`, `minHeight`, `resizeHandleThickness`,
-  `resizeHandles`, `resizeCursors`
+- Resize floor: `minWidth`, `minHeight`; opt in by rendering explicit
+  `ResizeRegion` children
 - Rendering: `LineSvelteComponent` (one renderer for all this node's lines),
   `resolveLineComponent(line)` (per-line override, resolved at render time)
 - Data: `metadata`, `resolveNewLine` (seeds payload onto a line this node's
@@ -373,11 +377,10 @@ inconsistent one.
 
 Everything SnapLine stores on the engine's shared `global.data` bag is declared
 in `core/src/internal/shared-data.ts` (`SnapLineSharedData`) and accessed through
-its typed helpers. It now holds only `resizeHandles` and `sourceSurfaces`
-(engine core's `input.ts` reads both duck-typed — it cannot import snapline —
-so keep the shapes in sync) plus the `graphRegistries` WeakMap keying each
-engine to its `GraphRegistry`. Selection, groups, and `resizingNode` are
-engine-scoped state on `GraphRegistry`, not global arrays.
+its typed helpers. It holds `sourceSurfaces` (engine core's `input.ts` reads
+the shape duck-typed — it cannot import snapline) plus the `graphRegistries`
+WeakMap keying each engine to its `GraphRegistry`. Selection, groups, and
+`resizingNode` are engine-scoped state on `GraphRegistry`, not global arrays.
 
 ### Pointer claims (camera blocking)
 

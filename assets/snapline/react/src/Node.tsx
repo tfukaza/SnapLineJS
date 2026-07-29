@@ -13,10 +13,8 @@ import {
   type ReactNode,
 } from "react";
 import {
-  DEFAULT_RESIZE_HANDLE_THICKNESS,
   LineMirror,
   NodeMirror,
-  type ResizeHandle,
   type NewLineResolver,
   type NodeCallbacks,
   type GeometryChangeEvent,
@@ -58,12 +56,8 @@ export interface NodeProps {
   y?: number;
   width?: number;
   height?: number;
-  resizable?: boolean;
   minWidth?: number;
   minHeight?: number;
-  resizeHandleThickness?: number;
-  resizeHandles?: true | readonly ResizeHandle[];
-  resizeCursors?: Partial<Record<ResizeHandle, string>>;
   metadata?: SnapLineMetadata;
   callbacks?: NodeCallbacks;
   edgePan?: boolean;
@@ -87,12 +81,8 @@ export const Node = forwardRef<NodeMirror, NodeProps>(function Node(
     y = 0,
     width,
     height,
-    resizable = false,
     minWidth,
     minHeight,
-    resizeHandleThickness,
-    resizeHandles,
-    resizeCursors,
     metadata = {},
     callbacks = {},
     edgePan = true,
@@ -109,12 +99,8 @@ export const Node = forwardRef<NodeMirror, NodeProps>(function Node(
   if (!nodeRef.current) {
     nodeRef.current = new NodeMirror(engine, null, {
       id,
-      resizable,
       minWidth,
       minHeight,
-      resizeHandleThickness,
-      resizeHandles,
-      resizeCursors,
       metadata,
       callbacks: {},
       edgePan,
@@ -170,8 +156,7 @@ export const Node = forwardRef<NodeMirror, NodeProps>(function Node(
     };
     node.callbacks.resolveDragPosition = (event) =>
       latestRef.current.callbacks.resolveDragPosition?.(event) ??
-      original.resolveDragPosition?.(event) ??
-      { x: event.x, y: event.y };
+      original.resolveDragPosition?.(event) ?? { x: event.x, y: event.y };
     node.callbacks.resolveSelectionMode = (event) =>
       latestRef.current.callbacks.resolveSelectionMode?.(event) ??
       original.resolveSelectionMode?.(event) ??
@@ -189,12 +174,6 @@ export const Node = forwardRef<NodeMirror, NodeProps>(function Node(
         event,
         original.onSelectionChange,
         latestRef.current.callbacks.onSelectionChange,
-      );
-    node.callbacks.onResizeHandleChange = (event) =>
-      invoke(
-        event,
-        original.onResizeHandleChange,
-        latestRef.current.callbacks.onResizeHandleChange,
       );
     node.callbacks.onLinesChanged = (event) => {
       invoke(
@@ -230,7 +209,6 @@ export const Node = forwardRef<NodeMirror, NodeProps>(function Node(
       node.callbacks.onDrag = original.onDrag;
       node.callbacks.onGeometryCommit = original.onGeometryCommit;
       node.callbacks.onSelectionChange = original.onSelectionChange;
-      node.callbacks.onResizeHandleChange = original.onResizeHandleChange;
       node.callbacks.onLinesChanged = original.onLinesChanged;
       node.callbacks.onSizeChange = original.onSizeChange;
       if (ownsNodeRef.current) {
@@ -256,8 +234,6 @@ export const Node = forwardRef<NodeMirror, NodeProps>(function Node(
     node.remeasureDomGeometry();
   }, [node, width, height]);
 
-  const handleSize =
-    resizeHandleThickness ?? DEFAULT_RESIZE_HANDLE_THICKNESS;
   return (
     <NodeMirrorContext.Provider value={node}>
       {lineList.map((line) => (
@@ -283,30 +259,6 @@ export const Node = forwardRef<NodeMirror, NodeProps>(function Node(
         }}
       >
         {children}
-        {node.resizeHandles.map((handle) => (
-          <div
-            key={handle}
-            data-snapline-part="node-resize"
-            data-handle={handle}
-            style={{
-              position: "absolute",
-              pointerEvents: "none",
-              ...(handle === "n" || handle === "s"
-                ? { left: handleSize, right: handleSize, height: handleSize }
-                : null),
-              ...(handle === "e" || handle === "w"
-                ? { top: handleSize, bottom: handleSize, width: handleSize }
-                : null),
-              ...(handle.length === 2
-                ? { width: handleSize, height: handleSize }
-                : null),
-              ...(handle.startsWith("n") ? { top: -handleSize / 2 } : null),
-              ...(handle.startsWith("s") ? { bottom: -handleSize / 2 } : null),
-              ...(handle.endsWith("e") ? { right: -handleSize / 2 } : null),
-              ...(handle.endsWith("w") ? { left: -handleSize / 2 } : null),
-            }}
-          />
-        ))}
       </div>
     </NodeMirrorContext.Provider>
   );

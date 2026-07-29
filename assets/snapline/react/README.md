@@ -11,9 +11,9 @@ npm install react react-dom @snap-engine/core \
 
 ## Components
 
-The package exports `Engine`, `Node`, `Group`, `Connector`, `Line`, `Select`,
-`Placement`, and `ControlledGraph`. Each component is also available from a
-named subpath.
+The package exports `Engine`, `Node`, `Group`, `ResizeRegion`, `Connector`,
+`Line`, `Select`, `Placement`, and `ControlledGraph`. Each component is also
+available from a named subpath.
 
 ```tsx
 import { Engine, Group, Node, Select } from "@snap-engine/snapline-react";
@@ -35,6 +35,9 @@ export function Graph() {
 resynchronize after mount, and callback props remain live across renders.
 Pass native ARIA attributes or DOM event handlers to the outer node element
 through `Node`'s `elementProps`.
+
+Render explicit `ResizeRegion` children to opt into resizing. Their CSS owns
+the hit area, position, cursor, hover behavior, and visuals.
 
 Set `virtual` on `Connector` to keep the logical endpoint without rendering a
 port. `surfaceStrategies` can then hit-test and anchor against the parent

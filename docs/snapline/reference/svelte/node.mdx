@@ -1,6 +1,6 @@
 ---
 title: Node API
-description: Svelte Node props, callbacks, resize configuration, and object access.
+description: Svelte Node props, callbacks, geometry, and object access.
 order: 2
 sectionTitle: Reference
 sectionOrder: 3
@@ -16,11 +16,7 @@ frameworkKey: node
 | `id` | Stable domain identity; minted when omitted — supply it for persistence |
 | `nodeObject` | Adopt an existing `NodeMirror` instead of creating one |
 | `x`, `y`, `width`, `height` | World geometry; changed props resynchronize the object |
-| `resizable` | Enable resize handles (default `false`) |
 | `minWidth`, `minHeight` | Resize floor |
-| `resizeHandles` | `true` for all handles, or a subset of `"n" \| "ne" \| "e" \| "se" \| "s" \| "sw" \| "w" \| "nw"` |
-| `resizeHandleThickness` | Handle hit area in pixels (default 14) |
-| `resizeCursors` | Per-handle cursor overrides |
 | `metadata` | `SnapLineMetadata` attached to the node |
 | `callbacks` | `NodeCallbacks` object (drag, selection, resize, lines) |
 | `onGeometryCommit` | Convenience callback; batched final geometry for persistence |
@@ -33,6 +29,10 @@ frameworkKey: node
 
 `getNodeObject()` returns the underlying `NodeMirror`. A supplied `nodeObject`
 is not destroyed on unmount.
+
+Resizing is opt-in by composition: render a `ResizeRegion` descendant for
+each direction you support. The region is the real DOM hit area; position,
+dimensions, cursor, visuals, and native hover events are application-owned.
 
 Convenience callbacks compose with their `callbacks`-object equivalents rather
 than replacing them. During a live pointer gesture, core writes retained

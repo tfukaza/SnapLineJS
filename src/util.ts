@@ -1,6 +1,21 @@
 import type { DomProperty, TransformProperty } from "./object";
 
 /**
+ * Merges defined override values onto a complete defaults object.
+ *
+ * Unlike object spread, an explicit `undefined` does not replace a default.
+ * Other falsy values such as `false`, `0`, `""`, and `null` are preserved.
+ */
+function mergeDefined<T extends object>(defaults: T, overrides: Partial<T>): T {
+  const merged = { ...defaults };
+  for (const key of Object.keys(overrides) as (keyof T)[]) {
+    const value = overrides[key];
+    if (value !== undefined) merged[key] = value as T[keyof T];
+  }
+  return merged;
+}
+
+/**
  * Retrieves the position and dimensions of a DOM element in multiple coordinate spaces.
  *
  * Returns coordinates in world space (accounting for camera transform), camera space,
@@ -209,4 +224,5 @@ export {
   cloneDomProperty,
   generateTransformString,
   parseTransformString,
+  mergeDefined,
 };

@@ -1,7 +1,8 @@
 <script lang="ts">
-    import { GroupNodeMirror, DEFAULT_RESIZE_HANDLE_THICKNESS, type GroupCallbacks, type GroupContainEvent, type GroupMembershipEvent, type GeometryChangeEvent, type ResizeHandle, type SnapLineMetadata } from "@snap-engine/snapline";
+    import { GroupNodeMirror, type GroupCallbacks, type GroupContainEvent, type GroupMembershipEvent, type GeometryChangeEvent, type SnapLineMetadata } from "@snap-engine/snapline";
     import type { Engine } from "@snap-engine/core";
-    import { onMount, onDestroy, getContext, tick, untrack, type Snippet } from "svelte";
+    import { onMount, onDestroy, getContext, setContext, tick, untrack, type Snippet } from "svelte";
+    import { resizeRegionOwnerContext } from "./resize-region-context";
 
     let {
         id = undefined,
@@ -16,9 +17,6 @@
         // Min sizes default in core (DEFAULT_GROUP_CONFIG); undefined passes through.
         minWidth = undefined,
         minHeight = undefined,
-        resizeHandleThickness = undefined,
-        resizeHandles = undefined,
-        resizeCursors = undefined,
         metadata = {},
         callbacks = {},
         groupCallbacks = {},
@@ -41,9 +39,6 @@
         headerContent?: Snippet;
         minWidth?: number;
         minHeight?: number;
-        resizeHandleThickness?: number;
-        resizeHandles?: true | readonly ResizeHandle[];
-        resizeCursors?: Partial<Record<ResizeHandle, string>>;
         metadata?: SnapLineMetadata;
         callbacks?: import("@snap-engine/snapline").NodeCallbacks;
         groupCallbacks?: GroupCallbacks;
@@ -59,8 +54,9 @@
     let engine: Engine = getContext("engine");
     const ownsGroup = groupObject == null;
     if (!groupObject) {
-        groupObject = new GroupNodeMirror(engine, null, { id, width, height, minWidth, minHeight, resizeHandleThickness, resizeHandles, resizeCursors, metadata, callbacks: {}, groupCallbacks: {}, canContain, edgePan });
+        groupObject = new GroupNodeMirror(engine, null, { id, width, height, minWidth, minHeight, metadata, callbacks: {}, groupCallbacks: {}, canContain, edgePan });
     }
+    setContext(resizeRegionOwnerContext, groupObject);
 
     // Snapshot, not a reactive binding: after mount the engine owns the size, and
     // a second writer on the same property is what splits it from the transform.
@@ -112,8 +108,6 @@
             invoke(event, originalCallbacks.onDrag, callbacks.onDrag);
         groupObject!.callbacks.onSelectionChange = (event) =>
             invoke(event, originalCallbacks.onSelectionChange, callbacks.onSelectionChange);
-        groupObject!.callbacks.onResizeHandleChange = (event) =>
-            invoke(event, originalCallbacks.onResizeHandleChange, callbacks.onResizeHandleChange);
         groupObject!.groupCallbacks.onMembershipChange = (event) =>
             invoke(event, originalGroupCallbacks.onMembershipChange, groupCallbacks.onMembershipChange, onMembershipChange);
         // Resize is handled by the core edge/corner hitboxes and writes live size
@@ -148,7 +142,6 @@
         groupObject!.callbacks.onDrag = originalCallbacks.onDrag;
         groupObject!.callbacks.onGeometryCommit = originalCallbacks.onGeometryCommit;
         groupObject!.callbacks.onSelectionChange = originalCallbacks.onSelectionChange;
-        groupObject!.callbacks.onResizeHandleChange = originalCallbacks.onResizeHandleChange;
         groupObject!.callbacks.onSizeChange = originalCallbacks.onSizeChange;
         groupObject!.groupCallbacks.onMembershipChange = originalGroupCallbacks.onMembershipChange;
         if (ownsGroup) groupObject!.destroy(false);
@@ -192,19 +185,10 @@
     <div class="snapline-group-body">
         {@render children?.()}
     </div>
-    {#each groupObject.resizeHandles as handle}
-    <div
-        class="snapline-group-resize"
-        data-snapline-part="group-resize"
-        data-handle={handle}
-        style:--snapline-resize-thickness={`${resizeHandleThickness ?? DEFAULT_RESIZE_HANDLE_THICKNESS}px`}
-    ></div>
-    {/each}
 </div>
 
 <style>
-    /* The box sits behind its members and must not steal their pointer events:
-       only the header (move surface) is interactive; the resize hitbox is virtual. */
+    /* The box sits behind its members and must not steal their pointer events. */
     .snapline-group {
         box-sizing: border-box;
         pointer-events: none;
@@ -215,36 +199,5 @@
     }
     .snapline-group-body {
         pointer-events: none;
-    }
-    .snapline-group-resize {
-        position: absolute;
-        pointer-events: none;
-    }
-    .snapline-group-resize[data-handle="n"],
-    .snapline-group-resize[data-handle="s"] {
-        right: var(--snapline-resize-thickness);
-        left: var(--snapline-resize-thickness);
-        height: var(--snapline-resize-thickness);
-    }
-    .snapline-group-resize[data-handle="e"],
-    .snapline-group-resize[data-handle="w"] {
-        top: var(--snapline-resize-thickness);
-        bottom: var(--snapline-resize-thickness);
-        width: var(--snapline-resize-thickness);
-    }
-    .snapline-group-resize[data-handle="n"],
-    .snapline-group-resize[data-handle^="n"] { top: calc(var(--snapline-resize-thickness) / -2); }
-    .snapline-group-resize[data-handle="s"],
-    .snapline-group-resize[data-handle^="s"] { bottom: calc(var(--snapline-resize-thickness) / -2); }
-    .snapline-group-resize[data-handle="e"],
-    .snapline-group-resize[data-handle$="e"] { right: calc(var(--snapline-resize-thickness) / -2); }
-    .snapline-group-resize[data-handle="w"],
-    .snapline-group-resize[data-handle$="w"] { left: calc(var(--snapline-resize-thickness) / -2); }
-    .snapline-group-resize[data-handle="ne"],
-    .snapline-group-resize[data-handle="se"],
-    .snapline-group-resize[data-handle="sw"],
-    .snapline-group-resize[data-handle="nw"] {
-        width: var(--snapline-resize-thickness);
-        height: var(--snapline-resize-thickness);
     }
 </style>

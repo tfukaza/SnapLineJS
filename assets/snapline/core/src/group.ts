@@ -1,5 +1,10 @@
-import type { BaseObject, Engine, eventPosition } from "@snap-engine/core";
-import { NodeMirror, mergeConfig, type NodeConfig } from "./node";
+import {
+  mergeDefined,
+  type BaseObject,
+  type Engine,
+  type eventPosition,
+} from "@snap-engine/core";
+import { NodeMirror, type NodeConfig } from "./node";
 import { getGraphRegistry } from "./internal/shared-data";
 
 export interface GroupConfig extends NodeConfig {
@@ -226,8 +231,8 @@ export function setGroupMembershipResolver(
   };
 }
 
-// A resizable box with settled geometric membership. Membership is exclusive:
-// each node has one direct parent, while nested groups form a recursive tree.
+// A box with settled geometric membership. Membership is exclusive: each node
+// has one direct parent, while nested groups form a recursive tree.
 class GroupNodeMirror extends NodeMirror {
   #members: Set<NodeMirror> = new Set();
   #carry: NodeMirror[] = [];
@@ -241,11 +246,11 @@ class GroupNodeMirror extends NodeMirror {
     parent: BaseObject | null,
     config: GroupConfig = {},
   ) {
-    const merged = mergeConfig<GroupConfig>(
+    const merged = mergeDefined<GroupConfig>(
       { ...DEFAULT_GROUP_CONFIG },
       config,
     );
-    super(engine, parent, { ...merged, resizable: true });
+    super(engine, parent, merged);
     this.#groupConfig = merged;
     this.#groupCallbacks = merged.groupCallbacks ?? {};
     getGraphRegistry(this.engine).groups.push(this);

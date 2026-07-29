@@ -25,7 +25,7 @@ async function dragFromTo(
 const NODE = "[data-snapline-type='node']";
 const MEMBER = "[data-member='true']";
 const HEADER = "[data-snapline-part='group-header']";
-const RESIZE = "[data-snapline-part='group-resize'][data-handle='se']";
+const RESIZE = "[data-snapline-part='resize-region'][data-handle='se']";
 
 function nodeByTitle(page: Page, title: string): Locator {
   return page.locator(NODE, { hasText: title });

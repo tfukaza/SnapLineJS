@@ -14,6 +14,7 @@
     ".": "./src/index.ts",
     "./Engine": "./src/Engine.tsx",
     "./Node": "./src/Node.tsx",
+    "./ResizeRegion": "./src/ResizeRegion.tsx",
     "./Group": "./src/Group.tsx",
     "./Connector": "./src/Connector.tsx",
     "./Line": "./src/Line.tsx",

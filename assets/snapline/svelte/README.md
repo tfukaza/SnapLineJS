@@ -11,10 +11,11 @@ npm install @snap-engine/core @snap-engine/snapline \
 
 ## Components
 
-`Node`, `Group`, `Connector`, `Line`, `Select`, `Placement`, and `ControlledGraph` are exported
-from the package root. Component subpaths are also available as
-`Node.svelte`, `Group.svelte`, `Connector.svelte`, `Line.svelte`,
-`Select.svelte`, `Placement.svelte`, and `ControlledGraph.svelte`.
+`Node`, `Group`, `ResizeRegion`, `Connector`, `Line`, `Select`, `Placement`,
+and `ControlledGraph` are exported from the package root. Component subpaths
+are also available as `Node.svelte`, `Group.svelte`, `ResizeRegion.svelte`,
+`Connector.svelte`, `Line.svelte`, `Select.svelte`, `Placement.svelte`, and
+`ControlledGraph.svelte`.
 
 ```svelte
 <script lang="ts">
@@ -33,6 +34,9 @@ Geometry props resynchronize after mount while active gestures update locally.
 Consumer callbacks compose with the adapter's rendering callbacks.
 Pass framework-native ARIA attributes or DOM event handlers to the outer node
 element through `Node`'s `elementProps`.
+
+Render explicit `ResizeRegion` children to opt into resizing. Their CSS owns
+the hit area, position, cursor, hover behavior, and visuals.
 
 `<Connector virtual>` creates a logical connector without a visible port.
 Combine it with `surfaceStrategies` and symmetric `rules` limits to make a

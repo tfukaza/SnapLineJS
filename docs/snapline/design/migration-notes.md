@@ -137,3 +137,19 @@ per settled drag (every moved node of a group/multi-select drag in one
 event) or resize (single entry). SnapLine owns live and settled geometry;
 persist the observation if you want it back after a reload — ignoring it
 never reverts the mirror.
+
+## Resize regions
+
+Generated virtual resize hitboxes were removed. Delete `resizable`,
+`resizeHandles`, `resizeHandleThickness`, and `resizeCursors`; also remove
+`onResizeHandleChange`, `DEFAULT_RESIZE_CURSORS`, and
+`DEFAULT_RESIZE_HANDLE_THICKNESS`.
+
+React and Svelte consumers now render one explicit `<ResizeRegion
+handle="...">` for each supported direction. Vanilla consumers create a
+`ResizeRegionMirror`, parented to their `NodeMirror`, and assign its DOM
+element. The region DOM owns its size, position, cursor, hover behavior, and
+visuals. No region means resizing is disabled.
+
+The separate `../lab` repository still contains examples using the removed
+generated-handle API and must migrate independently.

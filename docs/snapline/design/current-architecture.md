@@ -327,10 +327,9 @@ same registry reads and were removed.
 
 `SnapLineSharedData` (typed by `internal/shared-data.ts`) now holds only:
 
-- `resizeHandles` and `sourceSurfaces` — engine core's `input.ts` duck-reads
-  these to route pointerdowns to resize hitboxes and headless source
-  surfaces (engine core cannot import snapline, so the contract is
-  structural and lives on the shared bag);
+- `sourceSurfaces` — engine core's `input.ts` duck-reads this to route
+  pointerdowns to headless connector surfaces (engine core cannot import
+  snapline, so the contract is structural and lives on the shared bag);
 - the `graphRegistries` WeakMap keying each engine to its `GraphRegistry`
   (GlobalManager is application-wide; the WeakMap lets a destroyed engine
   release its registry);
