@@ -25,8 +25,8 @@ import type {
  * your own id works, but recreates the mirror.
  *
  * Consumer-owned fields survive an update (the record is spread), but cannot
- * be invented for an addition — seed those at drag start with the node's
- * `resolveNewLine`, and they ride into `request.add` for you.
+ * be invented for an addition — seed those at drag start with
+ * `node.callbacks.resolveNewLine`, and they ride into `request.add` for you.
  *
  * Replace-not-mutate by construction: every call builds a new array, which is
  * what makes `$state.raw` safe for the list in Svelte.

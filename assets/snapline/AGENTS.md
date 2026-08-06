@@ -30,8 +30,8 @@ The three that come up constantly, and what they have already decided:
    the application mounts the node and adds the record.
 
 **There are no such thing as sensible defaults.** When a hook seeds
-application data, its absence is meaningful — see `ResolvedNodeConfig`, which
-keeps `resolveNewLine` optional rather than defaulting it to a no-op.
+application data, its absence is meaningful — `NodeCallbacks.resolveNewLine`
+stays optional rather than defaulting to a no-op.
 
 A convenience API that duplicates an existing primitive should be rejected on
 these grounds, not merely debated.
@@ -166,7 +166,7 @@ snapline/
 **Features:**
 - Derived source/target roles (`isSource` = `maxOutgoing !== 0`, `isTarget` = `maxIncoming !== 0`)
 - Connection limits and admission predicates
-- Surface strategies for headless hit testing and anchors
+- Target hit-testing and anchor strategies around DOM-owned connector roots
 - Connection callbacks
 
 ### LineMirror
@@ -203,9 +203,9 @@ requiring PascalCase for dynamic components):
   `ResizeRegion` children
 - Rendering: `LineSvelteComponent` (one renderer for all this node's lines),
   `resolveLineComponent(line)` (per-line override, resolved at render time)
-- Data: `metadata`, `resolveNewLine` (seeds payload onto a line this node's
-  connectors create)
-- Callbacks: `callbacks` (the whole `NodeCallbacks` dictionary), plus the
+- Data: `metadata`
+- Callbacks: `callbacks` (the whole `NodeCallbacks` dictionary, including
+  `resolveNewLine` for seeding payload onto newly dragged lines), plus the
   convenience props `onGeometryCommit` and `onSizeChange`
 - `edgePan`
 
@@ -344,10 +344,11 @@ same registry.
 ### Controlled lines (ControlledGraph / LineReconciler)
 
 Topology is ALWAYS controlled: the CONSUMER's document is the only line
-authority, and there is no imperative public topology API (`deleteLine`,
-`createLine`, etc. are `@internal`; a gesture on an engine with no attached
-graph owner warns and discards the preview). `core/src/line-reconciler.ts`
-plus the `ControlledGraph` adapter components implement the contract:
+authority, and there is no imperative public topology API (creation and
+deletion are implementation operations; a gesture on an engine with no
+attached graph owner warns and discards the preview).
+`core/src/line-reconciler.ts` plus the `ControlledGraph` adapter components
+implement the contract:
 `attachControlledGraph(engine, { onLineChangeRequest, onDiagnosticsChanged? })`
 installs the `LineReconciler` and returns
 `{ setCanonicalGraph, flush, dispose }`. The app PUSHES its canonical
@@ -377,10 +378,11 @@ inconsistent one.
 
 Everything SnapLine stores on the engine's shared `global.data` bag is declared
 in `core/src/internal/shared-data.ts` (`SnapLineSharedData`) and accessed through
-its typed helpers. It holds `sourceSurfaces` (engine core's `input.ts` reads
-the shape duck-typed — it cannot import snapline) plus the `graphRegistries`
-WeakMap keying each engine to its `GraphRegistry`. Selection, groups, and
-`resizingNode` are engine-scoped state on `GraphRegistry`, not global arrays.
+its typed helpers. It holds the `graphRegistries` WeakMap keying each engine to
+its `GraphRegistry`, plus the deprecated third-party camera-control flag.
+Selection, groups, and `resizingNode` are engine-scoped state on
+`GraphRegistry`, not global arrays. Connector source input is ordinary DOM
+targeting; SnapLine stores no headless source registry.
 
 ### Pointer claims (camera blocking)
 

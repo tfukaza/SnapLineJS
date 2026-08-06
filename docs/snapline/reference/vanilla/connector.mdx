@@ -12,12 +12,15 @@ frameworkKey: connector
 gestures. Construct it with
 `new ConnectorMirror(engine, nodeMirror, config)` and register it via
 `nodeMirror.addConnectorObject(connector)`; bind a port element with
-`bindElement(element)` (or leave it virtual and rely on surface strategies).
+`bindElement(element)`. The input root may be an `HTMLElement` or
+`SVGElement`.
 
 `ConnectorConfig` accepts `id`, `name` (the connector's key within its parent
 node), `rules`, `metadata`, `callbacks`, `edgePan`, `surfaceStrategies`,
 and `colliderRadius`. `updateConfig(...)` applies everything
 except the construction-time identities `id` and `name`.
+`callbacks.resolveNewLine` overrides the parent node's resolver when this
+connector starts a genuinely new line.
 
 ## Connection rules
 
@@ -35,11 +38,15 @@ Limits are `number | "unlimited"`; `"unlimited"` normalizes to `Infinity` in
 unlimited-outgoing, single-incoming connector that rejects extra incoming
 lines.
 
-## Surfaces and lookup
+## Custom roots, targets, and anchors
 
-`ConnectorSurfaceStrategy` supplies `sourceHitTest`, `targetHitTest`, and
-`resolveAnchor` for custom shapes. `resolveConnectorSourceAtPoint(engine,
-point)` resolves which connector a pointer position would start a line from.
+The bound DOM element is the source hit area. For custom SVG geometry, bind an
+element such as a path with `pointer-events="stroke"`.
+`ConnectorSurfaceStrategy` supplies `targetHitTest` and `resolveAnchor` for
+custom target policy and endpoint projection. Target discovery begins with
+`collisionEngine.queryPoint(...)`; the connector's collider radius is the
+broad-phase snapping area and should enclose a custom target shape. Configured
+target hit tests replace the default center candidate within that area.
 Enumerate connectors with `query(engine).connectors()`.
 
 > [!WARNING]

@@ -39,14 +39,15 @@ through `Node`'s `elementProps`.
 Render explicit `ResizeRegion` children to opt into resizing. Their CSS owns
 the hit area, position, cursor, hover behavior, and visuals.
 
-Set `virtual` on `Connector` to keep the logical endpoint without rendering a
-port. `surfaceStrategies` can then hit-test and anchor against the parent
-node's shape, while symmetric `rules` limits enable source and target
-behavior. Keep domain edges in React state and use an opaque line payload as
-the stable link from a custom renderer.
+Pass a render function to `Connector` when the input root should be custom
+HTML or SVG. Attach its callback ref to exactly one element; for an SVG path,
+use `pointerEvents="stroke"` to make the painted stroke the source hit area.
+`surfaceStrategies` customize target admission and endpoint anchors. Keep
+domain edges in React state and use an opaque line payload as the stable link
+from a custom renderer.
 
-Connector policy, metadata, callbacks, strategies, and `virtual` stay live
-across renders. Toggling `virtual` removes or remounts only the visible port;
-the logical connector and existing lines are preserved.
+Connector policy, metadata, callbacks, strategies, and collider radius stay
+live across renders. `name` and an adopted `connectorObject` are
+construction-time identities.
 
 Full documentation: https://snapengine.dev/docs/snapline/introduction

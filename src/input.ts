@@ -1,5 +1,6 @@
 import type { GlobalManager } from "./global";
-import type { ElementObject } from "./object";
+import { BaseObject, ElementObject } from "./object";
+import type { DomElement } from "./object";
 import { reportConsumerError } from "./errors";
 
 export enum mouseButton {
@@ -47,6 +48,11 @@ export interface pointerUpProp {
   objectId: string | null;
   position: eventPosition;
   button: number;
+  cancelled: boolean;
+}
+
+export interface GestureHandoffControl {
+  handoffTo(objectOrId: ElementObject<DomElement> | string): void;
 }
 
 export interface mouseWheelProp {
@@ -56,7 +62,7 @@ export interface mouseWheelProp {
   delta: number;
 }
 
-export interface dragStartProp {
+export interface dragStartProp extends GestureHandoffControl {
   objectId: string | null;
   pointerId: number;
   start: eventPosition;
@@ -64,7 +70,7 @@ export interface dragStartProp {
   isWithinEngine: boolean;
 }
 
-export interface dragProp {
+export interface dragProp extends GestureHandoffControl {
   objectId: string | null;
   pointerId: number;
   start: eventPosition;
@@ -74,11 +80,13 @@ export interface dragProp {
 }
 
 export interface dragEndProp {
+  event: PointerEvent;
   objectId: string | null;
   pointerId: number;
   start: eventPosition;
   end: eventPosition;
   button: number;
+  cancelled: boolean;
 }
 
 export interface PinchSnapshot {
@@ -86,13 +94,13 @@ export interface PinchSnapshot {
   distance: number;
 }
 
-export interface pinchStartProp {
+export interface pinchStartProp extends GestureHandoffControl {
   objectId: string | null;
   gestureID: string;
   start: PinchSnapshot;
 }
 
-export interface pinchProp {
+export interface pinchProp extends GestureHandoffControl {
   objectId: string | null;
   gestureID: string;
   start: PinchSnapshot;
@@ -105,6 +113,7 @@ export interface pinchEndProp {
   start: PinchSnapshot;
   current: PinchSnapshot;
   end: PinchSnapshot;
+  cancelled: boolean;
 }
 
 export interface InputEventCallback {
@@ -129,7 +138,7 @@ export type pointerData = {
   id: number; // pointer id
   callerObjectId: string | null; // ID of the object that triggered the pointer event
   timestamp: number; // Timestamp of the pointer event
-  x: number; // Screen-space x coordinate
+  x: number; // Screen-space coordinates
   y: number;
   startX: number;
   startY: number;
@@ -143,7 +152,7 @@ export type pointerData = {
 };
 
 const INPUT_CONTROL_EVENT_SUBSCRIPTION_ID = "__input_control_event__";
-const DRAG_START_THRESHOLD_PX = 3;
+const DRAG_START_THRESHOLD_PX = 0;
 
 type InputEventPayloadMap = {
   pointerDown: pointerDownProp;
@@ -167,35 +176,35 @@ type GlobalCallbackRegistry = Record<
 >;
 
 type TrackedPointer = pointerData & {
-  owner: ElementObject | null;
-  currentOwner: ElementObject | null;
-  /**
-   * When true, GLOBAL listeners no longer receive this pointer's events
-   * (pointerDown/Move, dragStart/drag; pinches involving it; and wheel while
-   * any claim is held) — owner dispatch is unaffected, and end events
-   * (pointerUp/dragEnd/pinchEnd) always deliver so an already-engaged global
-   * listener can terminate cleanly. The claim dies with this entry (pointer
-   * up/cancel), so it can never be stranded by a destroyed owner.
-   */
+  dragState: "pending" | "drag";
+  owner: ElementObject<DomElement> | null;
+  currentOwner: ElementObject<DomElement> | null;
+  captureElement: DomElement | null;
+  originElement: DomElement | null;
+  lastEvent: PointerEvent;
+  finalizing: boolean;
   claimed: boolean;
 };
 
-interface dragGesture {
-  type: "drag";
-  state: "pending" | "drag" | "release";
-  member: ElementObject | null;
-  pointerId: number;
-}
-
-interface pinchGesture {
-  type: "pinch";
-  state: "idle" | "pinch" | "release";
-  member: ElementObject | null;
+interface PinchGesture {
+  member: ElementObject<DomElement> | null;
+  memberElement: DomElement | null;
   pointerId0: number;
   pointerId1: number;
   start: PinchSnapshot;
   current: PinchSnapshot;
 }
+
+type HandoffDestination = {
+  object: ElementObject<DomElement>;
+  element: DomElement;
+};
+
+type FinalizePointerOptions = {
+  event: PointerEvent;
+  cancelled: boolean;
+  dispatchTerminal?: boolean;
+};
 
 /**
  * Configuration options for input handling.
@@ -238,11 +247,11 @@ class InputControl {
   #containerController: AbortController | null = null;
   #document: Document;
   #documentController: AbortController | null = null;
-  #elementByObjectId: Map<string, HTMLElement>;
+  #elementByObjectId: Map<string, DomElement>;
   #engine: any;
-  #gestureDict: { [key: string]: dragGesture | pinchGesture };
-  #objectByElement: WeakMap<HTMLElement, ElementObject>;
-  #pointerDict: { [key: number]: TrackedPointer };
+  #objectByElement: WeakMap<DomElement, ElementObject<DomElement>>;
+  #pinches: Map<string, PinchGesture>;
+  #pointers: Map<number, TrackedPointer>;
   global: GlobalManager | null;
   globalCallbacks: GlobalCallbackRegistry;
   #event: InputEventCallback;
@@ -264,9 +273,9 @@ class InputControl {
     this.config = { ...DEFAULT_INPUT_CONTROL_CONFIG, ...config };
 
     this.#elementByObjectId = new Map();
-    this.#gestureDict = {};
     this.#objectByElement = new WeakMap();
-    this.#pointerDict = {};
+    this.#pinches = new Map();
+    this.#pointers = new Map();
 
     this.globalCallbacks = this.#createGlobalCallbackRegistry();
     this.#event = this.#createInputEventCallback();
@@ -296,10 +305,11 @@ class InputControl {
   }
 
   bindContainer(container: HTMLElement) {
+    this.#finalizeAllPointers(false);
     this.#destroyListeners();
     this.#container = container;
-    this.#pointerDict = {};
-    this.#gestureDict = {};
+    this.#pointers.clear();
+    this.#pinches.clear();
 
     this.#containerController = new AbortController();
     this.#documentController = new AbortController();
@@ -327,25 +337,52 @@ class InputControl {
     this.#document.addEventListener("pointercancel", this.#onPointerCancel, {
       signal: this.#documentController.signal,
     });
+    this.#document.addEventListener(
+      "lostpointercapture",
+      this.#onLostPointerCapture,
+      {
+        signal: this.#documentController.signal,
+      },
+    );
   }
 
   destroy() {
+    this.#finalizeAllPointers(false); // Cancel all ongoing gestures
     this.#destroyListeners();
     this.globalCallbacks = this.#createGlobalCallbackRegistry();
     this.#container = null;
     this.#elementByObjectId.clear();
-    this.#gestureDict = {};
     this.#objectByElement = new WeakMap();
-    this.#pointerDict = {};
+    this.#pinches.clear();
+    this.#pointers.clear();
   }
 
-  registerObjectElement(object: ElementObject, element: HTMLElement) {
+  /**
+   * Register an object so it can be tracked for input events.
+   * @param object - The ElementObject to register.
+   * @param element - The DOM element to associate with the object.
+   */
+  registerObjectElement(
+    object: ElementObject<DomElement>,
+    element: DomElement,
+  ) {
     this.unregisterObjectElement(object);
     this.#objectByElement.set(element, object);
     this.#elementByObjectId.set(object.id, element);
   }
 
-  unregisterObjectElement(object: ElementObject, element?: HTMLElement) {
+  /**
+   * Unregister an object so it no longer receives input events
+   * tracked by SnapEngine.
+   * @param object - The ElementObject to unregister.
+   * @param element - The DOM element to disassociate from the object.
+   *                  Required if the element is not the same as the one
+   *                  stored in object.element.
+   */
+  unregisterObjectElement(
+    object: ElementObject<DomElement>,
+    element?: DomElement,
+  ) {
     const registeredElement =
       element ?? this.#elementByObjectId.get(object.id) ?? null;
     if (
@@ -362,67 +399,48 @@ class InputControl {
       this.#elementByObjectId.delete(object.id);
     }
 
-    for (const pointer of Object.values(this.#pointerDict)) {
-      if (pointer.owner === object) {
-        pointer.owner = null;
-        pointer.callerObjectId = null;
-      }
-      if (pointer.currentOwner === object) {
-        pointer.currentOwner = null;
-      }
+    const affectedPointers = new Set(
+      [...this.#pointers.values()].filter(
+        (pointer) =>
+          pointer.owner === object ||
+          pointer.currentOwner === object ||
+          pointer.captureElement === registeredElement,
+      ),
+    );
+    for (const gesture of this.#pinches.values()) {
+      if (gesture.member !== object) continue;
+      const pointer0 = this.#pointers.get(gesture.pointerId0);
+      const pointer1 = this.#pointers.get(gesture.pointerId1);
+      if (pointer0) affectedPointers.add(pointer0);
+      if (pointer1) affectedPointers.add(pointer1);
     }
-
-    for (const gesture of Object.values(this.#gestureDict)) {
-      if (gesture.member === object) {
-        gesture.member = null;
-      }
-    }
-  }
-
-  setPointerDragOwner(pointerId: number, owner: ElementObject | null) {
-    const pointer = this.#pointerDict[pointerId];
-    if (pointer) {
-      pointer.owner = owner;
-      pointer.callerObjectId = this.#getOwnerId(owner);
-    }
-
-    const gesture = this.#gestureDict[pointerId];
-    if (gesture?.type === "drag") {
-      gesture.member = owner;
+    for (const pointer of affectedPointers) {
+      this.#finalizePointer(pointer, {
+        event: pointer.lastEvent,
+        cancelled: true,
+      });
     }
   }
 
-  /**
-   * Claims a pointer for its current gesture: GLOBAL listeners stop receiving
-   * that pointer's events (down/move, dragStart/drag; pinches involving it;
-   * wheel while any claim is held). Owner dispatch is unaffected, and end
-   * events (pointerUp/dragEnd/pinchEnd) still deliver so an already-engaged
-   * global listener can terminate cleanly. Call from a gesture owner's
-   * pointerDown handler (claiming at dragStart is legal but the camera may
-   * already have panned by the drag-start threshold).
-   *
-   * The claim is anchored to the input layer's pointer record and dies with it
-   * on pointer up/cancel — it auto-releases and cannot be stranded, even if
-   * the claiming object is destroyed mid-gesture.
-   */
+  /* Claims a pointer for its current gesture. */
   claimPointer(pointerId: number): void {
-    const pointer = this.#pointerDict[pointerId];
+    const pointer = this.#pointers.get(pointerId);
     if (pointer) pointer.claimed = true;
   }
 
   /** Releases a claim early (rarely needed — claims auto-release on gesture end). */
   releasePointerClaim(pointerId: number): void {
-    const pointer = this.#pointerDict[pointerId];
+    const pointer = this.#pointers.get(pointerId);
     if (pointer) pointer.claimed = false;
   }
 
   #isPointerClaimed(pointerId: number | undefined): boolean {
     if (pointerId === undefined) return false;
-    return this.#pointerDict[pointerId]?.claimed === true;
+    return this.#pointers.get(pointerId)?.claimed === true;
   }
 
   #hasClaimedPointer(): boolean {
-    for (const pointer of Object.values(this.#pointerDict)) {
+    for (const pointer of this.#pointers.values()) {
       if (pointer.claimed) return true;
     }
     return false;
@@ -455,37 +473,238 @@ class InputControl {
     this.#documentController = null;
   }
 
+  #captureOn(pointer: TrackedPointer, element: DomElement): void {
+    if (
+      pointer.captureElement === element &&
+      typeof element.hasPointerCapture === "function" &&
+      element.hasPointerCapture(pointer.id)
+    ) {
+      return;
+    }
+    element.setPointerCapture(pointer.id);
+    pointer.captureElement = element;
+  }
+
+  /**
+   * Call setPointerCapture for the given element,
+   * and update the pointer's captureElement
+   */
+  #capturePointer(
+    pointer: TrackedPointer,
+    element: DomElement | null,
+  ): void {
+    if (
+      !element?.isConnected ||
+      typeof element.setPointerCapture !== "function"
+    ) {
+      return;
+    }
+    try {
+      this.#captureOn(pointer, element);
+    } catch (error) {
+      reportConsumerError(error);
+    }
+  }
+
+  /**
+   * Determine the object and the element to hand off
+   * input controls to, given the object reference or ID.
+   * @param objectOrId
+   * @returns
+   */
+  #resolveHandoffDestination(
+    objectOrId: ElementObject<DomElement> | string,
+  ): HandoffDestination {
+    const object =
+      typeof objectOrId === "string"
+        ? this.global?.getEngineObjectTable(this.#engine)?.[objectOrId]
+        : objectOrId;
+    if (!(object instanceof ElementObject)) {
+      throw new Error(
+        `InputControl.handoffTo: destination must resolve to an ElementObject in this engine.`,
+      );
+    }
+    if (object.engine !== this.#engine || object.isDeleteRequested) {
+      throw new Error(
+        `InputControl.handoffTo: destination ${object.id} is not live in this engine.`,
+      );
+    }
+    const element = this.#elementByObjectId.get(object.id) ?? null;
+    if (
+      !element ||
+      this.#objectByElement.get(element) !== object ||
+      !element.isConnected
+    ) {
+      throw new Error(
+        `InputControl.handoffTo: destination ${object.id} has no connected input element.`,
+      );
+    }
+    return { object, element };
+  }
+
+  #handoffDrag(
+    pointerId: number,
+    objectOrId: ElementObject<DomElement> | string,
+  ): void {
+    const pointer = this.#pointers.get(pointerId);
+    if (
+      !pointer ||
+      pointer.finalizing ||
+      pointer.dragState !== "drag"
+    ) {
+      throw new Error(
+        `InputControl.handoffTo: drag gesture ${pointerId} is no longer active.`,
+      );
+    }
+    const destination = this.#resolveHandoffDestination(objectOrId);
+    if (typeof destination.element.setPointerCapture !== "function") {
+      throw new Error(
+        `InputControl.handoffTo: destination ${destination.object.id} does not support pointer capture.`,
+      );
+    }
+    try {
+      this.#captureOn(pointer, destination.element);
+      pointer.owner = destination.object;
+      pointer.currentOwner = destination.object;
+      pointer.callerObjectId = destination.object.id;
+    } catch (error) {
+      this.#finalizePointer(pointer, {
+        event: pointer.lastEvent,
+        cancelled: true,
+      });
+      throw error;
+    }
+  }
+
+  #handoffPinch(
+    gestureKey: string,
+    objectOrId: ElementObject<DomElement> | string,
+  ): void {
+    const gesture = this.#pinches.get(gestureKey);
+    if (!gesture) {
+      throw new Error(
+        `InputControl.handoffTo: pinch gesture ${gestureKey} is no longer active.`,
+      );
+    }
+    const pointer0 = this.#pointers.get(gesture.pointerId0);
+    const pointer1 = this.#pointers.get(gesture.pointerId1);
+    if (
+      !pointer0 ||
+      !pointer1 ||
+      pointer0.finalizing ||
+      pointer1.finalizing
+    ) {
+      throw new Error(
+        `InputControl.handoffTo: pinch gesture ${gestureKey} is no longer active.`,
+      );
+    }
+
+    const destination = this.#resolveHandoffDestination(objectOrId);
+    gesture.member = destination.object;
+    gesture.memberElement = destination.element;
+  }
+
+  #releasePointerCapture(pointer: TrackedPointer): void {
+    const element = pointer.captureElement;
+    pointer.captureElement = null;
+    if (!element || typeof element.releasePointerCapture !== "function") {
+      return;
+    }
+    try {
+      if (
+        typeof element.hasPointerCapture !== "function" ||
+        element.hasPointerCapture(pointer.id)
+      ) {
+        element.releasePointerCapture(pointer.id);
+      }
+    } catch {
+      // Release is best-effort after DOM removal or implicit browser release.
+    }
+  }
+
+  /**
+   * Common handling for a pointer that has just finished a
+   * gesture, like recording end positions.
+   * @param pointer
+   * @param options.event - The event that triggered the finalization.
+   * @param options.cancelled - Whether the gesture was cancelled.
+   * @param options.dispatchTerminal - Whether to dispatch pointer up
+   *                                   events (default: true).
+   * @returns void
+   */
+  #finalizePointer(
+    pointer: TrackedPointer,
+    {
+      event,
+      cancelled,
+      dispatchTerminal = true,
+    }: FinalizePointerOptions,
+  ): void {
+    if (
+      pointer.finalizing ||
+      this.#pointers.get(pointer.id) !== pointer
+    ) {
+      return;
+    }
+    pointer.finalizing = true;
+    pointer.lastEvent = event;
+    pointer.endX = event.clientX;
+    pointer.endY = event.clientY;
+
+    try {
+      if (dispatchTerminal) {
+        const currentOwner =
+          pointer.captureElement != null
+            ? pointer.owner
+            : this.#getTargetOwner(event);
+        const pointerUp: pointerUpProp = {
+          event,
+          objectId: this.#getOwnerId(currentOwner),
+          position: this.#getCoordinates(event.clientX, event.clientY),
+          button: event.buttons,
+          cancelled,
+        };
+        this.#dispatchObjectEvent(currentOwner, "pointerUp", pointerUp);
+        this.#dispatchGlobalEvent("pointerUp", pointerUp);
+
+        if (
+          pointer.dragState === "drag" ||
+          this.#isPastDragStartThreshold(pointer)
+        ) {
+          this.#fireDragEnd(pointer, pointer.button, event, cancelled);
+        }
+      }
+    } finally {
+      this.#endPinchGesturesForPointer(pointer.id, cancelled, dispatchTerminal);
+      this.#releasePointerCapture(pointer);
+      this.#pointers.delete(pointer.id);
+    }
+  }
+
+  /**
+   * Finalize all active pointers.
+   * @param dispatchTerminal - Whether to dispatch pointer up events.
+   */
+  #finalizeAllPointers(dispatchTerminal: boolean): void {
+    for (const pointer of [...this.#pointers.values()]) {
+      this.#finalizePointer(pointer, {
+        event: pointer.lastEvent,
+        cancelled: true,
+        dispatchTerminal,
+      });
+    }
+  }
+
   #getActiveDragCount(): number {
-    return Object.values(this.#gestureDict).filter(
-      (g) => g.type === "drag" && g.state === "drag",
+    return [...this.#pointers.values()].filter(
+      (pointer) => pointer.dragState === "drag",
     ).length;
   }
 
-  #getActiveDragsSortedByTime(): {
-    pointerId: number;
-    gesture: dragGesture;
-    timestamp: number;
-  }[] {
-    const drags: {
-      pointerId: number;
-      gesture: dragGesture;
-      timestamp: number;
-    }[] = [];
-
-    for (const [key, gesture] of Object.entries(this.#gestureDict)) {
-      if (gesture.type !== "drag" || gesture.state !== "drag") continue;
-      const pointerId = parseInt(key, 10);
-      const pointerData = this.#pointerDict[pointerId];
-      if (pointerData) {
-        drags.push({
-          pointerId,
-          gesture,
-          timestamp: pointerData.timestamp,
-        });
-      }
-    }
-
-    return drags.sort((a, b) => a.timestamp - b.timestamp);
+  #getActiveDragsSortedByTime(): TrackedPointer[] {
+    return [...this.#pointers.values()]
+      .filter((pointer) => pointer.dragState === "drag")
+      .sort((a, b) => a.timestamp - b.timestamp);
   }
 
   #cancelOldestDrag(): void {
@@ -493,12 +712,10 @@ class InputControl {
     if (drags.length === 0) return;
 
     const oldest = drags[0];
-    const pointerData = this.#pointerDict[oldest.pointerId];
-    if (!pointerData) return;
-
-    this.#fireDragEnd(pointerData, 0);
-    delete this.#gestureDict[oldest.pointerId];
-    delete this.#pointerDict[oldest.pointerId];
+    this.#finalizePointer(oldest, {
+      event: oldest.lastEvent,
+      cancelled: true,
+    });
   }
 
   #enforceMaxDragLimit(): void {
@@ -510,51 +727,37 @@ class InputControl {
     }
   }
 
-  dispatchPointerDown(
-    object: ElementObject,
-    params?: { x?: number; y?: number; buttons?: number; pointerId?: number },
-  ) {
-    const event = new PointerEvent("pointerdown", {
-      clientX: params?.x ?? object.worldTransform.x,
-      clientY: params?.y ?? object.worldTransform.y,
-      buttons: params?.buttons ?? mouseButtonBitmap.LEFT,
-      pointerId: params?.pointerId,
-    });
-    this.#onPointerDown(event, object);
-  }
+  // dispatchPointerDown(
+  //   object: ElementObject<DomElement>,
+  //   params?: { x?: number; y?: number; buttons?: number; pointerId?: number },
+  // ) {
+  //   const event = new PointerEvent("pointerdown", {
+  //     clientX: params?.x ?? object.worldTransform.x,
+  //     clientY: params?.y ?? object.worldTransform.y,
+  //     buttons: params?.buttons ?? mouseButtonBitmap.LEFT,
+  //     pointerId: params?.pointerId,
+  //   });
+  //   this.#onPointerDown(event, object);
+  // }
 
   #onPointerDown = (
     event: PointerEvent,
-    object: ElementObject | null = null,
+    object: ElementObject<DomElement> | null = null,
   ) => {
+    // TODO: Remove in favor of #isCoordinateWithinEngine?
     if (!this.#isEventInsideContainer(event)) {
       return;
     }
 
     const position = this.#getCoordinates(event.clientX, event.clientY);
     const domOwner = this.#getTargetOwner(event);
-    // A visible connector is an explicit hit target. Other DOM owners (nodes,
-    // camera layers, backgrounds) yield to a matching headless source surface.
-    const visibleConnectorOwner =
-      domOwner &&
-      typeof (
-        domOwner as ElementObject & {
-          resolveSourceHit?: unknown;
-        }
-      ).resolveSourceHit === "function"
-        ? domOwner
-        : null;
-    const owner =
-      object ??
-      visibleConnectorOwner ??
-      this.#resolveSourceSurfaceOwner(position) ??
-      domOwner;
+    const owner = object ?? domOwner;
     const isWithinEngine = this.#isCoordinateWithinEngine(
       event.clientX,
       event.clientY,
     );
     // TODO: Use persistentDeviceId if available
-    this.#pointerDict[event.pointerId] = {
+    const pointer: TrackedPointer = {
       id: event.pointerId,
       callerObjectId: owner?.id ?? null,
       timestamp: event.timeStamp,
@@ -569,17 +772,18 @@ class InputControl {
       moveCount: 0,
       button: event.buttons,
       isWithinEngine,
+      dragState: "pending",
       owner,
       currentOwner: owner,
+      captureElement: null,
+      originElement: owner
+        ? (this.#elementByObjectId.get(owner.id) ?? null)
+        : null,
+      lastEvent: event,
+      finalizing: false,
       claimed: false,
     };
-
-    this.#gestureDict[event.pointerId] = {
-      type: "drag",
-      state: "pending",
-      member: owner,
-      pointerId: event.pointerId,
-    };
+    this.#pointers.set(event.pointerId, pointer);
 
     const prop: pointerDownProp = {
       event,
@@ -590,6 +794,7 @@ class InputControl {
     };
 
     this.#dispatchObjectEvent(owner, "pointerDown", prop);
+    if (this.#pointers.get(event.pointerId) !== pointer) return;
     // An owner's pointerDown handler may have claimed the pointer just above.
     if (!this.#isPointerClaimed(event.pointerId)) {
       this.#dispatchGlobalEvent("pointerDown", prop);
@@ -604,20 +809,37 @@ class InputControl {
     if (this.#isEventInsideContainer(event)) {
       return;
     }
-    if (this.#pointerDict[event.pointerId] == null) {
+    if (!this.#pointers.has(event.pointerId)) {
       return;
     }
     this.#handlePointerMove(event);
   };
 
   #handlePointerMove(event: PointerEvent) {
-    const pointer = this.#pointerDict[event.pointerId] ?? null;
+    const pointer = this.#pointers.get(event.pointerId) ?? null;
     const isInsideContainer = this.#isEventInsideContainer(event);
     if (!pointer && !isInsideContainer) {
       return;
     }
 
-    const currentOwner = isInsideContainer ? this.#getTargetOwner(event) : null;
+    const ownerElement = pointer?.owner
+      ? this.#elementByObjectId.get(pointer.owner.id)
+      : null;
+    if (
+      pointer &&
+      ((pointer.captureElement && !pointer.captureElement.isConnected) ||
+        (ownerElement && !ownerElement.isConnected))
+    ) {
+      this.#finalizePointer(pointer, { event, cancelled: true });
+      return;
+    }
+
+    const currentOwner =
+      pointer?.captureElement != null
+        ? pointer.owner
+        : isInsideContainer || pointer
+          ? this.#getTargetOwner(event)
+          : null;
     const position = this.#getCoordinates(event.clientX, event.clientY);
     const prop: pointerMoveProp = {
       event,
@@ -627,6 +849,7 @@ class InputControl {
     };
 
     this.#dispatchObjectEvent(currentOwner, "pointerMove", prop);
+    if (pointer && this.#pointers.get(event.pointerId) !== pointer) return;
     if (!this.#isPointerClaimed(event.pointerId)) {
       this.#dispatchGlobalEvent("pointerMove", prop);
     }
@@ -638,6 +861,7 @@ class InputControl {
         x: event.clientX,
         y: event.clientY,
         currentOwner,
+        lastEvent: event,
       });
       pointer.moveCount++;
       this.#handleDrag(pointer);
@@ -650,63 +874,61 @@ class InputControl {
   };
 
   #onPointerCancel = (event: PointerEvent) => {
-    this.#finishPointer(event);
+    this.#finishPointer(event, true);
   };
 
-  #finishPointer(event: PointerEvent) {
-    const pointer = this.#pointerDict[event.pointerId] ?? null;
+  #onLostPointerCapture = (event: PointerEvent) => {
+    const pointer = this.#pointers.get(event.pointerId) ?? null;
+    const captureElement = pointer?.captureElement ?? null;
+    if (
+      !pointer ||
+      pointer.finalizing ||
+      !captureElement ||
+      event.target !== captureElement
+    ) {
+      return;
+    }
+    // Framework reconciliation may move a still-connected captured subtree.
+    // Browsers can drop native capture during that DOM move even though the
+    // gesture remains valid, so reacquire it while the pointer is still down.
+    // A released pointer, disconnected element, or rejected recapture follows
+    // the normal cancelled-terminal path below.
+    if (event.buttons !== 0 && captureElement.isConnected) {
+      try {
+        this.#captureOn(pointer, captureElement);
+        return;
+      } catch (error) {
+        reportConsumerError(error);
+      }
+    }
+    this.#finalizePointer(pointer, { event, cancelled: true });
+  };
+
+  #finishPointer(event: PointerEvent, cancelled = false) {
+    const pointer = this.#pointers.get(event.pointerId) ?? null;
     const isInsideContainer = this.#isEventInsideContainer(event);
     if (!pointer && !isInsideContainer) {
       return;
     }
 
-    const currentOwner = isInsideContainer ? this.#getTargetOwner(event) : null;
-    const position = this.#getCoordinates(event.clientX, event.clientY);
-    const prop: pointerUpProp = {
-      event,
-      objectId: currentOwner?.id ?? null,
-      position,
-      button: event.buttons,
-    };
-
-    try {
+    // If pointer was lost, treat as normal pointer up
+    if (!pointer) {
+      const currentOwner = isInsideContainer
+        ? this.#getTargetOwner(event)
+        : null;
+      const prop: pointerUpProp = {
+        event,
+        objectId: currentOwner?.id ?? null,
+        position: this.#getCoordinates(event.clientX, event.clientY),
+        button: event.buttons,
+        cancelled,
+      };
       this.#dispatchObjectEvent(currentOwner, "pointerUp", prop);
       this.#dispatchGlobalEvent("pointerUp", prop);
-
-      if (!pointer) {
-        return;
-      }
-
-      pointer.endX = event.clientX;
-      pointer.endY = event.clientY;
-
-      const gesture = this.#gestureDict[event.pointerId];
-      if (gesture?.type === "drag") {
-        // Once a drag has actually started (dragStart was dispatched, so the
-        // gesture is in the "drag" state), releasing must always fire dragEnd —
-        // even if the pointer wandered back near its start point. Re-measuring
-        // the distance at release would misclassify an away-and-back gesture
-        // (e.g. dropping an item back in the same place) as a click and leave
-        // the drag session uncommitted. Only a gesture still "pending" at
-        // release (never crossed the start threshold) is a click.
-        const dragStarted = gesture.state === "drag";
-        gesture.state = "release";
-        if (dragStarted || this.#isPastDragStartThreshold(pointer)) {
-          this.#fireDragEnd(pointer, pointer.button);
-        }
-      }
-    } finally {
-      // Deleting the pointer record is what releases its claim, and a claim
-      // that outlives its gesture suppresses every later global pointerMove
-      // for that pointer id — so this cannot be skippable by anything above.
-      // Only drag gestures are keyed by a bare pointer id (pinches use a
-      // composite key), so the delete matches the old conditional exactly.
-      if (pointer) {
-        delete this.#gestureDict[event.pointerId];
-        this.#endPinchGesturesForPointer(event.pointerId);
-        delete this.#pointerDict[event.pointerId];
-      }
+      return;
     }
+
+    this.#finalizePointer(pointer, { event, cancelled });
   }
 
   #onWheel = (event: WheelEvent) => {
@@ -760,22 +982,17 @@ class InputControl {
   }
 
   #handleDrag(pointer: TrackedPointer) {
-    const gesture = this.#gestureDict[pointer.id];
-    if (!gesture || gesture.type !== "drag") {
-      return;
-    }
-
-    if (gesture.state === "pending") {
+    if (pointer.dragState === "pending") {
       if (!this.#isPastDragStartThreshold(pointer)) {
         return;
       }
-      this.#startDragGesture(pointer, gesture);
-      if (this.#gestureDict[pointer.id] !== gesture) {
+      this.#startDragGesture(pointer);
+      if (this.#pointers.get(pointer.id) !== pointer) {
         return;
       }
     }
 
-    if (gesture.state !== "drag") {
+    if (pointer.dragState !== "drag") {
       return;
     }
 
@@ -789,10 +1006,14 @@ class InputControl {
     );
   }
 
-  #startDragGesture(pointer: TrackedPointer, gesture: dragGesture) {
-    gesture.state = "drag";
+  #startDragGesture(pointer: TrackedPointer) {
+    pointer.dragState = "drag";
+    const ownerElement = pointer.owner
+      ? (this.#elementByObjectId.get(pointer.owner.id) ?? null)
+      : null;
+    this.#capturePointer(pointer, ownerElement);
     this.#enforceMaxDragLimit();
-    if (this.#gestureDict[pointer.id] !== gesture) {
+    if (this.#pointers.get(pointer.id) !== pointer) {
       return;
     }
 
@@ -802,9 +1023,11 @@ class InputControl {
       start: this.#getCoordinates(pointer.startX, pointer.startY),
       button: pointer.button,
       isWithinEngine: pointer.isWithinEngine,
+      handoffTo: (objectOrId) => this.#handoffDrag(pointer.id, objectOrId),
     };
 
     this.#dispatchObjectEvent(pointer.owner, "dragStart", prop);
+    if (this.#pointers.get(pointer.id) !== pointer) return;
     if (!pointer.claimed) {
       this.#dispatchGlobalEvent("dragStart", prop);
     }
@@ -827,16 +1050,24 @@ class InputControl {
         screenY: position.screenY - start.screenY,
       },
       button: pointer.button,
+      handoffTo: (objectOrId) => this.#handoffDrag(pointer.id, objectOrId),
     };
 
     this.#dispatchObjectEvent(pointer.owner, "drag", prop);
+    if (this.#pointers.get(pointer.id) !== pointer) return;
     if (!pointer.claimed) {
       this.#dispatchGlobalEvent("drag", prop);
     }
   }
 
-  #fireDragEnd(pointer: TrackedPointer, button: number) {
+  #fireDragEnd(
+    pointer: TrackedPointer,
+    button: number,
+    event: PointerEvent,
+    cancelled: boolean,
+  ) {
     const prop: dragEndProp = {
+      event,
       objectId: this.#getOwnerId(pointer.owner),
       pointerId: pointer.id,
       start: this.#getCoordinates(pointer.startX, pointer.startY),
@@ -845,6 +1076,7 @@ class InputControl {
         pointer.endY ?? pointer.y,
       ),
       button,
+      cancelled,
     };
 
     this.#dispatchObjectEvent(pointer.owner, "dragEnd", prop);
@@ -852,7 +1084,7 @@ class InputControl {
   }
 
   #handlePinchGestures() {
-    const pointerList = Object.values(this.#pointerDict);
+    const pointerList = [...this.#pointers.values()];
     if (pointerList.length < 2) return;
 
     pointerList.sort((a, b) => a.timestamp - b.timestamp);
@@ -869,7 +1101,10 @@ class InputControl {
         pointer0.y - pointer1.y,
       );
 
-      if (this.#gestureDict[gestureKey] == null) {
+      let gesture = this.#pinches.get(gestureKey);
+      if (!gesture) {
+        this.#capturePointer(pointer0, pointer0.originElement);
+        this.#capturePointer(pointer1, pointer1.originElement);
         const startDistance = Math.hypot(
           pointer0.startX - pointer1.startX,
           pointer0.startY - pointer1.startY,
@@ -882,10 +1117,11 @@ class InputControl {
           pointer1.startX,
           pointer1.startY,
         );
-        this.#gestureDict[gestureKey] = {
-          type: "pinch",
-          state: "pinch",
+        gesture = {
           member: pointer0.owner,
+          memberElement: pointer0.owner
+            ? (this.#elementByObjectId.get(pointer0.owner.id) ?? null)
+            : null,
           pointerId0: pointer0.id,
           pointerId1: pointer1.id,
           start: {
@@ -897,23 +1133,31 @@ class InputControl {
             distance: currentDistance,
           },
         };
+        this.#pinches.set(gestureKey, gesture);
 
-        const pinchStartGesture = this.#gestureDict[gestureKey] as pinchGesture;
         const prop: pinchStartProp = {
-          objectId: this.#getOwnerId(pinchStartGesture.member),
+          objectId: this.#getOwnerId(gesture.member),
           gestureID: gestureKey,
-          start: pinchStartGesture.start,
+          start: gesture.start,
+          handoffTo: (objectOrId) => this.#handoffPinch(gestureKey, objectOrId),
         };
-        this.#dispatchObjectEvent(pinchStartGesture.member, "pinchStart", prop);
+        this.#dispatchObjectEvent(gesture.member, "pinchStart", prop);
+        if (this.#pinches.get(gestureKey) !== gesture) {
+          continue;
+        }
         if (
-          !this.#isPointerClaimed(pinchStartGesture.pointerId0) &&
-          !this.#isPointerClaimed(pinchStartGesture.pointerId1)
+          !this.#isPointerClaimed(gesture.pointerId0) &&
+          !this.#isPointerClaimed(gesture.pointerId1)
         ) {
           this.#dispatchGlobalEvent("pinchStart", prop);
         }
       }
 
-      const gesture = this.#gestureDict[gestureKey] as pinchGesture;
+      if (gesture.memberElement && !gesture.memberElement.isConnected) {
+        this.#cancelPinchPointers(gesture);
+        continue;
+      }
+
       gesture.current = {
         pointerList: [currentPointer0, currentPointer1],
         distance: currentDistance,
@@ -924,8 +1168,12 @@ class InputControl {
         gestureID: gestureKey,
         start: gesture.start,
         current: gesture.current,
+        handoffTo: (objectOrId) => this.#handoffPinch(gestureKey, objectOrId),
       };
       this.#dispatchObjectEvent(gesture.member, "pinch", prop);
+      if (this.#pinches.get(gestureKey) !== gesture) {
+        continue;
+      }
       // A pinch involving a claimed pointer is suppressed globally; pinchEnd
       // still delivers (end events always do) so engaged listeners clean up.
       if (
@@ -937,11 +1185,23 @@ class InputControl {
     }
   }
 
-  #endPinchGesturesForPointer(pointerId: number) {
-    for (const [gestureKey, gesture] of Object.entries(this.#gestureDict)) {
-      if (gesture.type !== "pinch") {
-        continue;
-      }
+  #cancelPinchPointers(gesture: PinchGesture): void {
+    for (const pointerId of [gesture.pointerId0, gesture.pointerId1]) {
+      const pointer = this.#pointers.get(pointerId);
+      if (!pointer) continue;
+      this.#finalizePointer(pointer, {
+        event: pointer.lastEvent,
+        cancelled: true,
+      });
+    }
+  }
+
+  #endPinchGesturesForPointer(
+    pointerId: number,
+    cancelled: boolean,
+    dispatchTerminal = true,
+  ) {
+    for (const [gestureKey, gesture] of [...this.#pinches.entries()]) {
       if (
         gesture.pointerId0 !== pointerId &&
         gesture.pointerId1 !== pointerId
@@ -955,33 +1215,43 @@ class InputControl {
         start: gesture.start,
         current: gesture.current,
         end: gesture.current,
+        cancelled,
       };
       try {
-        this.#dispatchObjectEvent(gesture.member, "pinchEnd", prop);
-        this.#dispatchGlobalEvent("pinchEnd", prop);
+        if (dispatchTerminal) {
+          this.#dispatchObjectEvent(gesture.member, "pinchEnd", prop);
+          this.#dispatchGlobalEvent("pinchEnd", prop);
+        }
       } finally {
-        // Same invariant as the drag path: a gesture that survives its own end
-        // event keeps re-ending on every later release.
-        delete this.#gestureDict[gestureKey];
+        this.#pinches.delete(gestureKey);
       }
     }
   }
 
   #dispatchObjectEvent<EventName extends keyof InputEventCallback>(
-    owner: ElementObject | null,
+    owner: ElementObject<DomElement> | null,
     event: EventName,
     prop: InputEventPayloadMap[EventName],
   ) {
-    if (!owner || !this.#isOwnerRegistered(owner)) {
+    if (!owner || !this.#isObjectRegistered(owner)) {
       return;
     }
-    try {
-      owner.event.input[event]?.(prop as any);
-    } catch (error) {
-      // A consumer handler must not unwind the dispatch: the pointer-lifecycle
-      // cleanup that follows releases the pointer's claim, and skipping it
-      // suppresses every later global pointerMove for that pointer id.
-      reportConsumerError(error);
+
+    const path: BaseObject[] = [];
+    let current: BaseObject | null = owner;
+    while (current) {
+      path.push(current);
+      current = current.parent;
+    }
+    for (const target of path) {
+      if (!this.#isObjectRegistered(target)) continue;
+      try {
+        target.event.input[event]?.(prop as any);
+      } catch (error) {
+        // Errors are isolated per target so later ancestors, global listeners,
+        // and pointer-lifecycle cleanup still run.
+        reportConsumerError(error);
+      }
     }
   }
 
@@ -1005,77 +1275,16 @@ class InputControl {
     }
   }
 
-  // Headless connector surfaces can extend beyond their parent node's DOM box.
-  // SnapLine registers them in global.data so pointerdown ownership can be
-  // resolved geometrically before composedPath routing. The registry shape is
-  // declared in internal/shared-data.ts (engine core cannot import SnapLine).
-  #resolveSourceSurfaceOwner(position: eventPosition): ElementObject | null {
-    const surfaces = this.global?.data?.sourceSurfaces as
-      | Array<{
-          id: string;
-          engine: unknown;
-          isDeleteRequested: boolean;
-          resolveSourceHit(position: eventPosition): {
-            candidate: {
-              hit: {
-                distance: number;
-                priority?: number;
-              };
-            };
-            strategyIndex: number;
-          } | null;
-        }>
-      | undefined;
-    if (!surfaces) return null;
-
-    let winner: {
-      owner: ElementObject;
-      priority: number;
-      distance: number;
-      strategyIndex: number;
-    } | null = null;
-
-    for (const surface of surfaces) {
-      if (surface.engine !== this.#engine || surface.isDeleteRequested) {
-        continue;
-      }
-      const resolved = surface.resolveSourceHit(position);
-      if (!resolved || !Number.isFinite(resolved.candidate.hit.distance)) {
-        continue;
-      }
-      const candidate = {
-        owner: surface as unknown as ElementObject,
-        priority: resolved.candidate.hit.priority ?? 0,
-        distance: resolved.candidate.hit.distance,
-        strategyIndex: resolved.strategyIndex,
-      };
-      if (
-        !winner ||
-        candidate.priority > winner.priority ||
-        (candidate.priority === winner.priority &&
-          candidate.distance < winner.distance) ||
-        (candidate.priority === winner.priority &&
-          candidate.distance === winner.distance &&
-          candidate.owner.id.localeCompare(winner.owner.id) < 0) ||
-        (candidate.priority === winner.priority &&
-          candidate.distance === winner.distance &&
-          candidate.owner.id === winner.owner.id &&
-          candidate.strategyIndex < winner.strategyIndex)
-      ) {
-        winner = candidate;
-      }
-    }
-
-    return winner?.owner ?? null;
-  }
-
-  #getTargetOwner(event: Event): ElementObject | null {
+  /* Determine the object that fired the event. */
+  #getTargetOwner(event: Event): ElementObject<DomElement> | null {
+    const ElementConstructor = this.#document.defaultView?.Element;
+    if (!ElementConstructor) return null;
     for (const target of this.#getEventPath(event)) {
-      if (!(target instanceof HTMLElement)) {
+      if (!(target instanceof ElementConstructor)) {
         continue;
       }
-      const owner = this.#objectByElement.get(target);
-      if (owner && this.#isOwnerRegistered(owner)) {
+      const owner = this.#objectByElement.get(target as DomElement);
+      if (owner && this.#isObjectRegistered(owner)) {
         return owner;
       }
     }
@@ -1096,29 +1305,14 @@ class InputControl {
     return path;
   }
 
-  #getOwnerId(owner: ElementObject | null) {
-    if (!owner || !this.#isOwnerRegistered(owner)) {
+  #getOwnerId(owner: ElementObject<DomElement> | null) {
+    if (!owner || !this.#isObjectRegistered(owner)) {
       return null;
     }
     return owner.id;
   }
 
-  #isOwnerRegistered(owner: ElementObject) {
-    const element = this.#elementByObjectId.get(owner.id);
-    if (element && this.#objectByElement.get(element) === owner) {
-      return true;
-    }
-
-    // Some interaction owners are deliberately headless. Virtual connectors
-    // and similar surfaces are selected geometrically by a DOM-backed parent
-    // and then explicitly assigned with setPointerDragOwner(). They still
-    // belong to the engine even though they do not have an element to discover
-    // through composedPath().
-    //
-    // Keep DOM hit discovery separate (#getTargetOwner still only walks the
-    // element map), but allow direct dispatch to a live object registered with
-    // this engine. This also prevents a destroyed/replaced object with a reused
-    // id from continuing to receive an in-flight gesture.
+  #isObjectRegistered(owner: BaseObject) {
     if (owner.isDeleteRequested || !this.global || !this.#engine) {
       return false;
     }

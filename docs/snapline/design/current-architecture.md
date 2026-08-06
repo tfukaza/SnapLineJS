@@ -85,8 +85,8 @@ application's records and mounted components.
    `GraphRegistry` under its domain id (`config.id` or minted).
 2. The adapter assigns the committed DOM element and calls
    `remeasureDomGeometry()` (nodes) / relies on the connector's scheduled
-   local-center measurement. A connector may stay headless (virtual) and use
-   surface strategies for hit testing and anchors.
+   local-center measurement. A connector always binds an HTML or SVG input
+   root; custom SVG strokes can use native `pointer-events="stroke"`.
 3. Connector registration schedules a reconciliation pass — a newly mounted
    endpoint may make a latent canonical line representable.
 4. On unmount, `destroy()` unregisters the mirror; connector/node teardown
@@ -95,7 +95,8 @@ application's records and mounted components.
 
 Connector policy updates in place through `updateConfig()`; `name` is a
 construction-time key in the parent node's map. `bindElement()` attaches or
-detaches the optional visible port without destroying the logical connector.
+detaches the developer-rendered HTML or SVG input root without destroying the
+logical connector.
 
 ### Lines: the controlled protocol
 
@@ -327,9 +328,6 @@ same registry reads and were removed.
 
 `SnapLineSharedData` (typed by `internal/shared-data.ts`) now holds only:
 
-- `sourceSurfaces` — engine core's `input.ts` duck-reads this to route
-  pointerdowns to headless connector surfaces (engine core cannot import
-  snapline, so the contract is structural and lives on the shared bag);
 - the `graphRegistries` WeakMap keying each engine to its `GraphRegistry`
   (GlobalManager is application-wide; the WeakMap lets a destroyed engine
   release its registry);
@@ -377,7 +375,7 @@ The packages export raw TypeScript source and are pre-1.0.
 | Controllers | `RectSelectController`, `PlacementController` |
 | Controlled graph | `attachControlledGraph`; types `LineRecord`, `CanonicalGraphSnapshot`, `LineChangeRequest`, `ProposedLine`, `LineEndpointUpdate`, `ControlledGraphCallbacks`, `ControlledGraphHandle` |
 | Identity/diagnostics | types `NodeId`, `ConnectorId`, `LineId`, `ReconciliationError`, `GraphBatch` |
-| Queries | `query` (+ `GraphQuery`), `getParentGroup`, `setGroupMembershipResolver`, `resolveConnectorSourceAtPoint` |
+| Queries | `query` (+ `GraphQuery`), `getParentGroup`, `setGroupMembershipResolver` |
 | Config/callback types | `NodeConfig`/`NodeCallbacks` (incl. `GeometryChangeEvent`), `ConnectorConfig`/`ConnectorRules`/`ConnectorCallbacks`/`ConnectionProposal`, line/group/select/placement types |
 
 The package has a single entry point (`.`). The per-module subpath exports were

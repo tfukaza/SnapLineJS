@@ -48,13 +48,13 @@ call `node.remeasureDomGeometry()`. The remeasure is coalesced into the next
 read/write cycle and re-glues every connected line without coupling SnapLine to
 the external system.
 
-Surface strategies decouple connection hit testing from visible connector
-elements. They can activate from a node border, rank shape-specific target
-hits, and resolve preview and settled anchors from cached geometry. Symmetric
-connector rules (`maxOutgoing`/`maxIncoming`, `"unlimited"` explicit) let the
-same logical surface start and accept connections. `onPointerDown` runs when a connector claims the primary pointer,
-before the drag threshold, so consumers can preserve click selection or other
-gesture-start UI for headless surfaces.
+Connector roots own gesture initiation, while target-hit and anchor strategies
+can rank shape-specific collision candidates and resolve preview and settled
+anchors from cached geometry. Symmetric connector rules
+(`maxOutgoing`/`maxIncoming`, `"unlimited"` explicit) let the same logical
+connector start and accept connections. `onPointerDown` runs when a connector
+claims the primary pointer, before the drag threshold, so consumers can
+preserve click selection or other gesture-start UI on custom HTML or SVG roots.
 
 Call `connector.updateConfig(...)` to change callbacks, metadata, policy,
 surface strategies, collider radius, or edge-pan behavior

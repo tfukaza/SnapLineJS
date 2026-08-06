@@ -6,7 +6,7 @@ import {
   BaseObject,
   ObjectTransform,
 } from "./object";
-import type { DomProperty } from "./object";
+import type { DomElement, DomProperty } from "./object";
 import { GlobalManager } from "./global";
 import { InputControl, mouseButtonBitmap } from "./input";
 import type {
@@ -21,6 +21,7 @@ import type {
   pinchProp,
   pinchEndProp,
   PinchSnapshot,
+  GestureHandoffControl,
   InputControlConfig,
   eventPosition,
 } from "./input";
@@ -57,9 +58,11 @@ export {
   type pinchProp,
   type pinchEndProp,
   type PinchSnapshot,
+  type GestureHandoffControl,
   type InputControlConfig,
   type eventPosition,
   type EdgePanController,
+  type DomElement,
   type DomProperty,
   type CameraConfig,
   mouseButtonBitmap,

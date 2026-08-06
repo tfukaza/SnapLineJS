@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { NodeMirror, LineMirror, type NodeCallbacks, type NewLineResolver, type GeometryChangeEvent, type NodeResizeEvent, type SnapLineMetadata } from "@snap-engine/snapline";
+    import { NodeMirror, LineMirror, type NodeCallbacks, type GeometryChangeEvent, type NodeResizeEvent, type SnapLineMetadata } from "@snap-engine/snapline";
     import type { Engine } from "@snap-engine/core";
     import Line from "./Line.svelte";
     import { onMount, setContext, getContext, onDestroy, tick, untrack } from "svelte";
@@ -12,7 +12,6 @@
         className = "",
         LineSvelteComponent = Line,
         resolveLineComponent = undefined,
-        resolveNewLine = undefined,
         nodeObject = null,
         x = 0,
         y = 0,
@@ -46,8 +45,6 @@
          * reference in a record.
          */
         resolveLineComponent?: (line: LineMirror) => typeof Line | null | undefined;
-        /** Seeds application data onto a line a drag from this node creates. */
-        resolveNewLine?: NewLineResolver;
         nodeObject?: NodeMirror | null;
         x?: number;
         y?: number;
@@ -68,7 +65,7 @@
     let engine: Engine = getContext("engine");
     const ownsNode = nodeObject == null;
     if (!nodeObject) {
-         nodeObject = new NodeMirror(engine, null, { id, minWidth, minHeight, metadata, callbacks: {}, edgePan, resolveNewLine });
+         nodeObject = new NodeMirror(engine, null, { id, minWidth, minHeight, metadata, callbacks: {}, edgePan });
     }
     let lineList: LineMirror[] = $state(nodeObject.getAllOutgoingLines());
 
@@ -114,6 +111,10 @@
             callbacks.resolveSelectionMode?.(event) ??
             originalCallbacks.resolveSelectionMode?.(event) ??
             "replace";
+        nodeObject.callbacks.resolveNewLine = (event) => {
+            const resolver = callbacks.resolveNewLine ?? originalCallbacks.resolveNewLine;
+            return resolver?.(event);
+        };
         nodeObject.callbacks.onDragStart = (event) =>
             invoke(event, originalCallbacks.onDragStart, callbacks.onDragStart);
         nodeObject.callbacks.onDrag = (event) =>
@@ -140,6 +141,7 @@
         nodeObject.callbacks.canStartDrag = originalCallbacks.canStartDrag;
         nodeObject.callbacks.resolveDragPosition = originalCallbacks.resolveDragPosition;
         nodeObject.callbacks.resolveSelectionMode = originalCallbacks.resolveSelectionMode;
+        nodeObject.callbacks.resolveNewLine = originalCallbacks.resolveNewLine;
         nodeObject.callbacks.onDragStart = originalCallbacks.onDragStart;
         nodeObject.callbacks.onDrag = originalCallbacks.onDrag;
         nodeObject.callbacks.onGeometryCommit = originalCallbacks.onGeometryCommit;

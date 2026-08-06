@@ -1,5 +1,9 @@
 import { expect, test } from "@playwright/test";
-import { ConnectorMirror, NodeMirror } from "../../assets/snapline/core/src";
+import {
+  ConnectorMirror,
+  LineMirror,
+  NodeMirror,
+} from "../../assets/snapline/core/src";
 
 import {
   armGesture,
@@ -39,7 +43,7 @@ function mountPair() {
 
 test("line geometry observers are multicast, and unsubscribing detaches only that one", () => {
   const { source } = mountPair();
-  const line = source.createLine();
+  const line = new LineMirror(source.engine, source);
   const first: number[] = [];
   const second: number[] = [];
 
@@ -64,7 +68,7 @@ test("line geometry observers are multicast, and unsubscribing detaches only tha
 
 test("the line signal fires synchronously BEFORE the write task is queued", () => {
   const { global, source } = mountPair();
-  const line = source.createLine();
+  const line = new LineMirror(source.engine, source);
   let queuedAtNotifyTime: string[] | null = null;
 
   line.onGeometryInvalidated(() => {
@@ -86,7 +90,7 @@ test("the line signal fires synchronously BEFORE the write task is queued", () =
 
 test("a throwing observer stops neither its peers nor the paint", () => {
   const { source } = mountPair();
-  const line = source.createLine();
+  const line = new LineMirror(source.engine, source);
   const survived: number[] = [];
   const painted: number[] = [];
   const errors: unknown[] = [];
@@ -180,7 +184,11 @@ test("resolveNewLine seeds a genuinely new line and rides into the request", () 
   const { engine, handle, requests, respondWith } = createControlledHarness();
   respondWith((request, current) => [...current, ...request.add]);
   const sourceNode = new NodeMirror(engine, null, {
-    resolveNewLine: ({ connector }) => ({ kind: `from:${connector.name}` }),
+    callbacks: {
+      resolveNewLine: ({ connector }) => ({
+        kind: `from:${connector.name}`,
+      }),
+    },
   });
   const targetNode = new NodeMirror(engine, null);
   const source = new ConnectorMirror(engine, sourceNode, {
@@ -216,7 +224,7 @@ test("resolveNewLine seeds a genuinely new line and rides into the request", () 
 test("a connector-level resolveNewLine overrides the node's", () => {
   const { engine } = createEngineHarness();
   const node = new NodeMirror(engine, null, {
-    resolveNewLine: () => "from-node",
+    callbacks: { resolveNewLine: () => "from-node" },
   });
   const plain = new ConnectorMirror(engine, node, {
     name: "plain",
@@ -225,7 +233,7 @@ test("a connector-level resolveNewLine overrides the node's", () => {
   const special = new ConnectorMirror(engine, node, {
     name: "special",
     rules: { maxIncoming: 0 },
-    resolveNewLine: () => "from-connector",
+    callbacks: { resolveNewLine: () => "from-connector" },
   });
   node.addConnectorObject(plain);
   node.addConnectorObject(special);
@@ -238,12 +246,38 @@ test("a connector-level resolveNewLine overrides the node's", () => {
   expect(special.outgoingLines[0].payload).toBe("from-connector");
 });
 
+test("resolveNewLine reads the current callback at gesture start", () => {
+  const { engine } = createEngineHarness();
+  const node = new NodeMirror(engine, null, {
+    callbacks: { resolveNewLine: () => "initial" },
+  });
+  const first = new ConnectorMirror(engine, node, {
+    name: "first",
+    rules: { maxIncoming: 0 },
+  });
+  const second = new ConnectorMirror(engine, node, {
+    name: "second",
+    rules: { maxIncoming: 0 },
+  });
+  node.addConnectorObject(first);
+  node.addConnectorObject(second);
+
+  armGesture(first, 4);
+  startGestureDrag(first, 4);
+  expect(first.outgoingLines[0].payload).toBe("initial");
+
+  node.callbacks.resolveNewLine = () => "updated";
+  armGesture(second, 5);
+  startGestureDrag(second, 5);
+  expect(second.outgoingLines[0].payload).toBe("updated");
+});
+
 test("a reconnect never re-seeds — the payload stays app-owned", () => {
   const { engine, handle, respondWith } = createControlledHarness();
   respondWith((request, current) => [...current, ...request.add]);
   let seeds = 0;
   const sourceNode = new NodeMirror(engine, null, {
-    resolveNewLine: () => `seed-${++seeds}`,
+    callbacks: { resolveNewLine: () => `seed-${++seeds}` },
   });
   const targetNode = new NodeMirror(engine, null);
   const source = new ConnectorMirror(engine, sourceNode, {

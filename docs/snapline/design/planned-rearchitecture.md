@@ -47,8 +47,8 @@ The final simplification review has landed: the gesture and record admission
 checks share one structural check plus one predicate check, the settle path's
 redundant eviction block and the reconciler's unused local-topology notify
 forwarding are gone, remaining single-class `_`-prefixed fields moved to `#`
-privates (with `_connectors` documented as the one deliberate cross-class
-field), and an informational perf benchmark
+privates, connector membership is encapsulated behind `NodeMirror`'s internal
+attachment boundary, and an informational perf benchmark
 (`tests/ut/snapline-perf.spec.ts`) guards the reconcile / candidate-discovery
 / bulk-load hot paths. The complete verification matrix — unit suites, all
 six SnapLine e2e suites, package validation, and the docs e2e — passes.

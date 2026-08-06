@@ -12,6 +12,25 @@ import {
 // Headless engine stand-in for SnapLine unit tests: a six-stage frame queue,
 // an engine-scoped object table, and the input/collision surface the mirrors
 // touch during construction. No DOM, no render loop.
+function createCollisionHarness() {
+  const colliders: any[] = [];
+  return {
+    addObject(collider: any) {
+      if (!colliders.includes(collider)) colliders.push(collider);
+    },
+    removeObject(id: symbol) {
+      const index = colliders.findIndex((collider) => collider.id === id);
+      if (index !== -1) colliders.splice(index, 1);
+    },
+    queryPoint(_position: { x: number; y: number }) {
+      // SnapLine's headless policy tests use targetHitTest as their narrow
+      // phase. The real CollisionEngine point-query behavior is covered by
+      // core collision tests.
+      return [...colliders];
+    },
+  };
+}
+
 export function createEngineHarness() {
   let nextId = 0;
   const objects: Record<string, unknown> = {};
@@ -25,16 +44,12 @@ export function createEngineHarness() {
   };
   const engine: any = {
     camera: null,
-    collisionEngine: {
-      addObject() {},
-      removeObject() {},
-    },
+    collisionEngine: createCollisionHarness(),
     edgePanController: null,
     global: null,
     input: {
       claimPointer() {},
       registerObjectElement() {},
-      setPointerDragOwner() {},
       subscribeGlobalCursorEvent() {},
       unregisterObjectElement() {},
       unsubscribeGlobalCursorEvent() {},
@@ -63,16 +78,12 @@ export function createEngineHarness() {
 export function createSiblingEngine(global: any) {
   const engine: any = {
     camera: null,
-    collisionEngine: {
-      addObject() {},
-      removeObject() {},
-    },
+    collisionEngine: createCollisionHarness(),
     edgePanController: null,
     global,
     input: {
       claimPointer() {},
       registerObjectElement() {},
-      setPointerDragOwner() {},
       subscribeGlobalCursorEvent() {},
       unregisterObjectElement() {},
       unsubscribeGlobalCursorEvent() {},

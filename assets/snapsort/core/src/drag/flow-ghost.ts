@@ -362,7 +362,19 @@ async function startCopyHandoff(session: DragSession): Promise<boolean> {
     throw error;
   }
 
-  session.handoff(cloneItems);
+  try {
+    session.handoff(cloneItems);
+  } catch (error) {
+    // Native capture can reject a destination that disappeared between the
+    // framework flush and the handoff. Retire those transient clones through
+    // framework state before propagating the input failure.
+    for (const { clone, container } of boundClones) {
+      fireItemRemove(container, [clone], session);
+    }
+    await settleMutation();
+    for (const clone of cloneItems) clone.destroy(false);
+    throw error;
+  }
   return true;
 }
 

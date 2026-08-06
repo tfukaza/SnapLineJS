@@ -265,6 +265,32 @@ test.describe("Collider transforms", () => {
     expect(collisionEngine.isIntersecting(circle, point)).toBe(false);
   });
 
+  test("queryPoint returns every live hit in registration order", () => {
+    const engine = createEngine();
+    const collisionEngine = new CollisionEngine();
+    const rectParent = new BaseObject(engine);
+    const circleParent = new BaseObject(engine);
+    const pointParent = new BaseObject(engine);
+    const rect = new RectCollider(engine, rectParent, 0, 0, 20, 20);
+    const circle = new CircleCollider(engine, circleParent, 10, 10, 8);
+    const point = new PointCollider(engine, pointParent, 10, 10);
+
+    collisionEngine.addObject(rect);
+    collisionEngine.addObject(circle);
+    collisionEngine.addObject(point);
+    expect(collisionEngine.queryPoint({ x: 10, y: 10 })).toEqual([
+      rect,
+      circle,
+      point,
+    ]);
+
+    circleParent.worldTransform = { x: 100, y: 100 };
+    expect(collisionEngine.queryPoint({ x: 10, y: 10 })).toEqual([rect, point]);
+
+    collisionEngine.removeObject(rect.id);
+    expect(collisionEngine.queryPoint({ x: 10, y: 10 })).toEqual([point]);
+  });
+
   test("emits begin, collide, and end callbacks after transform updates", () => {
     const engine = createEngine();
     const collisionEngine = new CollisionEngine();

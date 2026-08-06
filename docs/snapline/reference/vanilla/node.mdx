@@ -19,8 +19,9 @@ and `edgePan`.
 `NodeCallbacks` covers drag (`canStartDrag`, `resolveDragPosition`,
 `onDragStart`, `onDrag`), selection (`resolveSelectionMode`,
 `onSelectionChange`), resize (`onSizeChange`), lines
-(`onLinesChanged`), and the batched `onGeometryCommit` used for
-persistence.
+(`resolveNewLine`, `onLinesChanged`), and the batched `onGeometryCommit` used
+for persistence. `resolveNewLine` seeds serializable payload onto a newly
+dragged line; a connector-level callback may override it.
 
 ## Resize regions
 

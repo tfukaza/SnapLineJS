@@ -7,26 +7,39 @@ sectionOrder: 2
 ---
 
 Ordinary SnapLine connectors are visible ports with circular hit areas and
-center anchors. A surface connector keeps the same connection lifecycle while
-letting the application define where a gesture can start, where it can land,
-and where a line attaches.
+center anchors. A custom-root connector keeps the same connection lifecycle
+while letting the application render the source input shape, customize target
+admission, and decide where a line attaches.
 
-Use a surface connector for diagrams whose boxes, circles, or other shapes act
-as their own ports:
+Use an SVG path with native stroke hit testing when a box, circle, or other
+shape should act as its own port:
 
 ```svelte
-<Connector
-  id="node-1:surface"
-  name="surface"
-  virtual
-  rules={{
-    maxOutgoing: "unlimited",
-    maxIncoming: "unlimited",
-    reconnect: false,
-    allowParallel: true
-  }}
-  {surfaceStrategies}
-/>
+<svg viewBox="0 0 160 80">
+  <Connector
+    id="node-1:surface"
+    name="surface"
+    rules={{
+      maxOutgoing: "unlimited",
+      maxIncoming: "unlimited",
+      reconnect: false,
+      allowParallel: true
+    }}
+    colliderRadius={100}
+    {surfaceStrategies}
+  >
+    {#snippet children(bindConnector)}
+      <path
+        use:bindConnector
+        d={borderPath}
+        fill="none"
+        stroke="transparent"
+        stroke-width="16"
+        pointer-events="stroke"
+      />
+    {/snippet}
+  </Connector>
+</svg>
 ```
 
 The `rules` shown override defaults of `maxOutgoing: "unlimited"`,
@@ -36,19 +49,39 @@ incoming lines and parallel edges, while `onFull: "replace-oldest"` suits a
 single-input port that should adopt the newest connection instead of
 rejecting it.
 
-`virtual` omits the connector element. The logical `ConnectorMirror` still
-belongs to its node, participates in connection policy, and owns its lines.
-Source surfaces are registered with the engine's input router, so their hit
-area may extend beyond the parent node's DOM box (for example, a 16-pixel rim
-around a shape). A visible connector under the pointer still wins over a wider
-virtual surface; otherwise matching surfaces are considered before the node or
-background starts its ordinary gesture.
+The snippet action binds that path to the logical `ConnectorMirror`. SnapEngine
+then uses ordinary DOM event targeting and pointer capture for the source
+gesture; there is no separate headless input route. Make a transparent stroke
+wide enough for the desired hit area, or bind any other HTML/SVG element whose
+native pointer area matches the interaction.
+
+React's equivalent is a render function:
+
+```tsx
+<svg viewBox="0 0 160 80">
+  <Connector
+    name="surface"
+    colliderRadius={100}
+    surfaceStrategies={surfaceStrategies}
+  >
+    {({ ref }) => (
+      <path
+        ref={ref}
+        d={borderPath}
+        fill="none"
+        stroke="transparent"
+        strokeWidth={16}
+        pointerEvents="stroke"
+      />
+    )}
+  </Connector>
+</svg>
+```
 
 The Svelte and React adapters apply connector prop changes to the existing
-core object. Toggling `virtual` safely detaches or mounts the visible port
-without deleting connector topology. Vanilla integrations can update the same
-runtime options with `connector.updateConfig(...)`; `name` remains
-construction-only.
+core object. Vanilla integrations can update the same runtime options with
+`connector.updateConfig(...)` and bind an HTML or SVG root with
+`connector.bindElement(...)`; `name` remains construction-only.
 
 Use the connector's `onPointerDown` callback for selection or other UI that
 must happen as soon as the surface claims the pointer. It receives the
@@ -57,24 +90,28 @@ connector, normalized position, pointer ID, and original `PointerEvent`;
 
 ## Hit testing
 
-A `ConnectorSurfaceStrategy` may provide separate `sourceHitTest` and
-`targetHitTest` callbacks. Callbacks receive the pointer in SnapEngine world,
-camera, and screen coordinates together with a cached geometry snapshot. They
-return a projected anchor and a score:
+A `ConnectorSurfaceStrategy` may provide `targetHitTest` and `resolveAnchor`.
+Target callbacks receive the pointer in SnapEngine world, camera, and screen
+coordinates together with a cached geometry snapshot. They return a projected
+anchor and a score:
 
 ```ts
 const borderSurface: ConnectorSurfaceStrategy = {
-  sourceHitTest: ({ position, geometry }) => hitBorder(position, geometry),
   targetHitTest: ({ position, geometry }) => hitBorder(position, geometry),
   resolveAnchor: ({ geometry, peerGeometry, position }) =>
     boundaryToward(geometry, peerGeometry?.center ?? position),
 };
 ```
 
-Return `null` or `false` for a miss. When several surfaces match, SnapLine sorts
-by priority, then distance, then falls back to internal object identity order
-and strategy order for exact ties. This makes overlapping targets
-deterministic without requiring DOM z-index tricks.
+Target discovery first asks `collisionEngine.queryPoint()` for every connector
+collider under the pointer, in collider registration order. Set
+`colliderRadius` large enough to enclose a custom target shape.
+`targetHitTest` then applies the connector-specific narrow policy; when at
+least one target hit test is configured, its hits replace the default
+center candidate. Return `null` or `false` for a miss. When several targets
+match, SnapLine sorts by priority, then distance, then falls back to internal
+object identity order and strategy order for exact ties. This makes
+overlapping targets deterministic without requiring DOM z-index tricks.
 
 The geometry passed to callbacks is measured during SnapLine's read phase.
 Surface callbacks should use that snapshot instead of calling
@@ -82,9 +119,11 @@ Surface callbacks should use that snapshot instead of calling
 
 ## Preview and settled anchors
 
-Hit testing and line attachment are separate:
+Source targeting, target snapping, and line attachment are separate:
 
-- Source and target hits decide whether the pointer is on a valid surface.
+- The bound DOM root decides whether a source gesture starts.
+- The connector collider and optional target hit test decide whether a target
+  is under the pointer.
 - `resolveAnchor` projects each endpoint for free previews, target previews,
   drops, and settled connections.
 - Settled anchors are resolved again whenever either node moves or resizes.

@@ -17,17 +17,42 @@ frameworkKey: connector
 | `name` | **Required.** The connector's key within its parent node |
 | `rules` | `Partial<ConnectorRules>` admission rules (see below) |
 | `metadata` | `SnapLineMetadata` attached to the connector |
-| `callbacks` | `ConnectorCallbacks` (pointer, candidate, connection events) |
-| `surfaceStrategies` | Custom source/target hit-test and anchor strategies |
-| `virtual` | Keep the logical connector without rendering a port element; surfaces resolve against the parent node |
-| `colliderRadius` | Pointer pickup radius override |
+| `callbacks` | `ConnectorCallbacks` (new-line payload resolver plus pointer, candidate, and connection events) |
+| `surfaceStrategies` | Custom target hit-test and anchor strategies |
+| `children` | Snippet receiving an action; apply it with `use:` to one custom HTML or SVG input root |
+| `colliderRadius` | Target snapping radius override |
 | `edgePan` | Pan the camera when dragging a line near the viewport edge (default `true`) |
 | `connectorObject` | Adopt an existing `ConnectorMirror` |
 | `data` | Extra `data-*` attributes for the port element |
 
 `object()` returns the underlying `ConnectorMirror`. `name` and
 `connectorObject` are construction-time identities; every other prop is
-reactive, including `virtual`.
+reactive.
+
+Without a child snippet, `Connector` renders its default port `div`. A custom
+root can be an SVG stroke:
+
+```svelte
+<svg viewBox="0 0 160 80">
+  <Connector name="surface">
+    {#snippet children(bindConnector)}
+      <path
+        use:bindConnector
+        d="M 0 0 H 160 V 80 H 0 Z"
+        fill="none"
+        stroke="transparent"
+        stroke-width="16"
+        pointer-events="stroke"
+      />
+    {/snippet}
+  </Connector>
+</svg>
+```
+
+The custom element is the native source hit area. SnapLine does not run a
+manual source hit test. For target snapping, set `colliderRadius` large enough
+to enclose the custom shape; any configured `targetHitTest` callbacks replace
+the default center candidate inside that broad-phase circle.
 
 ## Connection rules
 

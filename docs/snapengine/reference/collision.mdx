@@ -50,6 +50,11 @@ playerCollider.event.collider.onBeginContact = (self, other) => {
 playerCollider.event.collider.onEndContact = (self, other) => {
   console.log("Collision ended", self, other);
 };
+
+const hits = engine.collisionEngine.queryPoint(pointerWorldPosition);
+for (const collider of hits) {
+  console.log("Point hit", collider.parent);
+}
 ```
 
 ## Collider Constructors
@@ -95,6 +100,7 @@ collider.event.collider.onEndContact = (self, other) => {
 | `collisionEngine.addObject(collider)` | Registers a collider. Usually called through `object.addCollider()`. |
 | `collisionEngine.removeObject(id)` | Removes a collider by symbol id. |
 | `collisionEngine.detectCollisions()` | Runs collision detection. |
+| `collisionEngine.queryPoint({ x, y })` | Synchronously returns all current point hits in collider registration order. |
 | `collisionEngine.isIntersecting(a, b)` | Checks two colliders directly. |
 | `new RectCollider(engine, parent, localX, localY, width, height)` | Creates a rectangular collider. |
 | `new CircleCollider(engine, parent, localX, localY, radius)` | Creates a circular collider. |

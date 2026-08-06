@@ -1,4 +1,4 @@
-import type { DomProperty, TransformProperty } from "./object";
+import type { DomElement, DomProperty, TransformProperty } from "./object";
 
 /**
  * Merges defined override values onto a complete defaults object.
@@ -25,7 +25,7 @@ function mergeDefined<T extends object>(defaults: T, overrides: Partial<T>): T {
  * @param dom - The HTML element to measure.
  * @returns An object containing position and size in various coordinate systems.
  */
-function getDomProperty(engine: any, dom: HTMLElement) {
+function getDomProperty(engine: any, dom: DomElement) {
   const rect = dom.getBoundingClientRect();
   const css = window.getComputedStyle(dom);
   const margin_top = parseFloat(css.marginTop) || 0;
@@ -148,10 +148,7 @@ function parseTransformString(transform: string) {
  * @param dom - The HTML or SVG element to style.
  * @param style - An object containing CSS property-value pairs.
  */
-function setDomStyle(
-  dom: HTMLElement | SVGElement,
-  style: { [key: string]: string },
-) {
+function setDomStyle(dom: DomElement, style: { [key: string]: string }) {
   Object.assign(dom.style, style);
 }
 

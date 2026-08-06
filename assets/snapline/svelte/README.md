@@ -38,14 +38,15 @@ element through `Node`'s `elementProps`.
 Render explicit `ResizeRegion` children to opt into resizing. Their CSS owns
 the hit area, position, cursor, hover behavior, and visuals.
 
-`<Connector virtual>` creates a logical connector without a visible port.
-Combine it with `surfaceStrategies` and symmetric `rules` limits to make a
-node border or another application-defined shape act as the connection surface.
-Application graph state remains authoritative; an opaque line payload can link
-a custom renderer back to the corresponding domain edge.
+Pass a child snippet to `Connector` when the input root should be custom HTML
+or SVG. Apply the snippet argument as a Svelte action to exactly one element;
+for an SVG path, use `pointer-events="stroke"` to make the painted stroke the
+source hit area. `surfaceStrategies` customize target admission and endpoint
+anchors. Application graph state remains authoritative; an opaque line payload
+can link a custom renderer back to the corresponding domain edge.
 
-Connector policy, metadata, callbacks, strategies, and `virtual` are reactive.
-Switching `virtual` detaches or remounts only the visible port; the logical
-connector and its existing lines remain intact.
+Connector policy, metadata, callbacks, strategies, and collider radius are
+reactive. `name` and an adopted `connectorObject` are construction-time
+identities.
 
 Full documentation: https://snapengine.dev/docs/snapline/introduction

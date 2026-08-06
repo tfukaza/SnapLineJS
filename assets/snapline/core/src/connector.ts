@@ -1,4 +1,4 @@
-import { ElementObject, BaseObject } from "@snap-engine/core";
+import { ElementObject, BaseObject, type DomElement } from "@snap-engine/core";
 import type {
   dragEndProp,
   dragProp,
@@ -10,7 +10,7 @@ import type {
 import { CircleCollider } from "@snap-engine/core/collision";
 import type { NodeMirror } from "./node";
 import { LineMirror, cloneAnchor, type LineMirrorPhase } from "./line";
-import { getGraphRegistry, getSourceSurfaces } from "./internal/shared-data";
+import { getGraphRegistry } from "./internal/shared-data";
 import { mintDomainId } from "./internal/graph-registry";
 import type { LineChangeRequest } from "./types";
 
@@ -101,9 +101,6 @@ export interface ConnectorAnchorEvent {
 }
 
 export interface ConnectorSurfaceStrategy {
-  sourceHitTest?: (
-    event: ConnectorSurfaceHitTestEvent,
-  ) => ConnectorHit | null | false | void;
   targetHitTest?: (
     event: ConnectorSurfaceHitTestEvent,
   ) => ConnectorHit | null | false | void;
@@ -189,6 +186,8 @@ export interface ConnectorPointerEvent extends ConnectorDragEvent {
 }
 
 export interface ConnectorCallbacks {
+  /** Overrides the parent node's `resolveNewLine` for this connector only. */
+  resolveNewLine?: NewLineResolver;
   /** Fires when this connector claims a primary pointer, before drag threshold. */
   onPointerDown?: (event: ConnectorPointerEvent) => void;
   onDragStart?: (event: ConnectorDragEvent) => void;
@@ -226,8 +225,6 @@ export interface ConnectorConfig {
   callbacks?: ConnectorCallbacks;
   /** Allows this connector gesture to use the engine's configured edge pan. */
   edgePan?: boolean;
-  /** Overrides the parent node's `resolveNewLine` for this connector only. */
-  resolveNewLine?: NewLineResolver;
 }
 
 /** Context for seeding a brand-new line at drag start. */
@@ -266,7 +263,7 @@ interface ArmedConnection {
   reconnectLine: LineMirror | null;
 }
 
-class ConnectorMirror extends ElementObject {
+class ConnectorMirror extends ElementObject<DomElement> {
   /** Stable domain identity — supplied via `ConnectorConfig.id` or minted.
    * Never the engine-internal `BaseObject.id`. */
   readonly connectorId: string;
@@ -286,6 +283,7 @@ class ConnectorMirror extends ElementObject {
   #armed: ArmedConnection | null = null;
   #gestureOrigin: "new" | "reconnect" | null = null;
   #cancelledPointers = new Set<number>();
+  #dragDelegate: ConnectorMirror | null = null;
   #callbacks: ConnectorCallbacks;
 
   get parent(): NodeMirror {
@@ -323,7 +321,6 @@ class ConnectorMirror extends ElementObject {
       this.#config.colliderRadius ?? 30,
     );
     this.addCollider(this.#hitCircle);
-    this.#syncSourceSurfaceRegistration();
     getGraphRegistry(this.engine).registerConnector(this);
 
     this.event.dom.onAssignDom = () => {
@@ -391,15 +388,14 @@ class ConnectorMirror extends ElementObject {
     this.#callbacks = this.#config.callbacks ?? {};
     this.#rules = Object.freeze(resolveRules(this.#config));
     this.#hitCircle.radius = this.#config.colliderRadius ?? 30;
-    this.#syncSourceSurfaceRegistration();
     this.scheduleAllLineWrites();
   }
 
   /**
-   * Attaches or detaches the optional visible port without destroying the
-   * logical connector. Framework adapters use this for live `virtual` changes.
+   * Attaches or detaches the developer-rendered HTML or SVG input root without
+   * destroying the logical connector.
    */
-  bindElement(element: HTMLElement | null): void {
+  bindElement(element: DomElement | null): void {
     if (this.element === element) return;
     if (this.element) {
       this.destroyDom(false);
@@ -491,8 +487,7 @@ class ConnectorMirror extends ElementObject {
 
   onCursorDown(prop: pointerDownProp): void {
     if (prop.event.button !== 0) return;
-    const sourceHit = this.#resolveOwnSourceHit(prop.position, "source-start");
-    this.armSurfaceGesture(prop, sourceHit);
+    this.armSurfaceGesture(prop, null);
   }
 
   armSurfaceGesture(
@@ -504,7 +499,7 @@ class ConnectorMirror extends ElementObject {
     if (this.#rules.reconnect && currentIncomingLines.length > 0) {
       const line = currentIncomingLines[0];
       const source = line.start;
-      this.engine.input.setPointerDragOwner(prop.event.pointerId, source);
+      this.#dragDelegate = source;
       source.#arm(prop, {
         sourceHit: null,
         sourceStrategy: null,
@@ -545,8 +540,17 @@ class ConnectorMirror extends ElementObject {
 
   #onPointerUp(prop: pointerUpProp): void {
     const pointerId = prop.event.pointerId;
+    const delegate = this.#dragDelegate;
+    this.#dragDelegate = null;
+    if (
+      delegate &&
+      delegate.#armed?.pointerId === pointerId &&
+      delegate.#state === ConnectorState.ARMED
+    ) {
+      delegate.#resetGesture();
+    }
     if (this.#armed?.pointerId !== pointerId) return;
-    if (prop.event.type === "pointercancel") {
+    if (prop.cancelled) {
       this.#cancelledPointers.add(pointerId);
     }
     if (this.#state === ConnectorState.ARMED) {
@@ -555,6 +559,13 @@ class ConnectorMirror extends ElementObject {
   }
 
   #onDragStart(prop: dragStartProp): void {
+    const delegate = this.#dragDelegate;
+    if (delegate && delegate.#armed?.pointerId === prop.pointerId) {
+      this.#dragDelegate = null;
+      prop.handoffTo(delegate);
+      delegate.#onDragStart(prop);
+      return;
+    }
     if (
       this.#state !== ConnectorState.ARMED ||
       this.#armed?.pointerId !== prop.pointerId
@@ -569,7 +580,7 @@ class ConnectorMirror extends ElementObject {
       this.#detachLineForReconnect(line);
       line.clearTarget();
     } else {
-      line = this.createLine();
+      line = this.#createLine();
       line.setSourceSurfaceContext(armed.sourceStrategy, armed.sourceHit);
       // Seed app data onto a genuinely new line. This branch structurally
       // cannot run for a reconnect, so it can never clobber payload the
@@ -637,7 +648,7 @@ class ConnectorMirror extends ElementObject {
   assignToNode(parent: NodeMirror): void {
     this.parent = parent;
     const parentRef = this.parent;
-    parentRef._connectors[this.#name] = this;
+    parentRef.attachConnector(this);
     this.#outgoingLines = [];
     this.#incomingLines = [];
     if (parentRef.global && this.global == null) {
@@ -645,9 +656,9 @@ class ConnectorMirror extends ElementObject {
     }
   }
 
-  /** @internal Gesture/reconciler-only: lines exist because canonical
+  /** Gesture/reconciler-only: lines exist because canonical
    * records (or in-flight gestures) say so. */
-  createLine(config: { id?: string } = {}): LineMirror {
+  #createLine(config: { id?: string } = {}): LineMirror {
     const line = new LineMirror(this.engine, this, config);
     line.setSourceSurfaceContext(this.#defaultAnchorStrategy(), null);
     return line;
@@ -661,10 +672,6 @@ class ConnectorMirror extends ElementObject {
       this.#resolveTargetAtPoint(asEventPosition(position), phase)?.candidate ??
       null
     );
-  }
-
-  resolveSourceHit(position: eventPosition): ConnectorResolvedHit | null {
-    return this.#resolveOwnSourceHit(position, "source-start");
   }
 
   /**
@@ -785,7 +792,7 @@ class ConnectorMirror extends ElementObject {
       return;
     }
 
-    if (this.#cancelledPointers.has(prop.pointerId)) {
+    if (prop.cancelled || this.#cancelledPointers.has(prop.pointerId)) {
       this.#discardDraggedLine(line, prop, false, "cancelled");
       return;
     }
@@ -912,7 +919,11 @@ class ConnectorMirror extends ElementObject {
 
   /** Connector-level override, else the parent node's resolver. */
   #resolveNewLine(): NewLineResolver | null {
-    return this.#config.resolveNewLine ?? this.parent?.resolveNewLine ?? null;
+    return (
+      this.#callbacks.resolveNewLine ??
+      this.parent?.callbacks.resolveNewLine ??
+      null
+    );
   }
 
   #dispatchRequest(request: LineChangeRequest): void {
@@ -1040,37 +1051,9 @@ class ConnectorMirror extends ElementObject {
     this.#resetGesture();
     this.deleteAllLines("teardown");
     getGraphRegistry(this.engine).unregisterConnector(this);
-    if (this.parent?._connectors[this.#name] === this) {
-      delete this.parent._connectors[this.#name];
-    }
-    this.#removeSourceSurfaceRegistration();
+    this.parent?.detachConnector(this);
     this.globalInput.pointerUp = null;
     super.destroy(removeElement);
-  }
-
-  #resolveOwnSourceHit(
-    position: eventPosition,
-    phase: LineMirrorPhase,
-  ): ConnectorResolvedHit | null {
-    const hits: ConnectorResolvedHit[] = [];
-    for (const [strategyIndex, strategy] of this.surfaceStrategies.entries()) {
-      const hit = normalizeHit(
-        strategy.sourceHitTest?.({
-          connector: this,
-          position,
-          geometry: this.geometry,
-          phase,
-        }),
-      );
-      if (hit) {
-        hits.push({
-          candidate: { connector: this, hit },
-          strategy,
-          strategyIndex,
-        });
-      }
-    }
-    return pickResolvedHit(hits);
   }
 
   #resolveTargetAtPoint(
@@ -1078,18 +1061,23 @@ class ConnectorMirror extends ElementObject {
     phase: "preview-target" | "drop",
   ): ConnectorResolvedHit | null {
     const hits: ConnectorResolvedHit[] = [];
-    for (const connector of registeredConnectors(this.engine)) {
+    for (const collider of this.engine.collisionEngine?.queryPoint(position) ??
+      []) {
+      const connector = collider.parent;
       if (
+        !(connector instanceof ConnectorMirror) ||
+        collider !== connector.#hitCircle ||
         connector.engine !== this.engine ||
+        connector.isDeleteRequested ||
         !this.#admitsConnection(connector, this.#dragLine, "candidate")
       ) {
         continue;
       }
 
-      for (const [
-        strategyIndex,
-        strategy,
-      ] of connector.surfaceStrategies.entries()) {
+      const targetStrategies = connector.surfaceStrategies
+        .map((strategy, strategyIndex) => ({ strategy, strategyIndex }))
+        .filter(({ strategy }) => strategy.targetHitTest != null);
+      for (const { strategyIndex, strategy } of targetStrategies) {
         const hit = normalizeHit(
           strategy.targetHitTest?.({
             connector,
@@ -1107,22 +1095,25 @@ class ConnectorMirror extends ElementObject {
         }
       }
 
-      if (connector.#hasOrdinaryPortGeometry()) {
+      if (
+        targetStrategies.length === 0 &&
+        connector.#hasOrdinaryPortGeometry()
+      ) {
         const center = connector.center;
-        const distance = Math.hypot(
-          center.x - position.x,
-          center.y - position.y,
-        );
-        if (distance <= (connector.#config.colliderRadius ?? 30)) {
-          hits.push({
-            candidate: {
-              connector,
-              hit: { anchor: center, distance },
+        hits.push({
+          candidate: {
+            connector,
+            hit: {
+              anchor: center,
+              distance: Math.hypot(
+                center.x - position.x,
+                center.y - position.y,
+              ),
             },
-            strategy: connector.#defaultAnchorStrategy(),
-            strategyIndex: Number.MAX_SAFE_INTEGER,
-          });
-        }
+          },
+          strategy: connector.#defaultAnchorStrategy(),
+          strategyIndex: Number.MAX_SAFE_INTEGER,
+        });
       }
     }
     return pickResolvedHit(hits);
@@ -1204,25 +1195,6 @@ class ConnectorMirror extends ElementObject {
     );
   }
 
-  #syncSourceSurfaceRegistration(): void {
-    const sourceSurfaces = getSourceSurfaces(this.global);
-    const index = sourceSurfaces.indexOf(this);
-    const shouldRegister =
-      this.isSource &&
-      this.surfaceStrategies.some((strategy) => strategy.sourceHitTest);
-    if (shouldRegister && index === -1) {
-      sourceSurfaces.push(this);
-    } else if (!shouldRegister && index !== -1) {
-      sourceSurfaces.splice(index, 1);
-    }
-  }
-
-  #removeSourceSurfaceRegistration(): void {
-    const sourceSurfaces = getSourceSurfaces(this.global);
-    const index = sourceSurfaces.indexOf(this);
-    if (index !== -1) sourceSurfaces.splice(index, 1);
-  }
-
   #hasOrdinaryPortGeometry(): boolean {
     return this.element != null || this.#hasMeasuredCenter;
   }
@@ -1239,7 +1211,7 @@ class ConnectorMirror extends ElementObject {
     const structural = this.#admitsEndpoints(target, null, false);
     if (structural !== true) return structural;
 
-    const line = this.createLine({ id: record.id });
+    const line = this.#createLine({ id: record.id });
     if (!this.#predicatesAdmit(target, line, "drop")) {
       line.destroy(false);
       return "connection-rejected";
@@ -1393,35 +1365,6 @@ function pickResolvedHit(
 ): ConnectorResolvedHit | null {
   hits.sort(compareResolvedHits);
   return hits[0] ?? null;
-}
-
-export function resolveConnectorSourceAtPoint(
-  engine: any,
-  position: eventPosition,
-  node?: NodeMirror,
-): ConnectorResolvedHit | null {
-  const hits: ConnectorResolvedHit[] = [];
-  for (const surface of getSourceSurfaces(engine.global)) {
-    const connector = surface as ConnectorMirror;
-    if (
-      connector.engine !== engine ||
-      (node && connector.parent !== node) ||
-      !connector.isSource
-    ) {
-      continue;
-    }
-    const resolved = connector.resolveSourceHit(position);
-    if (resolved) hits.push(resolved);
-  }
-  return pickResolvedHit(hits);
-}
-
-function registeredConnectors(engine: any): ConnectorMirror[] {
-  // The registry is the one connector source — no engine-object-table scan
-  // (this runs per pointer move during a connection drag).
-  return getGraphRegistry(engine).connectors.filter(
-    (connector) => !connector.isDeleteRequested,
-  );
 }
 
 export { ConnectorMirror };

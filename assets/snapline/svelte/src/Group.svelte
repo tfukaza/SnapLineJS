@@ -102,6 +102,10 @@
             callbacks.resolveSelectionMode?.(event) ??
             originalCallbacks.resolveSelectionMode?.(event) ??
             "replace";
+        groupObject!.callbacks.resolveNewLine = (event) => {
+            const resolver = callbacks.resolveNewLine ?? originalCallbacks.resolveNewLine;
+            return resolver?.(event);
+        };
         groupObject!.callbacks.onDragStart = (event) =>
             invoke(event, originalCallbacks.onDragStart, callbacks.onDragStart);
         groupObject!.callbacks.onDrag = (event) =>
@@ -138,6 +142,7 @@
         unregisterHeader = null;
         groupObject!.callbacks.canStartDrag = originalCallbacks.canStartDrag;
         groupObject!.callbacks.resolveSelectionMode = originalCallbacks.resolveSelectionMode;
+        groupObject!.callbacks.resolveNewLine = originalCallbacks.resolveNewLine;
         groupObject!.callbacks.onDragStart = originalCallbacks.onDragStart;
         groupObject!.callbacks.onDrag = originalCallbacks.onDrag;
         groupObject!.callbacks.onGeometryCommit = originalCallbacks.onGeometryCommit;

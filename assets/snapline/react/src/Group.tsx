@@ -143,6 +143,12 @@ export const Group = forwardRef<GroupNodeMirror, GroupProps>(function Group(
       latestRef.current.callbacks.resolveSelectionMode?.(event) ??
       originalCallbacks.resolveSelectionMode?.(event) ??
       "replace";
+    group.callbacks.resolveNewLine = (event) => {
+      const resolver =
+        latestRef.current.callbacks.resolveNewLine ??
+        originalCallbacks.resolveNewLine;
+      return resolver?.(event);
+    };
     group.callbacks.onDragStart = (event) =>
       invoke(
         event,
@@ -199,6 +205,7 @@ export const Group = forwardRef<GroupNodeMirror, GroupProps>(function Group(
       group.callbacks.canStartDrag = originalCallbacks.canStartDrag;
       group.callbacks.resolveSelectionMode =
         originalCallbacks.resolveSelectionMode;
+      group.callbacks.resolveNewLine = originalCallbacks.resolveNewLine;
       group.callbacks.onDragStart = originalCallbacks.onDragStart;
       group.callbacks.onDrag = originalCallbacks.onDrag;
       group.callbacks.onGeometryCommit = originalCallbacks.onGeometryCommit;

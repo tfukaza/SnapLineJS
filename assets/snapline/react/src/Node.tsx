@@ -15,7 +15,6 @@ import {
 import {
   LineMirror,
   NodeMirror,
-  type NewLineResolver,
   type NodeCallbacks,
   type GeometryChangeEvent,
   type NodeResizeEvent,
@@ -48,8 +47,6 @@ export interface NodeProps {
   resolveLineComponent?: (
     line: LineMirror,
   ) => ComponentType<{ line: LineMirror }> | null | undefined;
-  /** Seeds application data onto a line a drag from this node creates. */
-  resolveNewLine?: NewLineResolver;
   nodeObject?: NodeMirror | null;
   style?: CSSProperties;
   x?: number;
@@ -74,7 +71,6 @@ export const Node = forwardRef<NodeMirror, NodeProps>(function Node(
     className = "",
     lineComponent: LineRenderer = Line,
     resolveLineComponent,
-    resolveNewLine,
     nodeObject = null,
     style,
     x = 0,
@@ -104,7 +100,6 @@ export const Node = forwardRef<NodeMirror, NodeProps>(function Node(
       metadata,
       callbacks: {},
       edgePan,
-      resolveNewLine,
     });
   }
   const node = nodeRef.current;
@@ -161,6 +156,11 @@ export const Node = forwardRef<NodeMirror, NodeProps>(function Node(
       latestRef.current.callbacks.resolveSelectionMode?.(event) ??
       original.resolveSelectionMode?.(event) ??
       "replace";
+    node.callbacks.resolveNewLine = (event) => {
+      const resolver =
+        latestRef.current.callbacks.resolveNewLine ?? original.resolveNewLine;
+      return resolver?.(event);
+    };
     node.callbacks.onDragStart = (event) =>
       invoke(
         event,
@@ -205,6 +205,7 @@ export const Node = forwardRef<NodeMirror, NodeProps>(function Node(
       node.callbacks.canStartDrag = original.canStartDrag;
       node.callbacks.resolveDragPosition = original.resolveDragPosition;
       node.callbacks.resolveSelectionMode = original.resolveSelectionMode;
+      node.callbacks.resolveNewLine = original.resolveNewLine;
       node.callbacks.onDragStart = original.onDragStart;
       node.callbacks.onDrag = original.onDrag;
       node.callbacks.onGeometryCommit = original.onGeometryCommit;

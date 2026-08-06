@@ -122,87 +122,6 @@ function wouldCreateGroupCycle(
   return false;
 }
 
-function reconcileMembership(
-  source: GroupNodeMirror,
-  fireDelta: boolean,
-): void {
-  const mirror = getGraphRegistry(source.engine);
-  if (mirror.reconcilingMembership) return;
-  mirror.reconcilingMembership = true;
-
-  try {
-    const groups = groupsForEngine(source);
-    const nextMembers = new Map<GroupNodeMirror, Set<NodeMirror>>(
-      groups.map((group) => [group, new Set()]),
-    );
-    const nextParents = new Map<NodeMirror, GroupNodeMirror>();
-
-    const nodes = nodesForEngine(source);
-    const groupNodes = [...groups].sort(stableGroupOrder);
-    const ordinaryNodes = nodes.filter(
-      (node) => !(node instanceof GroupNodeMirror),
-    );
-
-    // Resolve the group forest first. A proposed edge can point at a group that
-    // has already chosen another parent, so walking the partial parent map is
-    // enough to reject the edge that would close any cycle.
-    for (const node of groupNodes) {
-      const candidates = groups.filter(
-        (group) =>
-          group !== node &&
-          group.allowsMembership(node) &&
-          !wouldCreateGroupCycle(node, group, nextParents),
-      );
-      const parent = resolveParent(node, candidates, mirror.membershipResolver);
-      if (!parent) continue;
-      nextMembers.get(parent)?.add(node);
-      nextParents.set(node, parent);
-    }
-
-    // Ordinary nodes cannot form membership cycles. They choose the innermost
-    // eligible group after the group hierarchy is settled.
-    for (const node of ordinaryNodes) {
-      const candidates = groups.filter((group) => group.allowsMembership(node));
-      const parent = resolveParent(node, candidates, mirror.membershipResolver);
-      if (!parent) continue;
-      nextMembers.get(parent)?.add(node);
-      nextParents.set(node, parent);
-    }
-
-    const deltas = groups.map((group) => {
-      const previous = group.members;
-      const next = nextMembers.get(group) ?? new Set<NodeMirror>();
-      return {
-        group,
-        next,
-        added: [...next].filter((node) => !previous.has(node)),
-        removed: [...previous].filter((node) => !next.has(node)),
-      };
-    });
-
-    for (const node of nodes) {
-      const parent = nextParents.get(node);
-      if (parent) mirror.parentGroups.set(node, parent);
-      else mirror.parentGroups.delete(node);
-    }
-    for (const { group, next } of deltas) group.setResolvedMembers(next);
-
-    if (fireDelta) {
-      for (const { group, next, added, removed } of deltas) {
-        if (!added.length && !removed.length) continue;
-        group.groupCallbacks.onMembershipChange?.({
-          group,
-          added,
-          removed,
-          members: [...next],
-        });
-      }
-    }
-  } finally {
-    mirror.reconcilingMembership = false;
-  }
-}
-
 /** Return the node's settled, exclusive direct parent group. */
 export function getParentGroup(node: NodeMirror): GroupNodeMirror | null {
   return getGraphRegistry(node.engine).parentGroups.get(node) ?? null;
@@ -240,6 +159,97 @@ class GroupNodeMirror extends NodeMirror {
   #carryGroupOrigin = { x: 0, y: 0 };
   #groupCallbacks: GroupCallbacks;
   #groupConfig: GroupConfig;
+
+  static #reconcileMembership(
+    source: GroupNodeMirror,
+    fireDelta: boolean,
+  ): void {
+    const mirror = getGraphRegistry(source.engine);
+    if (mirror.reconcilingMembership) return;
+    mirror.reconcilingMembership = true;
+
+    try {
+      const groups = groupsForEngine(source);
+      const nextMembers = new Map<GroupNodeMirror, Set<NodeMirror>>(
+        groups.map((group) => [group, new Set()]),
+      );
+      const nextParents = new Map<NodeMirror, GroupNodeMirror>();
+
+      const nodes = nodesForEngine(source);
+      const groupNodes = [...groups].sort(stableGroupOrder);
+      const ordinaryNodes = nodes.filter(
+        (node) => !(node instanceof GroupNodeMirror),
+      );
+
+      // Resolve the group forest first. A proposed edge can point at a group
+      // that has already chosen another parent, so walking the partial parent
+      // map is enough to reject the edge that would close any cycle.
+      for (const node of groupNodes) {
+        const candidates = groups.filter(
+          (group) =>
+            group !== node &&
+            group.allowsMembership(node) &&
+            !wouldCreateGroupCycle(node, group, nextParents),
+        );
+        const parent = resolveParent(
+          node,
+          candidates,
+          mirror.membershipResolver,
+        );
+        if (!parent) continue;
+        nextMembers.get(parent)?.add(node);
+        nextParents.set(node, parent);
+      }
+
+      // Ordinary nodes cannot form membership cycles. They choose the
+      // innermost eligible group after the group hierarchy is settled.
+      for (const node of ordinaryNodes) {
+        const candidates = groups.filter((group) =>
+          group.allowsMembership(node),
+        );
+        const parent = resolveParent(
+          node,
+          candidates,
+          mirror.membershipResolver,
+        );
+        if (!parent) continue;
+        nextMembers.get(parent)?.add(node);
+        nextParents.set(node, parent);
+      }
+
+      const deltas = groups.map((group) => {
+        const previous = group.#members;
+        const next = nextMembers.get(group) ?? new Set<NodeMirror>();
+        return {
+          group,
+          next,
+          added: [...next].filter((node) => !previous.has(node)),
+          removed: [...previous].filter((node) => !next.has(node)),
+        };
+      });
+
+      for (const node of nodes) {
+        const parent = nextParents.get(node);
+        if (parent) mirror.parentGroups.set(node, parent);
+        else mirror.parentGroups.delete(node);
+      }
+      for (const { group, next } of deltas) group.#members = next;
+
+      if (fireDelta) {
+        for (const { group, next, added, removed } of deltas) {
+          if (!added.length && !removed.length) continue;
+          group.#groupCallbacks.onMembershipChange?.({
+            group,
+            added,
+            removed,
+            members: [...next],
+          });
+        }
+      }
+    } finally {
+      mirror.reconcilingMembership = false;
+    }
+  }
 
   constructor(
     engine: any,
@@ -283,11 +293,6 @@ class GroupNodeMirror extends NodeMirror {
     return getParentGroup(this);
   }
 
-  /** @internal Used by the engine-wide exclusive-membership reconciliation. */
-  setResolvedMembers(members: Set<NodeMirror>): void {
-    this.#members = members;
-  }
-
   allowsMembership(node: NodeMirror): boolean {
     const box = this.hitBox.getWorldBoundsSnapshot();
     const nodeBounds = node.hitBox.getWorldBoundsSnapshot();
@@ -315,7 +320,7 @@ class GroupNodeMirror extends NodeMirror {
   }
 
   refreshMembership(fireDelta: boolean): void {
-    reconcileMembership(this, fireDelta);
+    GroupNodeMirror.#reconcileMembership(this, fireDelta);
   }
 
   setSizeState(width: number, height: number): void {
@@ -323,7 +328,7 @@ class GroupNodeMirror extends NodeMirror {
     this.refreshMembership(true);
   }
 
-  beginSelectionDrag(position: eventPosition): void {
+  protected override beginSelectionDrag(position: eventPosition): void {
     super.beginSelectionDrag(position);
     this.#carryGroupOrigin = {
       x: this.worldTransform.x,
@@ -340,15 +345,15 @@ class GroupNodeMirror extends NodeMirror {
     }
   }
 
-  containsSelectionDragNode(node: NodeMirror): boolean {
+  protected override containsSelectionDragNode(node: NodeMirror): boolean {
     return this.descendants.has(node);
   }
 
-  selectionDragNodes(): NodeMirror[] {
+  protected override selectionDragNodes(): NodeMirror[] {
     return [...new Set([this, ...this.#carry])];
   }
 
-  finishSelectionDrag(): void {
+  protected override finishSelectionDrag(): void {
     const dx = this.worldTransform.x - this.#carryGroupOrigin.x;
     const dy = this.worldTransform.y - this.#carryGroupOrigin.y;
     for (const member of this.#carry) {

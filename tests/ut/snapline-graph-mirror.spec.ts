@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 import {
   ConnectorMirror,
   GroupNodeMirror,
+  LineMirror,
   NodeMirror,
   ResizeRegionMirror,
 } from "../../assets/snapline/core/src";
@@ -31,7 +32,7 @@ test("mirrors mint domain ids when none is supplied and honor supplied ids", () 
   expect(connector.connectorId).toMatch(/^connector-\d+$/);
   expect(namedConnector.connectorId).toBe("app-port");
 
-  const line = connector.createLine();
+  const line = new LineMirror(engine, connector);
   expect(line.lineId).toMatch(/^line-\d+$/);
 });
 
@@ -102,7 +103,7 @@ test("lines move preview -> settled -> preview and unregister on destroy", () =>
     const { source } = mountConnectedPair(engine);
 
     // A freshly minted line is a preview, not part of the settled graph.
-    const preview = source.createLine();
+    const preview = new LineMirror(engine, source);
     expect(mirror.previewLines).toContain(preview);
     expect(mirror.lines).not.toContain(preview);
     expect(mirror.line(preview.lineId)).toBeNull();

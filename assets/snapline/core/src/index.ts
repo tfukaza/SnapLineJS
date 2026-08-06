@@ -15,7 +15,7 @@ export type {
   ResolvedNodeConfig,
   SelectionMode,
 } from "./node";
-export { ConnectorMirror, resolveConnectorSourceAtPoint } from "./connector";
+export { ConnectorMirror } from "./connector";
 export type {
   ConnectionLimit,
   ConnectionOrigin,
