@@ -6,6 +6,7 @@ import {
   useImperativeHandle,
   useRef,
   type CSSProperties,
+  type ReactNode,
 } from "react";
 import {
   ConnectorMirror,
@@ -28,8 +29,13 @@ export interface ConnectorProps {
   edgePan?: boolean;
   rules?: Partial<ConnectorRules>;
   surfaceStrategies?: readonly ConnectorSurfaceStrategy[];
-  /** Keep the logical connector without rendering a visible port element. */
-  virtual?: boolean;
+  /**
+   * Render a custom HTML or SVG connector root. Attach the supplied callback
+   * ref to the one element that should receive pointer input.
+   */
+  children?: (bind: {
+    ref: (element: HTMLElement | SVGElement | null) => void;
+  }) => ReactNode;
   colliderRadius?: number;
   connectorObject?: ConnectorMirror | null;
   data?: Record<string, string>;
@@ -51,7 +57,7 @@ export const Connector = forwardRef<ConnectorRef, ConnectorProps>(
       edgePan = true,
       rules,
       surfaceStrategies = [],
-      virtual = false,
+      children,
       colliderRadius,
       connectorObject = null,
       data = {},
@@ -105,7 +111,7 @@ export const Connector = forwardRef<ConnectorRef, ConnectorProps>(
     ]);
 
     const bindConnectorElement = useCallback(
-      (element: HTMLDivElement | null) => {
+      (element: HTMLElement | SVGElement | null) => {
         connector.bindElement(element);
       },
       [connector],
@@ -117,7 +123,9 @@ export const Connector = forwardRef<ConnectorRef, ConnectorProps>(
       };
     }, [connector]);
 
-    if (virtual) return null;
+    if (children) {
+      return children({ ref: bindConnectorElement });
+    }
 
     return (
       <div

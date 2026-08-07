@@ -2,7 +2,7 @@
 
 Framework-neutral node graph interaction primitives for SnapEngine.
 
-SnapLine provides draggable and resizable nodes, connector policy, SVG line
+SnapLine provides draggable nodes with explicit DOM resize regions, connector policy, SVG line
 geometry, rectangle selection, exclusive nested groups, engine queries, and
 headless palette placement. Applications retain ownership of graph documents,
 node types, validation, persistence, and styling.
@@ -13,24 +13,17 @@ node types, validation, persistence, and styling.
 npm install @snap-engine/core @snap-engine/snapline
 ```
 
-## Entry points
+## Entry point
 
-- `@snap-engine/snapline`
-- `@snap-engine/snapline/node`
-- `@snap-engine/snapline/connector`
-- `@snap-engine/snapline/line`
-- `@snap-engine/snapline/select`
-- `@snap-engine/snapline/group`
-- `@snap-engine/snapline/placement`
-- `@snap-engine/snapline/query`
-- `@snap-engine/snapline/graph-mirror`
-- `@snap-engine/snapline/line-reconciler`
-- `@snap-engine/snapline/geometry`
+`@snap-engine/snapline` — one entry point, no per-module subpaths. Everything
+public is re-exported from the package root; `core/src/internal/` is
+implementation detail and must not be deep-imported.
 
 ```ts
 import {
   GroupNodeMirror,
   NodeMirror,
+  ResizeRegionMirror,
   getParentGroup,
   setGroupMembershipResolver,
 } from "@snap-engine/snapline";
@@ -38,6 +31,10 @@ import {
 
 After assigning a Vanilla-rendered element, call `remeasureDomGeometry()`. Svelte
 and React adapters perform that synchronization automatically.
+
+Resizing is opt-in: create a `ResizeRegionMirror` child and assign its DOM
+element. The application owns that element's hit area, position, cursor,
+hover behavior, and visuals.
 
 Live gesture geometry stays outside framework state. Nodes and groups write
 their retained element transforms and resize dimensions directly. Line,
@@ -47,17 +44,17 @@ separate. A custom line renderer should mount its SVG/Canvas structure once,
 bind a writer, and call the returned cleanup function when it unmounts.
 
 When another interaction system applies transient transforms inside a node,
-call `connector.requestDomGeometrySync()` for each affected connector. The
-request is coalesced into the next read/write cycle and updates every connected
-line without coupling SnapLine to the external system.
+call `node.remeasureDomGeometry()`. The remeasure is coalesced into the next
+read/write cycle and re-glues every connected line without coupling SnapLine to
+the external system.
 
-Surface strategies decouple connection hit testing from visible connector
-elements. They can activate from a node border, rank shape-specific target
-hits, and resolve preview and settled anchors from cached geometry. Symmetric
-connector rules (`maxOutgoing`/`maxIncoming`, `"unlimited"` explicit) let the
-same logical surface start and accept connections. `onPointerDown` runs when a connector claims the primary pointer,
-before the drag threshold, so consumers can preserve click selection or other
-gesture-start UI for headless surfaces.
+Connector roots own gesture initiation, while target-hit and anchor strategies
+can rank shape-specific collision candidates and resolve preview and settled
+anchors from cached geometry. Symmetric connector rules
+(`maxOutgoing`/`maxIncoming`, `"unlimited"` explicit) let the same logical
+connector start and accept connections. `onPointerDown` runs when a connector
+claims the primary pointer, before the drag threshold, so consumers can
+preserve click selection or other gesture-start UI on custom HTML or SVG roots.
 
 Call `connector.updateConfig(...)` to change callbacks, metadata, policy,
 surface strategies, collider radius, or edge-pan behavior

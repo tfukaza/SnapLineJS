@@ -13,10 +13,8 @@ import {
   type ReactNode,
 } from "react";
 import {
-  DEFAULT_RESIZE_HANDLE_THICKNESS,
   LineMirror,
   NodeMirror,
-  type ResizeHandle,
   type NodeCallbacks,
   type GeometryChangeEvent,
   type NodeResizeEvent,
@@ -32,23 +30,35 @@ export interface NodeProps {
   id?: string;
   children: ReactNode;
   className?: string;
+  /** One renderer for every line leaving this node. */
   lineComponent?: ComponentType<{ line: LineMirror }>;
+  /**
+   * Picks a renderer per line, so a data edge and a control edge leaving the
+   * same node can look different. Falls back to `lineComponent` when it
+   * returns nothing.
+   *
+   * Resolved at render time, not at line creation: hydration never runs the
+   * creation callback (a reloaded graph builds its lines through the
+   * reconciler), so resolving from the line is what makes a line you just drew
+   * and the same line after a refresh render identically. Branch on
+   * serializable data you put in the payload — never store a component
+   * reference in a record.
+   */
+  resolveLineComponent?: (
+    line: LineMirror,
+  ) => ComponentType<{ line: LineMirror }> | null | undefined;
   nodeObject?: NodeMirror | null;
   style?: CSSProperties;
   x?: number;
   y?: number;
   width?: number;
   height?: number;
-  resizable?: boolean;
   minWidth?: number;
   minHeight?: number;
-  resizeHandleThickness?: number;
-  resizeHandles?: true | readonly ResizeHandle[];
-  resizeCursors?: Partial<Record<ResizeHandle, string>>;
   metadata?: SnapLineMetadata;
   callbacks?: NodeCallbacks;
   edgePan?: boolean;
-  onGeometryChanged?: (event: GeometryChangeEvent) => void;
+  onGeometryCommit?: (event: GeometryChangeEvent) => void;
   onSizeChange?: (event: NodeResizeEvent) => void;
   /** Framework-native attributes and events for the outer node element. */
   elementProps?: HTMLAttributes<HTMLDivElement>;
@@ -60,22 +70,19 @@ export const Node = forwardRef<NodeMirror, NodeProps>(function Node(
     children,
     className = "",
     lineComponent: LineRenderer = Line,
+    resolveLineComponent,
     nodeObject = null,
     style,
     x = 0,
     y = 0,
     width,
     height,
-    resizable = false,
     minWidth,
     minHeight,
-    resizeHandleThickness,
-    resizeHandles,
-    resizeCursors,
     metadata = {},
     callbacks = {},
     edgePan = true,
-    onGeometryChanged,
+    onGeometryCommit,
     onSizeChange,
     elementProps,
   },
@@ -88,12 +95,8 @@ export const Node = forwardRef<NodeMirror, NodeProps>(function Node(
   if (!nodeRef.current) {
     nodeRef.current = new NodeMirror(engine, null, {
       id,
-      resizable,
       minWidth,
       minHeight,
-      resizeHandleThickness,
-      resizeHandles,
-      resizeCursors,
       metadata,
       callbacks: {},
       edgePan,
@@ -105,12 +108,12 @@ export const Node = forwardRef<NodeMirror, NodeProps>(function Node(
   );
   const latestRef = useRef({
     callbacks,
-    onGeometryChanged,
+    onGeometryCommit,
     onSizeChange,
   });
   latestRef.current = {
     callbacks,
-    onGeometryChanged,
+    onGeometryCommit,
     onSizeChange,
   };
 
@@ -148,12 +151,16 @@ export const Node = forwardRef<NodeMirror, NodeProps>(function Node(
     };
     node.callbacks.resolveDragPosition = (event) =>
       latestRef.current.callbacks.resolveDragPosition?.(event) ??
-      original.resolveDragPosition?.(event) ??
-      { x: event.x, y: event.y };
+      original.resolveDragPosition?.(event) ?? { x: event.x, y: event.y };
     node.callbacks.resolveSelectionMode = (event) =>
       latestRef.current.callbacks.resolveSelectionMode?.(event) ??
       original.resolveSelectionMode?.(event) ??
       "replace";
+    node.callbacks.resolveNewLine = (event) => {
+      const resolver =
+        latestRef.current.callbacks.resolveNewLine ?? original.resolveNewLine;
+      return resolver?.(event);
+    };
     node.callbacks.onDragStart = (event) =>
       invoke(
         event,
@@ -167,12 +174,6 @@ export const Node = forwardRef<NodeMirror, NodeProps>(function Node(
         event,
         original.onSelectionChange,
         latestRef.current.callbacks.onSelectionChange,
-      );
-    node.callbacks.onResizeHandleChange = (event) =>
-      invoke(
-        event,
-        original.onResizeHandleChange,
-        latestRef.current.callbacks.onResizeHandleChange,
       );
     node.callbacks.onLinesChanged = (event) => {
       invoke(
@@ -190,12 +191,12 @@ export const Node = forwardRef<NodeMirror, NodeProps>(function Node(
         latestRef.current.onSizeChange,
       );
     };
-    node.callbacks.onGeometryChanged = (event) =>
+    node.callbacks.onGeometryCommit = (event) =>
       invoke(
         event,
-        original.onGeometryChanged,
-        latestRef.current.callbacks.onGeometryChanged,
-        latestRef.current.onGeometryChanged,
+        original.onGeometryCommit,
+        latestRef.current.callbacks.onGeometryCommit,
+        latestRef.current.onGeometryCommit,
       );
     setLineList([...node.getAllOutgoingLines()]);
     const boundElement = nodeDomRef.current;
@@ -204,11 +205,11 @@ export const Node = forwardRef<NodeMirror, NodeProps>(function Node(
       node.callbacks.canStartDrag = original.canStartDrag;
       node.callbacks.resolveDragPosition = original.resolveDragPosition;
       node.callbacks.resolveSelectionMode = original.resolveSelectionMode;
+      node.callbacks.resolveNewLine = original.resolveNewLine;
       node.callbacks.onDragStart = original.onDragStart;
       node.callbacks.onDrag = original.onDrag;
-      node.callbacks.onGeometryChanged = original.onGeometryChanged;
+      node.callbacks.onGeometryCommit = original.onGeometryCommit;
       node.callbacks.onSelectionChange = original.onSelectionChange;
-      node.callbacks.onResizeHandleChange = original.onResizeHandleChange;
       node.callbacks.onLinesChanged = original.onLinesChanged;
       node.callbacks.onSizeChange = original.onSizeChange;
       if (ownsNodeRef.current) {
@@ -234,12 +235,15 @@ export const Node = forwardRef<NodeMirror, NodeProps>(function Node(
     node.remeasureDomGeometry();
   }, [node, width, height]);
 
-  const handleSize =
-    resizeHandleThickness ?? DEFAULT_RESIZE_HANDLE_THICKNESS;
   return (
     <NodeMirrorContext.Provider value={node}>
       {lineList.map((line) => (
-        <LineRenderer key={line.lineId} line={line} />
+        <LineForLine
+          key={line.lineId}
+          line={line}
+          resolve={resolveLineComponent}
+          fallback={LineRenderer}
+        />
       ))}
       <div
         {...elementProps}
@@ -256,30 +260,6 @@ export const Node = forwardRef<NodeMirror, NodeProps>(function Node(
         }}
       >
         {children}
-        {node.resizeHandles.map((handle) => (
-          <div
-            key={handle}
-            data-snapline-part="node-resize"
-            data-handle={handle}
-            style={{
-              position: "absolute",
-              pointerEvents: "none",
-              ...(handle === "n" || handle === "s"
-                ? { left: handleSize, right: handleSize, height: handleSize }
-                : null),
-              ...(handle === "e" || handle === "w"
-                ? { top: handleSize, bottom: handleSize, width: handleSize }
-                : null),
-              ...(handle.length === 2
-                ? { width: handleSize, height: handleSize }
-                : null),
-              ...(handle.startsWith("n") ? { top: -handleSize / 2 } : null),
-              ...(handle.startsWith("s") ? { bottom: -handleSize / 2 } : null),
-              ...(handle.endsWith("e") ? { right: -handleSize / 2 } : null),
-              ...(handle.endsWith("w") ? { left: -handleSize / 2 } : null),
-            }}
-          />
-        ))}
       </div>
     </NodeMirrorContext.Provider>
   );
@@ -293,4 +273,20 @@ export function useNodeHandle(): RefCallback<HTMLElement> {
     cleanup.current?.();
     cleanup.current = element && node ? node.registerDragHandle(element) : null;
   };
+}
+
+/** Per-line renderer resolution, evaluated at render time. */
+function LineForLine({
+  line,
+  resolve,
+  fallback: Fallback,
+}: {
+  line: LineMirror;
+  resolve?: (
+    line: LineMirror,
+  ) => ComponentType<{ line: LineMirror }> | null | undefined;
+  fallback: ComponentType<{ line: LineMirror }>;
+}) {
+  const Resolved = resolve?.(line) ?? Fallback;
+  return <Resolved line={line} />;
 }

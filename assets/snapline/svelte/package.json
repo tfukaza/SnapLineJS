@@ -16,6 +16,7 @@
       "svelte": "./src/index.ts"
     },
     "./Node.svelte": "./src/Node.svelte",
+    "./ResizeRegion.svelte": "./src/ResizeRegion.svelte",
     "./Group.svelte": "./src/Group.svelte",
     "./Connector.svelte": "./src/Connector.svelte",
     "./Line.svelte": "./src/Line.svelte",

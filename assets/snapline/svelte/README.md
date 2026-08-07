@@ -11,10 +11,11 @@ npm install @snap-engine/core @snap-engine/snapline \
 
 ## Components
 
-`Node`, `Group`, `Connector`, `Line`, `Select`, `Placement`, and `ControlledGraph` are exported
-from the package root. Component subpaths are also available as
-`Node.svelte`, `Group.svelte`, `Connector.svelte`, `Line.svelte`,
-`Select.svelte`, `Placement.svelte`, and `ControlledGraph.svelte`.
+`Node`, `Group`, `ResizeRegion`, `Connector`, `Line`, `Select`, `Placement`,
+and `ControlledGraph` are exported from the package root. Component subpaths
+are also available as `Node.svelte`, `Group.svelte`, `ResizeRegion.svelte`,
+`Connector.svelte`, `Line.svelte`, `Select.svelte`, `Placement.svelte`, and
+`ControlledGraph.svelte`.
 
 ```svelte
 <script lang="ts">
@@ -34,14 +35,18 @@ Consumer callbacks compose with the adapter's rendering callbacks.
 Pass framework-native ARIA attributes or DOM event handlers to the outer node
 element through `Node`'s `elementProps`.
 
-`<Connector virtual>` creates a logical connector without a visible port.
-Combine it with `surfaceStrategies` and symmetric `rules` limits to make a
-node border or another application-defined shape act as the connection surface.
-Application graph state remains authoritative; an opaque line payload can link
-a custom renderer back to the corresponding domain edge.
+Render explicit `ResizeRegion` children to opt into resizing. Their CSS owns
+the hit area, position, cursor, hover behavior, and visuals.
 
-Connector policy, metadata, callbacks, strategies, and `virtual` are reactive.
-Switching `virtual` detaches or remounts only the visible port; the logical
-connector and its existing lines remain intact.
+Pass a child snippet to `Connector` when the input root should be custom HTML
+or SVG. Apply the snippet argument as a Svelte action to exactly one element;
+for an SVG path, use `pointer-events="stroke"` to make the painted stroke the
+source hit area. `surfaceStrategies` customize target admission and endpoint
+anchors. Application graph state remains authoritative; an opaque line payload
+can link a custom renderer back to the corresponding domain edge.
+
+Connector policy, metadata, callbacks, strategies, and collider radius are
+reactive. `name` and an adopted `connectorObject` are construction-time
+identities.
 
 Full documentation: https://snapengine.dev/docs/snapline/introduction

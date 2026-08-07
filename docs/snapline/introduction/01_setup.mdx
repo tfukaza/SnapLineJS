@@ -31,28 +31,20 @@ npm install react react-dom @snap-engine/snapline-react
     Node,
     Select,
   } from "@snap-engine/snapline-svelte";
-  import type { LineChangeRequest, LineRecord } from "@snap-engine/snapline";
+  import { applyLineChange } from "@snap-engine/snapline";
+  import type { LineRecord } from "@snap-engine/snapline";
 
   // Your document owns the lines; each gesture proposes one atomic change.
-  let lines = $state<LineRecord[]>([]);
-  function applyRequest(request: LineChangeRequest) {
-    lines = [
-      ...lines
-        .filter((record) => !request.remove.includes(record.id))
-        .map((record) => {
-          const update = request.update.find((u) => u.id === record.id);
-          return update
-            ? { ...record, toConnectorId: update.toConnectorId }
-            : record;
-        }),
-      ...request.add,
-    ];
-  }
+  // Return the list that should now be canonical — `$state.raw` because every
+  // update replaces the array rather than mutating it.
+  let lines = $state.raw<LineRecord[]>([]);
 </script>
 
 <Engine>
   <Select />
-  <ControlledGraph {lines} onLineChangeRequest={applyRequest} />
+  <ControlledGraph
+    onLineChangeRequest={(request) => (lines = applyLineChange(lines, request))}
+  />
   <Node id="source" x={80} y={90} className="node">
     <strong>Source</strong>
     <Connector id="source:value" name="value" rules={{ maxIncoming: 0 }} />
@@ -65,7 +57,7 @@ npm install react react-dom @snap-engine/snapline-react
 ```
 
 ```tsx framework=react
-import { useCallback, useState } from "react";
+import { useCallback, useRef } from "react";
 import {
   Connector,
   ControlledGraph,
@@ -73,28 +65,24 @@ import {
   Node,
   Select,
 } from "@snap-engine/snapline-react";
+import { applyLineChange } from "@snap-engine/snapline";
 import type { LineChangeRequest, LineRecord } from "@snap-engine/snapline";
 
 export function Graph() {
   // Your document owns the lines; each gesture proposes one atomic change.
-  const [lines, setLines] = useState<LineRecord[]>([]);
-  const applyRequest = useCallback((request: LineChangeRequest) => {
-    setLines((current) => [
-      ...current
-        .filter((record) => !request.remove.includes(record.id))
-        .map((record) => {
-          const update = request.update.find((u) => u.id === record.id);
-          return update
-            ? { ...record, toConnectorId: update.toConnectorId }
-            : record;
-        }),
-      ...request.add,
-    ]);
-  }, []);
+  // The handler must return the next list synchronously, so keep the records
+  // in a ref (a functional setState would not have produced it in time) and
+  // mirror them into component state only if you render them.
+  const linesRef = useRef<LineRecord[]>([]);
+  const applyRequest = useCallback(
+    (request: LineChangeRequest) =>
+      (linesRef.current = applyLineChange(linesRef.current, request)),
+    [],
+  );
   return (
     <Engine>
       <Select />
-      <ControlledGraph lines={lines} onLineChangeRequest={applyRequest} />
+      <ControlledGraph onLineChangeRequest={applyRequest} />
       <Node id="source" x={80} y={90} className="node">
         <strong>Source</strong>
         <Connector id="source:value" name="value" rules={{ maxIncoming: 0 }} />
@@ -114,6 +102,7 @@ import { CollisionEngine } from "@snap-engine/core/collision";
 import {
   ConnectorMirror,
   NodeMirror,
+  applyLineChange,
   attachControlledGraph,
   type LineRecord,
 } from "@snap-engine/snapline";
@@ -122,25 +111,15 @@ const engine = new Engine();
 engine.setCollisionEngine(new CollisionEngine());
 engine.assignDom(document.querySelector("#graph")!);
 
-// A vanilla app owns the graph with a plain module: hold the records,
-// apply each atomic proposal, and push the latest snapshot back.
+// A vanilla app owns the graph with a plain module: hold the records and
+// return the next list from each atomic proposal.
 let lines: LineRecord[] = [];
 const handle = attachControlledGraph(engine, {
-  onLineChangeRequest(request) {
-    lines = [
-      ...lines
-        .filter((record) => !request.remove.includes(record.id))
-        .map((record) => {
-          const update = request.update.find((u) => u.id === record.id);
-          return update
-            ? { ...record, toConnectorId: update.toConnectorId }
-            : record;
-        }),
-      ...request.add,
-    ];
-    handle.setCanonicalGraph({ lines });
-  },
+  onLineChangeRequest: (request) => (lines = applyLineChange(lines, request)),
 });
+
+// Only changes with no originating request need an explicit push — loading a
+// saved graph, undo/redo, a collaborator's edit.
 handle.setCanonicalGraph({ lines });
 
 const source = new NodeMirror(engine, null, { id: "source" });

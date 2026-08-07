@@ -3,9 +3,11 @@ import {
   ControlledGraph,
   Group,
   Node,
+  ResizeRegion,
   Select,
 } from "@snap-engine/snapline-react";
-import { useCallback, useState } from "react";
+import { applyLineChange, RESIZE_HANDLES } from "@snap-engine/snapline";
+import { useCallback, useRef, useState } from "react";
 import { Engine as SnapEngine } from "@snap-engine/asset-base-react";
 import {
   DropSnapNestedDemo,
@@ -20,21 +22,16 @@ import AssetBaseReactDemo from "./AssetBaseReactDemo";
 // The demo's canonical line document: topology is always controlled, so
 // even a sandbox owns its lines and accepts every atomic proposal.
 function DemoGraph() {
-  const [lines, setLines] = useState([]);
-  const applyRequest = useCallback((request) => {
-    setLines((current) => [
-      ...current
-        .filter((record) => !request.remove.includes(record.id))
-        .map((record) => {
-          const update = request.update.find((u) => u.id === record.id);
-          return update
-            ? { ...record, toConnectorId: update.toConnectorId }
-            : record;
-        }),
-      ...request.add,
-    ]);
-  }, []);
-  return <ControlledGraph lines={lines} onLineChangeRequest={applyRequest} />;
+  // The handler must return the next list synchronously, so the document lives
+  // in a ref: a functional setState would not have produced it in time. Nothing
+  // here renders the records, so no component state is needed at all.
+  const linesRef = useRef([]);
+  const applyRequest = useCallback(
+    (request) =>
+      (linesRef.current = applyLineChange(linesRef.current, request)),
+    [],
+  );
+  return <ControlledGraph onLineChangeRequest={applyRequest} />;
 }
 
 function ResizableNode({ title, id = title, x, y }) {
@@ -43,7 +40,6 @@ function ResizableNode({ title, id = title, x, y }) {
       className="card node"
       x={x}
       y={y}
-      resizable
       minWidth={140}
       minHeight={90}
       style={{ display: "flex", flexDirection: "column" }}
@@ -54,19 +50,80 @@ function ResizableNode({ title, id = title, x, y }) {
       <div className="node-body" style={{ flex: 1 }}>
         <div className="input-row">
           <div className="connector-wrapper">
-            <Connector id={`${id}:input`} name="input" rules={{ maxOutgoing: 0, maxIncoming: 1, onFull: "replace-oldest" }} />
+            <Connector
+              id={`${id}:input`}
+              name="input"
+              rules={{
+                maxOutgoing: 0,
+                maxIncoming: 1,
+                onFull: "replace-oldest",
+              }}
+            />
           </div>
           <span>Input</span>
         </div>
         <div className="output-row">
           <span>Output</span>
           <div className="connector-wrapper">
-            <Connector id={`${id}:output`} name="output" rules={{ maxIncoming: 0 }} />
+            <Connector
+              id={`${id}:output`}
+              name="output"
+              rules={{ maxIncoming: 0 }}
+            />
           </div>
         </div>
       </div>
+      <ResizeRegions />
     </Node>
   );
+}
+
+function ResizeRegions({ handles = RESIZE_HANDLES }) {
+  const thickness = 14;
+  return handles.map((handle) => {
+    const north = handle.startsWith("n");
+    const south = handle.startsWith("s");
+    const east = handle.endsWith("e");
+    const west = handle.endsWith("w");
+    const corner = handle.length === 2;
+    return (
+      <ResizeRegion
+        key={handle}
+        handle={handle}
+        style={{
+          position: "absolute",
+          zIndex: 2,
+          ...(handle === "n" || handle === "s"
+            ? {
+                left: thickness,
+                right: thickness,
+                height: thickness,
+                cursor: "ns-resize",
+              }
+            : null),
+          ...(handle === "e" || handle === "w"
+            ? {
+                top: thickness,
+                bottom: thickness,
+                width: thickness,
+                cursor: "ew-resize",
+              }
+            : null),
+          ...(corner ? { width: thickness, height: thickness } : null),
+          ...(north ? { top: -thickness / 2 } : null),
+          ...(south ? { bottom: -thickness / 2 } : null),
+          ...(east ? { right: -thickness / 2 } : null),
+          ...(west ? { left: -thickness / 2 } : null),
+          ...(handle === "ne" || handle === "sw"
+            ? { cursor: "nesw-resize" }
+            : null),
+          ...(handle === "nw" || handle === "se"
+            ? { cursor: "nwse-resize" }
+            : null),
+        }}
+      />
+    );
+  });
 }
 
 function SnapLineResizeDemo() {
@@ -110,7 +167,9 @@ function SnapLineGroupDemo() {
               borderRadius: "8px",
             }}
             onMembershipChange={updateMembers}
-          />
+          >
+            <ResizeRegions handles={["se"]} />
+          </Group>
           <SimpleNode title="Node A" x={100} y={110} />
           <SimpleNode title="Node C" x={100} y={300} />
           <SimpleNode title="Node B" x={640} y={120} />
@@ -129,14 +188,26 @@ function SimpleNode({ title, id = title, x, y }) {
       <div className="node-body">
         <div className="input-row">
           <div className="connector-wrapper">
-            <Connector id={`${id}:input`} name="input" rules={{ maxOutgoing: 0, maxIncoming: 1, onFull: "replace-oldest" }} />
+            <Connector
+              id={`${id}:input`}
+              name="input"
+              rules={{
+                maxOutgoing: 0,
+                maxIncoming: 1,
+                onFull: "replace-oldest",
+              }}
+            />
           </div>
           <span>Input</span>
         </div>
         <div className="output-row">
           <span>Output</span>
           <div className="connector-wrapper">
-            <Connector id={`${id}:output`} name="output" rules={{ maxIncoming: 0 }} />
+            <Connector
+              id={`${id}:output`}
+              name="output"
+              rules={{ maxIncoming: 0 }}
+            />
           </div>
         </div>
       </div>
@@ -152,24 +223,15 @@ export default function App() {
     return <AssetBaseReactDemo />;
   }
 
-  if (
-    path === "/snapsort-insertion" ||
-    demo === "snapsort_insertion"
-  ) {
+  if (path === "/snapsort-insertion" || demo === "snapsort_insertion") {
     return <SnapSortInsertionDemo />;
   }
 
-  if (
-    path === "/snapsort-website-core" ||
-    demo === "snapsort_website_core"
-  ) {
+  if (path === "/snapsort-website-core" || demo === "snapsort_website_core") {
     return <SnapSortWebsiteCoreDemo />;
   }
 
-  if (
-    path === "/snapsort-components" ||
-    demo === "snapsort_components"
-  ) {
+  if (path === "/snapsort-components" || demo === "snapsort_components") {
     return <SnapSortComponentsDemo />;
   }
 
@@ -215,7 +277,11 @@ function GraphNode({ nodeId, title, x, y, maxIncoming = 1 }) {
             <Connector
               id={`${nodeId}:input`}
               name="input"
-              rules={{ maxOutgoing: 0, maxIncoming: maxIncoming === -1 ? "unlimited" : maxIncoming, onFull: "replace-oldest" }}
+              rules={{
+                maxOutgoing: 0,
+                maxIncoming: maxIncoming === -1 ? "unlimited" : maxIncoming,
+                onFull: "replace-oldest",
+              }}
             />
           </div>
           <span>Input</span>
@@ -239,22 +305,34 @@ function SnapLineEdgesDemo() {
   const [lines, setLines] = useState([]);
   const [connectIntents, setConnectIntents] = useState(0);
   const [intentLog, setIntentLog] = useState([]);
+  // The document also drives rendering (edge-count), so it is mirrored into a
+  // ref the synchronous handler can read.
+  const linesRef = useRef(lines);
+  const graphRef = useRef(null);
 
-  const addDocLine = (record) =>
-    setLines((current) =>
-      current.some((existing) => existing.id === record.id)
-        ? current
-        : [
-            ...current.filter(
-              (existing) => existing.toConnectorId !== record.toConnectorId,
-            ),
-            record,
-          ],
-    );
+  const commit = useCallback((next) => {
+    linesRef.current = next;
+    setLines(next);
+    return next;
+  }, []);
 
-  const handleRequest = useCallback((request) => {
-    const nodeOf = (connectorId) => connectorId.split(":")[0];
-    setLines((current) => {
+  // No originating request, so this one has to be pushed through the handle.
+  const addDocLine = (record) => {
+    const current = linesRef.current;
+    if (current.some((existing) => existing.id === record.id)) return;
+    const next = commit([
+      ...current.filter(
+        (existing) => existing.toConnectorId !== record.toConnectorId,
+      ),
+      record,
+    ]);
+    graphRef.current?.setCanonicalGraph({ lines: next });
+  };
+
+  const handleRequest = useCallback(
+    (request) => {
+      const nodeOf = (connectorId) => connectorId.split(":")[0];
+      const current = linesRef.current;
       const byId = new Map(current.map((record) => [record.id, record]));
       const label = (record) =>
         `${nodeOf(record.fromConnectorId)}->${nodeOf(record.toConnectorId)}`;
@@ -265,7 +343,10 @@ function SnapLineEdgesDemo() {
       const updated = request.update
         .map((update) =>
           byId.has(update.id)
-            ? label({ ...byId.get(update.id), toConnectorId: update.toConnectorId })
+            ? label({
+                ...byId.get(update.id),
+                toConnectorId: update.toConnectorId,
+              })
             : update.id,
         )
         .join(",");
@@ -281,19 +362,10 @@ function SnapLineEdgesDemo() {
       if (request.add.length > 0) setConnectIntents((count) => count + 1);
       // Accept the atomic proposal — adopting the proposed ids settles the
       // staged lines in place.
-      return [
-        ...current
-          .filter((record) => !request.remove.includes(record.id))
-          .map((record) => {
-            const update = request.update.find((u) => u.id === record.id);
-            return update
-              ? { ...record, toConnectorId: update.toConnectorId }
-              : record;
-          }),
-        ...request.add,
-      ];
-    });
-  }, []);
+      return commit(applyLineChange(current, request));
+    },
+    [commit],
+  );
 
   return (
     <main className="snapline-demo">
@@ -318,9 +390,15 @@ function SnapLineEdgesDemo() {
         <div id="node-ui-demo">
           <div id="sl-background" />
           <Select />
-          <ControlledGraph lines={lines} onLineChangeRequest={handleRequest} />
+          <ControlledGraph ref={graphRef} onLineChangeRequest={handleRequest} />
           <GraphNode nodeId="a" title="Node A" x={120} y={120} />
-          <GraphNode nodeId="b" title="Node B" x={440} y={170} maxIncoming={1} />
+          <GraphNode
+            nodeId="b"
+            title="Node B"
+            x={440}
+            y={170}
+            maxIncoming={1}
+          />
           <GraphNode nodeId="c" title="Node C" x={280} y={380} />
         </div>
       </SnapEngine>

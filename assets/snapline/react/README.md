@@ -11,9 +11,9 @@ npm install react react-dom @snap-engine/core \
 
 ## Components
 
-The package exports `Engine`, `Node`, `Group`, `Connector`, `Line`, `Select`,
-`Placement`, and `ControlledGraph`. Each component is also available from a
-named subpath.
+The package exports `Engine`, `Node`, `Group`, `ResizeRegion`, `Connector`,
+`Line`, `Select`, `Placement`, and `ControlledGraph`. Each component is also
+available from a named subpath.
 
 ```tsx
 import { Engine, Group, Node, Select } from "@snap-engine/snapline-react";
@@ -36,14 +36,18 @@ resynchronize after mount, and callback props remain live across renders.
 Pass native ARIA attributes or DOM event handlers to the outer node element
 through `Node`'s `elementProps`.
 
-Set `virtual` on `Connector` to keep the logical endpoint without rendering a
-port. `surfaceStrategies` can then hit-test and anchor against the parent
-node's shape, while symmetric `rules` limits enable source and target
-behavior. Keep domain edges in React state and use an opaque line payload as
-the stable link from a custom renderer.
+Render explicit `ResizeRegion` children to opt into resizing. Their CSS owns
+the hit area, position, cursor, hover behavior, and visuals.
 
-Connector policy, metadata, callbacks, strategies, and `virtual` stay live
-across renders. Toggling `virtual` removes or remounts only the visible port;
-the logical connector and existing lines are preserved.
+Pass a render function to `Connector` when the input root should be custom
+HTML or SVG. Attach its callback ref to exactly one element; for an SVG path,
+use `pointerEvents="stroke"` to make the painted stroke the source hit area.
+`surfaceStrategies` customize target admission and endpoint anchors. Keep
+domain edges in React state and use an opaque line payload as the stable link
+from a custom renderer.
+
+Connector policy, metadata, callbacks, strategies, and collider radius stay
+live across renders. `name` and an adopted `connectorObject` are
+construction-time identities.
 
 Full documentation: https://snapengine.dev/docs/snapline/introduction

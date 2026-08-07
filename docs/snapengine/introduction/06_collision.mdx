@@ -14,4 +14,9 @@ The collision system supports rectangular, circular, and point shapes. Each coll
 
 Collision callbacks distinguish the start of contact, continuing overlap, and the end of contact. This lets interactions respond once when contact begins, every frame while contact continues, or when two objects separate.
 
+For synchronous hit testing, `collisionEngine.queryPoint({ x, y })` returns
+every registered collider containing the world-space point. It reads current
+transforms directly and preserves collider registration order; callers apply
+their own input, label, or admission policy.
+
 For collider constructors, event callbacks, collision engine setup, and examples, see [Collision reference](/docs/snapengine/reference/collision).

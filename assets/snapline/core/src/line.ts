@@ -7,9 +7,9 @@ import type {
   ConnectorPoint,
   ConnectorSurfaceStrategy,
 } from "./connector";
-import type { GeometryWriter } from "./geometry";
-import { getGraphMirror } from "./snapline-globals";
-import { mintDomainId } from "./graph-mirror";
+import type { GeometryInvalidationObserver, GeometryWriter } from "./types";
+import { getGraphRegistry } from "./internal/shared-data";
+import { mintDomainId } from "./internal/graph-registry";
 
 /**
  * Explicit line lifetime. "staged" is a gesture that completed locally and
@@ -51,6 +51,7 @@ class LineMirror extends ElementObject {
   #phase: LineMirrorPhase = "source-start";
   #candidate: ConnectorCandidate | null = null;
   #geometryWriter: GeometryWriter<LineGeometrySnapshot> | null = null;
+  #geometryObservers = new Set<GeometryInvalidationObserver<LineMirror>>();
   #stateCallbacks = new Set<(state: LineStateSnapshot) => void>();
   #sourceStrategy: ConnectorSurfaceStrategy | null = null;
   #sourceHit: ConnectorHit | null = null;
@@ -63,7 +64,7 @@ class LineMirror extends ElementObject {
     this.#start = parent as unknown as ConnectorMirror;
     this.transformMode = "direct";
     this.lineId = config.id ?? mintDomainId("line", this.global);
-    getGraphMirror(this.engine).registerLine(this);
+    getGraphRegistry(this.engine).registerLine(this);
   }
 
   // Read-only outside the mirror's own lifecycle operations.
@@ -85,14 +86,6 @@ class LineMirror extends ElementObject {
 
   get endAnchor(): ConnectorAnchor {
     return this.#endAnchor;
-  }
-
-  get endWorldX(): number {
-    return this.#endAnchor.x;
-  }
-
-  get endWorldY(): number {
-    return this.#endAnchor.y;
   }
 
   get phase(): LineMirrorPhase {
@@ -135,18 +128,49 @@ class LineMirror extends ElementObject {
   }
 
   override destroy(removeElement: boolean = true): void {
-    getGraphMirror(this.engine).unregisterLine(this);
+    getGraphRegistry(this.engine).unregisterLine(this);
     super.destroy(removeElement);
   }
 
-  bindGeometryWriter(
-    writer: GeometryWriter<LineGeometrySnapshot>,
-  ): () => void {
+  bindGeometryWriter(writer: GeometryWriter<LineGeometrySnapshot>): () => void {
     this.#geometryWriter = writer;
     writer(this.geometrySnapshot());
     return () => {
       if (this.#geometryWriter === writer) this.#geometryWriter = null;
     };
+  }
+
+  /**
+   * Subscribe to "this line's geometry is about to change".
+   *
+   * Fires **synchronously, during input dispatch, before any frame task is
+   * queued** — not at paint time. It deliberately hands over no geometry:
+   * schedule your own task at whatever stage suits you and read
+   * `geometrySnapshot()` there.
+   *
+   * ```ts
+   * const stop = line.onGeometryInvalidated(() =>
+   *   line.schedule(place, { stage: "WRITE_3", queueId: "label" }),
+   * );
+   * ```
+   *
+   * The line itself paints at `WRITE_2` (and resolves its anchors inside that
+   * same task), so `WRITE_3` sees this frame's position while `WRITE_1` and
+   * `READ_2` still see the previous frame's. Choosing that is the caller's
+   * job, which is why no stage is implied here.
+   *
+   * Unlike {@link bindGeometryWriter} — the single owner that paints the line —
+   * any number of observers may subscribe. There is no priming call: nothing
+   * has been invalidated at subscribe time, so read `geometrySnapshot()`
+   * directly for the initial position.
+   *
+   * @returns an unsubscribe function.
+   */
+  onGeometryInvalidated(
+    observer: GeometryInvalidationObserver<LineMirror>,
+  ): () => void {
+    this.#geometryObservers.add(observer);
+    return () => this.#geometryObservers.delete(observer);
   }
 
   onStateChange(callback: (state: LineStateSnapshot) => void): () => void {
@@ -227,7 +251,7 @@ class LineMirror extends ElementObject {
     this.#targetHit = candidate?.hit ?? this.#targetHit;
     this.#candidate = null;
     this.#phase = "connected";
-    getGraphMirror(this.engine).settleLine(this);
+    getGraphRegistry(this.engine).settleLine(this);
     this.updateAnchors();
     this.#emitStateChange();
   }
@@ -242,48 +266,8 @@ class LineMirror extends ElementObject {
     this.#targetStrategy = null;
     this.#targetHit = null;
     this.#phase = "preview-free";
-    getGraphMirror(this.engine).unsettleLine(this);
+    getGraphRegistry(this.engine).unsettleLine(this);
     if (changed) this.#emitStateChange();
-  }
-
-  setLineStartAtConnector(): void {
-    const peer = this.target ?? this.candidate?.connector ?? null;
-    const peerGeometry = peer?.geometry ?? null;
-    const position =
-      peerGeometry?.center ?? this.#previewPosition ?? this.endAnchor;
-    const anchor = this.start.resolveAnchor({
-      line: this,
-      role: "source",
-      phase: this.phase,
-      peer,
-      position,
-      hit: this.#sourceHit,
-      strategy: this.#sourceStrategy,
-    });
-    this.setLineStartAnchor(anchor);
-  }
-
-  setLineEndAtConnector(): void {
-    const target = this.target ?? this.candidate?.connector ?? null;
-    if (!target) return;
-    const anchor = target.resolveAnchor({
-      line: this,
-      role: "target",
-      phase: this.phase,
-      peer: this.start,
-      position: this.start.geometry.center,
-      hit: this.#targetHit,
-      strategy: this.#targetStrategy,
-    });
-    this.setLineEndAnchor(anchor);
-  }
-
-  setLineStart(startPositionX: number, startPositionY: number): void {
-    this.setLineStartAnchor({ x: startPositionX, y: startPositionY });
-  }
-
-  setLineEnd(endWorldX: number, endWorldY: number): void {
-    this.setLineEndAnchor({ x: endWorldX, y: endWorldY });
   }
 
   setLineStartAnchor(anchor: ConnectorAnchor): void {
@@ -295,14 +279,44 @@ class LineMirror extends ElementObject {
     this.#endAnchor = cloneAnchor(anchor);
   }
 
-  setLinePosition(
-    startWorldX: number,
-    startWorldY: number,
-    endWorldX: number,
-    endWorldY: number,
-  ): void {
-    this.setLineStart(startWorldX, startWorldY);
-    this.setLineEnd(endWorldX, endWorldY);
+  /**
+   * The deferred re-glue: notify observers now, paint next WRITE_2.
+   *
+   * Coalesces on `(objectId, queueId)`, so many invalidations in one frame
+   * collapse to a single write task.
+   */
+  invalidateGeometry(): void {
+    this.#notifyGeometryInvalidated();
+    this.schedule(
+      () => {
+        this.updateAnchors();
+        this.writeTransform();
+      },
+      { stage: "WRITE_2", queueId: `${this.id}-transform` },
+    );
+  }
+
+  /**
+   * The synchronous re-glue, for callers already inside a WRITE stage
+   * (settle, prop-driven node moves). Observers still fire first, so a
+   * subscriber's own scheduled task is queued before the paint happens.
+   */
+  invalidateGeometryNow(): void {
+    this.#notifyGeometryInvalidated();
+    this.updateAnchors();
+    this.writeTransform();
+  }
+
+  #notifyGeometryInvalidated(): void {
+    for (const observer of this.#geometryObservers) {
+      // A third-party observer must never be able to stop the line painting
+      // or starve its peers.
+      try {
+        observer(this);
+      } catch (error) {
+        console.error("SnapLine: a line geometry observer threw.", error);
+      }
+    }
   }
 
   updateAnchors(): void {
@@ -347,16 +361,12 @@ class LineMirror extends ElementObject {
     this.setLineEndAnchor(targetAnchor);
   }
 
-  moveLineToConnectorTransform(): void {
-    this.updateAnchors();
-  }
-
   writeTransform(): void {
     this.#geometryWriter?.(this.geometrySnapshot());
   }
 }
 
-function cloneAnchor(anchor: ConnectorAnchor): ConnectorAnchor {
+export function cloneAnchor(anchor: ConnectorAnchor): ConnectorAnchor {
   return {
     x: anchor.x,
     y: anchor.y,

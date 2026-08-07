@@ -571,9 +571,9 @@ test("progressive placement selects the ghost slot under the dragged center", ()
   );
   dragged.worldTransform = { x: 73, y: 0, scaleX: 1, scaleY: 1 };
 
-  expect(determineProgressiveDropTarget(dragged as any, row as any)).toMatchObject(
-    { container: row, index: 1 },
-  );
+  expect(
+    determineProgressiveDropTarget(dragged as any, row as any),
+  ).toMatchObject({ container: row, index: 1 });
 });
 
 test("euclidean placement keeps parent slots reachable next to nested containers", () => {
@@ -654,10 +654,7 @@ test("insertion placement maps a downward same-container gap to the live index",
   );
   dragged.worldTransform = { x: 0, y: 120, scaleX: 1, scaleY: 1 };
 
-  const target = determineInsertionDropTarget(
-    dragged as any,
-    container as any,
-  );
+  const target = determineInsertionDropTarget(dragged as any, container as any);
 
   expect(target?.container).toBe(container);
   expect(target?.index).toBe(3);
@@ -749,10 +746,7 @@ test("insertion placement maps an upward same-container gap to the live index", 
   );
   dragged.worldTransform = { x: 0, y: 32, scaleX: 1, scaleY: 1 };
 
-  const target = determineInsertionDropTarget(
-    dragged as any,
-    container as any,
-  );
+  const target = determineInsertionDropTarget(dragged as any, container as any);
 
   expect(target?.container).toBe(container);
   expect(target?.index).toBe(1);
@@ -791,10 +785,7 @@ test("insertion placement keeps the top boundary reachable when dragging the fir
   );
   dragged.worldTransform = { x: 0, y: -22, scaleX: 1, scaleY: 1 };
 
-  const target = determineInsertionDropTarget(
-    dragged as any,
-    container as any,
-  );
+  const target = determineInsertionDropTarget(dragged as any, container as any);
 
   expect(target?.container).toBe(container);
   expect(target?.index).toBe(1);
@@ -833,10 +824,7 @@ test("insertion placement keeps the bottom boundary reachable when dragging the 
   );
   dragged.worldTransform = { x: 0, y: 132, scaleX: 1, scaleY: 1 };
 
-  const target = determineInsertionDropTarget(
-    dragged as any,
-    container as any,
-  );
+  const target = determineInsertionDropTarget(dragged as any, container as any);
 
   expect(target?.container).toBe(container);
   expect(target?.index).toBe(3);
@@ -886,10 +874,7 @@ test("insertion placement spans the container content box on the marker cross ax
   container.currentDomProperty = containerBox;
   dragged.worldTransform = { x: 34, y: 112, scaleX: 1, scaleY: 1 };
 
-  const target = determineInsertionDropTarget(
-    dragged as any,
-    container as any,
-  );
+  const target = determineInsertionDropTarget(dragged as any, container as any);
 
   expect(target?.container).toBe(container);
   expect(target?.ghostRect?.x).toBe(32);
@@ -930,10 +915,7 @@ test("insertion placement carries snapshot marker insets on the ghost rect", () 
   };
   dragged.worldTransform = { x: 34, y: 112, scaleX: 1, scaleY: 1 };
 
-  const target = determineInsertionDropTarget(
-    dragged as any,
-    container as any,
-  );
+  const target = determineInsertionDropTarget(dragged as any, container as any);
 
   expect(target?.ghostRect?.insetLeft).toBe(18);
   expect(target?.ghostRect?.insetRight).toBe(6);
@@ -955,10 +937,7 @@ test("insertion placement shows a centered marker for an empty row container", (
   );
   dragged.worldTransform = { x: 80, y: 44, scaleX: 1, scaleY: 1 };
 
-  const target = determineInsertionDropTarget(
-    dragged as any,
-    container as any,
-  );
+  const target = determineInsertionDropTarget(dragged as any, container as any);
 
   expect(target?.container).toBe(container);
   expect(target?.index).toBe(0);
@@ -1174,12 +1153,16 @@ test("reproduces same-container row drag where final ghost centers collapse", ()
     direction: "row",
     mainAxisAlign: "start",
     locked: false,
-    box: layoutBox({ x: 0, y: 0, width: 488, height: 128 }, {}, {
-      top: 14,
-      right: 14,
-      bottom: 14,
-      left: 14,
-    }),
+    box: layoutBox(
+      { x: 0, y: 0, width: 488, height: 128 },
+      {},
+      {
+        top: 14,
+        right: 14,
+        bottom: 14,
+        left: 14,
+      },
+    ),
     children: [
       ["彼", 53.6, 47.8, 14, 14],
       ["の", 53.6, 47.8, 71.6, 14],
@@ -1575,7 +1558,9 @@ async function collectSample(
         : -1;
       const directSiblingTexts = spacerParent
         ? [...spacerParent.children]
-            .filter((child) => child.id !== "spacer" && child !== draggedElement)
+            .filter(
+              (child) => child.id !== "spacer" && child !== draggedElement,
+            )
             .map(
               (child) => child.textContent?.trim().replace(/\s+/g, " ") ?? "",
             )
@@ -1589,34 +1574,38 @@ async function collectSample(
                 (text) => text === "" || /^Item [4-6]$/.test(text),
               )
             ? "website-nested-inner"
-            : directSiblingTexts.some((text) =>
-                  /^Item [1-3]$/.test(text),
-                ) ||
+            : directSiblingTexts.some((text) => /^Item [1-3]$/.test(text)) ||
                 directSiblingTexts.some((text) =>
                   /Item 4 Item 5 Item 6/.test(text),
                 )
               ? "website-nested-outer"
               : directSiblingTexts.every((text) => /^Sub A\d/.test(text))
-            ? "nested-inner"
-            : directSiblingTexts.some((text) =>
-                  /Item 1\.5|Item 2|Item 3/.test(text),
-                )
-              ? "nested-outer"
-              : directSiblingTexts.some((text) =>
-                    /Header|Card Grid|Footer/.test(text),
-                  )
-                ? "layers-root"
-                : directSiblingTexts.some((text) => /Hero Section/.test(text))
-                  ? "layers-hero"
-                  : directSiblingTexts.some((text) => /Loose Item/.test(text))
-                    ? "drag-root"
-                    : directSiblingTexts.some((text) => /Group 1 -/.test(text))
-                      ? "drag-group-1"
+                ? "nested-inner"
+                : directSiblingTexts.some((text) =>
+                      /Item 1\.5|Item 2|Item 3/.test(text),
+                    )
+                  ? "nested-outer"
+                  : directSiblingTexts.some((text) =>
+                        /Header|Card Grid|Footer/.test(text),
+                      )
+                    ? "layers-root"
+                    : directSiblingTexts.some((text) =>
+                          /Hero Section/.test(text),
+                        )
+                      ? "layers-hero"
                       : directSiblingTexts.some((text) =>
-                            /Group 2 -/.test(text),
+                            /Loose Item/.test(text),
                           )
-                        ? "drag-group-2"
-                        : "other";
+                        ? "drag-root"
+                        : directSiblingTexts.some((text) =>
+                              /Group 1 -/.test(text),
+                            )
+                          ? "drag-group-1"
+                          : directSiblingTexts.some((text) =>
+                                /Group 2 -/.test(text),
+                              )
+                            ? "drag-group-2"
+                            : "other";
       const draggedRect = rectOf(draggedElement);
       const dragged = draggedRect
         ? {
@@ -1633,11 +1622,12 @@ async function collectSample(
             ),
           ].map((element) => {
             const htmlElement = element as HTMLElement;
-            const role = element.id === "spacer"
-              ? "ghost"
-              : element.classList.contains("snapsort-container")
-                ? "container"
-                : "item";
+            const role =
+              element.id === "spacer"
+                ? "ghost"
+                : element.classList.contains("snapsort-container")
+                  ? "container"
+                  : "item";
             return {
               role,
               text: element.textContent?.trim().replace(/\s+/g, " ") ?? "",
@@ -1777,10 +1767,17 @@ async function dragTo(
 ): Promise<DragSample[]> {
   const sourceCenter = center(await itemRect(source));
   const targetCenter = center(await itemRect(target));
-  return dragBy(page, source, text, index, {
-    x: targetCenter.x - sourceCenter.x,
-    y: targetCenter.y - sourceCenter.y,
-  }, options);
+  return dragBy(
+    page,
+    source,
+    text,
+    index,
+    {
+      x: targetCenter.x - sourceCenter.x,
+      y: targetCenter.y - sourceCenter.y,
+    },
+    options,
+  );
 }
 
 async function dragToItemFraction(
@@ -1794,10 +1791,17 @@ async function dragToItemFraction(
 ): Promise<DragSample[]> {
   const sourceCenter = center(await itemRect(source));
   const targetRect = await itemRect(target);
-  return dragBy(page, source, text, index, {
-    x: targetRect.x + targetRect.width / 2 - sourceCenter.x,
-    y: targetRect.y + targetRect.height * yRatio - sourceCenter.y,
-  }, options);
+  return dragBy(
+    page,
+    source,
+    text,
+    index,
+    {
+      x: targetRect.x + targetRect.width / 2 - sourceCenter.x,
+      y: targetRect.y + targetRect.height * yRatio - sourceCenter.y,
+    },
+    options,
+  );
 }
 
 async function directSnapSortItemTexts(locator: Locator): Promise<string[]> {
@@ -1889,7 +1893,10 @@ async function releaseStartedDragNearOrigin(
   await page.waitForTimeout(120);
 }
 
-async function dragLockedNestedContainerBackground(page: Page, nested: Locator) {
+async function dragLockedNestedContainerBackground(
+  page: Page,
+  nested: Locator,
+) {
   const childContainer = nested.locator(".snapsort-container").nth(1);
   const rect = await itemRect(childContainer);
   const start = {
@@ -1909,68 +1916,73 @@ async function nestedContainerSelfInsertProbe(
   page: Page,
 ): Promise<SelfInsertProbeState> {
   const coreImportPath = `/@fs${process.cwd()}/src/index.ts`;
-  return page.evaluate(async ({ coreImportPath }) => {
-    const { GlobalManager } = await import(coreImportPath);
-    const containers =
-      GlobalManager.getInstance().data.dragAndDropContainers ?? [];
-    const nestedCell = [...document.querySelectorAll(".demo-cell")].find(
-      (cell) =>
-        cell.querySelector("h2")?.textContent?.trim() === "Nested Container",
-    );
-    const outerElement = nestedCell?.querySelector(".snapsort-container");
-    const childElement = nestedCell?.querySelectorAll(".snapsort-container")[1];
-    const outer = containers.find(
-      (container: any) => container.element === outerElement,
-    );
-    const child = containers.find(
-      (container: any) => container.element === childElement,
-    );
-    const normalizeText = (element: Element | null) =>
-      element?.textContent?.trim().replace(/\s+/g, " ") ?? "";
-    const itemText = (item: any) => normalizeText(item.element);
+  return page.evaluate(
+    async ({ coreImportPath }) => {
+      const { GlobalManager } = await import(coreImportPath);
+      const containers =
+        GlobalManager.getInstance().data.dragAndDropContainers ?? [];
+      const nestedCell = [...document.querySelectorAll(".demo-cell")].find(
+        (cell) =>
+          cell.querySelector("h2")?.textContent?.trim() === "Nested Container",
+      );
+      const outerElement = nestedCell?.querySelector(".snapsort-container");
+      const childElement = nestedCell?.querySelectorAll(
+        ".snapsort-container",
+      )[1];
+      const outer = containers.find(
+        (container: any) => container.element === outerElement,
+      );
+      const child = containers.find(
+        (container: any) => container.element === childElement,
+      );
+      const normalizeText = (element: Element | null) =>
+        element?.textContent?.trim().replace(/\s+/g, " ") ?? "";
+      const itemText = (item: any) => normalizeText(item.element);
 
-    if (!outer || !child) {
-      return {
-        found: false,
-        childIndex: null,
-        duplicateCount: null,
-        insertEvents: [],
-        beforeOrder: [],
-        afterOrder: [],
-        domChildren: [],
+      if (!outer || !child) {
+        return {
+          found: false,
+          childIndex: null,
+          duplicateCount: null,
+          insertEvents: [],
+          beforeOrder: [],
+          afterOrder: [],
+          domChildren: [],
+        };
+      }
+
+      const beforeOrder = outer.itemOrderedList.map(itemText);
+      const childIndex = outer.itemOrderedList.indexOf(child);
+      const insertEvents: SelfInsertProbeState["insertEvents"] = [];
+      const originalInsert = outer.callbacks.onItemInsert;
+      outer.config.callbacks.onItemInsert = (event: any) => {
+        insertEvents.push({
+          index: event.index,
+          selfBefore: event.beforeElement === event.item.element,
+          beforeText: normalizeText(event.beforeElement),
+        });
+        originalInsert(event);
       };
-    }
 
-    const beforeOrder = outer.itemOrderedList.map(itemText);
-    const childIndex = outer.itemOrderedList.indexOf(child);
-    const insertEvents: SelfInsertProbeState["insertEvents"] = [];
-    const originalInsert = outer.callbacks.onItemInsert;
-    outer.config.callbacks.onItemInsert = (event: any) => {
-      insertEvents.push({
-        index: event.index,
-        selfBefore: event.beforeElement === event.item.element,
-        beforeText: normalizeText(event.beforeElement),
-      });
-      originalInsert(event);
-    };
+      outer.insertItemAt(outer, child, childIndex);
+      outer.config.callbacks.onItemInsert = originalInsert;
 
-    outer.insertItemAt(outer, child, childIndex);
-    outer.config.callbacks.onItemInsert = originalInsert;
-
-    return {
-      found: true,
-      childIndex,
-      duplicateCount: outer.itemOrderedList.filter(
-        (item: any) => item === child,
-      ).length,
-      insertEvents,
-      beforeOrder,
-      afterOrder: outer.itemOrderedList.map(itemText),
-      domChildren: [...outer.element.children].map((element) =>
-        normalizeText(element),
-      ),
-    };
-  }, { coreImportPath });
+      return {
+        found: true,
+        childIndex,
+        duplicateCount: outer.itemOrderedList.filter(
+          (item: any) => item === child,
+        ).length,
+        insertEvents,
+        beforeOrder,
+        afterOrder: outer.itemOrderedList.map(itemText),
+        domChildren: [...outer.element.children].map((element) =>
+          normalizeText(element),
+        ),
+      };
+    },
+    { coreImportPath },
+  );
 }
 
 async function directLogoSliceOrder(locator: Locator): Promise<number[]> {
@@ -1978,11 +1990,7 @@ async function directLogoSliceOrder(locator: Locator): Promise<number[]> {
     [...element.children]
       .filter((child) => child.classList.contains("snapsort-item"))
       .map((child) =>
-        Number(
-          child
-            .querySelector<HTMLElement>(".logo-slice")
-            ?.dataset.slice,
-        ),
+        Number(child.querySelector<HTMLElement>(".logo-slice")?.dataset.slice),
       ),
   );
 }
@@ -2060,10 +2068,7 @@ function expectNoParentReentry(
 ) {
   const kinds = samples
     .map((sample) => sample.spacerParentKind)
-    .filter(
-      (kind): kind is string =>
-        kind === innerKind || kind === outerKind,
-    );
+    .filter((kind): kind is string => kind === innerKind || kind === outerKind);
   const firstInner = kinds.indexOf(innerKind);
   expect(
     firstInner,
@@ -2288,13 +2293,30 @@ test.describe("Snapsort drag-start snapshot layout", () => {
     const offsets = [
       0,
       0.5,
-      0.25, 0.75,
-      0.33, 0.67, 1 / 3, 2 / 3,
-      0.1, 0.2, 0.4, 0.6, 0.8, 0.9,
-      0.125, 0.375, 0.625, 0.875,
-      0.0625, 0.03125, 0.015625, 0.0078125,
+      0.25,
+      0.75,
+      0.33,
+      0.67,
+      1 / 3,
+      2 / 3,
+      0.1,
+      0.2,
+      0.4,
+      0.6,
+      0.8,
+      0.9,
+      0.125,
+      0.375,
+      0.625,
+      0.875,
+      0.0625,
+      0.03125,
+      0.015625,
+      0.0078125,
     ];
-    const widths = bases.flatMap((base) => offsets.map((offset) => base + offset));
+    const widths = bases.flatMap((base) =>
+      offsets.map((offset) => base + offset),
+    );
 
     await page.setContent('<main id="hero-grid-fixture"></main>');
     const measuredGrids = await page.evaluate((caseWidths) => {
@@ -2561,7 +2583,12 @@ test.describe("Snapsort drag-start snapshot layout", () => {
             }
             return { spacerIndex: index, ghost, items };
           });
-          return { name: entry.name, container: containerBox, itemBoxes, truths };
+          return {
+            name: entry.name,
+            container: containerBox,
+            itemBoxes,
+            truths,
+          };
         });
       },
       {
@@ -2609,9 +2636,7 @@ test.describe("Snapsort drag-start snapshot layout", () => {
           filter: { excludeSnapshots: new Set([dragged]) },
           insertions: [insertion],
         });
-        const actualById = new Map(
-          truth.items.map((item) => [item.id, item]),
-        );
+        const actualById = new Map(truth.items.map((item) => [item.id, item]));
         for (const [snapshotItem, position] of result.itemPositions) {
           const actual = actualById.get(snapshotItem.value);
           if (!actual) continue;
@@ -2928,25 +2953,21 @@ test.describe("Snapsort drag-start snapshot layout", () => {
 
       const texts = (element: Element) =>
         element.textContent?.trim().replace(/\s+/g, " ") ?? "";
-      const prediction = await verticalColumn.evaluate(
-        (box, dragged) => {
-          const out: Record<string, { x: number; y: number }> = {};
-          for (const element of box.querySelectorAll(".snapsort-item")) {
-            const text =
-              element.textContent?.trim().replace(/\s+/g, " ") ?? "";
-            if (element.id === "spacer" || text.includes(dragged)) continue;
-            const rect = element.getBoundingClientRect();
-            out[text] = { x: rect.x, y: rect.y };
-          }
-          const spacer = box.querySelector("#spacer");
-          if (spacer) {
-            const rect = spacer.getBoundingClientRect();
-            out["__dragged__"] = { x: rect.x, y: rect.y };
-          }
-          return out;
-        },
-        sourceText,
-      );
+      const prediction = await verticalColumn.evaluate((box, dragged) => {
+        const out: Record<string, { x: number; y: number }> = {};
+        for (const element of box.querySelectorAll(".snapsort-item")) {
+          const text = element.textContent?.trim().replace(/\s+/g, " ") ?? "";
+          if (element.id === "spacer" || text.includes(dragged)) continue;
+          const rect = element.getBoundingClientRect();
+          out[text] = { x: rect.x, y: rect.y };
+        }
+        const spacer = box.querySelector("#spacer");
+        if (spacer) {
+          const rect = spacer.getBoundingClientRect();
+          out["__dragged__"] = { x: rect.x, y: rect.y };
+        }
+        return out;
+      }, sourceText);
 
       await page.mouse.up();
       await page.waitForTimeout(500);
@@ -2964,8 +2985,7 @@ test.describe("Snapsort drag-start snapshot layout", () => {
         return out;
       }, sourceText);
 
-      const drifts: Array<{ label: string; entry: string; delta: number }> =
-        [];
+      const drifts: Array<{ label: string; entry: string; delta: number }> = [];
       let compared = 0;
       for (const [entry, predicted] of Object.entries(prediction)) {
         const actual = settled[entry];
@@ -2975,7 +2995,8 @@ test.describe("Snapsort drag-start snapshot layout", () => {
           Math.abs(predicted.x - actual.x),
           Math.abs(predicted.y - actual.y),
         );
-        if (delta > TOLERANCE) drifts.push({ label, entry, delta: +delta.toFixed(2) });
+        if (delta > TOLERANCE)
+          drifts.push({ label, entry, delta: +delta.toFixed(2) });
       }
       // Guard against a vacuous pass: the oracle must have compared the
       // dragged item's landing slot plus the displaced items.
@@ -3070,7 +3091,9 @@ test.describe("Snapsort drag-start snapshot layout", () => {
     // was measured at.
     const spacerSizing = await nested.evaluate((box) => {
       const spacer = box.querySelector("#spacer") as HTMLElement | null;
-      const sublist = box.querySelector(".stretch-sublist") as HTMLElement | null;
+      const sublist = box.querySelector(
+        ".stretch-sublist",
+      ) as HTMLElement | null;
       if (!spacer || !sublist) return null;
       const spacerRect = spacer.getBoundingClientRect();
       const style = getComputedStyle(sublist);
@@ -3120,7 +3143,8 @@ test.describe("Snapsort drag-start snapshot layout", () => {
         const text = element.textContent?.trim().replace(/\s+/g, " ") ?? "";
         const rect = element.getBoundingClientRect();
         if (text === "Task 1") out["__dragged__"] = { x: rect.x, y: rect.y };
-        else if (/^Sub task \d$/.test(text)) out[text] = { x: rect.x, y: rect.y };
+        else if (/^Sub task \d$/.test(text))
+          out[text] = { x: rect.x, y: rect.y };
       }
       return out;
     });
@@ -3138,11 +3162,10 @@ test.describe("Snapsort drag-start snapshot layout", () => {
     const transitions = hosts.filter(
       (host, index) => index > 0 && host !== hosts[index - 1],
     ).length;
-    const subGroupTexts = await nested.evaluate(
-      (box) =>
-        [...box.querySelectorAll(".stretch-sublist .snapsort-item")].map(
-          (element) => element.textContent?.trim().replace(/\s+/g, " ") ?? "",
-        ),
+    const subGroupTexts = await nested.evaluate((box) =>
+      [...box.querySelectorAll(".stretch-sublist .snapsort-item")].map(
+        (element) => element.textContent?.trim().replace(/\s+/g, " ") ?? "",
+      ),
     );
 
     await writeJson(testInfo.outputPath("nested-stretch-flicker.json"), {
@@ -3151,14 +3174,18 @@ test.describe("Snapsort drag-start snapshot layout", () => {
       drifts,
       subGroupTexts,
     });
-    expect(hosts[hosts.length - 1], "spacer should end in the nested sub-list").toBe(
-      "nested",
-    );
+    expect(
+      hosts[hosts.length - 1],
+      "spacer should end in the nested sub-list",
+    ).toBe("nested");
     expect(
       transitions,
       "spacer host must not oscillate between parent and nested containers",
     ).toBeLessThanOrEqual(2);
-    expect(drifts, "nested drop should land where the preview predicted").toHaveLength(0);
+    expect(
+      drifts,
+      "nested drop should land where the preview predicted",
+    ).toHaveLength(0);
     expect(
       subGroupTexts.some((text) => text.includes("Task 1")),
       "the dragged item should commit into the nested sub-list",
@@ -3278,7 +3305,9 @@ test.describe("Snapsort drag-start snapshot layout", () => {
       insertions: [insertion],
     });
     const rect = result.virtualRects.get(insertion)!;
-    expect(Math.abs(rect.width - measured.spacer.width)).toBeLessThanOrEqual(1.25);
+    expect(Math.abs(rect.width - measured.spacer.width)).toBeLessThanOrEqual(
+      1.25,
+    );
     expect(Math.abs(rect.y - measured.spacer.y)).toBeLessThanOrEqual(1.25);
   });
 
@@ -3573,17 +3602,20 @@ test.describe("Snapsort drag-start snapshot layout", () => {
     await releaseStartedDragNearOrigin(page, nested, "Item 1.5", "Sub A1", 0.2);
     const state = await nestedSnapSortLifecycleState(page);
 
-    await writeJson(testInfo.outputPath("threshold-release-cleanup-repro.json"), {
-      state,
-      errors: [
-        ...pageErrors,
-        ...consoleMessages.filter((message) =>
-          /Missing drag snapshot|Unhandled|TypeError|ReferenceError/i.test(
-            message,
+    await writeJson(
+      testInfo.outputPath("threshold-release-cleanup-repro.json"),
+      {
+        state,
+        errors: [
+          ...pageErrors,
+          ...consoleMessages.filter((message) =>
+            /Missing drag snapshot|Unhandled|TypeError|ReferenceError/i.test(
+              message,
+            ),
           ),
-        ),
-      ],
-    });
+        ],
+      },
+    );
 
     expect(state.spacerCount, "released drag should remove its ghost").toBe(0);
     expect(
@@ -3616,21 +3648,24 @@ test.describe("Snapsort drag-start snapshot layout", () => {
     await dragLockedNestedContainerBackground(page, nested);
     const afterLockedDrag = await nestedSnapSortLifecycleState(page);
 
-    await writeJson(testInfo.outputPath("locked-container-leak-adoption-repro.json"), {
-      beforeLockedDrag,
-      afterLockedDrag,
-      adapterWarnings: consoleMessages.filter((message) =>
-        /adapter did not place/.test(message),
-      ),
-      errors: [
-        ...pageErrors,
-        ...consoleMessages.filter((message) =>
-          /Missing drag snapshot|Unhandled|TypeError|ReferenceError/i.test(
-            message,
-          ),
+    await writeJson(
+      testInfo.outputPath("locked-container-leak-adoption-repro.json"),
+      {
+        beforeLockedDrag,
+        afterLockedDrag,
+        adapterWarnings: consoleMessages.filter((message) =>
+          /adapter did not place/.test(message),
         ),
-      ],
-    });
+        errors: [
+          ...pageErrors,
+          ...consoleMessages.filter((message) =>
+            /Missing drag snapshot|Unhandled|TypeError|ReferenceError/i.test(
+              message,
+            ),
+          ),
+        ],
+      },
+    );
 
     expect(
       beforeLockedDrag.spacerCount,
@@ -3654,9 +3689,12 @@ test.describe("Snapsort drag-start snapshot layout", () => {
     });
 
     const probe = await nestedContainerSelfInsertProbe(page);
-    await writeJson(testInfo.outputPath("nested-container-self-insert-repro.json"), {
-      probe,
-    });
+    await writeJson(
+      testInfo.outputPath("nested-container-self-insert-repro.json"),
+      {
+        probe,
+      },
+    );
 
     expect(probe.found, "expected to find the nested container objects").toBe(
       true,
@@ -3943,10 +3981,17 @@ test.describe("Snapsort drag-start snapshot layout", () => {
       y: lastRect.y + lastRect.height / 2,
     };
 
-    await dragBy(page, source, "TypeScript slice 3", 0, {
-      x: target.x - sourceCenter.x,
-      y: target.y - sourceCenter.y,
-    }, { steps: 140 });
+    await dragBy(
+      page,
+      source,
+      "TypeScript slice 3",
+      0,
+      {
+        x: target.x - sourceCenter.x,
+        y: target.y - sourceCenter.y,
+      },
+      { steps: 140 },
+    );
 
     await expect
       .poll(() => directLogoSliceOrder(container))
@@ -3972,13 +4017,20 @@ test.describe("Snapsort drag-start snapshot layout", () => {
       x: targetRect.x + targetRect.width / 2,
       y: targetRect.y + targetRect.height * 1.15,
     };
-    const samples = await dragBy(page, source, "Item 1", 0, {
-      x: targetPoint.x - start.x,
-      y: targetPoint.y - start.y,
-    }, {
-      start,
-      steps: 240,
-    });
+    const samples = await dragBy(
+      page,
+      source,
+      "Item 1",
+      0,
+      {
+        x: targetPoint.x - start.x,
+        y: targetPoint.y - start.y,
+      },
+      {
+        start,
+        steps: 240,
+      },
+    );
 
     await expectStableDrag(
       page,
@@ -3998,10 +4050,13 @@ test.describe("Snapsort drag-start snapshot layout", () => {
       "website-nested-inner",
       "website-nested-outer",
     ]);
-    await writeJson(testInfo.outputPath("website-nested-bottom-slot-states.json"), {
-      states,
-      ghostTargets: ghostInsertionTargets(consoleMessages),
-    });
+    await writeJson(
+      testInfo.outputPath("website-nested-bottom-slot-states.json"),
+      {
+        states,
+        ghostTargets: ghostInsertionTargets(consoleMessages),
+      },
+    );
     expect(
       states,
       `ghost should reach the bottom slot of the website nested list; observed ${states.join(" -> ")}`,
@@ -4075,7 +4130,10 @@ test.describe("Snapsort drag-start snapshot layout", () => {
     });
 
     expect(measured.columns).toHaveLength(2);
-    expect(measured.domSameRow, "the browser DOM should keep both columns on one row").toBe(true);
+    expect(
+      measured.domSameRow,
+      "the browser DOM should keep both columns on one row",
+    ).toBe(true);
 
     const boardSnapshot = snapshotFixture<string>({
       value: "website-multi-container-board",
@@ -4100,10 +4158,13 @@ test.describe("Snapsort drag-start snapshot layout", () => {
       return { id: child.value, ...position };
     });
 
-    await writeJson(testInfo.outputPath("website-321px-multi-container-layout.json"), {
-      measured,
-      simulated,
-    });
+    await writeJson(
+      testInfo.outputPath("website-321px-multi-container-layout.json"),
+      {
+        measured,
+        simulated,
+      },
+    );
 
     expect(
       Math.abs(simulated[0].y - simulated[1].y),
@@ -4114,13 +4175,20 @@ test.describe("Snapsort drag-start snapshot layout", () => {
     const target = await itemByTextIn(card, "Ship");
     const sourceCenter = center(await itemRect(source));
     const targetRect = await itemRect(target);
-    const samples = await dragBy(page, source, "Spec", 0, {
-      x: targetRect.x + targetRect.width / 2 - sourceCenter.x,
-      y: targetRect.y + targetRect.height * 1.15 - sourceCenter.y,
-    }, {
-      captureFrameRects: true,
-      steps: 160,
-    });
+    const samples = await dragBy(
+      page,
+      source,
+      "Spec",
+      0,
+      {
+        x: targetRect.x + targetRect.width / 2 - sourceCenter.x,
+        y: targetRect.y + targetRect.height * 1.15 - sourceCenter.y,
+      },
+      {
+        captureFrameRects: true,
+        steps: 160,
+      },
+    );
     const wrappedFrames = samples.flatMap((sample) => {
       const columns =
         sample.frameRects?.filter(
@@ -4134,10 +4202,13 @@ test.describe("Snapsort drag-start snapshot layout", () => {
       return deltaY > 1 ? [{ step: sample.step, deltaY, columns }] : [];
     });
 
-    await writeJson(testInfo.outputPath("website-321px-multi-container-drag.json"), {
-      wrappedFrames,
-      samples,
-    });
+    await writeJson(
+      testInfo.outputPath("website-321px-multi-container-drag.json"),
+      {
+        wrappedFrames,
+        samples,
+      },
+    );
 
     expect(
       wrappedFrames,
@@ -4284,13 +4355,15 @@ test.describe("Snapsort drag-start snapshot layout", () => {
     await expect
       .poll(
         () =>
-          innerContainer.locator(".snapsort-item").evaluateAll((nodes) =>
-            nodes.some(
-              (node) =>
-                !node.textContent?.includes("Sub A1") &&
-                (node as HTMLElement).style.transform !== "",
+          innerContainer
+            .locator(".snapsort-item")
+            .evaluateAll((nodes) =>
+              nodes.some(
+                (node) =>
+                  !node.textContent?.includes("Sub A1") &&
+                  (node as HTMLElement).style.transform !== "",
+              ),
             ),
-          ),
         { intervals: [10, 20, 40], timeout: 300 },
       )
       .toBe(true);
@@ -4404,9 +4477,11 @@ test.describe("Snapsort drag-start snapshot layout", () => {
         () =>
           page.evaluate(
             () =>
-              (window as unknown as {
-                __dropContinuityTrace?: { done: boolean };
-              }).__dropContinuityTrace?.done ?? false,
+              (
+                window as unknown as {
+                  __dropContinuityTrace?: { done: boolean };
+                }
+              ).__dropContinuityTrace?.done ?? false,
           ),
         { timeout: 2_000 },
       )
@@ -4414,24 +4489,26 @@ test.describe("Snapsort drag-start snapshot layout", () => {
 
     const trace = await page.evaluate(
       () =>
-        (window as unknown as {
-          __dropContinuityTrace: {
-            done: boolean;
-            frames: Array<{
-              time: number;
-              rect: Rect;
-              inlineTransform: string;
-              computedTransform: string;
-              dragging: boolean;
-              displacedTransformCount: number;
-            }>;
-            styleMutations: Array<{
-              time: number;
-              oldValue: string | null;
-              currentValue: string;
-            }>;
-          };
-        }).__dropContinuityTrace,
+        (
+          window as unknown as {
+            __dropContinuityTrace: {
+              done: boolean;
+              frames: Array<{
+                time: number;
+                rect: Rect;
+                inlineTransform: string;
+                computedTransform: string;
+                dragging: boolean;
+                displacedTransformCount: number;
+              }>;
+              styleMutations: Array<{
+                time: number;
+                oldValue: string | null;
+                currentValue: string;
+              }>;
+            };
+          }
+        ).__dropContinuityTrace,
     );
     await writeJson(
       testInfo.outputPath("drop-animation-continuity-trace.json"),
@@ -4911,9 +4988,7 @@ test.describe("Snapsort drag-start snapshot layout", () => {
         await new Promise((resolve) => requestAnimationFrame(resolve));
         const animatedCard = [...document.querySelectorAll(".task-card")].find(
           (element) =>
-            /^translate3d\(-?\d/.test(
-              (element as HTMLElement).style.transform,
-            ),
+            /^translate3d\(-?\d/.test((element as HTMLElement).style.transform),
         );
         if (animatedCard) {
           return true;
@@ -4953,7 +5028,9 @@ test.describe("Snapsort drag-start snapshot layout", () => {
       );
       first.play();
       for (let frame = 0; frame < 20 && !first.requestDelete; frame++) {
-        await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+        await new Promise<void>((resolve) =>
+          requestAnimationFrame(() => resolve()),
+        );
       }
 
       const propertiesAfterFinish = Array.from(target.style).filter((name) =>
@@ -5044,28 +5121,38 @@ test.describe("Snapsort drag-start snapshot layout", () => {
         }>;
       };
       win.__dropFlipSamples = [];
-      window.addEventListener("pointerup", () => {
-        let frame = 0;
-        const sample = () => {
-          const card = [...document.querySelectorAll<HTMLElement>(
-            ".task-card:not(.ghost)",
-          )].find((element) => element.textContent?.includes("Profile fields"));
-          if (card) {
-            const rect = card.getBoundingClientRect();
-            win.__dropFlipSamples?.push({
-              column:
-                card.closest(".list-panel")?.querySelector("h2")?.textContent?.trim() ??
-                "",
-              transform: card.style.transform,
-              x: rect.x,
-              y: rect.y,
-            });
-          }
-          frame++;
-          if (frame < 12) requestAnimationFrame(sample);
-        };
-        requestAnimationFrame(sample);
-      }, { capture: true, once: true });
+      window.addEventListener(
+        "pointerup",
+        () => {
+          let frame = 0;
+          const sample = () => {
+            const card = [
+              ...document.querySelectorAll<HTMLElement>(
+                ".task-card:not(.ghost)",
+              ),
+            ].find((element) =>
+              element.textContent?.includes("Profile fields"),
+            );
+            if (card) {
+              const rect = card.getBoundingClientRect();
+              win.__dropFlipSamples?.push({
+                column:
+                  card
+                    .closest(".list-panel")
+                    ?.querySelector("h2")
+                    ?.textContent?.trim() ?? "",
+                transform: card.style.transform,
+                x: rect.x,
+                y: rect.y,
+              });
+            }
+            frame++;
+            if (frame < 12) requestAnimationFrame(sample);
+          };
+          requestAnimationFrame(sample);
+        },
+        { capture: true, once: true },
+      );
     });
 
     await page.mouse.up();
@@ -5083,7 +5170,9 @@ test.describe("Snapsort drag-start snapshot layout", () => {
     });
     await page.waitForTimeout(700);
     const finalRect = await itemRect(card);
-    const activeSamples = samples.filter((sample) => sample.column === "Active");
+    const activeSamples = samples.filter(
+      (sample) => sample.column === "Active",
+    );
     expect(activeSamples.length).toBeGreaterThan(1);
     expect(activeSamples[0].transform).toMatch(/^translate3d\(/);
 

@@ -1,4 +1,4 @@
-import type { GeometryWriter } from "./geometry";
+import type { GeometryWriter } from "./types";
 
 export interface PlacementPoint {
   x: number;
@@ -76,9 +76,7 @@ export class PlacementController<T> {
   #callbacks: PlacementCallbacks<T>;
   #snapshot: PlacementSnapshot<T>;
   #geometryWriter: GeometryWriter<PlacementGeometrySnapshot> | null = null;
-  #stateCallbacks = new Set<
-    (snapshot: PlacementSnapshot<T>) => void
-  >();
+  #stateCallbacks = new Set<(snapshot: PlacementSnapshot<T>) => void>();
 
   constructor(config: PlacementConfig<T>) {
     this.#config = config;

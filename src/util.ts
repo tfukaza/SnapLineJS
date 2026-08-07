@@ -1,4 +1,19 @@
-import type { DomProperty, TransformProperty } from "./object";
+import type { DomElement, DomProperty, TransformProperty } from "./object";
+
+/**
+ * Merges defined override values onto a complete defaults object.
+ *
+ * Unlike object spread, an explicit `undefined` does not replace a default.
+ * Other falsy values such as `false`, `0`, `""`, and `null` are preserved.
+ */
+function mergeDefined<T extends object>(defaults: T, overrides: Partial<T>): T {
+  const merged = { ...defaults };
+  for (const key of Object.keys(overrides) as (keyof T)[]) {
+    const value = overrides[key];
+    if (value !== undefined) merged[key] = value as T[keyof T];
+  }
+  return merged;
+}
 
 /**
  * Retrieves the position and dimensions of a DOM element in multiple coordinate spaces.
@@ -10,7 +25,7 @@ import type { DomProperty, TransformProperty } from "./object";
  * @param dom - The HTML element to measure.
  * @returns An object containing position and size in various coordinate systems.
  */
-function getDomProperty(engine: any, dom: HTMLElement) {
+function getDomProperty(engine: any, dom: DomElement) {
   const rect = dom.getBoundingClientRect();
   const css = window.getComputedStyle(dom);
   const margin_top = parseFloat(css.marginTop) || 0;
@@ -133,10 +148,7 @@ function parseTransformString(transform: string) {
  * @param dom - The HTML or SVG element to style.
  * @param style - An object containing CSS property-value pairs.
  */
-function setDomStyle(
-  dom: HTMLElement | SVGElement,
-  style: { [key: string]: string },
-) {
+function setDomStyle(dom: DomElement, style: { [key: string]: string }) {
   Object.assign(dom.style, style);
 }
 
@@ -209,4 +221,5 @@ export {
   cloneDomProperty,
   generateTransformString,
   parseTransformString,
+  mergeDefined,
 };

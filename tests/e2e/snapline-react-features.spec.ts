@@ -9,7 +9,11 @@ async function centerOf(locator: Locator) {
   return { x: box!.x + box!.width / 2, y: box!.y + box!.height / 2 };
 }
 
-async function dragFromTo(page: Page, from: { x: number; y: number }, to: { x: number; y: number }) {
+async function dragFromTo(
+  page: Page,
+  from: { x: number; y: number },
+  to: { x: number; y: number },
+) {
   await page.mouse.move(from.x, from.y);
   await page.mouse.down();
   await page.mouse.move(to.x, to.y, { steps: 14 });
@@ -17,12 +21,16 @@ async function dragFromTo(page: Page, from: { x: number; y: number }, to: { x: n
 }
 
 async function waitForAnimationFrame(page: Page) {
-  await page.evaluate(() => new Promise<void>((r) => requestAnimationFrame(() => r())));
+  await page.evaluate(
+    () => new Promise<void>((r) => requestAnimationFrame(() => r())),
+  );
 }
 
 const NODE = "[data-snapline-type='node']";
 
-test("react: resizing a node grows it from the BR corner and keeps lines glued", async ({ page }) => {
+test("react: resizing a node grows it from the BR corner and keeps lines glued", async ({
+  page,
+}) => {
   await page.goto("/snapline-resize");
   await expect(page.locator(NODE)).toHaveCount(2);
   const nodeA = page.locator(NODE, { hasText: "Resizable A" });
@@ -36,7 +44,10 @@ test("react: resizing a node grows it from the BR corner and keeps lines glued",
   await expect(line).toHaveCount(1);
 
   const before = await nodeA.boundingBox();
-  const corner = { x: before!.x + before!.width - 2, y: before!.y + before!.height - 2 };
+  const corner = {
+    x: before!.x + before!.width - 2,
+    y: before!.y + before!.height - 2,
+  };
   await dragFromTo(page, corner, { x: corner.x + 140, y: corner.y + 80 });
   await waitForAnimationFrame(page);
 
@@ -46,19 +57,26 @@ test("react: resizing a node grows it from the BR corner and keeps lines glued",
   await expect(line).toHaveCount(1);
 });
 
-test("react: a plain node moves (not resizes) when grabbed at its BR corner", async ({ page }) => {
+test("react: a plain node moves (not resizes) when grabbed at its BR corner", async ({
+  page,
+}) => {
   await page.goto("/snapline-resize");
   await expect(page.locator(NODE)).toHaveCount(2);
   const nodeB = page.locator(NODE, { hasText: "Fixed B" });
   const before = await nodeB.boundingBox();
-  const corner = { x: before!.x + before!.width - 3, y: before!.y + before!.height - 3 };
+  const corner = {
+    x: before!.x + before!.width - 3,
+    y: before!.y + before!.height - 3,
+  };
   await dragFromTo(page, corner, { x: corner.x + 100, y: corner.y + 60 });
   const after = await nodeB.boundingBox();
   expect(after!.x - before!.x).toBeGreaterThan(70);
   expect(Math.abs(after!.width - before!.width)).toBeLessThan(4);
 });
 
-test("react: group carries its in-box members and resize updates membership", async ({ page }) => {
+test("react: group carries its in-box members and resize updates membership", async ({
+  page,
+}) => {
   await page.goto("/snapline-group");
   await expect(page.locator(NODE)).toHaveCount(3);
   await expect(page.locator("[data-snapline-type='group']")).toHaveCount(1);
@@ -71,7 +89,9 @@ test("react: group carries its in-box members and resize updates membership", as
   const beforeB = await nodeB.boundingBox();
 
   // Move the group by its header: members ride, outsider stays.
-  const header = await centerOf(page.locator("[data-snapline-part='group-header']"));
+  const header = await centerOf(
+    page.locator("[data-snapline-part='group-header']"),
+  );
   await dragFromTo(page, header, { x: header.x + 120, y: header.y + 60 });
   const afterA = await nodeA.boundingBox();
   const afterB = await nodeB.boundingBox();

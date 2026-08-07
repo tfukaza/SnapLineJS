@@ -117,6 +117,10 @@ Unified input handling.
 - Mouse and touch normalization
 - Drag gesture detection
 - Object DOM ownership lookup
+- Native pointer capture for DOM-backed owners
+- Drag `handoffTo(...)` for capture/owner transfer and pinch `handoffTo(...)`
+  for pinch-recipient transfer while each pointer retains its origin capture
+- Targeted leaf-to-root object bubbling followed by global fan-out
 
 **Event types:**
 
@@ -134,6 +138,7 @@ Collision detection system.
 - Frame-based detection
 - State tracking
 - Collision callbacks
+- Synchronous ordered `queryPoint(...)` against current transforms
 
 **Collider shapes:**
 

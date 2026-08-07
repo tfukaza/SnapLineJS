@@ -1,6 +1,6 @@
 ---
 title: Node API
-description: Core NodeMirror configuration, callbacks, resize constants, and data attributes.
+description: Core NodeMirror configuration, callbacks, resize regions, and data attributes.
 order: 2
 sectionTitle: Reference
 sectionOrder: 3
@@ -13,23 +13,26 @@ connectors. Construct it with `new NodeMirror(engine, parent, config)`, assign
 its committed element, then call `remeasureDomGeometry()`.
 
 `NodeConfig` accepts `id` (stable domain identity — minted when omitted;
-supply it for persistence), `resizable`, `minWidth`, `minHeight`,
-`resizeHandles`, `resizeHandleThickness`, `resizeCursors`, `metadata`,
-`callbacks`, and `edgePan`.
+supply it for persistence), `minWidth`, `minHeight`, `metadata`, `callbacks`,
+and `edgePan`.
 
 `NodeCallbacks` covers drag (`canStartDrag`, `resolveDragPosition`,
 `onDragStart`, `onDrag`), selection (`resolveSelectionMode`,
-`onSelectionChange`), resize (`onResizeHandleChange`, `onSizeChange`), lines
-(`onLinesChanged`), and the batched `onGeometryChanged` used for
-persistence.
+`onSelectionChange`), resize (`onSizeChange`), lines
+(`resolveNewLine`, `onLinesChanged`), and the batched `onGeometryCommit` used
+for persistence. `resolveNewLine` seeds serializable payload onto a newly
+dragged line; a connector-level callback may override it.
 
-## Resize constants
+## Resize regions
+
+Create a `ResizeRegionMirror(engine, node, handle)` for each application DOM
+region, then assign its `element`. It is a normal `ElementObject` child of the
+node. The DOM owns hover, cursor, placement, thickness, border interaction,
+and visuals; SnapLine owns only the resize gesture and geometry.
 
 | Export | Value |
 | --- | --- |
 | `RESIZE_HANDLES` | The eight handles `"n" \| "ne" \| "e" \| "se" \| "s" \| "sw" \| "w" \| "nw"` |
-| `DEFAULT_RESIZE_CURSORS` | Per-handle CSS cursor map |
-| `DEFAULT_RESIZE_HANDLE_THICKNESS` | `14` (pixels) |
 
 ## Data attributes
 
@@ -37,5 +40,5 @@ Selection state is written to the element as `data-selected="true" | "false"`
 and `data-snapline-state="focus" | "idle"` — style either without extra
 callbacks. Adapters additionally stamp `data-snapline-type="node"`.
 
-Enumerate nodes with `getNodes(engine)` or `query(engine).nodes()`; look one
+Enumerate nodes with `query(engine).nodes()`; look one
 up by domain id with `query(engine).node(id)`.

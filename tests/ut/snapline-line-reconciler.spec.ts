@@ -1,10 +1,10 @@
 import { expect, test } from "@playwright/test";
+import { ConnectorMirror, NodeMirror } from "../../assets/snapline/core/src";
+import { getGraphRegistry } from "../../assets/snapline/core/src";
 import {
-  ConnectorMirror,
-  NodeMirror,
+  attachControlledGraph,
+  type LineChangeRequest,
 } from "../../assets/snapline/core/src";
-import { getGraphMirror } from "../../assets/snapline/core/src/snapline-globals";
-import { attachControlledGraph, type LineChangeRequest } from "../../assets/snapline/core/src";
 import {
   armGesture,
   createControlledHarness as controlledHarness,
@@ -33,7 +33,7 @@ function mountPair(engine: any) {
 
 test("canonical records hydrate settled lines, stay latent until endpoints mount, and prune on removal", () => {
   const { engine, handle, requests } = controlledHarness();
-  const mirror = getGraphMirror(engine);
+  const mirror = getGraphRegistry(engine);
 
   handle.setCanonicalGraph({
     lines: [
@@ -71,7 +71,7 @@ test("canonical records hydrate settled lines, stay latent until endpoints mount
 
 test("a settled line is preserved by stable id across endpoint retargets", () => {
   const { engine, handle } = controlledHarness();
-  const mirror = getGraphMirror(engine);
+  const mirror = getGraphRegistry(engine);
   const { source, targetNode } = mountPair(engine);
   const secondTarget = new ConnectorMirror(engine, targetNode, {
     id: "in-2",
@@ -112,7 +112,7 @@ test("a settled line is preserved by stable id across endpoint retargets", () =>
 
 test("rules violations leave records latent with structured diagnostics that clear on resolution", () => {
   const { engine, handle, diagnosticsLog } = controlledHarness();
-  const mirror = getGraphMirror(engine);
+  const mirror = getGraphRegistry(engine);
   const { target } = mountPair(engine);
   // A second source so two records target the same maxIncoming: 1 connector.
   new ConnectorMirror(engine, new NodeMirror(engine, null), {
@@ -150,7 +150,7 @@ test("rules violations leave records latent with structured diagnostics that cle
 
 test("duplicate canonical ids and predicate vetoes surface as diagnostics", () => {
   const { engine, handle } = controlledHarness();
-  const mirror = getGraphMirror(engine);
+  const mirror = getGraphRegistry(engine);
   const { source, target } = mountPair(engine);
 
   handle.setCanonicalGraph({
@@ -228,7 +228,7 @@ function driveDrop(owner: ConnectorMirror, dropX: number, pointerId = 7) {
 
 test("a controlled connect stages, proposes one atomic request, and settles in place on adoption", () => {
   const { engine, handle, requests, source, target } = gestureHarness();
-  const mirror = getGraphMirror(engine);
+  const mirror = getGraphRegistry(engine);
 
   dragFrom(source, 100);
   driveDrop(source, 100);
@@ -267,7 +267,7 @@ test("a controlled connect stages, proposes one atomic request, and settles in p
 
 test("rejection-by-inaction discards the staged line on the decisive pass", () => {
   const { engine, handle, requests, source } = gestureHarness();
-  const mirror = getGraphMirror(engine);
+  const mirror = getGraphRegistry(engine);
 
   dragFrom(source, 100);
   driveDrop(source, 100);
@@ -284,7 +284,7 @@ test("rejection-by-inaction discards the staged line on the decisive pass", () =
 
 test("a full replace-oldest target yields one atomic replace request with no local eviction", () => {
   const { engine, handle, requests, source, target } = gestureHarness();
-  const mirror = getGraphMirror(engine);
+  const mirror = getGraphRegistry(engine);
   target.updateConfig({
     rules: { maxOutgoing: 0, maxIncoming: 1, onFull: "replace-oldest" },
     surfaceStrategies: [nearStrategy],
@@ -331,7 +331,7 @@ test("a full replace-oldest target yields one atomic replace request with no loc
 
 test("a gesture disconnect proposes removal; rejection re-glues, acceptance discards", () => {
   const { engine, handle, requests, source, target } = gestureHarness();
-  const mirror = getGraphMirror(engine);
+  const mirror = getGraphRegistry(engine);
 
   handle.setCanonicalGraph({
     lines: [{ id: "line-a", fromConnectorId: "out-1", toConnectorId: "in-1" }],
@@ -389,8 +389,8 @@ test("controlled graphs on sibling engines are fully isolated, gestures included
   });
   handle.flush();
   siblingHandle.flush();
-  expect(getGraphMirror(engine).line("iso")).not.toBeNull();
-  expect(getGraphMirror(sibling).line("iso")).toBeNull();
+  expect(getGraphRegistry(engine).line("iso")).not.toBeNull();
+  expect(getGraphRegistry(sibling).line("iso")).toBeNull();
 
   // A gesture on the sibling engine cannot discover engine A's targets:
   // A's target accepts drops near x=100, the sibling's own target does not
@@ -406,7 +406,7 @@ test("controlled graphs on sibling engines are fully isolated, gestures included
 
 test("a gesture reconnect preserves the line's stable id and mirror", () => {
   const { engine, handle, requests } = controlledHarness();
-  const mirror = getGraphMirror(engine);
+  const mirror = getGraphRegistry(engine);
   const { source, targetNode, target } = mountConnectedPair(engine);
   // Second input on the same node, hit-testable only left of x=500 too but
   // distinguished by position: in-2 accepts drops at x >= 200.
@@ -466,7 +466,7 @@ test("a gesture reconnect preserves the line's stable id and mirror", () => {
 
 test("a bulk load reconciles exactly once at the outermost batch end", async () => {
   const { engine, handle } = controlledHarness();
-  const mirror = getGraphMirror(engine);
+  const mirror = getGraphRegistry(engine);
   const reconciler = mirror.reconciler!;
   const originalReconcile = reconciler.reconcile!.bind(reconciler);
   let passes = 0;

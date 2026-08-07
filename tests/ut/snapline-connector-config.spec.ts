@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { CircleCollider } from "../../src/collision";
+import { CircleCollider, CollisionEngine } from "../../src/collision";
 import {
   ConnectorMirror,
   LineMirror,
@@ -7,12 +7,14 @@ import {
   PlacementController,
   type ConnectorSurfaceStrategy,
 } from "../../assets/snapline/core/src";
-import { getGraphMirror } from "../../assets/snapline/core/src/snapline-globals";
+import { getGraphRegistry } from "../../assets/snapline/core/src";
 
 import {
+  armGesture,
   createControlledHarness,
   createEngineHarness,
   installObserverStubs,
+  startGestureDrag,
 } from "../helpers/snapline-harness";
 
 test("line geometry writers are imperative, replaceable, and separate from state", () => {
@@ -23,7 +25,7 @@ test("line geometry writers are imperative, replaceable, and separate from state
     rules: { maxIncoming: 0 },
   });
   sourceNode.addConnectorObject(source);
-  const line = source.createLine();
+  const line = new LineMirror(engine, source);
   const firstWrites: number[] = [];
   const secondWrites: number[] = [];
   const states: string[] = [];
@@ -40,7 +42,8 @@ test("line geometry writers are imperative, replaceable, and separate from state
 
   // A stale framework cleanup must not detach the newer renderer.
   unbindFirst();
-  line.setLinePosition(10, 20, 35, 45);
+  line.setLineStartAnchor({ x: 10, y: 20 });
+  line.setLineEndAnchor({ x: 35, y: 45 });
   expect(firstWrites).toEqual([0]);
   expect(secondWrites).toEqual([0]);
   expect(states).toEqual(["source-start"]);
@@ -133,8 +136,27 @@ test("framework cleanup detaches elements without removing owned DOM", () => {
   }
 });
 
+test("destroying an older same-name connector preserves its replacement", () => {
+  const { engine } = createEngineHarness();
+  const node = new NodeMirror(engine, null);
+  const first = new ConnectorMirror(engine, node, { name: "shared" });
+  const replacement = new ConnectorMirror(engine, node, { name: "shared" });
+
+  node.addConnectorObject(first);
+  expect(node.getConnector("shared")).toBe(first);
+
+  node.addConnectorObject(replacement);
+  expect(node.getConnector("shared")).toBe(replacement);
+
+  first.destroy(false);
+  expect(node.getConnector("shared")).toBe(replacement);
+
+  replacement.destroy(false);
+  node.destroy(false);
+});
+
 test("connector config updates stay live without replacing topology", () => {
-  const { engine, global, handle } = createControlledHarness();
+  const { engine, handle } = createControlledHarness();
   const sourceNode = new NodeMirror(engine, null);
   const targetNode = new NodeMirror(engine, null);
   const source = new ConnectorMirror(engine, sourceNode, {
@@ -156,11 +178,11 @@ test("connector config updates stay live without replacing topology", () => {
     ],
   });
   handle.flush();
-  const existingLine = getGraphMirror(engine).line("cfg-line")!;
+  const existingLine = getGraphRegistry(engine).line("cfg-line")!;
   expect(source.outgoingLines).toEqual([existingLine]);
 
   const strategy: ConnectorSurfaceStrategy = {
-    sourceHitTest: ({ position }) => ({
+    targetHitTest: ({ position }) => ({
       anchor: position,
       distance: 0,
     }),
@@ -204,10 +226,6 @@ test("connector config updates stay live without replacing topology", () => {
   expect(source.config.edgePan).toBe(false);
   expect(source.colliderList[0]).toBeInstanceOf(CircleCollider);
   expect((source.colliderList[0] as CircleCollider).radius).toBe(42);
-  expect(global.data.sourceSurfaces).toEqual([source]);
-  const updatedLine = source.createLine();
-  expect(updatedLine).toBeInstanceOf(LineMirror);
-  updatedLine.destroy(false);
 
   source.updateConfig({
     callbacks: undefined,
@@ -232,10 +250,6 @@ test("connector config updates stay live without replacing topology", () => {
   expect(source.isSource).toBe(false);
   expect(source.isTarget).toBe(true);
   expect((source.colliderList[0] as CircleCollider).radius).toBe(30);
-  expect(global.data.sourceSurfaces).toEqual([]);
-  const defaultLine = source.createLine();
-  expect(defaultLine).toBeInstanceOf(LineMirror);
-  defaultLine.destroy(false);
 
   source.destroy();
   target.destroy();
@@ -296,4 +310,124 @@ test("visible port binding can toggle while preserving connector lines", () => {
     targetNode.destroy();
     restoreObservers();
   }
+});
+
+test("target discovery is narrowed by the collision point query", () => {
+  const { engine } = createEngineHarness();
+  engine.collisionEngine = new CollisionEngine();
+  const sourceNode = new NodeMirror(engine, null);
+  const targetNode = new NodeMirror(engine, null);
+  const source = new ConnectorMirror(engine, sourceNode, {
+    name: "source",
+    rules: { maxIncoming: 0 },
+  });
+  const target = new ConnectorMirror(engine, targetNode, {
+    name: "target",
+    rules: { maxOutgoing: 0 },
+    surfaceStrategies: [
+      {
+        targetHitTest: ({ position }) => ({
+          anchor: position,
+          distance: 0,
+        }),
+      },
+    ],
+  });
+  sourceNode.addConnectorObject(source);
+  targetNode.addConnectorObject(target);
+  target.localTransform = { x: 100, y: 0 };
+
+  expect(source.findCandidateAtPoint({ x: 100, y: 0 })?.connector).toBe(target);
+  expect(source.findCandidateAtPoint({ x: 200, y: 0 })).toBeNull();
+  source.destroy();
+  target.destroy();
+  sourceNode.destroy();
+  targetNode.destroy();
+});
+
+test("targetHitTest replaces the ordinary center fallback", () => {
+  const restoreObservers = installObserverStubs();
+  const { engine } = createEngineHarness();
+  const sourceNode = new NodeMirror(engine, null);
+  const targetNode = new NodeMirror(engine, null);
+  const source = new ConnectorMirror(engine, sourceNode, {
+    name: "source",
+    rules: { maxIncoming: 0 },
+  });
+  const target = new ConnectorMirror(engine, targetNode, {
+    name: "target",
+    rules: { maxOutgoing: 0 },
+    surfaceStrategies: [{ targetHitTest: () => null }],
+  });
+  sourceNode.addConnectorObject(source);
+  targetNode.addConnectorObject(target);
+
+  try {
+    target.bindElement({ remove() {} } as unknown as HTMLElement);
+    expect(source.findCandidateAtPoint({ x: 0, y: 0 })).toBeNull();
+  } finally {
+    target.bindElement(null);
+    source.destroy();
+    target.destroy();
+    sourceNode.destroy();
+    targetNode.destroy();
+    restoreObservers();
+  }
+});
+
+test("a pre-threshold reconnect release disarms the delegated source", () => {
+  const { engine, handle } = createControlledHarness();
+  const sourceNode = new NodeMirror(engine, null);
+  const targetNode = new NodeMirror(engine, null);
+  const source = new ConnectorMirror(engine, sourceNode, {
+    id: "reconnect-source",
+    name: "source",
+    rules: { maxIncoming: 0 },
+  });
+  const target = new ConnectorMirror(engine, targetNode, {
+    id: "reconnect-target",
+    name: "target",
+    rules: { maxOutgoing: 0 },
+  });
+  sourceNode.addConnectorObject(source);
+  targetNode.addConnectorObject(target);
+  handle.setCanonicalGraph({
+    lines: [
+      {
+        id: "existing",
+        fromConnectorId: source.connectorId,
+        toConnectorId: target.connectorId,
+      },
+    ],
+  });
+  handle.flush();
+
+  const clickEvent = { button: 0, buttons: 0, pointerId: 4 } as PointerEvent;
+  target.armSurfaceGesture(
+    {
+      event: clickEvent,
+      position: {
+        x: 0,
+        y: 0,
+        cameraX: 0,
+        cameraY: 0,
+        screenX: 0,
+        screenY: 0,
+      },
+    } as any,
+    null,
+  );
+  (target as any).event.input.pointerUp({
+    event: clickEvent,
+    cancelled: false,
+  });
+
+  armGesture(source, 5);
+  startGestureDrag(source, 5);
+  expect(source.outgoingLines).toHaveLength(2);
+
+  source.destroy();
+  target.destroy();
+  sourceNode.destroy();
+  targetNode.destroy();
 });

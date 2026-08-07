@@ -1,10 +1,11 @@
-import type {
-  BaseObject,
-  Engine,
-  eventPosition,
+import {
+  mergeDefined,
+  type BaseObject,
+  type Engine,
+  type eventPosition,
 } from "@snap-engine/core";
-import { NodeMirror, mergeConfig, type NodeConfig } from "./node";
-import { getGraphMirror } from "./snapline-globals";
+import { NodeMirror, type NodeConfig } from "./node";
+import { getGraphRegistry } from "./internal/shared-data";
 
 export interface GroupConfig extends NodeConfig {
   width?: number;
@@ -51,13 +52,13 @@ const DEFAULT_GROUP_CONFIG = {
   minHeight: 120,
 } satisfies GroupConfig;
 
-type Bounds = ReturnType<
-  NodeMirror["hitBox"]["getWorldBoundsSnapshot"]
->;
+type Bounds = ReturnType<NodeMirror["hitBox"]["getWorldBoundsSnapshot"]>;
 
 function boundsArea(bounds: Bounds): number {
-  return Math.max(0, bounds.right - bounds.left) *
-    Math.max(0, bounds.bottom - bounds.top);
+  return (
+    Math.max(0, bounds.right - bounds.left) *
+    Math.max(0, bounds.bottom - bounds.top)
+  );
 }
 
 function containsBounds(container: Bounds, child: Bounds): boolean {
@@ -80,11 +81,11 @@ function stableGroupOrder(
 }
 
 function groupsForEngine(group: GroupNodeMirror): GroupNodeMirror[] {
-  return [...getGraphMirror(group.engine).groups];
+  return [...getGraphRegistry(group.engine).groups];
 }
 
 function nodesForEngine(group: GroupNodeMirror): NodeMirror[] {
-  return [...getGraphMirror(group.engine).nodes];
+  return [...getGraphRegistry(group.engine).nodes];
 }
 
 function resolveParent(
@@ -121,95 +122,9 @@ function wouldCreateGroupCycle(
   return false;
 }
 
-function reconcileMembership(
-  source: GroupNodeMirror,
-  fireDelta: boolean,
-): void {
-  const mirror = getGraphMirror(source.engine);
-  if (mirror.reconcilingMembership) return;
-  mirror.reconcilingMembership = true;
-
-  try {
-    const groups = groupsForEngine(source);
-    const nextMembers = new Map<
-      GroupNodeMirror,
-      Set<NodeMirror>
-    >(groups.map((group) => [group, new Set()]));
-    const nextParents = new Map<NodeMirror, GroupNodeMirror>();
-
-    const nodes = nodesForEngine(source);
-    const groupNodes = [...groups].sort(stableGroupOrder);
-    const ordinaryNodes = nodes.filter(
-      (node) => !(node instanceof GroupNodeMirror),
-    );
-
-    // Resolve the group forest first. A proposed edge can point at a group that
-    // has already chosen another parent, so walking the partial parent map is
-    // enough to reject the edge that would close any cycle.
-    for (const node of groupNodes) {
-      const candidates = groups.filter(
-        (group) =>
-          group !== node &&
-          group.allowsMembership(node) &&
-          !wouldCreateGroupCycle(node, group, nextParents),
-      );
-      const parent = resolveParent(node, candidates, mirror.membershipResolver);
-      if (!parent) continue;
-      nextMembers.get(parent)?.add(node);
-      nextParents.set(node, parent);
-    }
-
-    // Ordinary nodes cannot form membership cycles. They choose the innermost
-    // eligible group after the group hierarchy is settled.
-    for (const node of ordinaryNodes) {
-      const candidates = groups.filter((group) =>
-        group.allowsMembership(node)
-      );
-      const parent = resolveParent(node, candidates, mirror.membershipResolver);
-      if (!parent) continue;
-      nextMembers.get(parent)?.add(node);
-      nextParents.set(node, parent);
-    }
-
-    const deltas = groups.map((group) => {
-      const previous = group.members;
-      const next = nextMembers.get(group) ?? new Set<NodeMirror>();
-      return {
-        group,
-        next,
-        added: [...next].filter((node) => !previous.has(node)),
-        removed: [...previous].filter((node) => !next.has(node)),
-      };
-    });
-
-    for (const node of nodes) {
-      const parent = nextParents.get(node);
-      if (parent) mirror.parentGroups.set(node, parent);
-      else mirror.parentGroups.delete(node);
-    }
-    for (const { group, next } of deltas) group.setResolvedMembers(next);
-
-    if (fireDelta) {
-      for (const { group, next, added, removed } of deltas) {
-        if (!added.length && !removed.length) continue;
-        group.groupCallbacks.onMembershipChange?.({
-          group,
-          added,
-          removed,
-          members: [...next],
-        });
-      }
-    }
-  } finally {
-    mirror.reconcilingMembership = false;
-  }
-}
-
 /** Return the node's settled, exclusive direct parent group. */
-export function getParentGroup(
-  node: NodeMirror,
-): GroupNodeMirror | null {
-  return getGraphMirror(node.engine).parentGroups.get(node) ?? null;
+export function getParentGroup(node: NodeMirror): GroupNodeMirror | null {
+  return getGraphRegistry(node.engine).parentGroups.get(node) ?? null;
 }
 
 /**
@@ -220,7 +135,7 @@ export function setGroupMembershipResolver(
   engine: Engine,
   resolver: GroupMembershipResolver,
 ): () => void {
-  const mirror = getGraphMirror(engine);
+  const mirror = getGraphRegistry(engine);
   mirror.membershipResolver = resolver;
   const refresh = () => {
     // Any live group re-derives the whole engine's membership forest.
@@ -235,8 +150,8 @@ export function setGroupMembershipResolver(
   };
 }
 
-// A resizable box with settled geometric membership. Membership is exclusive:
-// each node has one direct parent, while nested groups form a recursive tree.
+// A box with settled geometric membership. Membership is exclusive: each node
+// has one direct parent, while nested groups form a recursive tree.
 class GroupNodeMirror extends NodeMirror {
   #members: Set<NodeMirror> = new Set();
   #carry: NodeMirror[] = [];
@@ -245,15 +160,110 @@ class GroupNodeMirror extends NodeMirror {
   #groupCallbacks: GroupCallbacks;
   #groupConfig: GroupConfig;
 
-  constructor(engine: any, parent: BaseObject | null, config: GroupConfig = {}) {
-    const merged = mergeConfig<GroupConfig>(
+  static #reconcileMembership(
+    source: GroupNodeMirror,
+    fireDelta: boolean,
+  ): void {
+    const mirror = getGraphRegistry(source.engine);
+    if (mirror.reconcilingMembership) return;
+    mirror.reconcilingMembership = true;
+
+    try {
+      const groups = groupsForEngine(source);
+      const nextMembers = new Map<GroupNodeMirror, Set<NodeMirror>>(
+        groups.map((group) => [group, new Set()]),
+      );
+      const nextParents = new Map<NodeMirror, GroupNodeMirror>();
+
+      const nodes = nodesForEngine(source);
+      const groupNodes = [...groups].sort(stableGroupOrder);
+      const ordinaryNodes = nodes.filter(
+        (node) => !(node instanceof GroupNodeMirror),
+      );
+
+      // Resolve the group forest first. A proposed edge can point at a group
+      // that has already chosen another parent, so walking the partial parent
+      // map is enough to reject the edge that would close any cycle.
+      for (const node of groupNodes) {
+        const candidates = groups.filter(
+          (group) =>
+            group !== node &&
+            group.allowsMembership(node) &&
+            !wouldCreateGroupCycle(node, group, nextParents),
+        );
+        const parent = resolveParent(
+          node,
+          candidates,
+          mirror.membershipResolver,
+        );
+        if (!parent) continue;
+        nextMembers.get(parent)?.add(node);
+        nextParents.set(node, parent);
+      }
+
+      // Ordinary nodes cannot form membership cycles. They choose the
+      // innermost eligible group after the group hierarchy is settled.
+      for (const node of ordinaryNodes) {
+        const candidates = groups.filter((group) =>
+          group.allowsMembership(node),
+        );
+        const parent = resolveParent(
+          node,
+          candidates,
+          mirror.membershipResolver,
+        );
+        if (!parent) continue;
+        nextMembers.get(parent)?.add(node);
+        nextParents.set(node, parent);
+      }
+
+      const deltas = groups.map((group) => {
+        const previous = group.#members;
+        const next = nextMembers.get(group) ?? new Set<NodeMirror>();
+        return {
+          group,
+          next,
+          added: [...next].filter((node) => !previous.has(node)),
+          removed: [...previous].filter((node) => !next.has(node)),
+        };
+      });
+
+      for (const node of nodes) {
+        const parent = nextParents.get(node);
+        if (parent) mirror.parentGroups.set(node, parent);
+        else mirror.parentGroups.delete(node);
+      }
+      for (const { group, next } of deltas) group.#members = next;
+
+      if (fireDelta) {
+        for (const { group, next, added, removed } of deltas) {
+          if (!added.length && !removed.length) continue;
+          group.#groupCallbacks.onMembershipChange?.({
+            group,
+            added,
+            removed,
+            members: [...next],
+          });
+        }
+      }
+    } finally {
+      mirror.reconcilingMembership = false;
+    }
+  }
+
+  constructor(
+    engine: any,
+    parent: BaseObject | null,
+    config: GroupConfig = {},
+  ) {
+    const merged = mergeDefined<GroupConfig>(
       { ...DEFAULT_GROUP_CONFIG },
       config,
     );
-    super(engine, parent, { ...merged, resizable: true });
+    super(engine, parent, merged);
     this.#groupConfig = merged;
     this.#groupCallbacks = merged.groupCallbacks ?? {};
-    getGraphMirror(this.engine).groups.push(this);
+    getGraphRegistry(this.engine).groups.push(this);
   }
 
   get groupCallbacks(): GroupCallbacks {
@@ -283,15 +293,6 @@ class GroupNodeMirror extends NodeMirror {
     return getParentGroup(this);
   }
 
-  /** @internal Used by the engine-wide exclusive-membership reconciliation. */
-  setResolvedMembers(members: Set<NodeMirror>): void {
-    this.#members = members;
-  }
-
-  writeTransformAndLines(): void {
-    super.writeTransformAndLines();
-  }
-
   allowsMembership(node: NodeMirror): boolean {
     const box = this.hitBox.getWorldBoundsSnapshot();
     const nodeBounds = node.hitBox.getWorldBoundsSnapshot();
@@ -304,9 +305,7 @@ class GroupNodeMirror extends NodeMirror {
 
     // Ordinary nodes use center containment. A nested group must fit completely
     // so partially overlapping peers cannot become a parent/child pair.
-    if (
-      node instanceof GroupNodeMirror ? !boundsContained : !centerContained
-    ) {
+    if (node instanceof GroupNodeMirror ? !boundsContained : !centerContained) {
       return false;
     }
 
@@ -321,7 +320,7 @@ class GroupNodeMirror extends NodeMirror {
   }
 
   refreshMembership(fireDelta: boolean): void {
-    reconcileMembership(this, fireDelta);
+    GroupNodeMirror.#reconcileMembership(this, fireDelta);
   }
 
   setSizeState(width: number, height: number): void {
@@ -329,7 +328,7 @@ class GroupNodeMirror extends NodeMirror {
     this.refreshMembership(true);
   }
 
-  beginSelectionDrag(position: eventPosition): void {
+  protected override beginSelectionDrag(position: eventPosition): void {
     super.beginSelectionDrag(position);
     this.#carryGroupOrigin = {
       x: this.worldTransform.x,
@@ -346,15 +345,15 @@ class GroupNodeMirror extends NodeMirror {
     }
   }
 
-  containsSelectionDragNode(node: NodeMirror): boolean {
+  protected override containsSelectionDragNode(node: NodeMirror): boolean {
     return this.descendants.has(node);
   }
 
-  selectionDragNodes(): NodeMirror[] {
+  protected override selectionDragNodes(): NodeMirror[] {
     return [...new Set([this, ...this.#carry])];
   }
 
-  finishSelectionDrag(): void {
+  protected override finishSelectionDrag(): void {
     const dx = this.worldTransform.x - this.#carryGroupOrigin.x;
     const dy = this.worldTransform.y - this.#carryGroupOrigin.y;
     for (const member of this.#carry) {
@@ -373,7 +372,7 @@ class GroupNodeMirror extends NodeMirror {
   }
 
   destroy(removeElement: boolean = true): void {
-    const mirror = getGraphMirror(this.engine);
+    const mirror = getGraphRegistry(this.engine);
     const index = mirror.groups.indexOf(this);
     if (index >= 0) mirror.groups.splice(index, 1);
     for (const member of this.#carry) member.detachTransformFromGroup();

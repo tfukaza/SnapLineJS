@@ -12,12 +12,15 @@ frameworkKey: connector
 gestures. Construct it with
 `new ConnectorMirror(engine, nodeMirror, config)` and register it via
 `nodeMirror.addConnectorObject(connector)`; bind a port element with
-`bindElement(element)` (or leave it virtual and rely on surface strategies).
+`bindElement(element)`. The input root may be an `HTMLElement` or
+`SVGElement`.
 
 `ConnectorConfig` accepts `id`, `name` (the connector's key within its parent
 node), `rules`, `metadata`, `callbacks`, `edgePan`, `surfaceStrategies`,
 and `colliderRadius`. `updateConfig(...)` applies everything
 except the construction-time identities `id` and `name`.
+`callbacks.resolveNewLine` overrides the parent node's resolver when this
+connector starts a genuinely new line.
 
 ## Connection rules
 
@@ -35,16 +38,62 @@ Limits are `number | "unlimited"`; `"unlimited"` normalizes to `Infinity` in
 unlimited-outgoing, single-incoming connector that rejects extra incoming
 lines.
 
-## Surfaces and lookup
+## Custom roots, targets, and anchors
 
-`ConnectorSurfaceStrategy` supplies `sourceHitTest`, `targetHitTest`, and
-`resolveAnchor` for custom shapes. `resolveConnectorSourceAtPoint(engine,
-point)` resolves which connector a pointer position would start a line from.
-Enumerate connectors with `getConnectors(engine)` or
-`query(engine).connectors()`.
+The bound DOM element is the source hit area. For custom SVG geometry, bind an
+element such as a path with `pointer-events="stroke"`.
+`ConnectorSurfaceStrategy` supplies `targetHitTest` and `resolveAnchor` for
+custom target policy and endpoint projection. Target discovery begins with
+`collisionEngine.queryPoint(...)`; the connector's collider radius is the
+broad-phase snapping area and should enclose a custom target shape. Configured
+target hit tests replace the default center candidate within that area.
+Enumerate connectors with `query(engine).connectors()`.
 
 > [!WARNING]
 > Topology methods on `ConnectorMirror` such as `createLine`, `deleteLine`,
-> `deleteAllLines`, and `disconnectFromConnector` are `@internal` even though
+> and `deleteAllLines` are `@internal` even though
 > they appear in editor autocomplete. Change topology by updating canonical
 > `LineRecord`s through the controlled-graph handle.
+
+## Spawning a node from an empty-space drop
+
+`onDragEnd` reports **why** a drag ended through `outcome`:
+
+| `outcome` | Meaning |
+| --- | --- |
+| `"connected"` | Settled onto an admitting target |
+| `"refused"` | Dropped over a target that declined (capacity, predicate, roles) |
+| `"empty-space"` | No connector was resolved under the pointer |
+| `"cancelled"` | Pointer cancel or teardown |
+
+`"empty-space"` is the hook for "drag a line out and drop it on the canvas to
+make a new node". SnapLine deliberately has no node-change request channel:
+your framework decides when a node exists, so you mount the node **and** add
+the line record yourself.
+
+```ts
+onDragEnd: ({ outcome, position, connector }) => {
+  if (outcome !== "empty-space") return;
+  const nodeId = mint();
+  nodes = [...nodes, { id: nodeId, x: position.x, y: position.y }];
+  graph.setLines([
+    ...lines,
+    {
+      id: mint(),
+      fromConnectorId: connector.connectorId,
+      toConnectorId: `${nodeId}:input`,
+    },
+  ]);
+};
+```
+
+The record names a connector that has not mounted yet. That is fine: it stays
+**latent**, and connector registration schedules the pass that converges it,
+so the line appears the moment the node does. Note the dragged preview is
+discarded at drop like any unaccepted gesture — the new line appears with the
+node rather than continuing the stroke.
+
+A role-ineligible connector (`maxIncoming: 0`) is filtered out during
+candidate resolution, so dropping on one reports `"empty-space"`, not
+`"refused"`. A refusal is a connector that resolves as a candidate and then
+declines at drop, which is what `isValidConnection`'s `phase` distinguishes.

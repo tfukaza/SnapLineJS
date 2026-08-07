@@ -1,13 +1,26 @@
 <script lang="ts">
-    import { Node, Connector, Line } from "@snap-engine/snapline-svelte";
+    import { Node, Connector, Line, ResizeRegion } from "@snap-engine/snapline-svelte";
 
-    let { nodeId, title, x = 0, y = 0, maxIncoming = 1 } = $props();
+    let { nodeId, title, x = 0, y = 0, maxIncoming = 1, canResize = false } = $props();
 </script>
 
-<Node className="card node" LineSvelteComponent={Line} {x} {y}>
+<Node
+    className="card node"
+    LineSvelteComponent={Line}
+    {x}
+    {y}
+    minWidth={160}
+    minHeight={110}
+>
     <div class="node-header">
         <h3>{title}</h3>
     </div>
+    {#if canResize}
+        <ResizeRegion
+            handle="se"
+            style="position:absolute;right:-7px;bottom:-7px;width:14px;height:14px;cursor:nwse-resize;"
+        />
+    {/if}
     <div class="node-body">
         <div class="input-row">
             <div class="connector-wrapper">

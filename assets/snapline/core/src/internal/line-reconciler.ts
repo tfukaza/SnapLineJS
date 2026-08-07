@@ -1,60 +1,13 @@
-import type { LineMirror } from "./line";
+import type { LineMirror } from "../line";
 import type {
-  ConnectorId,
-  GraphMirror,
+  CanonicalGraphSnapshot,
+  ControlledGraphCallbacks,
+  LineChangeRequest,
   LineId,
+  LineRecord,
   ReconciliationError,
-} from "./graph-mirror";
-
-/** Canonical committed relationship, owned by the application. */
-export interface LineRecord {
-  id: LineId;
-  fromConnectorId: ConnectorId;
-  toConnectorId: ConnectorId;
-  payload?: unknown;
-}
-
-/** The application-pushed canonical document. Node and connector existence
- * stays framework-mount-led; the snapshot carries the line records. */
-export interface CanonicalGraphSnapshot {
-  lines: readonly LineRecord[];
-}
-
-/** A gesture-created line proposed to the canonical owner. The `id` is
- * minted by SnapLine; adopting it settles the staged mirror in place. */
-export interface ProposedLine {
-  id: LineId;
-  fromConnectorId: ConnectorId;
-  toConnectorId: ConnectorId;
-  payload?: unknown;
-}
-
-export interface LineEndpointUpdate {
-  id: LineId;
-  toConnectorId: ConnectorId;
-}
-
-/** One atomic proposal for the application to change canonical records. */
-export interface LineChangeRequest {
-  intent: "connect" | "disconnect" | "replace" | "reconnect";
-  add: readonly ProposedLine[];
-  remove: readonly LineId[];
-  update: readonly LineEndpointUpdate[];
-  originalEvent?: PointerEvent;
-}
-
-export interface ControlledGraphCallbacks {
-  onLineChangeRequest(request: LineChangeRequest): void;
-  onDiagnosticsChanged?(diagnostics: readonly ReconciliationError[]): void;
-}
-
-/** What `attachControlledGraph()` hands the adapter. */
-export interface ControlledGraphHandle {
-  setCanonicalGraph(snapshot: CanonicalGraphSnapshot): void;
-  /** Run any pending reconciliation synchronously (vanilla/tests). */
-  flush(): void;
-  dispose(): void;
-}
+} from "../types";
+import type { GraphRegistry } from "./graph-registry";
 
 // Converges the engine's line mirrors onto the cached canonical snapshot.
 // Read-only with respect to canonical state: reconciliation never emits a
@@ -63,13 +16,13 @@ export interface ControlledGraphHandle {
 // endpoints not mounted; silent) or errored (rules violation; structured
 // diagnostic), and is retried when relevant state changes.
 export class LineReconciler {
-  #mirror: GraphMirror;
+  #mirror: GraphRegistry;
   #callbacks: ControlledGraphCallbacks;
   #snapshot: CanonicalGraphSnapshot = { lines: [] };
   #reconciling = false;
   #disposed = false;
 
-  constructor(mirror: GraphMirror, callbacks: ControlledGraphCallbacks) {
+  constructor(mirror: GraphRegistry, callbacks: ControlledGraphCallbacks) {
     this.#mirror = mirror;
     this.#callbacks = callbacks;
   }
@@ -86,9 +39,19 @@ export class LineReconciler {
     if (this.#mirror.reconciler === this) this.#mirror.reconciler = null;
   }
 
-  /** Forward a gesture's atomic proposal to the application. */
+  /**
+   * Forward a gesture's atomic proposal to the application and adopt whatever
+   * it returns as the new canonical state.
+   *
+   * Synchronous and unconditional, which is what makes the protocol's
+   * invariants structural rather than timed: exactly one decisive pass per
+   * request (including a rejected one, since the end-of-pass sweep is
+   * snapshot-driven, not flag-driven), and no dependence on when a framework
+   * happens to flush its state.
+   */
   dispatchLineChangeRequest(request: LineChangeRequest): void {
-    this.#callbacks.onLineChangeRequest(request);
+    const lines = this.#callbacks.onLineChangeRequest(request);
+    this.setCanonicalGraph({ lines });
   }
 
   /** One pass: prune, preserve/retarget by stable id, create, report. */
@@ -96,7 +59,6 @@ export class LineReconciler {
     if (this.#reconciling || this.#disposed) return;
     this.#reconciling = true;
     const mirror = this.#mirror;
-    mirror.reconcilerActive = true;
     const errors: ReconciliationError[] = [];
     try {
       // Canonical records by id — duplicates never silently collapse.
@@ -204,8 +166,6 @@ export class LineReconciler {
       }
     } finally {
       this.#reconciling = false;
-      mirror.reconcilerActive = false;
-      mirror.pendingGestureRequest = false;
     }
 
     if (mirror.setReconciliationErrors(errors)) {

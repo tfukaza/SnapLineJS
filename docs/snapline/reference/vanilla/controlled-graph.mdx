@@ -14,7 +14,7 @@ canonical snapshots through:
 
 | Handle member | Meaning |
 | --- | --- |
-| `setCanonicalGraph(snapshot)` | Cache the latest `CanonicalGraphSnapshot` (`{ lines: LineRecord[] }`) and schedule one coalesced reconciliation pass — the only inbound canonical channel |
+| `setCanonicalGraph(snapshot)` | Cache the latest `CanonicalGraphSnapshot` (`{ lines: LineRecord[] }`) and schedule one coalesced pass. Needed only for changes **no request asked for** — loading a saved graph, undo/redo, a collaborator's edit |
 | `flush()` | Run any pending reconciliation synchronously (vanilla apps and tests) |
 | `dispose()` | Detach the reconciler |
 
@@ -25,12 +25,26 @@ framework-mount-led; the snapshot carries only line records.
 ## Change requests
 
 `callbacks.onLineChangeRequest(request)` receives one atomic
-`LineChangeRequest` per gesture: an `intent`
+`LineChangeRequest` per gesture — an `intent`
 (`"connect" | "disconnect" | "replace" | "reconnect"`) plus `add`
 (`ProposedLine[]` with SnapLine-minted ids), `remove` (`LineId[]`), `update`
-(`LineEndpointUpdate[]`), and the `originalEvent`. Apply the proposal to your
-records and push them back through `setCanonicalGraph` — adopting a proposed
-id settles the staged line in place; pushing unchanged records rejects it.
+(`LineEndpointUpdate[]`) — and **returns the line list that should now be
+canonical**. The bridge adopts it directly, so there is no push to remember:
+
+```ts
+let lines: LineRecord[] = [];
+const handle = attachControlledGraph(engine, {
+  onLineChangeRequest: (request) => (lines = applyLineChange(lines, request)),
+});
+```
+
+Adopting a proposed id settles the staged line in place. Reject by returning
+the list unchanged. The handler must be synchronous — the staged preview is
+resolved by the pass that follows the call.
+
+`applyLineChange(lines, request)` is the built-in reducer: drop `remove`,
+apply `update` endpoint changes, append `add`, as one commit returning a new
+array.
 
 ## Diagnostics
 

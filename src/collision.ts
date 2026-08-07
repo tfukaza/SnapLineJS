@@ -464,6 +464,20 @@ class CollisionEngine {
     }
   }
 
+  /**
+   * Returns every registered collider containing a world-space point.
+   *
+   * The query reads each collider's current transform/shape snapshot directly,
+   * so it does not depend on detectCollisions() having run this frame. Results
+   * preserve collider registration order and are intentionally unfiltered;
+   * callers own any label, admission, or input-target policy.
+   */
+  queryPoint(point: { x: number; y: number }): Collider[] {
+    return this.#objectList.filter((collider) =>
+      collider.containsWorldPoint(point.x, point.y),
+    );
+  }
+
   #updateXCoordinates() {
     for (const entry of this.#sortedXCoordinates) {
       const bounds = entry.collider.getWorldBoundsSnapshot();

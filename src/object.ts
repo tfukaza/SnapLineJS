@@ -16,6 +16,7 @@ export type FrameWriteStages = "WRITE_1" | "WRITE_2" | "WRITE_3";
 export type FrameStages = FrameReadStages | FrameWriteStages;
 export type FrameTaskCallback = () => void | Promise<void>;
 export type TransformSpace = "world" | "local";
+export type DomElement = HTMLElement | SVGElement;
 
 export interface DomEvent {
   onAssignDom: null | (() => void);
@@ -952,8 +953,10 @@ function copyDomPropertyValue(target: DomProperty, source: DomProperty) {
   });
 }
 
-export class ElementObject extends BaseObject {
-  #element: HTMLElement | null = null;
+export class ElementObject<
+  ElementType extends DomElement = HTMLElement,
+> extends BaseObject {
+  #element: ElementType | null = null;
   #style: Record<string, any> = {};
   #classList: string[] = [];
   #dataAttribute: Record<string, any> = {};
@@ -968,7 +971,7 @@ export class ElementObject extends BaseObject {
   transformMode: "direct" | "relative" | "origin" | "none";
   transformOrigin: BaseObject | null;
 
-  #inputAlias: HTMLElement | null = null;
+  #inputAlias: DomElement | null = null;
 
   constructor(engine: Engine, parent: BaseObject | null = null) {
     super(engine, parent);
@@ -1015,11 +1018,11 @@ export class ElementObject extends BaseObject {
     this.#dataAttribute = Object.assign(this.#dataAttribute, dataAttribute);
   }
 
-  get element(): HTMLElement | null {
+  get element(): ElementType | null {
     return this.#element;
   }
 
-  set element(element: HTMLElement | null | undefined) {
+  set element(element: ElementType | null | undefined) {
     if (!element) {
       return;
     }
@@ -1027,7 +1030,7 @@ export class ElementObject extends BaseObject {
     this.event.dom.onAssignDom?.();
   }
 
-  addInputAlias(element: HTMLElement): void {
+  addInputAlias(element: DomElement): void {
     if (this.#inputAlias === element) {
       return;
     }
@@ -1037,7 +1040,7 @@ export class ElementObject extends BaseObject {
     this.engine.input.registerObjectElement(this, element);
   }
 
-  removeInputAlias(element: HTMLElement): void {
+  removeInputAlias(element: DomElement): void {
     if (this.#inputAlias !== element) {
       return;
     }
@@ -1340,7 +1343,7 @@ export class ElementObject extends BaseObject {
    * When `expectedElement` is supplied, a stale cleanup is ignored after a
    * newer element has already been assigned.
    */
-  detachElement(expectedElement?: HTMLElement): boolean {
+  detachElement(expectedElement?: ElementType): boolean {
     if (expectedElement && this.#element !== expectedElement) {
       return false;
     }
@@ -1359,7 +1362,7 @@ export class ElementObject extends BaseObject {
     return true;
   }
 
-  #assignElement(element: HTMLElement) {
+  #assignElement(element: ElementType) {
     if (this.#element) {
       this.detachElement();
     }

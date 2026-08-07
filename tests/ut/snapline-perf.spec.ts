@@ -4,7 +4,7 @@ import {
   NodeMirror,
   type LineRecord,
 } from "../../assets/snapline/core/src";
-import { getGraphMirror } from "../../assets/snapline/core/src/snapline-globals";
+import { getGraphRegistry } from "../../assets/snapline/core/src";
 import {
   createControlledHarness,
   nearTargetStrategy,
@@ -15,7 +15,7 @@ import {
 // visible in test output before it reaches an application.
 test("perf: reconcile, candidate discovery, and bulk load on a 200-node graph", () => {
   const { engine, handle } = createControlledHarness();
-  const mirror = getGraphMirror(engine);
+  const mirror = getGraphRegistry(engine);
 
   const NODES = 200;
   const LINES = 150;

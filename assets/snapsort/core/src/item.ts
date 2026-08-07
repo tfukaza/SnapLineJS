@@ -1690,6 +1690,7 @@ export class Item extends ElementObject {
    * @returns
    */
   dragStart(prop: dragStartProp) {
+    if (prop.objectId !== this.id) return;
     if (this.#locked) return;
 
     // Take a snapshot of the current state.
@@ -1742,20 +1743,27 @@ export class Item extends ElementObject {
    * @param prop Drag position property containing mouse coordinates.
    */
   drag(prop: dragProp) {
+    if (prop.objectId !== this.id) return;
     const session = this.rootContainer.dragSession;
     if (!session || session.status !== "active") return;
     session.pointerMove(prop);
   }
 
   dragEnd(prop: dragEndProp) {
+    if (prop.objectId !== this.id) return;
     const session = this.rootContainer.dragSession;
-    if (!session || session.status !== "active") {
+    if (!session) {
       // Defensive cleanup in case a veto or stale session left visual state
       // behind (e.g. onDragStart returned false after the dataset flag was
       // set on a previous, unrelated gesture).
       if (this.element) delete this.element.dataset.snapsortDragging;
       return;
     }
+    if (prop.cancelled || session.status === "pending") {
+      session.cancel();
+      return;
+    }
+    if (session.status !== "active") return;
     session.status = "dropping";
     session.dragTransformSyncAnimation?.cancel();
     session.dragTransformSyncAnimation = null;

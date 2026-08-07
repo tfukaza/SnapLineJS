@@ -3,12 +3,15 @@ import { expect, test, type Locator, type Page } from "@playwright/test";
 async function directItemKeys(container: Locator): Promise<string[]> {
   return container.evaluate((element) =>
     Array.from(element.children)
-      .filter((child): child is HTMLElement =>
-        child instanceof HTMLElement && child.classList.contains("snapsort-item"),
+      .filter(
+        (child): child is HTMLElement =>
+          child instanceof HTMLElement &&
+          child.classList.contains("snapsort-item"),
       )
-      .map((child) =>
-        child.dataset.snapsortItemId ??
-        child.innerText.replace(/\s+/g, " ").trim(),
+      .map(
+        (child) =>
+          child.dataset.snapsortItemId ??
+          child.innerText.replace(/\s+/g, " ").trim(),
       ),
   );
 }
@@ -63,9 +66,7 @@ async function reorderDirectItems(
   const movingDown = targetIndex > sourceIndex;
   const end = {
     x: targetBox.x + targetBox.width / 2,
-    y:
-      targetBox.y +
-      targetBox.height * (movingDown ? 0.82 : 0.18),
+    y: targetBox.y + targetBox.height * (movingDown ? 0.82 : 0.18),
   };
 
   await page.mouse.move(start.x, start.y);
@@ -107,7 +108,9 @@ async function reorderDirectItems(
   for (let index = 1; index < sampledCenters.length; index++) {
     const previous = sampledCenters[index - 1];
     const current = sampledCenters[index];
-    expect(Math.hypot(current.x - previous.x, current.y - previous.y)).toBeGreaterThan(4);
+    expect(
+      Math.hypot(current.x - previous.x, current.y - previous.y),
+    ).toBeGreaterThan(4);
   }
 
   await page.mouse.up();
@@ -168,7 +171,9 @@ test.describe("SnapSort landing repeated-drag ownership", () => {
     const customizable = page.locator(".customizable-demo");
     await customizable.scrollIntoViewIfNeeded();
     await customizable.evaluate((element) => {
-      const rail = element.querySelector<HTMLElement>(".customizable-theme-rail");
+      const rail = element.querySelector<HTMLElement>(
+        ".customizable-theme-rail",
+      );
       rail?.style.setProperty("transform", "translateX(0)", "important");
       for (const frame of element.querySelectorAll<HTMLElement>(
         ".customizable-motion-frame",

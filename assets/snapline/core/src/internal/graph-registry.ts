@@ -1,51 +1,26 @@
-import type { ConnectorMirror } from "./connector";
-import type { NodeMirror } from "./node";
-import type { LineMirror } from "./line";
-import type { GroupNodeMirror, GroupMembershipResolver } from "./group";
-import type { LineChangeRequest } from "./line-reconciler";
-
-/** Stable application-facing identity of a canonical node. */
-export type NodeId = string;
-/** Stable application-facing identity of a canonical connector (graph-global). */
-export type ConnectorId = string;
-/** Stable application-facing identity of a canonical line. */
-export type LineId = string;
-
-/**
- * Structured, non-throwing report of a graph state the mirror cannot
- * represent. Derived state: entries drop out when their cause resolves.
- */
-export interface ReconciliationError {
-  code:
-    | "duplicate-id"
-    | "missing-node"
-    | "missing-connector"
-    | "capacity-exceeded"
-    | "connection-rejected"
-    | "identity-changed"
-    | "unrepresentable-line";
-  lineId?: LineId;
-  nodeId?: NodeId;
-  connectorId?: ConnectorId;
-  message: string;
-  cause?: unknown;
-}
+import type { ConnectorMirror } from "../connector";
+import type { NodeMirror } from "../node";
+import type { LineMirror } from "../line";
+import type { GroupNodeMirror, GroupMembershipResolver } from "../group";
+import type {
+  ConnectorId,
+  GraphBatch,
+  LineChangeRequest,
+  LineId,
+  NodeId,
+  ReconciliationError,
+} from "../types";
 
 // Structural reconciler contract so the registry (and the connector emit
 // sites that reach it) never value-import the reconciler module — it imports
 // the registry accessor, not the reverse.
 export interface GraphReconcilerLike {
   /** Run one reconciliation pass against the latest canonical state. Invoked
-   * by the mirror's coalescing, batch-aware scheduler. */
+   * by the registry's coalescing, batch-aware scheduler. */
   reconcile?(): void;
   /** Forward a gesture's atomic proposal to the application. Present only on
    * the controlled bridge; its presence routes gesture drops. */
   dispatchLineChangeRequest?(request: LineChangeRequest): void;
-}
-
-/** A batch token from `beginBatch()`; `end()` is idempotent. */
-export interface GraphBatch {
-  end(): void;
 }
 
 /** Mint a domain ID for a mirror created without an application-supplied id. */
@@ -56,10 +31,10 @@ export function mintDomainId(
   return `${kind}-${global.createId()}`;
 }
 
-// Engine-scoped registry of every live SnapLine runtime mirror — the mirror
-// of the whole graph (nodes, connectors, settled lines, previews).
+// Engine-scoped registry of every live SnapLine runtime mirror: nodes,
+// connectors, settled lines, and previews.
 //
-// Created lazily by `getGraphMirror(engine)` the first time any SnapLine
+// Created lazily by `getGraphRegistry(engine)` the first time any SnapLine
 // mirror registers, so it exists exactly when SnapLine is in use — no adapter
 // wiring required, vanilla consumers included. Mirrors register in their
 // constructors and unregister in `destroy()`.
@@ -68,7 +43,7 @@ export function mintDomainId(
 // duplicate ID is never silently allowed to steal the index entry; it stays
 // unindexed and is reported through `diagnostics()` until the conflict
 // resolves (either mirror unregisters).
-export class GraphMirror {
+export class GraphRegistry {
   readonly engine: unknown;
   #nodes = new Set<NodeMirror>();
   #connectors = new Set<ConnectorMirror>();
@@ -83,15 +58,6 @@ export class GraphMirror {
   // attachControlledGraph(); the connector emit sites and the scheduler
   // reach it through this slot.
   reconciler: GraphReconcilerLike | null = null;
-
-  /** @internal True while a reconciler pass mutates topology on the
-   * canonical document's behalf — those mutations bypass the authority gate
-   * on imperative commands. */
-  reconcilerActive = false;
-
-  /** @internal One in-flight gesture request per engine (gestures are
-   * serial); cleared by the next reconciliation pass. */
-  pendingGestureRequest = false;
 
   #reconciliationQueued = false;
   #batchDepth = 0;
@@ -182,7 +148,13 @@ export class GraphMirror {
 
   unregisterNode(node: NodeMirror): void {
     this.#nodes.delete(node);
-    this.#unindex(this.#nodesById, node.nodeId, node, this.#nodes, (n) => n.nodeId);
+    this.#unindex(
+      this.#nodesById,
+      node.nodeId,
+      node,
+      this.#nodes,
+      (n) => n.nodeId,
+    );
   }
 
   registerConnector(connector: ConnectorMirror): void {
@@ -330,5 +302,4 @@ export class GraphMirror {
       }
     }
   }
-
 }

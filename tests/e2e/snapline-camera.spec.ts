@@ -42,7 +42,9 @@ test.beforeEach(async ({ page }) => {
 });
 
 test("background drag pans the camera", async ({ page }) => {
-  const nodeA = page.locator("[data-snapline-type='node']", { hasText: "Node A" });
+  const nodeA = page.locator("[data-snapline-type='node']", {
+    hasText: "Node A",
+  });
   const before = await nodeA.boundingBox();
   await dragFromTo(page, { x: 900, y: 620 }, { x: 700, y: 470 });
   const after = await nodeA.boundingBox();
@@ -61,7 +63,9 @@ test("ctrl+wheel zooms the camera", async ({ page }) => {
 });
 
 test("dragging a node does not pan the camera", async ({ page }) => {
-  const nodeB = page.locator("[data-snapline-type='node']", { hasText: "Node B" });
+  const nodeB = page.locator("[data-snapline-type='node']", {
+    hasText: "Node B",
+  });
   const startBox = await nodeB.boundingBox();
   const before = await cameraTransform(page);
   await dragFromTo(
@@ -75,20 +79,26 @@ test("dragging a node does not pan the camera", async ({ page }) => {
 });
 
 test("dragging a connector line does not pan the camera", async ({ page }) => {
-  const nodeA = page.locator("[data-snapline-type='node']", { hasText: "Node A" });
+  const nodeA = page.locator("[data-snapline-type='node']", {
+    hasText: "Node A",
+  });
   const output = nodeA.locator("[data-snapline-name='output']");
   const before = await cameraTransform(page);
   // Drag a line out and drop it on empty canvas: no connection, no pan.
   const start = await centerOf(output);
   await dragFromTo(page, start, { x: start.x + 180, y: start.y + 140 });
   expect(await cameraTransform(page)).toBe(before);
-  await expect(page.locator("[data-snapline-type='connector-line']")).toHaveCount(0);
+  await expect(
+    page.locator("[data-snapline-type='connector-line']"),
+  ).toHaveCount(0);
 });
 
 test("connector drag edge-pans continuously and keeps the line under the pointer", async ({
   page,
 }) => {
-  const nodeA = page.locator("[data-snapline-type='node']", { hasText: "Node A" });
+  const nodeA = page.locator("[data-snapline-type='node']", {
+    hasText: "Node A",
+  });
   const output = nodeA.locator("[data-snapline-name='output']");
   const start = await centerOf(output);
   const camera = page.locator("#node-ui-camera-canvas");
@@ -112,8 +122,14 @@ test("connector drag edge-pans continuously and keeps the line under the pointer
     const path = svg.querySelector("path")?.getAttribute("d") ?? "";
     const numbers = path.match(/-?\d+(?:\.\d+)?/g)?.map(Number) ?? [];
     const transform = new DOMMatrixReadOnly(getComputedStyle(svg).transform);
-    const startPoint = new DOMPoint(numbers[0] ?? 0, numbers[1] ?? 0).matrixTransform(transform);
-    const endPoint = new DOMPoint(numbers[6] ?? 0, numbers[7] ?? 0).matrixTransform(transform);
+    const startPoint = new DOMPoint(
+      numbers[0] ?? 0,
+      numbers[1] ?? 0,
+    ).matrixTransform(transform);
+    const endPoint = new DOMPoint(
+      numbers[6] ?? 0,
+      numbers[7] ?? 0,
+    ).matrixTransform(transform);
     const layoutOffsetX = rect.left - startPoint.x;
     const layoutOffsetY = rect.top - startPoint.y;
     return {
@@ -131,7 +147,9 @@ test("connector drag edge-pans continuously and keeps the line under the pointer
 test("node drag edge-pans while the dragged node stays under the pointer", async ({
   page,
 }) => {
-  const nodeC = page.locator("[data-snapline-type='node']", { hasText: "Node C" });
+  const nodeC = page.locator("[data-snapline-type='node']", {
+    hasText: "Node C",
+  });
   const startBox = await nodeC.boundingBox();
   const camera = page.locator("#node-ui-camera-canvas");
   const bounds = await camera.boundingBox();
@@ -156,10 +174,14 @@ test("node drag edge-pans while the dragged node stays under the pointer", async
   await page.mouse.up();
 });
 
-test("panButton='middle': middle-drag pans, left-drag does not", async ({ page }) => {
+test("panButton='middle': middle-drag pans, left-drag does not", async ({
+  page,
+}) => {
   await page.goto("/snapline-camera?panButton=middle");
   await expect(page.locator("[data-snapline-type='node']")).toHaveCount(3);
-  const nodeA = page.locator("[data-snapline-type='node']", { hasText: "Node A" });
+  const nodeA = page.locator("[data-snapline-type='node']", {
+    hasText: "Node A",
+  });
 
   // Left-drag the background: with panButton='middle' this must NOT pan.
   const beforeLeft = await cameraTransform(page);
@@ -174,10 +196,14 @@ test("panButton='middle': middle-drag pans, left-drag does not", async ({ page }
   expect(after!.y - before!.y).toBeLessThan(-100);
 });
 
-test("wheelPan: unmodified wheel pans, ctrl+wheel still zooms", async ({ page }) => {
+test("wheelPan: unmodified wheel pans, ctrl+wheel still zooms", async ({
+  page,
+}) => {
   await page.goto("/snapline-camera?wheelPan=1");
   await expect(page.locator("[data-snapline-type='node']")).toHaveCount(3);
-  const nodeA = page.locator("[data-snapline-type='node']", { hasText: "Node A" });
+  const nodeA = page.locator("[data-snapline-type='node']", {
+    hasText: "Node A",
+  });
 
   // Two-finger scroll (an unmodified wheel with deltaX/deltaY) pans the camera:
   // a downward + rightward scroll pans the view down/right, so nodes shift up/left.
@@ -199,7 +225,9 @@ test("wheelPan: unmodified wheel pans, ctrl+wheel still zooms", async ({ page })
   await expect.poll(() => cameraTransform(page)).not.toBe(beforeZoom);
 });
 
-test("ctrl+wheel direction: scroll down / pinch in zooms out, scroll up / pinch out zooms in", async ({ page }) => {
+test("ctrl+wheel direction: scroll down / pinch in zooms out, scroll up / pinch out zooms in", async ({
+  page,
+}) => {
   await page.mouse.move(640, 450);
   // Starts at max zoom (1), so first zoom out (scroll down / pinch in): scale drops.
   const base = await cameraScale(page);
@@ -216,15 +244,21 @@ test("ctrl+wheel direction: scroll down / pinch in zooms out, scroll up / pinch 
   await expect.poll(() => cameraScale(page)).toBeGreaterThan(zoomedOut);
 });
 
-test("connecting after pan and zoom still lands on the target connector", async ({ page }) => {
+test("connecting after pan and zoom still lands on the target connector", async ({
+  page,
+}) => {
   await dragFromTo(page, { x: 900, y: 620 }, { x: 780, y: 540 });
   await page.mouse.move(640, 450);
   await page.keyboard.down("Control");
   await page.mouse.wheel(0, 120);
   await page.keyboard.up("Control");
 
-  const nodeA = page.locator("[data-snapline-type='node']", { hasText: "Node A" });
-  const nodeB = page.locator("[data-snapline-type='node']", { hasText: "Node B" });
+  const nodeA = page.locator("[data-snapline-type='node']", {
+    hasText: "Node A",
+  });
+  const nodeB = page.locator("[data-snapline-type='node']", {
+    hasText: "Node B",
+  });
   const output = nodeA.locator("[data-snapline-name='output']");
   const input = nodeB.locator("[data-snapline-name='input']");
   await dragFromTo(page, await centerOf(output), await centerOf(input));
@@ -234,10 +268,14 @@ test("connecting after pan and zoom still lands on the target connector", async 
   await expect(line.locator("path")).toHaveAttribute("d", /C/);
 });
 
-test("wheel does not pan or zoom the camera mid node-drag (pointer claim blocks it)", async ({ page }) => {
+test("wheel does not pan or zoom the camera mid node-drag (pointer claim blocks it)", async ({
+  page,
+}) => {
   await page.goto("/snapline-camera?wheelPan=1");
   await expect(page.locator("[data-snapline-type='node']")).toHaveCount(3);
-  const nodeA = page.locator("[data-snapline-type='node']", { hasText: "Node A" });
+  const nodeA = page.locator("[data-snapline-type='node']", {
+    hasText: "Node A",
+  });
   const startBox = await nodeA.boundingBox();
 
   // Hold a node drag, then wheel: the claim must suppress the camera globally.

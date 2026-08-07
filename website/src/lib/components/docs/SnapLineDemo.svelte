@@ -1,16 +1,17 @@
 <script lang="ts">
   import { Engine } from "@snap-engine/asset-base-svelte";
   import type { Engine as CoreEngine } from "@snap-engine/core";
-  import { PlacementController } from "@snap-engine/snapline";
+  import { PlacementController, RESIZE_HANDLES, applyLineChange } from "@snap-engine/snapline";
   import {
     Connector,
     Group,
     Node,
     Placement,
+    ResizeRegion,
     Select,
   } from "@snap-engine/snapline-svelte";
   import { ControlledGraph } from "@snap-engine/snapline-svelte";
-  import type { LineChangeRequest, LineRecord } from "@snap-engine/snapline";
+  import type { LineRecord } from "@snap-engine/snapline";
   import ClientDemoFrame from "$lib/components/ClientDemoFrame.svelte";
 
   let {
@@ -23,20 +24,7 @@
   let engine = $state<CoreEngine | null>(null);
   // Topology is always controlled: the demo owns its line document and
   // accepts every atomic proposal.
-  let lines = $state<LineRecord[]>([]);
-  function applyRequest(request: LineChangeRequest): void {
-    lines = [
-      ...lines
-        .filter((record) => !request.remove.includes(record.id))
-        .map((record) => {
-          const update = request.update.find((entry) => entry.id === record.id);
-          return update
-            ? { ...record, toConnectorId: update.toConnectorId }
-            : record;
-        }),
-      ...request.add,
-    ];
-  }
+  let lines = $state.raw<LineRecord[]>([]);
   let placement = $state<PlacementController<string> | null>(null);
   let placedNodes = $state<Array<{ id: number; x: number; y: number }>>([]);
   let nextPlacedId = 1;
@@ -82,6 +70,12 @@
   }
 </script>
 
+{#snippet resizeRegions()}
+  {#each RESIZE_HANDLES as handle}
+    <ResizeRegion {handle} class="doc-resize-region" />
+  {/each}
+{/snippet}
+
 <figure class="snapline-demo" aria-label={`Interactive SnapLine ${mode} example`}>
   <ClientDemoFrame className="snapline-demo-skeleton">
     <div class="demo-shell slot shallow">
@@ -97,7 +91,9 @@
           {/each}
         </div>
         {#if mode === "connections"}
-          <ControlledGraph {lines} onLineChangeRequest={applyRequest} />
+          <ControlledGraph
+            onLineChangeRequest={(request) => (lines = applyLineChange(lines, request))}
+          />
           <Node className="doc-node card shallow" x={55} y={80}>
             <strong>Source</strong>
             <span>Drag the port</span>
@@ -116,9 +112,9 @@
                author sizes the stylesheet refuses to render, drifting the
                anchored edge on a north or west resize. -->
           <Select className="doc-selection" />
-          <Node className="doc-node compact card shallow" x={65} y={70} resizable minWidth={108} minHeight={54}><strong>One</strong></Node>
-          <Node className="doc-node compact card shallow" x={245} y={105} resizable minWidth={108} minHeight={54}><strong>Two</strong></Node>
-          <Node className="doc-node compact card shallow" x={155} y={210} resizable minWidth={108} minHeight={54}><strong>Three</strong></Node>
+          <Node className="doc-node compact card shallow" x={65} y={70} minWidth={108} minHeight={54}><strong>One</strong>{@render resizeRegions()}</Node>
+          <Node className="doc-node compact card shallow" x={245} y={105} minWidth={108} minHeight={54}><strong>Two</strong>{@render resizeRegions()}</Node>
+          <Node className="doc-node compact card shallow" x={155} y={210} minWidth={108} minHeight={54}><strong>Three</strong>{@render resizeRegions()}</Node>
         {:else if mode === "groups"}
           <Group className="doc-group outer" x={28} y={35} width={430} height={245} title="Outer group" />
           <Group className="doc-group inner" x={90} y={95} width={235} height={130} title="Nested group" />
@@ -218,6 +214,40 @@
     width: 108px;
     min-height: 54px;
   }
+
+  :global(.doc-resize-region) {
+    --resize-size: 12px;
+    position: absolute;
+  }
+  :global(.doc-resize-region[data-handle="n"]),
+  :global(.doc-resize-region[data-handle="s"]) {
+    left: var(--resize-size);
+    right: var(--resize-size);
+    height: var(--resize-size);
+    cursor: ns-resize;
+  }
+  :global(.doc-resize-region[data-handle="e"]),
+  :global(.doc-resize-region[data-handle="w"]) {
+    top: var(--resize-size);
+    bottom: var(--resize-size);
+    width: var(--resize-size);
+    cursor: ew-resize;
+  }
+  :global(.doc-resize-region[data-handle^="n"]) { top: -6px; }
+  :global(.doc-resize-region[data-handle^="s"]) { bottom: -6px; }
+  :global(.doc-resize-region[data-handle$="e"]) { right: -6px; }
+  :global(.doc-resize-region[data-handle$="w"]) { left: -6px; }
+  :global(.doc-resize-region[data-handle="ne"]),
+  :global(.doc-resize-region[data-handle="se"]),
+  :global(.doc-resize-region[data-handle="sw"]),
+  :global(.doc-resize-region[data-handle="nw"]) {
+    width: var(--resize-size);
+    height: var(--resize-size);
+  }
+  :global(.doc-resize-region[data-handle="ne"]),
+  :global(.doc-resize-region[data-handle="sw"]) { cursor: nesw-resize; }
+  :global(.doc-resize-region[data-handle="nw"]),
+  :global(.doc-resize-region[data-handle="se"]) { cursor: nwse-resize; }
 
   :global(.doc-node[data-selected="true"]) {
     outline: 3px solid color-mix(in srgb, var(--color-primary) 38%, transparent);

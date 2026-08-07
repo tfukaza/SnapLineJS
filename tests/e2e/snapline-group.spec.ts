@@ -25,7 +25,7 @@ async function dragFromTo(
 const NODE = "[data-snapline-type='node']";
 const MEMBER = "[data-member='true']";
 const HEADER = "[data-snapline-part='group-header']";
-const RESIZE = "[data-snapline-part='group-resize'][data-handle='se']";
+const RESIZE = "[data-snapline-part='resize-region'][data-handle='se']";
 
 function nodeByTitle(page: Page, title: string): Locator {
   return page.locator(NODE, { hasText: title });
@@ -43,7 +43,9 @@ test.beforeEach(async ({ page }) => {
   await expect(page.locator(MEMBER)).toHaveCount(2);
 });
 
-test("dragging the group header carries its in-box members, not outsiders", async ({ page }) => {
+test("dragging the group header carries its in-box members, not outsiders", async ({
+  page,
+}) => {
   const nodeA = nodeByTitle(page, "Node A");
   const nodeB = nodeByTitle(page, "Node B");
   const beforeA = await nodeA.boundingBox();
@@ -62,14 +64,18 @@ test("dragging the group header carries its in-box members, not outsiders", asyn
   expect(Math.abs(afterB!.y - beforeB!.y)).toBeLessThan(8);
 });
 
-test("carried members do not fire enter/leave (cue count stays stable)", async ({ page }) => {
+test("carried members do not fire enter/leave (cue count stays stable)", async ({
+  page,
+}) => {
   const header = await centerOf(page.locator(HEADER));
   await dragFromTo(page, header, { x: header.x + 60, y: header.y + 40 });
   // A and C merely moved with the group — still members, no flicker.
   await expect(page.locator(MEMBER)).toHaveCount(2);
 });
 
-test("resizing the group to cover a node adds it, shrinking removes it", async ({ page }) => {
+test("resizing the group to cover a node adds it, shrinking removes it", async ({
+  page,
+}) => {
   const nodeB = nodeByTitle(page, "Node B");
   await expect(nodeB).not.toHaveAttribute("data-member", "true");
 
@@ -86,7 +92,9 @@ test("resizing the group to cover a node adds it, shrinking removes it", async (
   await expect(page.locator(MEMBER)).toHaveCount(2);
 });
 
-test("moving the group over a node adds it, and the next drag carries it", async ({ page }) => {
+test("moving the group over a node adds it, and the next drag carries it", async ({
+  page,
+}) => {
   const nodeB = nodeByTitle(page, "Node B");
   const startB = await nodeB.boundingBox();
 
@@ -134,7 +142,8 @@ test("nested groups carry their full descendant subtree", async ({ page }) => {
   await page.mouse.down();
   await page.mouse.move(target.x, target.y, { steps: 12 });
   await page.evaluate(
-    () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())),
+    () =>
+      new Promise<void>((resolve) => requestAnimationFrame(() => resolve())),
   );
 
   const liveInner = await inner.boundingBox();

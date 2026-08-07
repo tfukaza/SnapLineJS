@@ -6,8 +6,8 @@ import type {
 } from "@snap-engine/core";
 import { RectCollider, Collider } from "@snap-engine/core/collision";
 import { NodeMirror, type SelectionMode } from "./node";
-import { getGraphMirror } from "./snapline-globals";
-import type { GeometryWriter } from "./geometry";
+import { getGraphRegistry } from "./internal/shared-data";
+import type { GeometryWriter } from "./types";
 
 /** World-space rectangle delivered to the registered geometry writer. */
 export interface SelectRect {
@@ -80,12 +80,11 @@ class RectSelectController extends ElementObject {
 
     this.#selectHitBox = new RectCollider(engine, this, 0, 0, 0, 0);
     this.#selectHitBox.localTransform = { x: 0, y: 0 };
-    this.#selectHitBox.event.collider.onCollide = this.onCollideNode;
 
     this.addCollider(this.#selectHitBox);
 
     // A fresh selection controller starts its engine from an empty selection.
-    getGraphMirror(this.engine).selection.length = 0;
+    getGraphRegistry(this.engine).selection.length = 0;
 
     this.#callbacks = config.callbacks ?? {};
   }
@@ -115,13 +114,10 @@ class RectSelectController extends ElementObject {
       visible,
     };
     this.#callbacks.onRectChange?.({ ...this.#rect });
-    this.schedule(
-      () => this.#geometryWriter?.({ ...this.#rect }),
-      {
-        stage: "WRITE_2",
-        queueId: `${this.id}-geometry`,
-      },
-    );
+    this.schedule(() => this.#geometryWriter?.({ ...this.#rect }), {
+      stage: "WRITE_2",
+      queueId: `${this.id}-geometry`,
+    });
   }
 
   onGlobalCursorDown(prop: pointerDownProp): void {
@@ -136,10 +132,10 @@ class RectSelectController extends ElementObject {
     if (this.#callbacks.canStart?.(startEvent) === false) return;
     this.#selectionMode =
       this.#callbacks.resolveSelectionMode?.(startEvent) ?? "replace";
-    this.#baselineSelection = new Set(getGraphMirror(this.engine).selection);
+    this.#baselineSelection = new Set(getGraphRegistry(this.engine).selection);
     if (this.#selectionMode === "replace") {
       // setSelected(false) removes each node from the engine's selection.
-      for (let node of [...getGraphMirror(this.engine).selection]) {
+      for (const node of [...getGraphRegistry(this.engine).selection]) {
         node.setSelected(false);
       }
     }
@@ -155,7 +151,7 @@ class RectSelectController extends ElementObject {
     this.#fireRect(0, 0, true);
     this.#callbacks.onSelectionChange?.({
       select: this,
-      selection: [...getGraphMirror(this.engine).selection],
+      selection: [...getGraphRegistry(this.engine).selection],
     });
 
     this.#selectHitBox.event.collider.onBeginContact = (
@@ -163,7 +159,7 @@ class RectSelectController extends ElementObject {
       otherObject: Collider,
     ) => {
       if (otherObject.parent instanceof NodeMirror) {
-        let node = otherObject.parent as NodeMirror;
+        const node = otherObject.parent as NodeMirror;
         node.setSelected(
           this.#selectionMode === "toggle"
             ? !this.#baselineSelection.has(node)
@@ -171,7 +167,7 @@ class RectSelectController extends ElementObject {
         );
         this.#callbacks.onSelectionChange?.({
           select: this,
-          selection: [...getGraphMirror(this.engine).selection],
+          selection: [...getGraphRegistry(this.engine).selection],
         });
       }
     };
@@ -180,11 +176,11 @@ class RectSelectController extends ElementObject {
       otherObject: Collider,
     ) => {
       if (otherObject.parent instanceof NodeMirror) {
-        let node = otherObject.parent as NodeMirror;
+        const node = otherObject.parent as NodeMirror;
         node.setSelected(this.#baselineSelection.has(node));
         this.#callbacks.onSelectionChange?.({
           select: this,
-          selection: [...getGraphMirror(this.engine).selection],
+          selection: [...getGraphRegistry(this.engine).selection],
         });
       }
     };
@@ -192,11 +188,11 @@ class RectSelectController extends ElementObject {
 
   onGlobalCursorMove(prop: pointerMoveProp): void {
     if (this.#state === "dragging") {
-      let [boxOriginX, boxOriginY] = [
+      const [boxOriginX, boxOriginY] = [
         Math.min(this.#mouseDownX, prop.position.x),
         Math.min(this.#mouseDownY, prop.position.y),
       ];
-      let [boxWidth, boxHeight] = [
+      const [boxWidth, boxHeight] = [
         Math.abs(prop.position.x - this.#mouseDownX),
         Math.abs(prop.position.y - this.#mouseDownY),
       ];
@@ -216,8 +212,6 @@ class RectSelectController extends ElementObject {
     this.#selectHitBox.event.collider.onEndContact = null;
     if (wasDragging) this.#fireRect(0, 0, false);
   }
-
-  onCollideNode(_hitBox: Collider, _node: Collider): void {}
 }
 
 export { RectSelectController };

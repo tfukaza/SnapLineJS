@@ -15,7 +15,7 @@ Related:
 
 This document is a delta from the current implementation and contains only
 work that has not landed. Everything previously specified here — the
-vocabulary and `*Mirror` renames, stable domain identity, the `GraphMirror`
+vocabulary and `*Mirror` renames, stable domain identity, the `GraphRegistry`
 registry, engine scoping, `ConnectorRules`, the controlled line protocol
 (`attachControlledGraph` / `setCanonicalGraph` / `onLineChangeRequest`),
 batching, diagnostics, the `ControlledGraph` adapters, property-propagation
@@ -38,7 +38,7 @@ Two decisions were amended from the original plan (both user-directed):
 2. **Geometry authority modes were dropped.** Position and size are visual
    cues owned by SnapLine; there is no controlled-geometry variant and no
    `onGeometryChangeRequest`. D8 reduced to the consolidation: one batched
-   `onGeometryChanged` observation replaces `onDragCommit` +
+   `onGeometryCommit` observation replaces `onDragCommit` +
    `onResizeCommit`.
 
 ## Status: complete
@@ -47,8 +47,8 @@ The final simplification review has landed: the gesture and record admission
 checks share one structural check plus one predicate check, the settle path's
 redundant eviction block and the reconciler's unused local-topology notify
 forwarding are gone, remaining single-class `_`-prefixed fields moved to `#`
-privates (with `_connectors` documented as the one deliberate cross-class
-field), and an informational perf benchmark
+privates, connector membership is encapsulated behind `NodeMirror`'s internal
+attachment boundary, and an informational perf benchmark
 (`tests/ut/snapline-perf.spec.ts`) guards the reconcile / candidate-discovery
 / bulk-load hot paths. The complete verification matrix — unit suites, all
 six SnapLine e2e suites, package validation, and the docs e2e — passes.

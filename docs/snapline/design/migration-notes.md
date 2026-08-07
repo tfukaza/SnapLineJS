@@ -26,7 +26,7 @@ Position and size stay SnapLine-owned — geometry is a visual cue, observed
 | `ConnectorLinePhase` | `LineMirrorPhase` (adds `"staged"`) |
 | `syncDomGeometry()` | `remeasureDomGeometry()` |
 | `onLinesChanged` | unchanged name; payload is `LineMirror`s |
-| `onDragCommit` + `onResizeCommit` | one batched `onGeometryChanged({ nodes })` |
+| `onDragCommit` + `onResizeCommit` | one batched `onGeometryCommit({ nodes })` |
 | `NodePosition` / `NodeDragCommitEvent` | `NodeGeometry` / `GeometryChangeEvent` |
 | `EdgeId` / `EdgeRecord` / `EdgeLike` / `EdgeEndpoint` | `LineId` / `LineRecord` (stable-id, no endpoint-pair keying) |
 
@@ -53,7 +53,7 @@ The `EdgeSync` component/controller, its `identity()` callback, and
 endpoint-pair edge matching are replaced by the controlled-graph protocol:
 
 ```svelte
-<ControlledGraph {lines} onLineChangeRequest={applyRequest} />
+<ControlledGraph onLineChangeRequest={(r) => (lines = applyLineChange(lines, r))} />
 ```
 
 - `lines: readonly LineRecord[]` — your document's records, each
@@ -69,9 +69,11 @@ endpoint-pair edge matching are replaced by the controlled-graph protocol:
   SnapLine-minted `LineId`; keeping it in the record you add settles the
   dragged line in place (no flicker, same mirror). Substituting your own id
   works but recreates the mirror.
-- Rejection needs no code path: apply nothing and the staged line is
-  discarded on the next pass (the adapter guarantees a post-request push of
-  your latest records).
+- **Return the next list.** `onLineChangeRequest` returns the records that
+  should now be canonical; the bridge adopts them directly, so there is no
+  push to remember. Rejection is `return lines` — the staged line is
+  discarded on the decisive pass. The return type is required, so forgetting
+  to return is a type error rather than a silent rejection.
 - Diagnostics: records the mirror cannot represent (missing endpoints stay
   silently latent; capacity/rule violations) surface through
   `onDiagnosticsChanged` / `query(engine).diagnostics()` — canonical records
@@ -79,8 +81,9 @@ endpoint-pair edge matching are replaced by the controlled-graph protocol:
 
 ## Imperative topology API removal
 
-`connectToConnector()`, `deleteLine()`, `disconnectFromConnector()`,
-`deleteAllLines()`, and `createLine()` are no longer public. Create and
+`connectToConnector()`, `deleteLine()`, `deleteAllLines()`, and `createLine()`
+are no longer public (`disconnectFromConnector()` has been removed
+outright). Create and
 remove lines by changing your records; `canConnect(target, line?)` remains
 as a read-only admission query. A gesture on an engine with no attached
 graph owner warns and discards the preview.
@@ -129,8 +132,24 @@ values from your own document (the same records that drive
 
 ## Geometry
 
-`onGeometryChanged({ nodes: [{ node, x, y, width, height }] })` fires once
+`onGeometryCommit({ nodes: [{ node, x, y, width, height }] })` fires once
 per settled drag (every moved node of a group/multi-select drag in one
 event) or resize (single entry). SnapLine owns live and settled geometry;
 persist the observation if you want it back after a reload — ignoring it
 never reverts the mirror.
+
+## Resize regions
+
+Generated virtual resize hitboxes were removed. Delete `resizable`,
+`resizeHandles`, `resizeHandleThickness`, and `resizeCursors`; also remove
+`onResizeHandleChange`, `DEFAULT_RESIZE_CURSORS`, and
+`DEFAULT_RESIZE_HANDLE_THICKNESS`.
+
+React and Svelte consumers now render one explicit `<ResizeRegion
+handle="...">` for each supported direction. Vanilla consumers create a
+`ResizeRegionMirror`, parented to their `NodeMirror`, and assign its DOM
+element. The region DOM owns its size, position, cursor, hover behavior, and
+visuals. No region means resizing is disabled.
+
+The separate `../lab` repository still contains examples using the removed
+generated-handle API and must migrate independently.

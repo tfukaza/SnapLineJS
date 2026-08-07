@@ -13,7 +13,7 @@ sectionOrder: 2
 <SnapLineDemo mode="selection" />
 
 `Select` starts a rubber-band gesture on unclaimed background space. Selection
-is reflected in `getSelectedNodes(engine)` and on each node through
+is reflected in `query(engine).selection()` and on each node through
 `data-selected`.
 
 SnapLine does not assign meanings to Shift, Control, or any other key. Use
@@ -31,7 +31,9 @@ For a rubber band, `"add"` preserves the baseline selection while adding the
 nodes touched by the rectangle. `"toggle"` inverts touched nodes relative to
 that baseline. Membership in a group never selects a node.
 
-Set `resizable` to enable all eight handles, or pass an exact list:
+Resizing exists only where you render a DOM `ResizeRegion`. Its element is the
+actual hit area, so CSS determines its placement, thickness, cursor, and
+appearance:
 
 ```svelte framework=svelte
 <Node
@@ -39,9 +41,12 @@ Set `resizable` to enable all eight handles, or pass an exact list:
   y={node.y}
   width={node.width}
   height={node.height}
-  resizeHandles={["e", "se", "s"]}
-  onGeometryChanged={(event) => saveGeometry(event)}
-/>
+  onGeometryCommit={(event) => saveGeometry(event)}
+>
+  <ResizeRegion handle="e" class="resize-e" />
+  <ResizeRegion handle="se" class="resize-se" />
+  <ResizeRegion handle="s" class="resize-s" />
+</Node>
 ```
 
 ```tsx framework=react
@@ -50,15 +55,23 @@ Set `resizable` to enable all eight handles, or pass an exact list:
   y={node.y}
   width={node.width}
   height={node.height}
-  resizeHandles={["e", "se", "s"]}
-  onGeometryChanged={saveGeometry}
-/>
+  onGeometryCommit={saveGeometry}
+>
+  <ResizeRegion handle="e" className="resize-e" />
+  <ResizeRegion handle="se" className="resize-se" />
+  <ResizeRegion handle="s" className="resize-s" />
+</Node>
 ```
+
+The component only enforces `pointer-events: auto` and `touch-action: none`.
+It stamps `data-snapline-part="resize-region"` and `data-handle`, but supplies
+no layout or cursor defaults. A region may contain its own visible control, and
+multiple regions may use the same handle direction.
 
 SnapLine owns live and settled geometry — position and size are visual cues
 that never wait for an application render; changed props still resynchronize
 the object deliberately. Persist final values from the batched
-`onGeometryChanged` event: a group or multi-select drag reports every moved
+`onGeometryCommit` event: a group or multi-select drag reports every moved
 node in one event (`{ nodes: [{ node, x, y, width, height }] }`), a resize
 reports a single entry.
 

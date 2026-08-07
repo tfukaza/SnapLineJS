@@ -9,15 +9,13 @@
   import { getContext, onDestroy } from "svelte";
 
   let {
-    lines,
     onLineChangeRequest,
     onDiagnosticsChanged = undefined,
   }: {
-    /** The application-owned canonical line records (stable ids). */
-    lines: readonly LineRecord[];
-    /** One atomic proposal per gesture; accept/normalize/reject by updating
-     * the records — adopting a proposed id settles the line in place. */
-    onLineChangeRequest: (request: LineChangeRequest) => void;
+    /** One atomic proposal per gesture. Return the list that should now be
+     * canonical — adopting a proposed id settles the line in place; returning
+     * the list unchanged rejects. Must be synchronous. */
+    onLineChangeRequest: (request: LineChangeRequest) => readonly LineRecord[];
     onDiagnosticsChanged?: (
       diagnostics: readonly ReconciliationError[],
     ) => void;
@@ -25,20 +23,25 @@
 
   const engine: Engine = getContext("engine");
   const handle = attachControlledGraph(engine, {
-    onLineChangeRequest: (request) => {
-      onLineChangeRequest(request);
-      // Guaranteed post-request push: reads the live prop after the app's
-      // synchronous document update, queued ahead of the decisive
-      // reconciliation pass so acceptance and rejection both resolve
-      // without timing inference.
-      queueMicrotask(() => handle.setCanonicalGraph({ lines }));
-    },
+    onLineChangeRequest: (request) => onLineChangeRequest(request),
     onDiagnosticsChanged: (diagnostics) => onDiagnosticsChanged?.(diagnostics),
   });
 
-  $effect(() => {
+  /**
+   * Push records that no originating request asked for: hydration/load,
+   * undo/redo, or a collaborator's edit. Reach it with `bind:this`.
+   *
+   * Gesture-driven changes need none of this — returning the list from
+   * `onLineChangeRequest` already delivers them.
+   */
+  export function setLines(lines: readonly LineRecord[]): void {
     handle.setCanonicalGraph({ lines });
-  });
+  }
+
+  /** Run any pending reconciliation synchronously (tests, imperative flows). */
+  export function flush(): void {
+    handle.flush();
+  }
 
   onDestroy(() => handle.dispose());
 </script>

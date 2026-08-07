@@ -38,9 +38,11 @@ function tileIn(container: Locator, text: string) {
 }
 
 async function tileTexts(container: Locator) {
-  return container.locator(".tile").evaluateAll((nodes) =>
-    nodes.map((node) => node.textContent?.trim().replace(/\s+/g, " ") ?? ""),
-  );
+  return container
+    .locator(".tile")
+    .evaluateAll((nodes) =>
+      nodes.map((node) => node.textContent?.trim().replace(/\s+/g, " ") ?? ""),
+    );
 }
 
 async function rect(locator: Locator) {
@@ -228,7 +230,9 @@ test.describe("SnapSort Kiokun sentence builder demo", () => {
 
     await answer.getByRole("button", { name: "私" }).click();
     await expect(answer.locator(".tile")).toHaveText(["は"]);
-    await expect(bank.locator(".tile").filter({ hasText: "私" })).toHaveCount(1);
+    await expect(bank.locator(".tile").filter({ hasText: "私" })).toHaveCount(
+      1,
+    );
 
     await expectCleanConsole(
       consoleEntries,
@@ -333,7 +337,9 @@ test.describe("SnapSort Kiokun sentence builder demo", () => {
     });
 
     await expect(answer.locator(".tile")).toHaveText(["は"]);
-    await expect(bank.locator(".tile").filter({ hasText: "私" })).toHaveCount(1);
+    await expect(bank.locator(".tile").filter({ hasText: "私" })).toHaveCount(
+      1,
+    );
     expect(
       samples.some(
         (sample) =>
@@ -400,7 +406,12 @@ test.describe("SnapSort Kiokun sentence builder demo", () => {
     for (const text of ["私", "は", "毎朝", "水"]) {
       await bank.getByRole("button", { name: text }).click();
     }
-    await expect(answer.locator(".tile")).toHaveText(["私", "は", "毎朝", "水"]);
+    await expect(answer.locator(".tile")).toHaveText([
+      "私",
+      "は",
+      "毎朝",
+      "水",
+    ]);
 
     const source = tileIn(answer, "は");
     const target = tileIn(answer, "水");
@@ -408,12 +419,20 @@ test.describe("SnapSort Kiokun sentence builder demo", () => {
       xOffset: -36,
     });
 
-    await writeJson(testInfo.outputPath("same-container-non-last-before-assert.json"), {
-      samples,
-      answerTexts: await tileTexts(answer),
-      bankTexts: await tileTexts(bank),
-    });
-    await expect(answer.locator(".tile")).toHaveText(["私", "毎朝", "は", "水"]);
+    await writeJson(
+      testInfo.outputPath("same-container-non-last-before-assert.json"),
+      {
+        samples,
+        answerTexts: await tileTexts(answer),
+        bankTexts: await tileTexts(bank),
+      },
+    );
+    await expect(answer.locator(".tile")).toHaveText([
+      "私",
+      "毎朝",
+      "は",
+      "水",
+    ]);
     await expectCleanConsole(
       consoleEntries,
       pageErrors,

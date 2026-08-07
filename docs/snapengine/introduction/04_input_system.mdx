@@ -8,8 +8,11 @@ sectionTitle: Introduction
 sectionOrder: 1
 ---
 
-SnapEngine normalizes mouse, touch, wheel, drag, and pinch input into one event model. 
-It also handles common edge cases like a mouse leaving the browser while dragging.
+SnapEngine normalizes pointer, wheel, drag, and pinch input into one event
+model. DOM-backed objects use native pointer capture while SnapEngine retains
+gesture recognition, object routing, and engine-wide fan-out. Capture begins
+when a drag or pinch is recognized so pre-threshold controls retain native
+click targeting.
 
 SnapEgnine objects can all listen to three types of events: pointer event, drag event, and gesture event.
 
@@ -36,7 +39,7 @@ even when the pointer leaves the browser window or the original element.
 
 The engine defines these drag events:
 - dragStart
-- dragMove
+- drag
 - dragEnd
 
 These events provide the same world coordinate positions as pointer events 
@@ -58,9 +61,16 @@ These events provide information about multi-touch gestures like pinches.
 
 ## Global and Local Event
 
-All events listed above can either happen locally (when the pointer is within the bounds of the ElementObject) 
-or globally (triggered for every listener regardless of where the pointer is). 
-BaseObjects can only listen to global events.
+Targeted events begin at the DOM-owning `ElementObject` and bubble through its
+`BaseObject` parents, leaf to root. Engine-wide listeners run afterward.
+`claimPointer()` suppresses the global delivery for an active pointer without
+changing targeted delivery.
+
+An active `dragStart`, `drag`, `pinchStart`, or `pinch` payload exposes
+`handoffTo(objectOrId)`. Drag handoff transfers native capture and logical
+pointer ownership to a connected DOM-backed object. Pinch handoff transfers
+only pinch delivery; each finger retains the capture and pointer/drag owner
+from where it started. Pointer and terminal payloads do not expose handoff.
 
 
 For event names, payload shapes, object-level handlers, global handlers, and gesture examples, see [Input System reference](/docs/snapengine/reference/input_system).

@@ -1,9 +1,4 @@
-export {
-  NodeMirror,
-  DEFAULT_RESIZE_CURSORS,
-  DEFAULT_RESIZE_HANDLE_THICKNESS,
-  RESIZE_HANDLES,
-} from "./node";
+export { NodeMirror, ResizeRegionMirror, RESIZE_HANDLES } from "./node";
 export type {
   NodeConfig,
   NodeCallbacks,
@@ -14,13 +9,13 @@ export type {
   NodeGeometry,
   ResolvedNodeDragPosition,
   NodeResizeEvent,
-  NodeResizeHandleEvent,
   NodeSelectionEvent,
   NodeSelectionModeEvent,
   ResizeHandle,
+  ResolvedNodeConfig,
   SelectionMode,
 } from "./node";
-export { ConnectorMirror, resolveConnectorSourceAtPoint } from "./connector";
+export { ConnectorMirror } from "./connector";
 export type {
   ConnectionLimit,
   ConnectionOrigin,
@@ -47,6 +42,9 @@ export type {
   ConnectorSurfaceHitTestEvent,
   ConnectorSurfaceStrategy,
   DisconnectReason,
+  DragEndOutcome,
+  NewLineEvent,
+  NewLineResolver,
   ResolvedConnectorRules,
   SnapLineMetadata,
 } from "./connector";
@@ -56,7 +54,6 @@ export type {
   LineMirrorPhase,
   LineStateSnapshot,
 } from "./line";
-export type { GeometryWriter } from "./geometry";
 export {
   GroupNodeMirror,
   getParentGroup,
@@ -78,13 +75,7 @@ export type {
   SelectRect,
   SelectStartEvent,
 } from "./select";
-export {
-  getConnectors,
-  getGroupNodes,
-  getNodes,
-  getSelectedNodes,
-  query,
-} from "./query";
+export { query } from "./query";
 export type { GraphQuery } from "./query";
 export { PlacementController } from "./placement";
 export type {
@@ -98,20 +89,21 @@ export type {
   PlacementSize,
   PlacementSnapshot,
 } from "./placement";
-export type {
-  NodeId,
-  ConnectorId,
-  LineId,
-  ReconciliationError,
-  GraphBatch,
-} from "./graph-mirror";
-export { attachControlledGraph } from "./snapline-globals";
+export { applyLineChange, attachControlledGraph } from "./controlled-graph";
+export { getGraphRegistry } from "./internal/shared-data";
 export type {
   CanonicalGraphSnapshot,
+  ConnectorId,
   ControlledGraphCallbacks,
   ControlledGraphHandle,
+  GeometryInvalidationObserver,
+  GeometryWriter,
+  GraphBatch,
   LineChangeRequest,
   LineEndpointUpdate,
+  LineId,
   LineRecord,
+  NodeId,
   ProposedLine,
-} from "./line-reconciler";
+  ReconciliationError,
+} from "./types";

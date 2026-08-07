@@ -1,7 +1,6 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 
-// JS-driven node resize (SnapLine core): a virtual CircleCollider hitbox at the
-// node's bottom-right corner. Pressing+dragging it resizes the node, and every
+// JS-driven node resize starts from developer-rendered DOM regions. Every
 // resize re-glues the node's connector lines (same handling as a move + a size
 // re-measure).
 
@@ -200,6 +199,9 @@ test("a north drag holds the bottom edge with one pointermove per animation fram
     const element = [
       ...document.querySelectorAll<HTMLElement>("[data-snapline-type='node']"),
     ].find((node) => node.textContent?.includes("Resizable A"))!;
+    const region = element.querySelector<HTMLElement>(
+      "[data-snapline-part='resize-region'][data-handle='n']",
+    )!;
     const rect = element.getBoundingClientRect();
     const x = Math.round(rect.left + rect.width / 2);
     const top = Math.round(rect.top + 2);
@@ -218,7 +220,7 @@ test("a north drag holds the bottom edge with one pointermove per animation fram
     });
 
     const send = (type: string, clientY: number) =>
-      element.dispatchEvent(
+      region.dispatchEvent(
         new PointerEvent(type, {
           bubbles: true,
           cancelable: true,
@@ -267,18 +269,15 @@ test("a north drag holds the bottom edge with one pointermove per animation fram
   expect(Math.max(...bottoms) - Math.min(...bottoms)).toBeLessThanOrEqual(2);
 });
 
-test("hovering virtual resize surfaces applies and restores the CSS cursor", async ({
-  page,
-}) => {
+test("resize regions own their native CSS cursor", async ({ page }) => {
   const nodeA = page.locator("[data-snapline-type='node']", {
     hasText: "Resizable A",
   });
-  const box = (await nodeA.boundingBox())!;
-  await page.mouse.move(box.x + box.width - 2, box.y + box.height / 2);
-  await expect(nodeA).toHaveAttribute("data-snapline-resize-handle", "e");
-  await expect(nodeA).toHaveCSS("cursor", "ew-resize");
-
-  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  const east = nodeA.locator(
+    "[data-snapline-part='resize-region'][data-handle='e']",
+  );
+  await east.hover();
+  await expect(east).toHaveCSS("cursor", "ew-resize");
   await expect(nodeA).not.toHaveAttribute("data-snapline-resize-handle");
 });
 
@@ -378,13 +377,13 @@ test("releasing a resize leaves cursor and selection state usable", async ({
   );
   await waitForAnimationFrame(page);
 
-  // Hover recompute still runs after release, so a DIFFERENT handle wins.
+  // Native CSS immediately reflects whichever region is hovered after release.
   const after = (await nodeA.boundingBox())!;
+  const south = nodeA.locator(
+    "[data-snapline-part='resize-region'][data-handle='s']",
+  );
   await page.mouse.move(after.x + after.width / 2, after.y + after.height - 2);
-  await expect(nodeA).toHaveAttribute("data-snapline-resize-handle", "s");
-  await expect(nodeA).toHaveCSS("cursor", "ns-resize");
-  await page.mouse.move(after.x + after.width / 2, after.y + after.height / 2);
-  await expect(nodeA).not.toHaveAttribute("data-snapline-resize-handle");
+  await expect(south).toHaveCSS("cursor", "ns-resize");
 
   // resizingNode was cleared, so onUp no longer bails out of click-selection.
   await nodeB.click();

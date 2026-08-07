@@ -27,6 +27,7 @@ object.event.input.pointerMove = (props) => {
 
 object.event.input.pointerUp = (props) => {
   console.log(props.position.screenX, props.position.screenY);
+  console.log(props.cancelled);
 };
 
 object.event.input.mouseWheel = (props) => {
@@ -60,8 +61,35 @@ object.event.input.drag = (props) => {
 
 object.event.input.dragEnd = (props) => {
   console.log(props.end.x, props.end.y);
+  console.log(props.event.target, props.cancelled);
 };
 ```
+
+### Gesture handoff
+
+Only active derived gestures expose handoff: `dragStart`, `drag`,
+`pinchStart`, and `pinch`. The destination may be a connected
+`ElementObject` or its engine object ID.
+
+```ts
+handle.event.input.dragStart = (props) => {
+  props.handoffTo(draggable);
+};
+```
+
+Drag handoff transfers native pointer capture and changes targeted delivery
+for later drag events. It does not emit cancellation to the previous owner and
+does not turn global subscriptions into owner callbacks. Invalid, destroyed,
+cross-engine, headless, or disconnected destinations throw synchronously.
+Pinch handoff moves only `pinch`/`pinchEnd` delivery; each finger's native
+capture and pointer/drag delivery remain with its origin.
+
+Native capture begins when a drag or pinch is recognized, not on
+`pointerDown`, so nested buttons and other pre-threshold controls retain their
+normal click targeting.
+
+`handoffTo` is intentionally absent from `pointerDown`, `pointerMove`,
+`pointerUp`, `dragEnd`, and `pinchEnd`.
 
 ## Pinch Gestures
 
@@ -72,14 +100,25 @@ object.event.input.pinchStart = (props) => {
 };
 
 object.event.input.pinch = (props) => {
-  const scale = props.distance / props.start.distance;
+  const scale = props.current.distance / props.start.distance;
   console.log(scale);
 };
 
 object.event.input.pinchEnd = (props) => {
   console.log(props.end.pointerList);
+  console.log(props.cancelled);
 };
 ```
+
+## Targeted bubbling and global fan-out
+
+Targeted handlers run on a snapshot of the original owner-to-parent path,
+leaf first. A handler failure is isolated, so later ancestors and global
+listeners still run. There is no propagation-stop API.
+
+Global listeners run after targeted delivery. Claiming a pointer suppresses
+non-terminal global delivery for that gesture; terminal events still fan out
+so already-engaged listeners can clean up.
 
 ## Event Position
 

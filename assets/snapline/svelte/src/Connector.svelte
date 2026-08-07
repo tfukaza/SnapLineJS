@@ -8,7 +8,11 @@
     type SnapLineMetadata,
   } from "@snap-engine/snapline";
   import type { Engine } from "@snap-engine/core";
-  import { getContext, onDestroy } from "svelte";
+  import { getContext, onDestroy, type Snippet } from "svelte";
+
+  type ConnectorAction = (
+    element: HTMLElement | SVGElement,
+  ) => { destroy(): void };
 
   let {
     id = undefined,
@@ -18,7 +22,7 @@
     callbacks = {},
     edgePan = true,
     surfaceStrategies = [],
-    virtual = false,
+    children = undefined,
     colliderRadius = undefined,
     connectorObject = null,
     data = {},
@@ -31,8 +35,8 @@
     callbacks?: ConnectorCallbacks;
     edgePan?: boolean;
     surfaceStrategies?: readonly ConnectorSurfaceStrategy[];
-    /** Keep the logical connector without rendering a visible port element. */
-    virtual?: boolean;
+    /** Custom connector root. Apply the snippet argument with `use:`. */
+    children?: Snippet<[ConnectorAction]>;
     colliderRadius?: number;
     connectorObject?: ConnectorMirror | null;
     data?: Record<string, string>;
@@ -58,11 +62,11 @@
     return connector;
   }
 
-  function bindConnectorElement(element: HTMLDivElement) {
+  function bindConnectorElement(element: HTMLElement | SVGElement) {
     connector.bindElement(element);
     return {
       destroy() {
-        connector.bindElement(null);
+        if (connector.element === element) connector.bindElement(null);
       },
     };
   }
@@ -83,7 +87,9 @@
   });
 </script>
 
-{#if !virtual}
+{#if children}
+  {@render children(bindConnectorElement)}
+{:else}
   <div
     use:bindConnectorElement
     data-snapline-type="connector"

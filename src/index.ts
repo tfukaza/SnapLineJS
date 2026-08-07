@@ -6,7 +6,7 @@ import {
   BaseObject,
   ObjectTransform,
 } from "./object";
-import type { DomProperty } from "./object";
+import type { DomElement, DomProperty } from "./object";
 import { GlobalManager } from "./global";
 import { InputControl, mouseButtonBitmap } from "./input";
 import type {
@@ -21,10 +21,16 @@ import type {
   pinchProp,
   pinchEndProp,
   PinchSnapshot,
+  GestureHandoffControl,
   InputControlConfig,
   eventPosition,
 } from "./input";
-import { getDomProperty, cloneDomProperty, EventProxyFactory } from "./util";
+import {
+  getDomProperty,
+  cloneDomProperty,
+  EventProxyFactory,
+  mergeDefined,
+} from "./util";
 import { Camera } from "./camera";
 import type { CameraConfig } from "./camera";
 
@@ -40,6 +46,7 @@ export {
   getDomProperty,
   cloneDomProperty,
   EventProxyFactory,
+  mergeDefined,
   type pointerDownProp,
   type pointerMoveProp,
   type pointerUpProp,
@@ -51,9 +58,11 @@ export {
   type pinchProp,
   type pinchEndProp,
   type PinchSnapshot,
+  type GestureHandoffControl,
   type InputControlConfig,
   type eventPosition,
   type EdgePanController,
+  type DomElement,
   type DomProperty,
   type CameraConfig,
   mouseButtonBitmap,

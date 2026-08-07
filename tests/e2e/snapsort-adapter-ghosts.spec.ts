@@ -5,7 +5,10 @@ import { expect, test, type Locator, type Page } from "@playwright/test";
 // has migrated to the items+snippet API) — it has no React-adapter
 // equivalent yet, so it only runs under the svelte project.
 test.beforeEach(async ({}, testInfo) => {
-  test.skip(!testInfo.project.name.startsWith("svelte"), "Svelte-adapter-specific ghost ownership marker");
+  test.skip(
+    !testInfo.project.name.startsWith("svelte"),
+    "Svelte-adapter-specific ghost ownership marker",
+  );
 });
 
 async function rect(locator: Locator) {
@@ -19,7 +22,9 @@ function center(box: { x: number; y: number; width: number; height: number }) {
 }
 
 async function demoBoxByHeading(page: Page, heading: string): Promise<Locator> {
-  return page.locator(".demo-cell", { has: page.locator("h2", { hasText: heading }) });
+  return page.locator(".demo-cell", {
+    has: page.locator("h2", { hasText: heading }),
+  });
 }
 
 async function itemByText(container: Locator, text: string): Promise<Locator> {
@@ -66,10 +71,10 @@ test.describe("SnapSort adapter-rendered ghost entries (items mode)", () => {
     await page.mouse.up();
     await page.waitForTimeout(250);
 
-    await expect(column.locator('[data-snapsort-ghost-entry]')).toHaveCount(0);
-    const order = await column.locator(".snapsort-item").evaluateAll((els) =>
-      els.map((el) => el.textContent?.trim()),
-    );
+    await expect(column.locator("[data-snapsort-ghost-entry]")).toHaveCount(0);
+    const order = await column
+      .locator(".snapsort-item")
+      .evaluateAll((els) => els.map((el) => el.textContent?.trim()));
     expect(order).toEqual(["Item 2", "Item 3", "Item 4", "Item 1"]);
   });
 
@@ -105,13 +110,15 @@ test.describe("SnapSort adapter-rendered ghost entries (items mode)", () => {
       const ghostIndices = children
         .map((n, i) => (n.hasAttribute("data-snapsort-ghost-entry") ? i : -1))
         .filter((i) => i !== -1);
-      return ghostIndices.length === 2 && ghostIndices[1] - ghostIndices[0] === 1;
+      return (
+        ghostIndices.length === 2 && ghostIndices[1] - ghostIndices[0] === 1
+      );
     });
     expect(isContiguous).toBe(true);
 
     await page.mouse.up();
     await page.waitForTimeout(250);
-    await expect(column.locator('[data-snapsort-ghost-entry]')).toHaveCount(0);
+    await expect(column.locator("[data-snapsort-ghost-entry]")).toHaveCount(0);
   });
 
   test("cross-container drag never leaves a stale ghost entry in the departed area", async ({
@@ -146,14 +153,16 @@ test.describe("SnapSort adapter-rendered ghost entries (items mode)", () => {
     }
     await page.waitForTimeout(80);
 
-    await expect(area1.locator('[data-snapsort-ghost-entry]')).toHaveCount(0);
-    await expect(area2.locator('[data-snapsort-ghost-entry="flow"]')).toHaveCount(1);
+    await expect(area1.locator("[data-snapsort-ghost-entry]")).toHaveCount(0);
+    await expect(
+      area2.locator('[data-snapsort-ghost-entry="flow"]'),
+    ).toHaveCount(1);
 
     await page.mouse.up();
     await page.waitForTimeout(250);
 
-    await expect(area1.locator('[data-snapsort-ghost-entry]')).toHaveCount(0);
-    await expect(area2.locator('[data-snapsort-ghost-entry]')).toHaveCount(0);
+    await expect(area1.locator("[data-snapsort-ghost-entry]")).toHaveCount(0);
+    await expect(area2.locator("[data-snapsort-ghost-entry]")).toHaveCount(0);
     await expect(area1.locator(".snapsort-item")).toHaveCount(2);
     await expect(area2.locator(".snapsort-item")).toHaveCount(4);
 
@@ -175,8 +184,10 @@ test.describe("SnapSort adapter-rendered ghost entries (items mode)", () => {
     }
     await page.waitForTimeout(80);
 
-    await expect(area2.locator('[data-snapsort-ghost-entry]')).toHaveCount(0);
-    await expect(area1.locator('[data-snapsort-ghost-entry="flow"]')).toHaveCount(1);
+    await expect(area2.locator("[data-snapsort-ghost-entry]")).toHaveCount(0);
+    await expect(
+      area1.locator('[data-snapsort-ghost-entry="flow"]'),
+    ).toHaveCount(1);
 
     await page.mouse.up();
     await page.waitForTimeout(250);

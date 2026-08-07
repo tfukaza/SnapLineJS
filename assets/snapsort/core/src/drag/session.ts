@@ -1,5 +1,9 @@
 import type { AnimationObject } from "@snap-engine/core/animation";
-import type { dragStartProp, dragProp } from "@snap-engine/core";
+import type {
+  GestureHandoffControl,
+  dragStartProp,
+  dragProp,
+} from "@snap-engine/core";
 import type { Container } from "../container";
 import type { Item } from "../item";
 import {
@@ -55,8 +59,9 @@ function reportDragSessionError(error: unknown): void {
  */
 export class DragSession {
   readonly root: Container;
-  /** Pointer id driving this drag (from `dragStartProp`). Needed to transfer pointer ownership on `handoff`. */
+  /** Pointer id driving this drag (from `dragStartProp`). */
   readonly pointerId: number;
+  readonly #handoffTo: GestureHandoffControl["handoffTo"];
   /**
    * The items being dragged. Stable for the whole gesture EXCEPT across a
    * `handoff` (copy), which replaces the originals with freshly-created clone
@@ -162,6 +167,7 @@ export class DragSession {
     this.itemSet = new Set(items);
     this.strategy = strategy;
     this.pointerId = prop.pointerId;
+    this.#handoffTo = prop.handoffTo;
     this.start = { x: prop.start.x, y: prop.start.y };
     this.pointer = { x: prop.start.x, y: prop.start.y };
   }
@@ -187,6 +193,7 @@ export class DragSession {
     }
     const origins = this.items;
     const pressedIndex = origins.indexOf(this.pressedItem);
+    const nextPressedItem = clones[pressedIndex === -1 ? 0 : pressedIndex];
 
     // Each clone reuses its original's frozen drag snapshot for geometry — the
     // clone visually replaces the original at the pointer, so "as if dragging
@@ -195,16 +202,13 @@ export class DragSession {
       clone.adoptDragSnapshotFrom(origins[i]);
     });
 
+    // Transfer input first. A rejected destination leaves this session owned
+    // by the originals instead of exposing a half-switched copy lifecycle.
+    this.#handoffTo(nextPressedItem);
     this.handoffOrigins = origins;
     this.items = clones;
     this.itemSet = new Set(clones);
-    this.pressedItem = clones[pressedIndex === -1 ? 0 : pressedIndex];
-
-    // Retarget the input pointer so drag/dragEnd now dispatch to the clone.
-    this.root.engine.input.setPointerDragOwner(
-      this.pointerId,
-      this.pressedItem,
-    );
+    this.pressedItem = nextPressedItem;
   }
 
   /** The run head — lowest original index, first element of `items`. Used as the singular `item` in backwards-compatible event fields. */
@@ -254,6 +258,7 @@ export class DragSession {
 
     item.schedule(
       () => {
+        if (this.#isEnded()) return;
         this.pointer = { x: prop.start.x, y: prop.start.y };
         this.start = { x: prop.start.x, y: prop.start.y };
         this.offset = {
@@ -269,6 +274,7 @@ export class DragSession {
 
     item.schedule(
       async () => {
+        if (this.#isEnded()) return;
         const primary = this.primaryItem;
         let vetoed = false;
         try {
@@ -348,9 +354,18 @@ export class DragSession {
 
   #cancelAfterError(error: unknown): void {
     reportDragSessionError(error);
+    this.cancel();
+  }
+
+  /** @internal Unwinds an input-cancelled drag without committing a drop. */
+  cancel(): void {
     if (this.status === "dropping" || this.status === "ended") return;
 
     this.cancelled = true;
+    if (this.status === "pending") {
+      this.#clearSessionState();
+      return;
+    }
     this.status = "dropping";
     this.dragTransformSyncAnimation?.cancel();
     this.dragTransformSyncAnimation = null;
@@ -491,9 +506,7 @@ export class DragSession {
         this.dropTarget = null;
         await lifecycle.removeGhost(this, "target");
         this.#invalidateVisualGeometry(
-          previousGhostLocation
-            ? [previousGhostLocation.container]
-            : [],
+          previousGhostLocation ? [previousGhostLocation.container] : [],
           "ghost",
         );
         this.fireDropTargetChange(previousGhostLocation, null);

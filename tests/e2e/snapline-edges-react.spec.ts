@@ -22,7 +22,9 @@ async function dragFromTo(
 function connectorOf(page: Page, nodeTitle: string, port: "input" | "output") {
   return page
     .locator("[data-snapline-type='node']")
-    .filter({ has: page.getByRole("heading", { name: nodeTitle, exact: true }) })
+    .filter({
+      has: page.getByRole("heading", { name: nodeTitle, exact: true }),
+    })
     .locator(`[data-snapline-name='${port}']`);
 }
 
@@ -31,7 +33,9 @@ test.beforeEach(async ({ page }) => {
   await expect(connectorOf(page, "Node A", "output")).toBeVisible();
 });
 
-test("react: gesture connect emits one intent and the line survives sync", async ({ page }) => {
+test("react: gesture connect emits one intent and the line survives sync", async ({
+  page,
+}) => {
   await dragFromTo(
     page,
     await centerOf(connectorOf(page, "Node A", "output")),
@@ -42,7 +46,9 @@ test("react: gesture connect emits one intent and the line survives sync", async
   await expect(page.locator(LINE)).toHaveCount(1);
 });
 
-test("react: programmatic edge add renders a line with zero intents", async ({ page }) => {
+test("react: programmatic edge add renders a line with zero intents", async ({
+  page,
+}) => {
   await page.getByTestId("add-edge").click();
   await expect(page.locator(LINE)).toHaveCount(1);
   await expect(page.getByTestId("connect-intents")).toHaveText("0");

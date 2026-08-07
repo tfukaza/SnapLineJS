@@ -1,30 +1,28 @@
 <script lang="ts">
-    import { NodeMirror, LineMirror, DEFAULT_RESIZE_HANDLE_THICKNESS, type NodeCallbacks, type GeometryChangeEvent, type NodeResizeEvent, type ResizeHandle, type SnapLineMetadata } from "@snap-engine/snapline";
+    import { NodeMirror, LineMirror, type NodeCallbacks, type GeometryChangeEvent, type NodeResizeEvent, type SnapLineMetadata } from "@snap-engine/snapline";
     import type { Engine } from "@snap-engine/core";
     import Line from "./Line.svelte";
     import { onMount, setContext, getContext, onDestroy, tick, untrack } from "svelte";
     import type { HTMLAttributes } from "svelte/elements";
     import { blur } from "svelte/transition";
+    import { resizeRegionOwnerContext } from "./resize-region-context";
 
     let {
         id = undefined,
         className = "",
         LineSvelteComponent = Line,
+        resolveLineComponent = undefined,
         nodeObject = null,
         x = 0,
         y = 0,
         width = undefined,
         height = undefined,
-        resizable = false,
         minWidth = undefined,
         minHeight = undefined,
-        resizeHandleThickness = undefined,
-        resizeHandles = undefined,
-        resizeCursors = undefined,
         metadata = {},
         callbacks = {},
         edgePan = true,
-        onGeometryChanged = undefined,
+        onGeometryCommit = undefined,
         onSizeChange = undefined,
         elementProps = {},
         children,
@@ -32,22 +30,32 @@
         /** Stable domain identity; minted when omitted (supply for persistence). */
         id?: string;
         className?: string;
+        /** One renderer for every line leaving this node. */
         LineSvelteComponent?: typeof Line;
+        /**
+         * Picks a renderer per line, so a data edge and a control edge leaving
+         * the same node can look different. Falls back to
+         * `LineSvelteComponent` when it returns nothing.
+         *
+         * Resolved at render time, not at line creation: hydration never runs
+         * the creation callback (a reloaded graph builds its lines through the
+         * reconciler), so resolving from the line is what makes a line you just
+         * drew and the same line after a refresh render identically. Branch on
+         * serializable data you put in the payload — never store a component
+         * reference in a record.
+         */
+        resolveLineComponent?: (line: LineMirror) => typeof Line | null | undefined;
         nodeObject?: NodeMirror | null;
         x?: number;
         y?: number;
         width?: number;
         height?: number;
-        resizable?: boolean;
         minWidth?: number;
         minHeight?: number;
-        resizeHandleThickness?: number;
-        resizeHandles?: true | readonly ResizeHandle[];
-        resizeCursors?: Partial<Record<ResizeHandle, string>>;
         metadata?: SnapLineMetadata;
         callbacks?: NodeCallbacks;
         edgePan?: boolean;
-        onGeometryChanged?: (event: GeometryChangeEvent) => void;
+        onGeometryCommit?: (event: GeometryChangeEvent) => void;
         onSizeChange?: (event: NodeResizeEvent) => void;
         /** Framework-native attributes and events for the outer node element. */
         elementProps?: HTMLAttributes<HTMLDivElement>;
@@ -57,7 +65,7 @@
     let engine: Engine = getContext("engine");
     const ownsNode = nodeObject == null;
     if (!nodeObject) {
-         nodeObject = new NodeMirror(engine, null, { id, resizable, minWidth, minHeight, resizeHandleThickness, resizeHandles, resizeCursors, metadata, callbacks: {}, edgePan });
+         nodeObject = new NodeMirror(engine, null, { id, minWidth, minHeight, metadata, callbacks: {}, edgePan });
     }
     let lineList: LineMirror[] = $state(nodeObject.getAllOutgoingLines());
 
@@ -77,6 +85,7 @@
     }
 
     setContext("nodeObject", nodeObject);
+    setContext(resizeRegionOwnerContext, nodeObject);
 
     onMount(() => {
         mounted = true;
@@ -102,16 +111,18 @@
             callbacks.resolveSelectionMode?.(event) ??
             originalCallbacks.resolveSelectionMode?.(event) ??
             "replace";
+        nodeObject.callbacks.resolveNewLine = (event) => {
+            const resolver = callbacks.resolveNewLine ?? originalCallbacks.resolveNewLine;
+            return resolver?.(event);
+        };
         nodeObject.callbacks.onDragStart = (event) =>
             invoke(event, originalCallbacks.onDragStart, callbacks.onDragStart);
         nodeObject.callbacks.onDrag = (event) =>
             invoke(event, originalCallbacks.onDrag, callbacks.onDrag);
         nodeObject.callbacks.onSelectionChange = (event) =>
             invoke(event, originalCallbacks.onSelectionChange, callbacks.onSelectionChange);
-        nodeObject.callbacks.onResizeHandleChange = (event) =>
-            invoke(event, originalCallbacks.onResizeHandleChange, callbacks.onResizeHandleChange);
-        nodeObject.callbacks.onGeometryChanged = (event) =>
-            invoke(event, originalCallbacks.onGeometryChanged, callbacks.onGeometryChanged, onGeometryChanged);
+        nodeObject.callbacks.onGeometryCommit = (event) =>
+            invoke(event, originalCallbacks.onGeometryCommit, callbacks.onGeometryCommit, onGeometryCommit);
         nodeObject.callbacks.onSizeChange = (event) => {
             invoke(event, originalCallbacks.onSizeChange, callbacks.onSizeChange, onSizeChange);
         };
@@ -130,11 +141,11 @@
         nodeObject.callbacks.canStartDrag = originalCallbacks.canStartDrag;
         nodeObject.callbacks.resolveDragPosition = originalCallbacks.resolveDragPosition;
         nodeObject.callbacks.resolveSelectionMode = originalCallbacks.resolveSelectionMode;
+        nodeObject.callbacks.resolveNewLine = originalCallbacks.resolveNewLine;
         nodeObject.callbacks.onDragStart = originalCallbacks.onDragStart;
         nodeObject.callbacks.onDrag = originalCallbacks.onDrag;
-        nodeObject.callbacks.onGeometryChanged = originalCallbacks.onGeometryChanged;
+        nodeObject.callbacks.onGeometryCommit = originalCallbacks.onGeometryCommit;
         nodeObject.callbacks.onSelectionChange = originalCallbacks.onSelectionChange;
-        nodeObject.callbacks.onResizeHandleChange = originalCallbacks.onResizeHandleChange;
         nodeObject.callbacks.onLinesChanged = originalCallbacks.onLinesChanged;
         nodeObject.callbacks.onSizeChange = originalCallbacks.onSizeChange;
         if (ownsNode) {
@@ -180,7 +191,8 @@
 
 
 {#each lineList as line (line.lineId)}
-    <LineSvelteComponent {line} />
+    {@const LineFor = resolveLineComponent?.(line) ?? LineSvelteComponent}
+    <LineFor {line} />
 {/each}
 <div
     {...elementProps}
@@ -193,47 +205,4 @@
     transition:blur|global={{duration: 200}}
 >
     {@render children()}
-    {#each nodeObject.resizeHandles as handle}
-        <div
-            class="snapline-node-resize"
-            data-snapline-part="node-resize"
-            data-handle={handle}
-            style:--snapline-resize-thickness={`${resizeHandleThickness ?? DEFAULT_RESIZE_HANDLE_THICKNESS}px`}
-        ></div>
-    {/each}
 </div>
-
-
-<style>
-    .snapline-node-resize {
-        position: absolute;
-        pointer-events: none;
-    }
-    .snapline-node-resize[data-handle="n"],
-    .snapline-node-resize[data-handle="s"] {
-        right: var(--snapline-resize-thickness);
-        left: var(--snapline-resize-thickness);
-        height: var(--snapline-resize-thickness);
-    }
-    .snapline-node-resize[data-handle="e"],
-    .snapline-node-resize[data-handle="w"] {
-        top: var(--snapline-resize-thickness);
-        bottom: var(--snapline-resize-thickness);
-        width: var(--snapline-resize-thickness);
-    }
-    .snapline-node-resize[data-handle="n"],
-    .snapline-node-resize[data-handle^="n"] { top: calc(var(--snapline-resize-thickness) / -2); }
-    .snapline-node-resize[data-handle="s"],
-    .snapline-node-resize[data-handle^="s"] { bottom: calc(var(--snapline-resize-thickness) / -2); }
-    .snapline-node-resize[data-handle="e"],
-    .snapline-node-resize[data-handle$="e"] { right: calc(var(--snapline-resize-thickness) / -2); }
-    .snapline-node-resize[data-handle="w"],
-    .snapline-node-resize[data-handle$="w"] { left: calc(var(--snapline-resize-thickness) / -2); }
-    .snapline-node-resize[data-handle="ne"],
-    .snapline-node-resize[data-handle="se"],
-    .snapline-node-resize[data-handle="sw"],
-    .snapline-node-resize[data-handle="nw"] {
-        width: var(--snapline-resize-thickness);
-        height: var(--snapline-resize-thickness);
-    }
-</style>

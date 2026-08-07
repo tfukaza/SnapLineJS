@@ -1,32 +1,53 @@
 import { expect, test } from "@playwright/test";
 
-test("framework selector shows only its matching install code block", async ({ page }) => {
-  const response = await page.goto("/docs/snapsort/introduction/01_setup?framework=svelte");
+test("framework selector shows only its matching install code block", async ({
+  page,
+}) => {
+  const response = await page.goto(
+    "/docs/snapsort/introduction/01_setup?framework=svelte",
+  );
   expect(response?.status()).toBe(200);
   await page.waitForFunction(
     () => localStorage.getItem("preferredCodeFramework") === "svelte",
   );
 
-  const visibleInstallBlocks = page.locator(".framework-code-block:visible").filter({
-    hasText: "npm install",
-  });
+  const visibleInstallBlocks = page
+    .locator(".framework-code-block:visible")
+    .filter({
+      hasText: "npm install",
+    });
 
   await expect(visibleInstallBlocks).toHaveCount(1);
-  await expect(visibleInstallBlocks).toContainText("@snap-engine/snapsort-svelte");
-  await expect(visibleInstallBlocks).not.toContainText("@snap-engine/snapsort-react");
+  await expect(visibleInstallBlocks).toContainText(
+    "@snap-engine/snapsort-svelte",
+  );
+  await expect(visibleInstallBlocks).not.toContainText(
+    "@snap-engine/snapsort-react",
+  );
 
   await page.locator("#desktop-doc-framework").selectOption("react");
 
-  await expect(page.locator(".doc-article")).toHaveAttribute("data-framework", "react");
+  await expect(page.locator(".doc-article")).toHaveAttribute(
+    "data-framework",
+    "react",
+  );
   await expect(visibleInstallBlocks).toHaveCount(1);
-  await expect(visibleInstallBlocks).toContainText("@snap-engine/snapsort-react");
-  await expect(visibleInstallBlocks).not.toContainText("@snap-engine/snapsort-svelte");
+  await expect(visibleInstallBlocks).toContainText(
+    "@snap-engine/snapsort-react",
+  );
+  await expect(visibleInstallBlocks).not.toContainText(
+    "@snap-engine/snapsort-svelte",
+  );
 });
 
-test("coding-agent resource links bypass client-side routing", async ({ page }) => {
+test("coding-agent resource links bypass client-side routing", async ({
+  page,
+}) => {
   await page.goto("/docs/snapsort/introduction");
 
-  const markdownLink = page.getByRole("link", { name: "this page as Markdown" });
+  const markdownLink = page.getByRole("link", {
+    name: "this page as Markdown",
+  });
   await expect(markdownLink).toHaveAttribute("data-sveltekit-reload", "");
   const markdownResponsePromise = page.waitForResponse((response) =>
     response.url().endsWith("/docs/snapsort/introduction.md"),
@@ -57,7 +78,7 @@ test("raw Markdown selects one framework without damaging fenced code", async ({
 
   const svelteMarkdown = await svelteResponse.text();
   expect(svelteMarkdown).toContain("# Setup");
-  expect(svelteMarkdown).toContain("```svelte\n<script lang=\"ts\">");
+  expect(svelteMarkdown).toContain('```svelte\n<script lang="ts">');
   expect(svelteMarkdown).toContain("@snap-engine/snapsort-svelte");
   expect(svelteMarkdown).not.toContain("@snap-engine/snapsort-react");
   expect(svelteMarkdown).not.toContain("framework=Svelte");
@@ -123,7 +144,9 @@ test("raw Markdown switches paired reference pages and cleans interactive MDX", 
   expect(interactiveMarkdown).not.toContain("<script>");
 });
 
-test("raw Markdown validates routes and framework values", async ({ request }) => {
+test("raw Markdown validates routes and framework values", async ({
+  request,
+}) => {
   const indexResponse = await request.get("/docs/snapsort/introduction.md");
   expect(indexResponse.status()).toBe(200);
   expect(await indexResponse.text()).toContain("# What is SnapSort?");
@@ -262,9 +285,7 @@ test("SnapLine docs expose framework switching, live demos, Markdown, and llms i
 
   await page.goto("/docs/snapline/guides/03_groups");
   await expect(page.locator(".snapline-demo")).toBeVisible();
-  await expect(
-    page.locator("[data-snapline-type='group']"),
-  ).toHaveCount(2);
+  await expect(page.locator("[data-snapline-type='group']")).toHaveCount(2);
   await expect(page.getByText("Outer group", { exact: true })).toBeVisible();
 
   const markdown = await request.get(

@@ -22,7 +22,9 @@ async function dragFromTo(
 function connectorOf(page: Page, nodeTitle: string, port: "input" | "output") {
   return page
     .locator("[data-snapline-type='node']")
-    .filter({ has: page.getByRole("heading", { name: nodeTitle, exact: true }) })
+    .filter({
+      has: page.getByRole("heading", { name: nodeTitle, exact: true }),
+    })
     .locator(`[data-snapline-name='${port}']`);
 }
 
@@ -42,7 +44,9 @@ test.beforeEach(async ({ page }) => {
   await expect(connectorOf(page, "Node A", "output")).toBeVisible();
 });
 
-test("gesture connect emits one intent and the accepted line survives sync", async ({ page }) => {
+test("gesture connect emits one intent and the accepted line survives sync", async ({
+  page,
+}) => {
   await dragFromTo(
     page,
     await centerOf(connectorOf(page, "Node A", "output")),
@@ -52,12 +56,17 @@ test("gesture connect emits one intent and the accepted line survives sync", asy
   await expect(page.getByTestId("edge-count")).toHaveText("1");
   await expect(page.locator(LINE)).toHaveCount(1);
   // Two frames later the reconciled line is still the doc's line.
-  await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
+  await page.evaluate(
+    () =>
+      new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))),
+  );
   await expect(page.locator(LINE)).toHaveCount(1);
   expect((await counts(page)).disconnect).toBe(0);
 });
 
-test("gesture disconnect emits one intent and the doc drops the edge", async ({ page }) => {
+test("gesture disconnect emits one intent and the doc drops the edge", async ({
+  page,
+}) => {
   await dragFromTo(
     page,
     await centerOf(connectorOf(page, "Node A", "output")),
@@ -65,17 +74,18 @@ test("gesture disconnect emits one intent and the doc drops the edge", async ({ 
   );
   await expect(page.getByTestId("edge-count")).toHaveText("1");
   // Pick the line up from the occupied input and drop it on empty canvas.
-  await dragFromTo(
-    page,
-    await centerOf(connectorOf(page, "Node B", "input")),
-    { x: 900, y: 700 },
-  );
+  await dragFromTo(page, await centerOf(connectorOf(page, "Node B", "input")), {
+    x: 900,
+    y: 700,
+  });
   await expect(page.getByTestId("disconnect-intents")).toHaveText("1");
   await expect(page.getByTestId("edge-count")).toHaveText("0");
   await expect(page.locator(LINE)).toHaveCount(0);
 });
 
-test("programmatic edge add and remove sync lines with zero intents", async ({ page }) => {
+test("programmatic edge add and remove sync lines with zero intents", async ({
+  page,
+}) => {
   await page.getByTestId("add-edge").click();
   await expect(page.locator(LINE)).toHaveCount(1);
   await page.getByTestId("remove-edge").click();
@@ -85,7 +95,9 @@ test("programmatic edge add and remove sync lines with zero intents", async ({ p
   expect(result.disconnect).toBe(0);
 });
 
-test("full input replaces via ONE atomic request the document applies", async ({ page }) => {
+test("full input replaces via ONE atomic request the document applies", async ({
+  page,
+}) => {
   await dragFromTo(
     page,
     await centerOf(connectorOf(page, "Node A", "output")),
@@ -103,15 +115,21 @@ test("full input replaces via ONE atomic request the document applies", async ({
   expect(log).toBe("connect:a->b|replace:-a->b+c->b");
 });
 
-test("rejected gesture connect leaves no line after re-sync and no paint flicker on accept", async ({ page }) => {
+test("rejected gesture connect leaves no line after re-sync and no paint flicker on accept", async ({
+  page,
+}) => {
   // Arm a per-frame observer that records the line count on every rAF.
   await page.evaluate(() => {
-    const win = window as unknown as { __lineCounts?: number[]; __stop?: boolean };
+    const win = window as unknown as {
+      __lineCounts?: number[];
+      __stop?: boolean;
+    };
     win.__lineCounts = [];
     const tick = () => {
       if (win.__stop) return;
       win.__lineCounts!.push(
-        document.querySelectorAll("[data-snapline-type='connector-line']").length,
+        document.querySelectorAll("[data-snapline-type='connector-line']")
+          .length,
       );
       requestAnimationFrame(tick);
     };
@@ -146,7 +164,9 @@ test("rejected gesture connect leaves no line after re-sync and no paint flicker
   await expect(page.locator(LINE)).toHaveCount(1);
 });
 
-test("node unmount emits zero intents and clears its lines", async ({ page }) => {
+test("node unmount emits zero intents and clears its lines", async ({
+  page,
+}) => {
   await page.getByTestId("add-edge").click(); // programmatic A->C
   await expect(page.locator(LINE)).toHaveCount(1);
   await page.getByTestId("show-node-c").click();
@@ -160,7 +180,9 @@ test("node unmount emits zero intents and clears its lines", async ({ page }) =>
   await expect(page.locator(LINE)).toHaveCount(1);
 });
 
-test("doc changes mid-drag do not destroy the in-flight drag line", async ({ page }) => {
+test("doc changes mid-drag do not destroy the in-flight drag line", async ({
+  page,
+}) => {
   const from = await centerOf(connectorOf(page, "Node A", "output"));
   await page.mouse.move(from.x, from.y);
   await page.mouse.down();

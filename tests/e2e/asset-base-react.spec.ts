@@ -27,9 +27,9 @@ test("shares contexts, exposes refs, and survives Strict Mode remounts", async (
   );
 
   await page.getByTestId("toggle-debug").click();
-  await expect(page.getByTestId("asset-base-engine").locator("canvas")).toHaveCount(
-    1,
-  );
+  await expect(
+    page.getByTestId("asset-base-engine").locator("canvas"),
+  ).toHaveCount(1);
 
   await page.getByTestId("toggle-engine").click();
   await expect(page.getByTestId("asset-base-engine")).toHaveCount(0);

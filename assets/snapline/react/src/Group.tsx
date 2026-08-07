@@ -7,18 +7,16 @@ import {
   type ReactNode,
 } from "react";
 import {
-  DEFAULT_RESIZE_HANDLE_THICKNESS,
   GroupNodeMirror,
   type GroupCallbacks,
   type GroupContainEvent,
   type GroupMembershipEvent,
   type NodeCallbacks,
   type GeometryChangeEvent,
-  type NodeResizeEvent,
-  type ResizeHandle,
   type SnapLineMetadata,
 } from "@snap-engine/snapline";
 import { useSnapLineEngine } from "./Engine";
+import { NodeMirrorContext } from "./Node";
 
 export interface GroupProps {
   /** Stable domain identity; minted when omitted (supply for persistence). */
@@ -36,16 +34,13 @@ export interface GroupProps {
   height?: number;
   minWidth?: number;
   minHeight?: number;
-  resizeHandleThickness?: number;
-  resizeHandles?: true | readonly ResizeHandle[];
-  resizeCursors?: Partial<Record<ResizeHandle, string>>;
   metadata?: SnapLineMetadata;
   callbacks?: NodeCallbacks;
   groupCallbacks?: GroupCallbacks;
   canContain?: (event: GroupContainEvent) => boolean;
   edgePan?: boolean;
   onMembershipChange?: (event: GroupMembershipEvent) => void;
-  onGeometryChanged?: (event: GeometryChangeEvent) => void;
+  onGeometryCommit?: (event: GeometryChangeEvent) => void;
 }
 
 export const Group = forwardRef<GroupNodeMirror, GroupProps>(function Group(
@@ -63,16 +58,13 @@ export const Group = forwardRef<GroupNodeMirror, GroupProps>(function Group(
     height = 300,
     minWidth,
     minHeight,
-    resizeHandleThickness,
-    resizeHandles,
-    resizeCursors,
     metadata = {},
     callbacks = {},
     groupCallbacks = {},
     canContain,
     edgePan = true,
     onMembershipChange,
-    onGeometryChanged,
+    onGeometryCommit,
   },
   ref,
 ) {
@@ -88,9 +80,6 @@ export const Group = forwardRef<GroupNodeMirror, GroupProps>(function Group(
       height,
       minWidth,
       minHeight,
-      resizeHandleThickness,
-      resizeHandles,
-      resizeCursors,
       metadata,
       callbacks: {},
       groupCallbacks: {},
@@ -108,13 +97,13 @@ export const Group = forwardRef<GroupNodeMirror, GroupProps>(function Group(
     callbacks,
     groupCallbacks,
     onMembershipChange,
-    onGeometryChanged,
+    onGeometryCommit,
   });
   latestRef.current = {
     callbacks,
     groupCallbacks,
     onMembershipChange,
-    onGeometryChanged,
+    onGeometryCommit,
   };
 
   useImperativeHandle(ref, () => group, [group]);
@@ -154,6 +143,12 @@ export const Group = forwardRef<GroupNodeMirror, GroupProps>(function Group(
       latestRef.current.callbacks.resolveSelectionMode?.(event) ??
       originalCallbacks.resolveSelectionMode?.(event) ??
       "replace";
+    group.callbacks.resolveNewLine = (event) => {
+      const resolver =
+        latestRef.current.callbacks.resolveNewLine ??
+        originalCallbacks.resolveNewLine;
+      return resolver?.(event);
+    };
     group.callbacks.onDragStart = (event) =>
       invoke(
         event,
@@ -172,12 +167,6 @@ export const Group = forwardRef<GroupNodeMirror, GroupProps>(function Group(
         originalCallbacks.onSelectionChange,
         latestRef.current.callbacks.onSelectionChange,
       );
-    group.callbacks.onResizeHandleChange = (event) =>
-      invoke(
-        event,
-        originalCallbacks.onResizeHandleChange,
-        latestRef.current.callbacks.onResizeHandleChange,
-      );
     group.groupCallbacks.onMembershipChange = (event) =>
       invoke(
         event,
@@ -185,12 +174,12 @@ export const Group = forwardRef<GroupNodeMirror, GroupProps>(function Group(
         latestRef.current.groupCallbacks.onMembershipChange,
         latestRef.current.onMembershipChange,
       );
-    group.callbacks.onGeometryChanged = (event) =>
+    group.callbacks.onGeometryCommit = (event) =>
       invoke(
         event,
-        originalCallbacks.onGeometryChanged,
-        latestRef.current.callbacks.onGeometryChanged,
-        latestRef.current.onGeometryChanged,
+        originalCallbacks.onGeometryCommit,
+        latestRef.current.callbacks.onGeometryCommit,
+        latestRef.current.onGeometryCommit,
       );
     group.callbacks.onSizeChange = (event) => {
       invoke(
@@ -216,12 +205,11 @@ export const Group = forwardRef<GroupNodeMirror, GroupProps>(function Group(
       group.callbacks.canStartDrag = originalCallbacks.canStartDrag;
       group.callbacks.resolveSelectionMode =
         originalCallbacks.resolveSelectionMode;
+      group.callbacks.resolveNewLine = originalCallbacks.resolveNewLine;
       group.callbacks.onDragStart = originalCallbacks.onDragStart;
       group.callbacks.onDrag = originalCallbacks.onDrag;
-      group.callbacks.onGeometryChanged = originalCallbacks.onGeometryChanged;
+      group.callbacks.onGeometryCommit = originalCallbacks.onGeometryCommit;
       group.callbacks.onSelectionChange = originalCallbacks.onSelectionChange;
-      group.callbacks.onResizeHandleChange =
-        originalCallbacks.onResizeHandleChange;
       group.callbacks.onSizeChange = originalCallbacks.onSizeChange;
       group.groupCallbacks.onMembershipChange =
         originalGroupCallbacks.onMembershipChange;
@@ -243,55 +231,32 @@ export const Group = forwardRef<GroupNodeMirror, GroupProps>(function Group(
     group.scheduleGeometryWrite();
   }, [group, x, y, width, height]);
 
-  const handleSize = resizeHandleThickness ?? DEFAULT_RESIZE_HANDLE_THICKNESS;
   return (
-    <div
-      ref={boxDomRef}
-      data-snapline-type="group"
-      className={`snapline-group ${className}`}
-      style={{
-        position: "absolute",
-        transformOrigin: "top left",
-        willChange: "transform",
-        boxSizing: "border-box",
-        pointerEvents: "none",
-        width: `${initialSize.width}px`,
-        height: `${initialSize.height}px`,
-        ...style,
-      }}
-    >
-      <header
-        ref={headerRef}
-        data-snapline-part="group-header"
-        style={{ pointerEvents: "auto", cursor: "grab" }}
+    <NodeMirrorContext.Provider value={group}>
+      <div
+        ref={boxDomRef}
+        data-snapline-type="group"
+        className={`snapline-group ${className}`}
+        style={{
+          position: "absolute",
+          transformOrigin: "top left",
+          willChange: "transform",
+          boxSizing: "border-box",
+          pointerEvents: "none",
+          width: `${initialSize.width}px`,
+          height: `${initialSize.height}px`,
+          ...style,
+        }}
       >
-        {headerContent ?? <span>{title}</span>}
-      </header>
-      <div style={{ pointerEvents: "none" }}>{children}</div>
-      {group.resizeHandles.map((handle) => (
-        <div
-          key={handle}
-          data-snapline-part="group-resize"
-          data-handle={handle}
-          style={{
-            position: "absolute",
-            pointerEvents: "none",
-            ...(handle === "n" || handle === "s"
-              ? { left: handleSize, right: handleSize, height: handleSize }
-              : null),
-            ...(handle === "e" || handle === "w"
-              ? { top: handleSize, bottom: handleSize, width: handleSize }
-              : null),
-            ...(handle.length === 2
-              ? { width: handleSize, height: handleSize }
-              : null),
-            ...(handle.startsWith("n") ? { top: -handleSize / 2 } : null),
-            ...(handle.startsWith("s") ? { bottom: -handleSize / 2 } : null),
-            ...(handle.endsWith("e") ? { right: -handleSize / 2 } : null),
-            ...(handle.endsWith("w") ? { left: -handleSize / 2 } : null),
-          }}
-        />
-      ))}
-    </div>
+        <header
+          ref={headerRef}
+          data-snapline-part="group-header"
+          style={{ pointerEvents: "auto", cursor: "grab" }}
+        >
+          {headerContent ?? <span>{title}</span>}
+        </header>
+        <div style={{ pointerEvents: "none" }}>{children}</div>
+      </div>
+    </NodeMirrorContext.Provider>
   );
 });

@@ -96,10 +96,14 @@ test.describe("SnapSort gallery — new drag primitives", () => {
 
       // The palette template is never consumed — copy leaves the source alone.
       await expect(palette.locator(".snapsort-item")).toHaveCount(4);
-      await expect(palette.locator(".snapsort-item").filter({ hasText: "Button" })).toHaveCount(1);
+      await expect(
+        palette.locator(".snapsort-item").filter({ hasText: "Button" }),
+      ).toHaveCount(1);
       // The canvas gained one cloned block.
       await expect(canvas.locator(".clone-canvas-block")).toHaveCount(1);
-      await expect(canvas.locator(".clone-canvas-block")).toContainText("Button");
+      await expect(canvas.locator(".clone-canvas-block")).toContainText(
+        "Button",
+      );
 
       // Dragging a second, different block clones onto the canvas too.
       const imageTemplate = palette
@@ -114,7 +118,9 @@ test.describe("SnapSort gallery — new drag primitives", () => {
       const canvasItems = canvas.locator(".snapsort-item");
       await dragOnto(page, canvasItems.nth(1), canvasItems.nth(0));
       await expect(canvas.locator(".clone-canvas-block")).toHaveCount(2);
-      await expect(canvas.locator(".clone-canvas-block").first()).toContainText("Image");
+      await expect(canvas.locator(".clone-canvas-block").first()).toContainText(
+        "Image",
+      );
 
       // Click-to-remove takes a cloned block back out of the canvas.
       const firstBlock = canvas.locator(".clone-canvas-block").first();
@@ -148,7 +154,10 @@ test.describe("SnapSort gallery — new drag primitives", () => {
       let maxPaletteGhosts = 0;
       for (let step = 1; step <= 16; step++) {
         const t = step / 16;
-        await page.mouse.move(start.x + (end.x - start.x) * t, start.y + (end.y - start.y) * t);
+        await page.mouse.move(
+          start.x + (end.x - start.x) * t,
+          start.y + (end.y - start.y) * t,
+        );
         await page.waitForTimeout(20);
         maxPaletteGhosts = Math.max(
           maxPaletteGhosts,
@@ -199,8 +208,12 @@ test.describe("SnapSort gallery — new drag primitives", () => {
       const trashZone = exhibit.locator(".trash-drop-target");
 
       await expect(list.locator(".trash-task")).toHaveCount(5);
-      const firstTaskText = (await list.locator(".trash-task").first().textContent())?.trim();
-      const secondTaskText = (await list.locator(".trash-task").nth(1).textContent())?.trim();
+      const firstTaskText = (
+        await list.locator(".trash-task").first().textContent()
+      )?.trim();
+      const secondTaskText = (
+        await list.locator(".trash-task").nth(1).textContent()
+      )?.trim();
 
       // Reordering within the list (default move effect) still works.
       const firstTask = list.locator(".snapsort-item").first();
@@ -211,11 +224,15 @@ test.describe("SnapSort gallery — new drag primitives", () => {
       );
 
       // Dragging a task onto the trash deletes it instead of moving it there.
-      const taskToDelete = list.locator(".snapsort-item").filter({ hasText: secondTaskText ?? "" });
+      const taskToDelete = list
+        .locator(".snapsort-item")
+        .filter({ hasText: secondTaskText ?? "" });
       await dragOnto(page, taskToDelete, trashZone);
 
       await expect(list.locator(".trash-task")).toHaveCount(4);
-      await expect(list.locator(".trash-task", { hasText: secondTaskText ?? "__never__" })).toHaveCount(0);
+      await expect(
+        list.locator(".trash-task", { hasText: secondTaskText ?? "__never__" }),
+      ).toHaveCount(0);
       // Nothing should have actually landed inside the trash container itself.
       await expect(trashZone.locator(".trash-task")).toHaveCount(0);
     });
@@ -232,10 +249,22 @@ test.describe("SnapSort gallery — new drag primitives", () => {
       const tiles = grid.locator(".snapsort-item");
       await expect(tiles).toHaveCount(9);
 
-      const beforeOrder = await grid.locator(".swap-tile").evaluateAll((nodes) =>
-        nodes.map((node) => node.textContent?.trim() ?? ""),
-      );
-      expect(beforeOrder).toEqual(["A1", "A2", "A3", "B1", "B2", "B3", "C1", "C2", "C3"]);
+      const beforeOrder = await grid
+        .locator(".swap-tile")
+        .evaluateAll((nodes) =>
+          nodes.map((node) => node.textContent?.trim() ?? ""),
+        );
+      expect(beforeOrder).toEqual([
+        "A1",
+        "A2",
+        "A3",
+        "B1",
+        "B2",
+        "B3",
+        "C1",
+        "C2",
+        "C3",
+      ]);
 
       const tileA1 = tiles.filter({ hasText: "A1" });
       const tileB2 = tiles.filter({ hasText: "B2" });
@@ -247,13 +276,13 @@ test.describe("SnapSort gallery — new drag primitives", () => {
         yOffset: -24,
         beforeDrop: async () => {
           const sourceTile = tileA1.locator(".swap-tile");
-          const pointerGhost = page.locator(
-            '[data-snapsort-ghost="pointer"]',
-          );
+          const pointerGhost = page.locator('[data-snapsort-ghost="pointer"]');
 
           await expect(pointerGhost).toBeVisible();
           await expect(pointerGhost).toContainText("A1");
-          await expect(pointerGhost.locator(".swap-tile-grip i")).toHaveCount(6);
+          await expect(pointerGhost.locator(".swap-tile-grip i")).toHaveCount(
+            6,
+          );
 
           const appearances = await Promise.all(
             [sourceTile, pointerGhost].map((locator) =>
@@ -286,12 +315,14 @@ test.describe("SnapSort gallery — new drag primitives", () => {
           await expect
             .poll(
               () =>
-                grid.locator(".snapsort-item").evaluateAll(
-                  (nodes) =>
-                    nodes.filter(
-                      (node) => getComputedStyle(node).transform !== "none",
-                    ).length,
-                ),
+                grid
+                  .locator(".snapsort-item")
+                  .evaluateAll(
+                    (nodes) =>
+                      nodes.filter(
+                        (node) => getComputedStyle(node).transform !== "none",
+                      ).length,
+                  ),
               { intervals: [10, 20, 40], timeout: 500 },
             )
             .toBeGreaterThanOrEqual(2);
@@ -343,16 +374,28 @@ test.describe("SnapSort gallery — new drag primitives", () => {
         },
       });
 
-      const afterOrder = await grid.locator(".swap-tile").evaluateAll((nodes) =>
-        nodes.map((node) => node.textContent?.trim() ?? ""),
-      );
+      const afterOrder = await grid
+        .locator(".swap-tile")
+        .evaluateAll((nodes) =>
+          nodes.map((node) => node.textContent?.trim() ?? ""),
+        );
 
       // Only the two dragged/targeted slots change; everything else stays put.
-      expect(afterOrder).toEqual(["B2", "A2", "A3", "B1", "A1", "B3", "C1", "C2", "C3"]);
+      expect(afterOrder).toEqual([
+        "B2",
+        "A2",
+        "A3",
+        "B1",
+        "A1",
+        "B3",
+        "C1",
+        "C2",
+        "C3",
+      ]);
       await expect(tiles).toHaveCount(9);
-      await expect(
-        grid.locator('[data-snapsort-dragging="true"]'),
-      ).toHaveCount(0);
+      await expect(grid.locator('[data-snapsort-dragging="true"]')).toHaveCount(
+        0,
+      );
       const tileOpacities = await grid
         .locator(".swap-tile")
         .evaluateAll((nodes) =>
@@ -397,11 +440,25 @@ test.describe("SnapSort gallery — new drag primitives", () => {
         },
       });
 
-      const order = await grid.locator(".swap-tile").evaluateAll((nodes) =>
-        nodes.map((node) => node.textContent?.trim() ?? ""),
+      const order = await grid
+        .locator(".swap-tile")
+        .evaluateAll((nodes) =>
+          nodes.map((node) => node.textContent?.trim() ?? ""),
+        );
+      expect(order).toEqual([
+        "A1",
+        "A2",
+        "A3",
+        "B1",
+        "B2",
+        "B3",
+        "C1",
+        "C2",
+        "C3",
+      ]);
+      await expect(grid.locator('[data-snapsort-dragging="true"]')).toHaveCount(
+        0,
       );
-      expect(order).toEqual(["A1", "A2", "A3", "B1", "B2", "B3", "C1", "C2", "C3"]);
-      await expect(grid.locator('[data-snapsort-dragging="true"]')).toHaveCount(0);
       await expect(tileA2).toHaveCSS("transform", "none");
       await expect(tileA2.locator(".swap-tile")).toHaveCSS("opacity", "1");
     });
