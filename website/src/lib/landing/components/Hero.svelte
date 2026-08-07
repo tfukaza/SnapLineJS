@@ -52,6 +52,7 @@
 
   let toneInstrument: ReturnType<typeof createToneInstrument> | null = null;
   let activePadIndex = $state<number | null>(null);
+  let draggedPadGesture = false;
 
   // Fixed tone character now that the joystick that used to drive these is gone.
   const toneX = 0.5;
@@ -133,6 +134,22 @@
     padOrder = nextOrder;
   }
 
+  function handlePadPointerDown() {
+    draggedPadGesture = false;
+  }
+
+  function handlePadDragStart() {
+    draggedPadGesture = true;
+  }
+
+  function handlePadClick(index: number) {
+    if (draggedPadGesture) {
+      draggedPadGesture = false;
+      return;
+    }
+    void playPad(index);
+  }
+
   async function playPad(index: number) {
     const instrument = await getToneInstrument();
     if (!instrument) return;
@@ -208,7 +225,11 @@
                 config={{
                   direction: "row",
                   groupID: "hero-synth-pads",
-                  callbacks: { onItemMove: handlePadMove },
+                  mode: "euclidean",
+                  callbacks: {
+                    onDragStart: handlePadDragStart,
+                    onItemMove: handlePadMove,
+                  },
                 }}
                 items={padOrder}
                 getItemId={(index) => `pad-${index}`}
@@ -218,7 +239,8 @@
                     <div
                       class={`hero-synth-button ${padColorClasses[index]} ${activePadIndex === index ? "is-active" : ""}`}
                       data-pad-index={index}
-                      onpointerdown={() => playPad(index)}
+                      onclick={() => handlePadClick(index)}
+                      onpointerdown={handlePadPointerDown}
                       onkeydown={(event) => {
                         if (event.key === "Enter" || event.key === " ") {
                           event.preventDefault();

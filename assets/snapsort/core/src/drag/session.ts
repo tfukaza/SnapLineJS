@@ -149,6 +149,8 @@ export class DragSession {
   readonly dragCoordinateParent: Map<Item, Item> = new Map();
   /** @internal */
   readonly dragLayoutPosition: Map<Item, { x: number; y: number }> = new Map();
+  /** @internal Visual top-left of each member when this gesture began, before active FLIP transforms are removed from the frozen layout snapshot. */
+  readonly dragVisualStart: Map<Item, { x: number; y: number }> = new Map();
   /** @internal */
   dragTransformSyncAnimation: AnimationObject | null = null;
 
@@ -200,6 +202,10 @@ export class DragSession {
     // the original" is the correct drag position/size.
     clones.forEach((clone, i) => {
       clone.adoptDragSnapshotFrom(origins[i]);
+      const visualStart = this.dragVisualStart.get(origins[i]);
+      if (visualStart) {
+        this.dragVisualStart.set(clone, { ...visualStart });
+      }
     });
 
     // Transfer input first. A rejected destination leaves this session owned
@@ -253,19 +259,25 @@ export class DragSession {
   begin(prop: dragStartProp): void {
     const item = this.pressedItem;
     const root = this.root;
-    const source =
-      this.sources[this.items.indexOf(this.pressedItem)] ?? this.sources[0];
 
     item.schedule(
       () => {
         if (this.#isEnded()) return;
         this.pointer = { x: prop.start.x, y: prop.start.y };
         this.start = { x: prop.start.x, y: prop.start.y };
-        this.offset = {
-          x: prop.start.x - item.worldTransform.x,
-          y: prop.start.y - item.worldTransform.y,
+        for (const member of this.items) {
+          const visual = member.readDom({ unapplyTransform: false });
+          this.dragVisualStart.set(member, { x: visual.x, y: visual.y });
+        }
+        const itemVisualStart = this.dragVisualStart.get(item) ?? {
+          x: item.worldTransform.x,
+          y: item.worldTransform.y,
         };
-        source.container.readDom({ unapplyTransform: true });
+        this.offset = {
+          x: prop.start.x - itemVisualStart.x,
+          y: prop.start.y - itemVisualStart.y,
+        };
+        root.readDragSnapshotTree();
         root.captureDragSnapshotTree();
         this.groupDims = this.computeGroupDims();
       },
@@ -411,6 +423,10 @@ export class DragSession {
     if (this.root.dragSession === this) {
       this.root.dragSession = null;
     }
+    this.dragCoordinateParent.clear();
+    this.dragLayoutPosition.clear();
+    this.dragVisualStart.clear();
+    this.groupVisualOffsets.clear();
     this.root.clearDragSnapshotTree();
     const members = new Set([...this.items, ...(this.handoffOrigins ?? [])]);
     for (const member of members) {
@@ -474,6 +490,7 @@ export class DragSession {
     this.hoveredItem = null;
     this.dragCoordinateParent.clear();
     this.dragLayoutPosition.clear();
+    this.dragVisualStart.clear();
     this.groupVisualOffsets.clear();
     this.#clearSessionState();
   }

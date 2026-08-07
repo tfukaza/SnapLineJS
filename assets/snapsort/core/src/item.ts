@@ -438,7 +438,12 @@ export class Item extends ElementObject {
   get dragPositionX(): number {
     const session = this.rootContainer.dragSession;
     if (!session || !this.#dragSnapshot) return this.worldTransform.x;
-    return this.#dragSnapshot.box.x + session.pointer.x - session.start.x;
+    const visualStart = session.dragVisualStart.get(this);
+    return (
+      (visualStart?.x ?? this.#dragSnapshot.box.x) +
+      session.pointer.x -
+      session.start.x
+    );
   }
 
   /**
@@ -448,7 +453,12 @@ export class Item extends ElementObject {
   get dragPositionY(): number {
     const session = this.rootContainer.dragSession;
     if (!session || !this.#dragSnapshot) return this.worldTransform.y;
-    return this.#dragSnapshot.box.y + session.pointer.y - session.start.y;
+    const visualStart = session.dragVisualStart.get(this);
+    return (
+      (visualStart?.y ?? this.#dragSnapshot.box.y) +
+      session.pointer.y -
+      session.start.y
+    );
   }
 
   cancelAnimations() {
@@ -615,6 +625,11 @@ export class Item extends ElementObject {
         child.#readDomTree(config);
       }
     }
+  }
+
+  /** @internal Read stable layout geometry for a drag snapshot without replacing the visual positions used for pointer continuity. */
+  readDragSnapshotTree(): void {
+    this.#readDomTree({ unapplyTransform: true, saveWorldPosition: false });
   }
 
   #snapshotDirection(): LayoutDirection {

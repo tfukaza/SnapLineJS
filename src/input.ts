@@ -890,10 +890,14 @@ class InputControl {
     }
     // Framework reconciliation may move a still-connected captured subtree.
     // Browsers can drop native capture during that DOM move even though the
-    // gesture remains valid, so reacquire it while the pointer is still down.
-    // A released pointer, disconnected element, or rejected recapture follows
-    // the normal cancelled-terminal path below.
-    if (event.buttons !== 0 && captureElement.isConnected) {
+    // gesture remains valid. WebKit reports `buttons === 0` on that synthetic
+    // lost-capture event, so use the last real pointer event as the source of
+    // truth and reacquire while it still says the pointer is down. A released
+    // pointer, disconnected element, or rejected recapture follows the normal
+    // cancelled-terminal path below.
+    const pointerWasDown =
+      pointer.lastEvent.buttons !== 0 || event.buttons !== 0;
+    if (pointerWasDown && captureElement.isConnected) {
       try {
         this.#captureOn(pointer, captureElement);
         return;

@@ -125,6 +125,162 @@ async function reorderDirectItems(
 }
 
 test.describe("SnapSort landing repeated-drag ownership", () => {
+  test("keeps the homepage Euclidean pad-grid drop and FLIP positions aligned", async ({
+    page,
+  }) => {
+    const problems = watchSnapSortProblems(page);
+    await page.goto("/", { waitUntil: "networkidle" });
+
+    const bed = page.locator(".hero-button-bed");
+    const grid = page.locator(".hero-button-grid .snapsort-container");
+    await expect(grid).toHaveClass(/snapsort-mode-euclidean/);
+    const items = grid.locator(":scope > .snapsort-item");
+    await expect(items).toHaveCount(16);
+
+    const ghost = grid.locator(
+      ':scope > [data-snapsort-ghost-entry="flow"]',
+    );
+    let expected = await directItemKeys(grid);
+
+    for (let drag = 0; drag < 12; drag++) {
+      const sourceIndex = drag % 2 === 0 ? 0 : 8;
+      const targetIndex = drag % 2 === 0 ? 8 : 0;
+      const source = items.nth(sourceIndex);
+      const target = items.nth(targetIndex);
+      const sourceBox = await box(source);
+      const targetBox = await box(target);
+      const start = {
+        x: sourceBox.x + sourceBox.width / 2,
+        y: sourceBox.y + sourceBox.height / 2,
+      };
+      const end = {
+        x: targetBox.x + targetBox.width / 2,
+        y: targetBox.y + targetBox.height / 2,
+      };
+
+      await page.mouse.move(start.x, start.y);
+      await page.mouse.down();
+      if (drag === 0) {
+        await page.waitForTimeout(60);
+        await expect(source.locator(".hero-synth-button.is-active")).toHaveCount(0);
+      }
+      await page.mouse.move(start.x + 8, start.y + 8);
+      await page.mouse.move(end.x, end.y, { steps: 12 });
+      await expect(ghost).toHaveCount(1);
+      // WebKit may briefly release capture when Svelte inserts the initial
+      // framework-owned ghost. Send the final position again after the ghost
+      // exists to exercise capture recovery and the intended target update.
+      await page.mouse.move(end.x + 0.5, end.y + 0.5);
+
+      const currentGhostIndex = () =>
+        grid.evaluate((element) => {
+          let index = 0;
+          for (const child of element.children) {
+            if (
+              child instanceof HTMLElement &&
+              child.dataset.snapsortGhostEntry === "flow"
+            ) {
+              return index;
+            }
+            if (
+              child instanceof HTMLElement &&
+              child.classList.contains("snapsort-item") &&
+              child.dataset.snapsortDragging !== "true"
+            ) {
+              index++;
+            }
+          }
+          return -1;
+        });
+      await expect
+        .poll(currentGhostIndex, {
+          message: `drag ${drag} should place the ghost at index ${targetIndex}`,
+        })
+        .toBe(targetIndex);
+
+      const bedBox = await box(bed);
+      const sourceId = expected[sourceIndex];
+      const stationaryBoxes = await items.evaluateAll((elements) =>
+        elements.map((element) => {
+          const rect = element.getBoundingClientRect();
+          return {
+            id: element.dataset.snapsortItemId,
+            x: rect.x,
+            y: rect.y,
+            right: rect.right,
+            bottom: rect.bottom,
+          };
+        }),
+      );
+      for (const rect of stationaryBoxes) {
+        if (rect.id === sourceId) continue;
+        expect(rect.x).toBeGreaterThanOrEqual(bedBox.x - 1);
+        expect(rect.y).toBeGreaterThanOrEqual(bedBox.y - 1);
+        expect(rect.right).toBeLessThanOrEqual(bedBox.x + bedBox.width + 1);
+        expect(rect.bottom).toBeLessThanOrEqual(bedBox.y + bedBox.height + 1);
+      }
+
+      await page.mouse.up();
+
+      const visualTrace = await page.evaluate(
+        async ({ itemId, duration }) => {
+          const samples: Array<{
+            x: number;
+            y: number;
+            right: number;
+            bottom: number;
+          }> = [];
+          const start = performance.now();
+          await new Promise<void>((resolve) => {
+            const sample = () => {
+              const element = document.querySelector<HTMLElement>(
+                `.hero-button-grid .snapsort-item[data-snapsort-item-id="${itemId}"]`,
+              );
+              if (element) {
+                const rect = element.getBoundingClientRect();
+                samples.push({
+                  x: rect.x,
+                  y: rect.y,
+                  right: rect.right,
+                  bottom: rect.bottom,
+                });
+              }
+              if (performance.now() - start >= duration) {
+                resolve();
+              } else {
+                requestAnimationFrame(sample);
+              }
+            };
+            requestAnimationFrame(sample);
+          });
+          return samples;
+        },
+        { itemId: sourceId, duration: 24 },
+      );
+      await expect(ghost).toHaveCount(0);
+      await expect(page.locator("[data-snapsort-dragging]")).toHaveCount(0);
+
+      const [moved] = expected.splice(sourceIndex, 1);
+      expected.splice(targetIndex, 0, moved);
+      await expect.poll(() => directItemKeys(grid)).toEqual(expected);
+
+      const settledTargetBox = await box(items.nth(targetIndex));
+      for (const rect of visualTrace) {
+        expect(rect.x).toBeGreaterThanOrEqual(bedBox.x - 1);
+        expect(rect.y).toBeGreaterThanOrEqual(bedBox.y - 1);
+        expect(rect.right).toBeLessThanOrEqual(bedBox.x + bedBox.width + 1);
+        expect(rect.bottom).toBeLessThanOrEqual(bedBox.y + bedBox.height + 1);
+      }
+      const finalVisual = visualTrace.at(-1);
+      expect(finalVisual).toBeDefined();
+      expect(finalVisual!.x).toBeCloseTo(settledTargetBox.x, 0);
+      expect(finalVisual!.y).toBeCloseTo(settledTargetBox.y, 0);
+    }
+
+    await page.waitForTimeout(140);
+    expect(problems).toEqual([]);
+  });
+
   test("keeps the sortable list responsive and ordered through repeated drags", async ({
     page,
   }) => {

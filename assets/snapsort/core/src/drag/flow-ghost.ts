@@ -486,6 +486,7 @@ function drop(session: DragSession): void {
       }
       session.dragCoordinateParent.clear();
       session.dragLayoutPosition.clear();
+      session.dragVisualStart.clear();
       session.groupVisualOffsets.clear();
 
       // Remove the target ghost run first.

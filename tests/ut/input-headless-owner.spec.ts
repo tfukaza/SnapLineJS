@@ -358,8 +358,21 @@ test("dragStart handoff transfers capture and later delivery to a DOM-backed obj
     expect(received).toEqual([
       `start:${source.id}`,
       `drag:${destination.id}`,
-      `up:${destination.id}:lostpointercapture:true`,
-      `end:${destination.id}:lostpointercapture:true`,
+    ]);
+    expect(captures.get(9)).toBe(destinationElement);
+    dom.window.document.dispatchEvent(
+      pointerEvent(dom.window, "pointerup", {
+        x: 20,
+        y: 10,
+        buttons: 0,
+        pointerId: 9,
+      }),
+    );
+    expect(received).toEqual([
+      `start:${source.id}`,
+      `drag:${destination.id}`,
+      `up:${destination.id}:pointerup:false`,
+      `end:${destination.id}:pointerup:false`,
     ]);
     expect(captures.has(9)).toBe(false);
     input.destroy();
