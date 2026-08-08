@@ -5,9 +5,10 @@
   font-size: 1rem;
   line-height: 1.62;
 
-  .doc-article > :where(h2, h3, h4, p, ul, ol, blockquote) {
+  .doc-article > * {
     width: 100%;
     max-width: var(--doc-reading-width);
+    min-width: 0;
     box-sizing: border-box;
   }
 
@@ -196,10 +197,6 @@
   align-items: center;
   flex-direction: column;
   width: 100%;
-
-  > :where(figure, .display, .doc-prototype-grid, table, hr) {
-    width: 100%;
-  }
 }
 
 .framework-code-block {

@@ -86,24 +86,6 @@
 	const prevEntry = $derived(currentIndex > 0 ? currentProjectEntries[currentIndex - 1] : null);
 	const nextEntry = $derived(currentIndex < currentProjectEntries.length - 1 ? currentProjectEntries[currentIndex + 1] : null);
 
-	// Mobile menu state
-	let mobileMenuOpen = $state(false);
-	let mobileMenuButton = $state<HTMLButtonElement | null>(null);
-
-	function toggleMobileMenu() {
-		mobileMenuOpen = !mobileMenuOpen;
-	}
-
-	function closeMobileMenu() {
-		mobileMenuOpen = false;
-	}
-
-	function handleDocKeyDown(event: KeyboardEvent) {
-		if (event.key !== 'Escape' || !mobileMenuOpen) return;
-		closeMobileMenu();
-		mobileMenuButton?.focus();
-	}
-
 	function handleFrameworkChange(framework: Framework) {
 		const currentEntry = allEntries.find((entry) => entry.slug === currentSlug);
 		const equivalentEntry = currentEntry?.frameworkKey
@@ -132,8 +114,6 @@
 		}
 	});
 </script>
-
-<svelte:window onkeydown={handleDocKeyDown} />
 
 <SeoHead
 	title={docTitle}
@@ -178,57 +158,6 @@
 		</aside>
 	{/if}
 	<div class="doc-content">
-		{#if !isDocsHome}
-			<div class="mobile-doc-navigation">
-				<button
-					bind:this={mobileMenuButton}
-					type="button"
-					class="mobile-doc-menu-btn"
-					onclick={toggleMobileMenu}
-					aria-expanded={mobileMenuOpen}
-					aria-controls="mobile-doc-menu"
-				>
-					<span class="mobile-doc-menu-icon" aria-hidden="true">
-						<span class="hamburger-line" class:open={mobileMenuOpen}></span>
-						<span class="hamburger-line" class:open={mobileMenuOpen}></span>
-						<span class="hamburger-line" class:open={mobileMenuOpen}></span>
-					</span>
-					<span>Browse {currentProjectTitle} docs</span>
-				</button>
-				<div id="mobile-doc-menu" class="mobile-doc-menu card" class:open={mobileMenuOpen}>
-					<nav aria-label={`${currentProjectTitle} documentation`}>
-						{#if showFrameworkSelect}
-							<FrameworkSelect
-								id="mobile-doc-framework"
-								value={$selectedFramework}
-								onFrameworkChange={handleFrameworkChange}
-							/>
-						{/if}
-						{#each visibleDocSections as section}
-							<div class="sidebar-section">
-								{#if section.name}
-									<p class="section-title">{section.title}</p>
-								{/if}
-								<ul>
-									{#each section.entries as entry}
-										<li>
-											<a
-												href={entry.slug ? `/docs/${entry.slug}` : '/docs'}
-												class:active={(entry.slug || '') === currentSlug}
-												aria-current={(entry.slug || '') === currentSlug ? 'page' : undefined}
-												onclick={closeMobileMenu}
-											>
-												{entry.title}
-											</a>
-										</li>
-									{/each}
-								</ul>
-							</div>
-						{/each}
-					</nav>
-				</div>
-			</div>
-		{/if}
 		<nav class="doc-breadcrumb" aria-label="Breadcrumb">
 			{#each breadcrumbs as crumb, i}
 				{#if i > 0} <span class="breadcrumb-sep">/</span> {/if}
@@ -282,10 +211,6 @@
 
 .doc-layout.docs-home {
 	grid-template-columns: minmax(0, 1fr);
-}
-
-.docs-home .doc-content {
-	max-width: 960px;
 }
 
 .doc-sidebar {
@@ -363,7 +288,8 @@
 
 .doc-content {
 	min-width: 0;
-	max-width: 840px;
+	width: 100%;
+	max-width: var(--doc-reading-width, 700px);
 }
 
 .doc-header {
@@ -474,137 +400,15 @@
 		text-shadow 0.15s ease;
 }
 
-// Inline mobile documentation navigation (hidden on desktop)
-.mobile-doc-navigation {
-	display: none;
-	margin-bottom: var(--size-24);
-}
-
-.mobile-doc-menu-btn {
-	display: flex;
-	align-items: center;
-	gap: var(--size-8);
-	max-width: 100%;
-	min-height: 44px;
-	box-sizing: border-box;
-	background: transparent;
-	border: 1px solid color-mix(in srgb, var(--color-background-dark) 18%, transparent);
-	border-radius: var(--ui-radius);
-	padding: var(--size-8) var(--size-12);
-	color: var(--color-text);
-	font-family: "Geist", sans-serif;
-	font-size: 0.9rem;
-	font-weight: 600;
-	line-height: 1.3;
-	cursor: pointer;
-	box-shadow: none;
-}
-
-.mobile-doc-menu-icon {
-	display: flex;
-	width: 20px;
-	flex-shrink: 0;
-	flex-direction: column;
-	gap: 5px;
-
-	.hamburger-line {
-		display: block;
-		width: 18px;
-		height: 2px;
-		background: #333;
-		border-radius: 1px;
-		transition: transform 0.3s, opacity 0.3s;
-		margin-bottom: 0px;
-
-		&.open:nth-child(1) {
-			transform: translateY(7px) rotate(45deg);
-		}
-		&.open:nth-child(2) {
-			transform: scaleX(0);
-		}
-		&.open:nth-child(3) {
-			transform: translateY(-7px) rotate(-45deg);
-		}
-	}
-}
-
-.mobile-doc-menu {
-	display: none;
-	--card-color: var(--color-background);
-	margin-top: var(--size-8);
-	max-height: min(70vh, 38rem);
-	overflow-y: auto;
-	padding: var(--size-20);
-
-	&.open {
-		display: block;
-	}
-
-	.sidebar-section {
-		margin-bottom: 1.5rem;
-
-		&:last-child {
-			margin-bottom: 0;
-		}
-	}
-
-	.section-title {
-		font-size: 0.92rem;
-		font-weight: 300;
-		text-transform: none;
-		letter-spacing: 0;
-		color: var(--color-background-dark);
-		margin: 0 0 0.5rem 0;
-	}
-
-	ul {
-		list-style: none;
-		padding: 0;
-		margin: 0;
-	}
-
-	li {
-		margin-bottom: 0.5rem;
-	}
-
-	a {
-		display: block;
-		padding: var(--size-8) var(--size-12);
-		border-radius: calc(var(--ui-radius) - 2px);
-		color: var(--color-text);
-		text-decoration: none;
-		font-size: 0.9rem;
-		line-height: 1.3;
-		transition:
-			color 0.15s ease,
-			text-shadow 0.15s ease;
-
-		&:hover,
-		&:focus-visible {
-			color: var(--color-action);
-			text-decoration: none;
-		}
-
-		&.active {
-			color: var(--color-action);
-			font-weight: 600;
-		}
-	}
-}
-
 // Responsive styles
 @media (max-width: 768px) {
-	.mobile-doc-navigation {
-		display: block;
-	}
-
 	.doc-layout {
 		display: block;
 		margin: 1.5rem auto;
 		width: clamp(100px, 92%, 720px);
 	}
 
-	// The desktop sidebar becomes the inline disclosure above the breadcrumb.
+	// The project documentation links move into the global mobile menu.
 	.doc-sidebar {
 		display: none;
 	}

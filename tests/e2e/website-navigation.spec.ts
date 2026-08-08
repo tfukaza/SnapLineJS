@@ -67,7 +67,7 @@ test("switches projects without leaving the current marketing or docs context", 
   await expect(docsProjectTrigger).toHaveAttribute("aria-expanded", "false");
 });
 
-test("keeps one global header and exposes inline docs navigation on mobile", async ({
+test("puts project documentation inside the icon-only mobile menu", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 390, height: 844 });
@@ -88,21 +88,59 @@ test("keeps one global header and exposes inline docs navigation on mobile", asy
   ).toHaveAttribute("href", "/docs/snapsort/introduction");
 
   await page.keyboard.press("Escape");
-  const docsMenuTrigger = page.getByRole("button", {
-    name: "Browse SnapLine docs",
-  });
-  await expect(docsMenuTrigger).toBeVisible();
-  await expect(page.locator(".mobile-navbar")).toHaveCount(0);
-  await docsMenuTrigger.click();
-  await expect(docsMenuTrigger).toHaveAttribute("aria-expanded", "true");
-  await expect(page.locator("#mobile-doc-menu")).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: /Browse .* docs/ }),
+  ).toHaveCount(0);
 
   const mobileHeaderTrigger = primaryNav.getByRole("button", {
     name: "Toggle navigation",
   });
+  await expect(mobileHeaderTrigger).toHaveText("≡");
   await mobileHeaderTrigger.click();
   await expect(mobileHeaderTrigger).toHaveAttribute("aria-expanded", "true");
+  await expect(mobileHeaderTrigger).toHaveText("×");
   await expect(
     primaryNav.getByRole("link", { name: "Docs", exact: true }),
   ).toHaveAttribute("href", "/docs/snapline/introduction");
+
+  const mobileDocs = primaryNav.locator(".mobile-doc-navigation");
+  await expect(mobileDocs).toBeVisible();
+  await expect(mobileDocs).toContainText("SnapLine docs");
+  await expect(mobileDocs.getByLabel("Framework")).toBeVisible();
+  await expect(
+    mobileDocs.getByRole("link", { name: "Installation and setup" }),
+  ).toHaveAttribute("href", "/docs/snapline/introduction/01_setup");
+  await expect(
+    mobileDocs.getByRole("link", { name: "SnapLine", exact: true }),
+  ).toHaveAttribute("aria-current", "page");
+});
+
+test("uses one reading width for documentation chrome and article content", async ({
+  page,
+}) => {
+  await page.goto("/docs/snapengine/reference/engine", {
+    waitUntil: "networkidle",
+  });
+
+  const selectors = [
+    ".doc-breadcrumb",
+    ".doc-header",
+    ".doc-article > p",
+    ".doc-article > .display",
+    ".doc-article > table",
+    ".doc-pagination",
+  ];
+  const boxes = await Promise.all(
+    selectors.map((selector) => page.locator(selector).first().boundingBox()),
+  );
+  const measuredBoxes = boxes.filter(
+    (box): box is NonNullable<typeof box> => box !== null,
+  );
+
+  expect(measuredBoxes).toHaveLength(selectors.length);
+  for (const box of measuredBoxes) {
+    expect(box.x).toBeCloseTo(measuredBoxes[0].x, 0);
+    expect(box.width).toBeCloseTo(measuredBoxes[0].width, 0);
+  }
+  expect(measuredBoxes[0].width).toBeLessThanOrEqual(700);
 });

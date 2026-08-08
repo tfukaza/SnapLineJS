@@ -12,6 +12,21 @@ export const csr = true;
 export { entries };
 export const _getGroupedEntries = getGroupedEntries;
 
+function mobileDocsNavigationForSlug(slug: string) {
+  const projectSlug = slug.split("/")[0] ?? "";
+  const project = findDocProject(projectSlug);
+  if (!project) return null;
+
+  return {
+    project: project.slug,
+    projectTitle: project.title,
+    frameworks: [...project.frameworks],
+    sections: getGroupedEntries().filter(
+      (section) => section.project === project.slug,
+    ),
+  };
+}
+
 export async function load({ params }) {
   const modules = import.meta.glob("@docs/**/*.{md,mdx}");
 
@@ -39,6 +54,7 @@ export async function load({ params }) {
           return {
             component: mdx.default,
             metadata: mdx.metadata,
+            mobileDocsNavigation: null,
           };
         }
       } else {
@@ -47,6 +63,7 @@ export async function load({ params }) {
           return {
             component: mdx.default,
             metadata: mdx.metadata,
+            mobileDocsNavigation: mobileDocsNavigationForSlug(slug),
           };
         }
       }

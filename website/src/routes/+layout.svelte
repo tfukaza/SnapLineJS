@@ -2,6 +2,7 @@
   import { page } from "$app/state";
   import "../../../css/snapdesign.scss";
   import DebugLayoutToolbar from "$lib/components/DebugLayoutToolbar.svelte";
+  import FrameworkSelect from "$lib/components/FrameworkSelect.svelte";
   import {
     findProjectForPath,
     projectDestination,
@@ -9,6 +10,11 @@
   } from "$lib/projectNavigation";
   import "$lib/fonts.css";
   import { debugLayoutFooterControl } from "$lib/stores/debugLayoutFooter";
+  import {
+    selectedFramework,
+    setSelectedFramework,
+    type Framework,
+  } from "$lib/stores/frameworkState.svelte";
 
   let { children } = $props();
 
@@ -19,6 +25,25 @@
   const assetProjects = projectNavigationEntries.filter(
     (project) => project.group === "asset",
   );
+  type MobileDocEntry = {
+    slug: string;
+    title: string;
+    project: string;
+    section: string;
+    framework: string | null;
+    frameworkKey: string | null;
+  };
+  type MobileDocSection = {
+    name: string;
+    title: string;
+    entries: MobileDocEntry[];
+  };
+  type MobileDocsNavigation = {
+    project: string;
+    projectTitle: string;
+    frameworks: string[];
+    sections: MobileDocSection[];
+  };
   type MenuName = "projects";
 
   let activeMenu = $state<MenuName | null>(null);
@@ -34,6 +59,21 @@
   const isAboutPath = $derived(currentPath === "/about");
   const projectSwitchLabel = $derived(currentProject?.title ?? "Explore");
   const contextualDocsHref = $derived(currentProject?.docsHref ?? "/docs");
+  const mobileDocsNavigation = $derived(
+    (page.data as { mobileDocsNavigation?: MobileDocsNavigation | null })
+      .mobileDocsNavigation ?? null,
+  );
+  const currentDocSlug = $derived(page.params.slug ?? "");
+  const visibleMobileDocSections = $derived(
+    mobileDocsNavigation?.sections
+      .map((section) => ({
+        ...section,
+        entries: section.entries.filter(
+          (entry) => !entry.framework || entry.framework === $selectedFramework,
+        ),
+      }))
+      .filter((section) => section.entries.length > 0) ?? [],
+  );
 
   function toggleMenu(menu: MenuName) {
     activeMenu = activeMenu === menu ? null : menu;
@@ -48,6 +88,31 @@
   function closeNavigation() {
     activeMenu = null;
     mobileNavOpen = false;
+  }
+
+  function handleMobileFrameworkChange(framework: Framework) {
+    if (!mobileDocsNavigation) return;
+
+    const allEntries = mobileDocsNavigation.sections.flatMap(
+      (section) => section.entries,
+    );
+    const currentEntry = allEntries.find((entry) => entry.slug === currentDocSlug);
+    const equivalentEntry = currentEntry?.frameworkKey
+      ? allEntries.find(
+          (entry) =>
+            entry.project === mobileDocsNavigation.project &&
+            entry.section === currentEntry.section &&
+            entry.framework === framework &&
+            entry.frameworkKey === currentEntry.frameworkKey,
+        )
+      : null;
+
+    setSelectedFramework(framework, !equivalentEntry);
+    closeNavigation();
+
+    if (equivalentEntry) {
+      window.location.href = `/docs/${equivalentEntry.slug}?framework=${framework}`;
+    }
   }
 
   function handleWindowPointerDown(event: PointerEvent) {
@@ -153,7 +218,6 @@
     aria-controls="primary-nav-links"
     onclick={toggleMobileNav}
   >
-    <span>Menu</span>
     <span class="mobile-nav-icon" aria-hidden="true">{mobileNavOpen ? "×" : "≡"}</span>
   </button>
 
@@ -189,6 +253,44 @@
         <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/>
       </svg>
     </a>
+
+    {#if mobileDocsNavigation}
+      <div
+        class="mobile-doc-navigation"
+        role="group"
+        aria-label={`${mobileDocsNavigation.projectTitle} documentation`}
+      >
+        <p class="mobile-doc-project-title">{mobileDocsNavigation.projectTitle} docs</p>
+        {#if mobileDocsNavigation.frameworks.length > 1}
+          <FrameworkSelect
+            id="mobile-header-doc-framework"
+            value={$selectedFramework}
+            onFrameworkChange={handleMobileFrameworkChange}
+          />
+        {/if}
+        {#each visibleMobileDocSections as section}
+          <div class="mobile-doc-section">
+            {#if section.name}
+              <p class="mobile-doc-section-title">{section.title}</p>
+            {/if}
+            <ul>
+              {#each section.entries as entry}
+                <li>
+                  <a
+                    href={`/docs/${entry.slug}`}
+                    class:active={entry.slug === currentDocSlug}
+                    aria-current={entry.slug === currentDocSlug ? "page" : undefined}
+                    onclick={closeNavigation}
+                  >
+                    {entry.title}
+                  </a>
+                </li>
+              {/each}
+            </ul>
+          </div>
+        {/each}
+      </div>
+    {/if}
   </div>
 </nav>
 
@@ -490,6 +592,10 @@
     line-height: 1;
   }
 
+  .mobile-doc-navigation {
+    display: none;
+  }
+
   @media (max-width: 760px) {
     .nav-bar {
       gap: var(--size-16);
@@ -497,8 +603,10 @@
 
     .mobile-nav-trigger {
       display: inline-flex;
+      justify-content: center;
+      width: 44px;
       min-height: 44px;
-      padding-inline: var(--size-8);
+      padding: var(--size-8);
     }
 
     .nav-right {
@@ -544,6 +652,71 @@
         text-overflow: ellipsis;
         white-space: nowrap;
       }
+    }
+
+    .mobile-doc-navigation {
+      display: block;
+      margin-top: var(--size-8);
+      padding: var(--size-20) var(--size-12) var(--size-8);
+      border-top: 1px solid rgba(58, 42, 34, 0.1);
+    }
+
+    .mobile-doc-project-title {
+      margin: 0 0 var(--size-20);
+      color: var(--color-background-dark);
+      font-family: var(--font-display);
+      font-size: 1.05rem;
+      font-weight: 600;
+      line-height: 1.2;
+    }
+
+    .mobile-doc-section {
+      margin-bottom: var(--size-20);
+
+      &:last-child {
+        margin-bottom: 0;
+      }
+
+      ul {
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+
+      li {
+        margin: 0;
+      }
+
+      a {
+        display: block;
+        padding: var(--size-8) var(--size-12);
+        border-radius: var(--size-8);
+        color: var(--color-text);
+        font-size: 0.9rem;
+        font-weight: 400;
+        line-height: 1.3;
+        text-decoration: none;
+
+        &:hover,
+        &:focus-visible,
+        &.active {
+          color: var(--color-action);
+        }
+
+        &.active {
+          font-weight: 600;
+        }
+      }
+    }
+
+    .mobile-doc-section-title {
+      margin: 0 0 var(--size-8);
+      padding: 0 var(--size-12);
+      color: var(--color-background-dark);
+      font-family: var(--font-label);
+      font-size: 0.86rem;
+      font-weight: 400;
+      line-height: 1.2;
     }
 
   }
