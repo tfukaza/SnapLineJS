@@ -1,0 +1,54 @@
+{
+  "name": "@snap-engine/asset-base",
+  "version": "0.5.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tfukaza/SnapEngineJS.git",
+    "directory": "assets/asset-base"
+  },
+  "type": "module",
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./camera": "./src/camera.ts",
+    "./background": "./src/background.ts",
+    "./svelte": "./src/svelte/index.ts",
+    "./svelte/*.svelte": "./src/svelte/*.svelte",
+    "./svelte/engine": "./src/svelte/engineState.svelte.js",
+    "./react": "./src/react/index.ts",
+    "./react/*": "./src/react/*.tsx"
+  },
+  "dependencies": {
+    "@snap-engine/core": "^0.4.1"
+  },
+  "peerDependencies": {
+    "react": "^18.0.0 || ^19.0.0",
+    "svelte": "^5.0.0"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    },
+    "svelte": {
+      "optional": true
+    }
+  },
+  "description": "Shared SnapEngine assets with Svelte and React bindings",
+  "types": "./src/index.ts",
+  "files": [
+    "src",
+    "README.md"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "keywords": [
+    "ui",
+    "camera",
+    "background",
+    "react",
+    "svelte"
+  ],
+  "author": "Tomoki Fukazawa",
+  "license": "MIT"
+}

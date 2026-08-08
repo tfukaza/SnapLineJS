@@ -4,9 +4,9 @@
   "description": "Interactivity engine for the web",
   "type": "module",
   "workspaces": [
-    "assets/asset-base/*",
-    "assets/snapsort/*",
-    "assets/snapline/*",
+    "assets/asset-base",
+    "assets/snapsort",
+    "assets/snapline",
     "assets/snapzap/*"
   ],
   "main": "./src/index.ts",
@@ -67,7 +67,7 @@
     "build:dev": "FRAMEWORK=test npx vite build --mode development",
     "validate:packages": "node scripts/validate-packages.mjs",
     "check:website": "npm run check --prefix website",
-    "check:adapters": "FRAMEWORK=test svelte-check --tsconfig assets/asset-base/svelte/tsconfig.json && FRAMEWORK=test svelte-check --tsconfig assets/snapsort/svelte/tsconfig.json && FRAMEWORK=test svelte-check --tsconfig assets/snapline/svelte/tsconfig.json",
+    "check:adapters": "FRAMEWORK=test svelte-check --tsconfig assets/asset-base/tsconfig.json && FRAMEWORK=test svelte-check --tsconfig assets/snapsort/tsconfig.json && FRAMEWORK=test svelte-check --tsconfig assets/snapline/tsconfig.json",
     "typecheck": "tsc --noEmit",
     "ci": "npm run validate:packages && npm run typecheck && npm run lint && npm run check:adapters && npm run check:website && npm run build",
     "prepublishOnly": "npm run lint",

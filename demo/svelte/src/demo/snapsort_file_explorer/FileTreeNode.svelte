@@ -10,7 +10,7 @@
 </script>
 
 <script lang="ts">
-  import { Container, Item } from "@snap-engine/snapsort-svelte";
+  import { Container, Item } from "@snap-engine/snapsort/svelte";
   import type { ContainerCallbacks } from "@snap-engine/snapsort";
   import FileTreeNode from "./FileTreeNode.svelte";
 

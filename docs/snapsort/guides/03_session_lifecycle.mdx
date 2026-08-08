@@ -53,8 +53,8 @@ The example below renders two containers from the same application-owned data. D
 
 ```svelte framework=Svelte
 <script lang="ts">
-  import { Engine } from "@snap-engine/asset-base-svelte";
-  import { Container, Item } from "@snap-engine/snapsort-svelte";
+  import { Engine } from "@snap-engine/asset-base/svelte";
+  import { Container, Item } from "@snap-engine/snapsort/svelte";
   import type {
     Container as SnapSortContainer,
     ItemMoveEvent,
@@ -139,7 +139,7 @@ The example below renders two containers from the same application-owned data. D
 ```
 ```tsx framework=React
 import { useCallback, useRef, useState } from "react";
-import { Engine, Container, Ghost, Item } from "@snap-engine/snapsort-react";
+import { Engine, Container, Ghost, Item } from "@snap-engine/snapsort/react";
 import type {
   Container as SnapSortContainer,
   GhostInsertEvent,

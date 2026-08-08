@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { Node, Connector, Line, ResizeRegion } from "@snap-engine/snapline-svelte";
+    import { Node, Connector, Line, ResizeRegion } from "@snap-engine/snapline/svelte";
 
     let { nodeId, title, x = 0, y = 0, maxIncoming = 1, canResize = false } = $props();
 </script>

@@ -2,9 +2,11 @@
 
 ## Overview
 
-Asset packages extend SnapEngine with specialized functionality. Each follows a consistent monorepo structure with TypeScript core logic and framework-specific wrappers.
+Asset packages extend SnapEngine with specialized functionality. Core logic and
+framework bindings stay separated by source directory. Products may publish
+them as split packages or as one package with framework subpath exports.
 
-## Package Structure Pattern
+## Split Package Structure
 
 ```
 {product-name}/
@@ -25,24 +27,41 @@ Asset packages extend SnapEngine with specialized functionality. Each follows a 
     └── src/
 ```
 
+## Unified Package Structure
+
+Asset Base, SnapSort, and SnapLine ship all bindings from one package:
+
+```
+{product-name}/
+├── package.json           # @snap-engine/{product}
+├── tsconfig.json
+└── src/
+    ├── index.ts           # Framework-neutral root
+    ├── *.ts
+    ├── svelte/            # @snap-engine/{product}/svelte
+    └── react/             # @snap-engine/{product}/react
+```
+
 ## Available Packages
 
 ### 1. asset-base/
-- **Packages:** `@snap-engine/asset-base`, `@snap-engine/asset-base-svelte`, `@snap-engine/asset-base-react`
+- **Packages:** `@snap-engine/asset-base`, `@snap-engine/asset-base/svelte`, `@snap-engine/asset-base/react`
 - **Purpose:** Common base components (Engine, Camera, Background)
 - **Components:** Engine.svelte, Camera.svelte, Background.svelte
 - **Classes:** CameraControl, Background
 - **Status:** ✅ Active
 
 ### 2. snapsort/
-- **Packages:** `@snap-engine/snapsort`, `@snap-engine/snapsort-svelte`
+- **Package:** `@snap-engine/snapsort`
+- **Bindings:** `@snap-engine/snapsort/svelte`, `@snap-engine/snapsort/react`
 - **Purpose:** Drag-and-drop list reordering
-- **Components:** ContainerEuclidean, ItemEuclidean, ContainerProgressive, ItemProgressive
-- **Classes:** ContainerBase, ContainerEuclidean, ContainerProgressive, ItemBase, ItemEuclidean, ItemProgressive
+- **Components:** Container, Item, Ghost, Handle
+- **Classes:** Container, Item, DragSession
 - **Status:** ✅ Active
 
 ### 3. snapline/
-- **Packages:** `@snap-engine/snapline`, `@snap-engine/snapline-svelte`
+- **Package:** `@snap-engine/snapline`
+- **Bindings:** `@snap-engine/snapline/svelte`, `@snap-engine/snapline/react`
 - **Purpose:** Node-based graph UI
 - **Components:** Node, Connector, Line, Select
 - **Classes:** NodeComponent, ConnectorComponent, LineComponent, RectSelectComponent
@@ -57,7 +76,7 @@ Asset packages extend SnapEngine with specialized functionality. Each follows a 
 
 ### Separation of Concerns
 - **Core packages:** Framework-agnostic TypeScript, extends @snap-engine/core
-- **Framework packages:** Thin wrappers for React, Svelte, etc.
+- **Framework bindings:** Thin wrappers for React, Svelte, etc.
 - **No build step:** Raw source exported, not built bundles
 
 ### Framework-owned collections
@@ -80,11 +99,12 @@ adapter (Svelte renders ghosts internally; React consumers render `Ghost`).
 @snap-engine/{product}-svelte
 ```
 
-Special case - Asset Base:
+Unified asset packages:
+
 ```
 @snap-engine/core
     ↓
-@snap-engine/asset-base
-    ↓
-@snap-engine/asset-base-svelte   @snap-engine/asset-base-react
+@snap-engine/{product}
+    ├── /svelte (optional Svelte peer)
+    └── /react  (optional React peers)
 ```

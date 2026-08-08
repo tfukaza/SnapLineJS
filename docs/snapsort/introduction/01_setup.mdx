@@ -10,35 +10,17 @@ sectionOrder: 1
 
 ## Install
 
-SnapSort consists of SnapSort package itself,
-the SnapEngine core it's built on, and the frontend framework bindings (if applicable).
+SnapSort ships its framework-neutral core and framework bindings in one
+package. Install the shared Engine binding for your framework alongside it.
 
 ```bash framework=Svelte
-npm install @snap-engine/core @snap-engine/asset-base-svelte @snap-engine/snapsort @snap-engine/snapsort-svelte
+npm install @snap-engine/snapsort @snap-engine/asset-base
 ```
 ```bash framework=React
-npm install @snap-engine/core @snap-engine/asset-base-react @snap-engine/snapsort @snap-engine/snapsort-react react react-dom
+npm install @snap-engine/snapsort @snap-engine/asset-base react react-dom
 ```
 ```bash framework=Vanilla
-npm install @snap-engine/core @snap-engine/snapsort
-```
-
-### SvelteKit / SSR
-
-SnapEngine asset packages publish TypeScript source. SvelteKit must bundle the
-framework-agnostic asset packages during SSR instead of externalizing them to
-Node. Add them to `ssr.noExternal` in `vite.config.js`:
-
-```javascript framework=Svelte
-import { sveltekit } from "@sveltejs/kit/vite";
-import { defineConfig } from "vite";
-
-export default defineConfig({
-  plugins: [sveltekit()],
-  ssr: {
-    noExternal: ["@snap-engine/asset-base", "@snap-engine/snapsort"],
-  },
-});
+npm install @snap-engine/snapsort
 ```
 
 
@@ -49,8 +31,8 @@ and render one `Item` per entry. This creates a working drag-and-drop list:
 
 ```svelte framework=Svelte
 <script lang="ts">
-  import { Engine } from "@snap-engine/asset-base-svelte";
-  import { Container, Item } from "@snap-engine/snapsort-svelte";
+  import { Engine } from "@snap-engine/asset-base/svelte";
+  import { Container, Item } from "@snap-engine/snapsort/svelte";
   import type { ItemMoveEvent } from "@snap-engine/snapsort";
 
   let tasks = $state([
@@ -87,7 +69,7 @@ and render one `Item` per entry. This creates a working drag-and-drop list:
 
 ```tsx framework=React
 import { useState } from "react";
-import { Engine, Container, Ghost, Item } from "@snap-engine/snapsort-react";
+import { Engine, Container, Ghost, Item } from "@snap-engine/snapsort/react";
 import type {
   GhostInsertEvent,
   GhostRemoveEvent,
@@ -188,20 +170,4 @@ for (const element of list.querySelectorAll("[data-item-id]")) {
 }
 ```
 
-Items can now be dragged to reorder, with FLIP animations included by default.
-In Svelte and React, the callback updates framework state and the framework
-renders the new order. SnapSort never reparents framework-owned item nodes.
-The Vanilla integration uses SnapSort's default DOM callbacks. Cross-container
-state updates are covered in [Session Lifecycle](/docs/snapsort/guides/03_session_lifecycle).
-
-## Production Checklist
-
-Before treating a list as complete:
-
-1. Give every item a stable, unique `itemId`; do not use its array index.
-2. Keep the framework array as the source of truth. Update it synchronously in `onItemMove` (and `onItemSwap` when using swap mode).
-3. Put containers that exchange items in the same `groupID` and attach identifying `metadata` to each container.
-4. Give the `Engine` and sortable container real dimensions. `Engine` defaults to `height: 100%`, `position: relative`, and `overflow: visible`; pass `style` or a class when the parent does not already establish a height.
-5. Render one framework component for each core object. Svelte `Container` manages its ghost entries; React code stores `onGhostInsert`/`onGhostRemove` events and renders keyed `Ghost` components. Never wrap `event.ghostItem` in a normal `Item`.
-
-All wrapper components forward normal `div` attributes such as `class`, `className`, `style`, `id`, `data-*`, ARIA attributes, and event handlers. Consumer styles are merged after the structural defaults, so an explicit style can override them.
+Items can now be dragged to reorder, with animations included by default.

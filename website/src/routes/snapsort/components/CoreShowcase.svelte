@@ -1,8 +1,8 @@
 <script lang="ts">
   import ClientDemoFrame from "$lib/components/ClientDemoFrame.svelte";
-  import { Engine } from "@snap-engine/asset-base-svelte";
+  import { Engine } from "@snap-engine/asset-base/svelte";
   import type { Engine as SnapEngine } from "@snap-engine/core";
-  import { Container, Handle, Item } from "@snap-engine/snapsort-svelte";
+  import { Container, Handle, Item } from "@snap-engine/snapsort/svelte";
   import type {
     Container as ContainerType,
     ItemMoveEvent,

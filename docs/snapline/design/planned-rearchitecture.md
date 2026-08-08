@@ -1,6 +1,5 @@
 ---
 title: SnapLine planned re-architecture
-description: Internal design doc — closed-out decision record for the re-architecture.
 hidden: true
 ---
 

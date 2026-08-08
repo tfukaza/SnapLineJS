@@ -3,7 +3,7 @@
   import { onDestroy, tick } from "svelte";
   import { fade } from "svelte/transition";
   import ClientDemoFrame from "$lib/components/ClientDemoFrame.svelte";
-  import { Engine } from "@snap-engine/asset-base-svelte";
+  import { Engine } from "@snap-engine/asset-base/svelte";
   import { ElementObject } from "@snapline/object";
   import { AnimationObject } from "@snapline/animation";
   import type { Engine as EngineType } from "@snapline/index";

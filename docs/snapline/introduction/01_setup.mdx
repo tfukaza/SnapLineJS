@@ -1,36 +1,36 @@
 ---
 title: Installation and setup
-description: Install SnapLine and render a first node graph in Vanilla, Svelte, or React.
 order: 2
 sectionTitle: Introduction
 sectionOrder: 1
 ---
 
-Install the core package plus the adapter you use.
-
-```bash
-npm install @snap-engine/core @snap-engine/snapline
-```
+SnapLine ships its framework-neutral core and framework bindings in one
+package. Install the shared Engine binding for your framework alongside it.
 
 ```bash framework=svelte
-npm install @snap-engine/asset-base-svelte @snap-engine/snapline-svelte
+npm install @snap-engine/snapline @snap-engine/asset-base
 ```
 
 ```bash framework=react
-npm install react react-dom @snap-engine/snapline-react
+npm install @snap-engine/snapline @snap-engine/asset-base react react-dom
+```
+
+```bash framework=vanilla
+npm install @snap-engine/snapline
 ```
 
 ## First graph
 
 ```svelte framework=svelte
 <script lang="ts">
-  import { Engine } from "@snap-engine/asset-base-svelte";
+  import { Engine } from "@snap-engine/asset-base/svelte";
   import {
     Connector,
     ControlledGraph,
     Node,
     Select,
-  } from "@snap-engine/snapline-svelte";
+  } from "@snap-engine/snapline/svelte";
   import { applyLineChange } from "@snap-engine/snapline";
   import type { LineRecord } from "@snap-engine/snapline";
 
@@ -64,7 +64,7 @@ import {
   Engine,
   Node,
   Select,
-} from "@snap-engine/snapline-react";
+} from "@snap-engine/snapline/react";
 import { applyLineChange } from "@snap-engine/snapline";
 import type { LineChangeRequest, LineRecord } from "@snap-engine/snapline";
 

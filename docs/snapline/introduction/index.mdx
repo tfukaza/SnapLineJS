@@ -1,6 +1,5 @@
 ---
 title: SnapLine
-description: Node graph interaction primitives for Vanilla JavaScript, Svelte, and React.
 order: 1
 sectionTitle: Introduction
 sectionOrder: 1
@@ -11,7 +10,7 @@ resizable nodes, typed connectors, SVG lines, rectangle selection, nested
 groups, and palette placement without prescribing your graph document or node
 design.
 
-SnapLine is experimental in `0.3`. APIs may change before `1.0` and breaking
+SnapLine is experimental in `0.4`. APIs may change before `1.0` and breaking
 changes will not be hidden behind legacy compatibility aliases.
 
 ## Pick the responsibility boundary
@@ -22,13 +21,15 @@ undo/redo, labels, and styling. Svelte and React remain responsible for
 structural DOM; SnapLine only writes transforms and state attributes on
 elements those frameworks rendered.
 
-## Packages
+## Package entry points
 
-| Package | Use |
+The core and both bindings ship from one npm package.
+
+| Import path | Use |
 | --- | --- |
 | `@snap-engine/snapline` | Framework-neutral core objects and policies |
-| `@snap-engine/snapline-svelte` | Svelte 5 adapters |
-| `@snap-engine/snapline-react` | React 18/19 adapters |
+| `@snap-engine/snapline/svelte` | Svelte 5 adapters |
+| `@snap-engine/snapline/react` | React 18/19 adapters |
 
 Start with [installation and setup](/docs/snapline/introduction/01_setup), then
 read [core concepts](/docs/snapline/guides/01_core_concepts).

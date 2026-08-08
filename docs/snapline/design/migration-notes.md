@@ -1,6 +1,5 @@
 ---
 title: SnapLine migration notes
-description: Internal design doc — migrating across the controlled-graph re-architecture.
 hidden: true
 ---
 

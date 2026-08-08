@@ -1,6 +1,5 @@
 ---
 title: Container
-description: Svelte Container component props, configuration, callbacks, and imperative API.
 order: 1
 project: snapsort
 projectTitle: SnapSort
@@ -19,7 +18,7 @@ does not fall back to SnapSort's Vanilla DOM callbacks.
 
 ```svelte
 <script lang="ts">
-  import { Container, Item } from "@snap-engine/snapsort-svelte";
+  import { Container, Item } from "@snap-engine/snapsort/svelte";
   import type { ItemMoveEvent } from "@snap-engine/snapsort";
 
   let tasks = $state([
@@ -133,7 +132,7 @@ Use `bind:container` when buttons, keyboard handlers, or other controls need the
 
 ```svelte
 <script lang="ts">
-  import { Container, Item } from "@snap-engine/snapsort-svelte";
+  import { Container, Item } from "@snap-engine/snapsort/svelte";
   import type { Container as SnapSortContainer, ItemMoveEvent } from "@snap-engine/snapsort";
 
   let source: SnapSortContainer | undefined = $state();

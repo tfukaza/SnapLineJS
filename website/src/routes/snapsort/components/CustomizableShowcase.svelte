@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Container, Handle, Item } from "@snap-engine/snapsort-svelte";
+  import { Container, Handle, Item } from "@snap-engine/snapsort/svelte";
   import type { ContainerConfig, ItemMoveEvent } from "@snap-engine/snapsort";
   import SnapSortContextBoundary from "../SnapSortContextBoundary.svelte";
   import { moveEntries, moveEntriesAcrossLists } from "./listState";

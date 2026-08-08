@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { Node, Connector, Line, ResizeRegion } from "@snap-engine/snapline-svelte";
+    import { Node, Connector, Line, ResizeRegion } from "@snap-engine/snapline/svelte";
     import type { ResizeHandle } from "@snap-engine/snapline";
 
     let { title = "Node", id = title, x = 0, y = 0, handles = [] }:

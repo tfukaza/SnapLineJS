@@ -1,7 +1,7 @@
 <script lang="ts">
-  import { Engine } from "@snap-engine/asset-base-svelte";
+  import { Engine } from "@snap-engine/asset-base/svelte";
   import type { CanDropEvent, ItemMoveEvent } from "@snap-engine/snapsort";
-  import { Container, Ghost, Item } from "@snap-engine/snapsort-svelte";
+  import { Container, Ghost, Item } from "@snap-engine/snapsort/svelte";
   import ClientDemoFrame from "$lib/components/ClientDemoFrame.svelte";
 
   type DiagramItem = { id: string; kind: "item" };

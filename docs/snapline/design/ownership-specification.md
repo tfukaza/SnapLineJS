@@ -1,6 +1,5 @@
 ---
 title: SnapLine ownership specification
-description: Internal design doc — the normative framework ownership contract.
 hidden: true
 ---
 

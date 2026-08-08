@@ -1,0 +1,22 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "outDir": "./dist",
+    "baseUrl": ".",
+    "paths": {
+      "@snap-engine/core": ["../../src/index.ts"],
+      "@snap-engine/core/animation": ["../../src/animation.ts"],
+      "@snap-engine/core/collision": ["../../src/collision.ts"],
+      "@snap-engine/core/debug": ["../../src/debug.ts"],
+      "@snap-engine/asset-base": ["../asset-base/src/index.ts"],
+      "@snap-engine/asset-base/react": ["../asset-base/src/react/index.ts"],
+      "@snap-engine/snapline": ["./src/index.ts"],
+      "@snap-engine/snapline/*": ["./src/*"],
+      "@snap-engine/snapline/svelte": ["./src/svelte/index.ts"],
+      "@snap-engine/snapline/svelte/*": ["./src/svelte/*"],
+      "@snap-engine/snapline/react": ["./src/react/index.ts"],
+      "@snap-engine/snapline/react/*": ["./src/react/*"]
+    }
+  },
+  "include": ["src/**/*"]
+}

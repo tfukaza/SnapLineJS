@@ -13,7 +13,7 @@
   import {
     Container,
     Item,
-  } from "@snap-engine/snapsort-svelte";
+  } from "@snap-engine/snapsort/svelte";
   import type { ContainerCallbacks } from "@snap-engine/snapsort";
   import FileExplorerNode from "./FileExplorerNode.svelte";
 

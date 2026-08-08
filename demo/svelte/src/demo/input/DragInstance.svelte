@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { Engine as EngineComponent } from "@snap-engine/asset-base-svelte";
+    import { Engine as EngineComponent } from "@snap-engine/asset-base/svelte";
     import type {Engine} from "@snap-engine/core";
     import {ElementObject, BaseObject} from "@snap-engine/core";
     import type {

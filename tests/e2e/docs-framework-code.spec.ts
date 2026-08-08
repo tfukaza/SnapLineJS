@@ -1,5 +1,28 @@
 import { expect, test } from "@playwright/test";
 
+test("SnapSort exposes one canonical Svelte overview entry", async ({
+  page,
+}) => {
+  const response = await page.goto(
+    "/docs/snapsort/reference/svelte?framework=svelte",
+  );
+  expect(response?.status()).toBe(200);
+
+  const sidebar = page.locator(".doc-sidebar");
+  await expect(sidebar.getByRole("heading", { name: "SnapSort" })).toHaveCount(
+    1,
+  );
+  await expect(
+    sidebar.getByRole("link", { name: "Svelte Overview", exact: true }),
+  ).toHaveCount(1);
+  await expect(
+    sidebar.getByRole("link", { name: "Svelte API", exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("heading", { name: "Svelte Overview" }),
+  ).toHaveCount(1);
+});
+
 test("framework selector shows only its matching install code block", async ({
   page,
 }) => {
@@ -19,10 +42,13 @@ test("framework selector shows only its matching install code block", async ({
 
   await expect(visibleInstallBlocks).toHaveCount(1);
   await expect(visibleInstallBlocks).toContainText(
-    "@snap-engine/snapsort-svelte",
+    "npm install @snap-engine/snapsort @snap-engine/asset-base",
   );
   await expect(visibleInstallBlocks).not.toContainText(
-    "@snap-engine/snapsort-react",
+    "@snap-engine/asset-base/svelte",
+  );
+  await expect(visibleInstallBlocks).not.toContainText(
+    "@snap-engine/snapsort/svelte",
   );
 
   await page.locator("#desktop-doc-framework").selectOption("react");
@@ -33,10 +59,13 @@ test("framework selector shows only its matching install code block", async ({
   );
   await expect(visibleInstallBlocks).toHaveCount(1);
   await expect(visibleInstallBlocks).toContainText(
-    "@snap-engine/snapsort-react",
+    "npm install @snap-engine/snapsort @snap-engine/asset-base react react-dom",
   );
   await expect(visibleInstallBlocks).not.toContainText(
-    "@snap-engine/snapsort-svelte",
+    "@snap-engine/asset-base/react",
+  );
+  await expect(visibleInstallBlocks).not.toContainText(
+    "@snap-engine/snapsort/react",
   );
 });
 
@@ -79,13 +108,14 @@ test("raw Markdown selects one framework without damaging fenced code", async ({
   const svelteMarkdown = await svelteResponse.text();
   expect(svelteMarkdown).toContain("# Setup");
   expect(svelteMarkdown).toContain('```svelte\n<script lang="ts">');
-  expect(svelteMarkdown).toContain("@snap-engine/snapsort-svelte");
-  expect(svelteMarkdown).not.toContain("@snap-engine/snapsort-react");
+  expect(svelteMarkdown).toContain("@snap-engine/snapsort/svelte");
+  expect(svelteMarkdown).not.toContain("@snap-engine/snapsort/react");
   expect(svelteMarkdown).not.toContain("framework=Svelte");
   expect(svelteMarkdown).not.toContain("\nproject: snapsort\n");
   expect(svelteMarkdown).toContain(
-    "](/docs/snapsort/guides/03_session_lifecycle.md?framework=svelte)",
+    "npm install @snap-engine/snapsort @snap-engine/asset-base",
   );
+  expect(svelteMarkdown).not.toContain("@snap-engine/snapsort-svelte");
 
   const reactResponse = await request.get(
     "/docs/snapsort/introduction/01_setup.md?framework=react",
@@ -93,8 +123,8 @@ test("raw Markdown selects one framework without damaging fenced code", async ({
   expect(reactResponse.status()).toBe(200);
   const reactMarkdown = await reactResponse.text();
   expect(reactMarkdown).toContain("```tsx");
-  expect(reactMarkdown).toContain("@snap-engine/snapsort-react");
-  expect(reactMarkdown).not.toContain("@snap-engine/snapsort-svelte");
+  expect(reactMarkdown).toContain("@snap-engine/snapsort/react");
+  expect(reactMarkdown).not.toContain("@snap-engine/snapsort/svelte");
   expect(reactMarkdown).not.toContain("framework=React");
 
   const vanillaResponse = await request.get(
@@ -104,7 +134,7 @@ test("raw Markdown selects one framework without damaging fenced code", async ({
   const vanillaMarkdown = await vanillaResponse.text();
   expect(vanillaMarkdown).toContain("```javascript");
   expect(vanillaMarkdown).toContain("new CollisionEngine()");
-  expect(vanillaMarkdown).not.toContain("@snap-engine/snapsort-react");
+  expect(vanillaMarkdown).not.toContain("@snap-engine/snapsort/react");
 });
 
 test("raw Markdown switches paired reference pages and cleans interactive MDX", async ({
@@ -115,9 +145,10 @@ test("raw Markdown switches paired reference pages and cleans interactive MDX", 
   );
   expect(pairedResponse.status()).toBe(200);
   const pairedMarkdown = await pairedResponse.text();
-  expect(pairedMarkdown).toContain("React Container component props");
-  expect(pairedMarkdown).toContain("@snap-engine/snapsort-react");
-  expect(pairedMarkdown).not.toContain("@snap-engine/snapsort-svelte");
+  expect(pairedMarkdown).toContain("# Container");
+  expect(pairedMarkdown).not.toContain("React Container component props");
+  expect(pairedMarkdown).toContain("@snap-engine/snapsort/react");
+  expect(pairedMarkdown).not.toContain("@snap-engine/snapsort/svelte");
 
   const svelteReferenceResponse = await request.get(
     "/docs/snapsort/reference/svelte/container.md",
@@ -268,9 +299,9 @@ test("SnapLine docs expose framework switching, live demos, Markdown, and llms i
   await expect(page.locator("#desktop-doc-framework")).toHaveValue("svelte");
   await expect(
     page.locator(".framework-code-block:visible").filter({
-      hasText: "@snap-engine/snapline-svelte",
+      hasText: "@snap-engine/snapline/svelte",
     }),
-  ).toHaveCount(2);
+  ).toHaveCount(1);
 
   await page.locator("#desktop-doc-framework").selectOption("react");
   await expect(page.locator(".doc-article")).toHaveAttribute(
@@ -279,9 +310,9 @@ test("SnapLine docs expose framework switching, live demos, Markdown, and llms i
   );
   await expect(
     page.locator(".framework-code-block:visible").filter({
-      hasText: "@snap-engine/snapline-react",
+      hasText: "@snap-engine/snapline/react",
     }),
-  ).toHaveCount(2);
+  ).toHaveCount(1);
 
   await page.goto("/docs/snapline/guides/03_groups");
   await expect(page.locator(".snapline-demo")).toBeVisible();

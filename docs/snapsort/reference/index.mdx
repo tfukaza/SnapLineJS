@@ -1,6 +1,5 @@
 ---
 title: Reference Overview
-description: API reference for using SnapSort from Svelte and React.
 order: 0
 project: snapsort
 projectTitle: SnapSort
@@ -19,10 +18,12 @@ Choose a framework, then open the page for the component you are using.
 
 The framework selector in the sidebar keeps the current component selected when you switch between Svelte and React.
 
-## Packages
+## Package entry points
 
-| Package | Purpose |
+SnapSort ships one package with framework bindings exposed as subpaths.
+
+| Import path | Purpose |
 |---------|---------|
 | `@snap-engine/snapsort` | Framework-agnostic SnapEngine objects and types used by framework bindings. |
-| `@snap-engine/snapsort-svelte` | Svelte components that wrap the core objects. |
-| `@snap-engine/snapsort-react` | React components that wrap the core objects. |
+| `@snap-engine/snapsort/svelte` | Svelte components that wrap the core objects. |
+| `@snap-engine/snapsort/react` | React components that wrap the core objects. |

@@ -10,6 +10,7 @@ export default defineConfig({
   testMatch: [
     "docs-framework-code.spec.ts",
     "snapsort-landing-regression.spec.ts",
+    "website-navigation.spec.ts",
     "website-engine-lifecycle.spec.ts",
   ],
   workers: 1,

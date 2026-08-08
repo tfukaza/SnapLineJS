@@ -5,11 +5,10 @@ import type { Framework } from "$lib/frameworks";
  * keep these in step when that page changes.
  */
 export const installCommands: Record<Framework, string> = {
-  svelte:
-    "npm install @snap-engine/core @snap-engine/asset-base-svelte @snap-engine/snapsort @snap-engine/snapsort-svelte",
+  svelte: "npm install @snap-engine/snapsort @snap-engine/asset-base",
   react:
-    "npm install @snap-engine/core @snap-engine/asset-base-react @snap-engine/snapsort @snap-engine/snapsort-react",
-  vanilla: "npm install @snap-engine/core @snap-engine/snapsort",
+    "npm install @snap-engine/snapsort @snap-engine/asset-base react react-dom",
+  vanilla: "npm install @snap-engine/snapsort",
 };
 
 export const sampleLanguages: Record<Framework, string> = {
@@ -20,8 +19,8 @@ export const sampleLanguages: Record<Framework, string> = {
 
 const svelteSample = [
   '<script lang="ts">',
-  '  import { Engine } from "@snap-engine/asset-base-svelte";',
-  '  import { Container, Item } from "@snap-engine/snapsort-svelte";',
+  '  import { Engine } from "@snap-engine/asset-base/svelte";',
+  '  import { Container, Item } from "@snap-engine/snapsort/svelte";',
   '  import type { ItemMoveEvent } from "@snap-engine/snapsort";',
   "",
   "  let tasks = $state([",
@@ -53,7 +52,7 @@ const svelteSample = [
 ].join("\n");
 
 const reactSample = `import { useState } from "react";
-import { Engine, Container, Item } from "@snap-engine/snapsort-react";
+import { Engine, Container, Item } from "@snap-engine/snapsort/react";
 import type { ItemMoveEvent } from "@snap-engine/snapsort";
 
 const initial = [

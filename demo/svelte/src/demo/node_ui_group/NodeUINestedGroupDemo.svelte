@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { Engine } from "@snap-engine/asset-base-svelte";
-  import { Group } from "@snap-engine/snapline-svelte";
+  import { Engine } from "@snap-engine/asset-base/svelte";
+  import { Group } from "@snap-engine/snapline/svelte";
   import { GroupNodeMirror } from "@snap-engine/snapline";
   import SimpleNode from "../node_ui_demo/SimpleNode.svelte";
 

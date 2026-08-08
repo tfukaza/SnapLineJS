@@ -5,7 +5,7 @@ import {
   Engine,
   useCameraControl,
   useSnapEngine,
-} from "@snap-engine/asset-base-react";
+} from "@snap-engine/asset-base/react";
 
 function ContextStatus() {
   const engine = useSnapEngine();

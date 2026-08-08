@@ -1,6 +1,5 @@
 ---
 title: API reference
-description: Entry points and framework-specific references for SnapLine 0.3.
 order: 1
 sectionTitle: Reference
 sectionOrder: 3
@@ -10,11 +9,13 @@ hidden: true
 Use the framework selector to switch between equivalent Vanilla, Svelte, and
 React pages.
 
-| Package | Primary exports |
+SnapLine ships one package with framework bindings exposed as subpaths.
+
+| Import path | Primary exports |
 | --- | --- |
 | `@snap-engine/snapline` | Node, connector, line, selection, group, placement, controlled-graph, and query core APIs |
-| `@snap-engine/snapline-svelte` | `Node`, `Connector`, `Line`, `Select`, `Group`, `Placement`, `ControlledGraph` |
-| `@snap-engine/snapline-react` | `Engine`, `Node`, `Connector`, `Line`, `Select`, `Group`, `Placement`, `ControlledGraph` |
+| `@snap-engine/snapline/svelte` | `Node`, `Connector`, `Line`, `Select`, `Group`, `Placement`, `ControlledGraph` |
+| `@snap-engine/snapline/react` | `Engine`, `Node`, `Connector`, `Line`, `Select`, `Group`, `Placement`, `ControlledGraph` |
 
-The core package has a single entry point and no subpaths — import everything
+The framework-neutral API has no per-module subpaths — import all core objects
 from `@snap-engine/snapline`.

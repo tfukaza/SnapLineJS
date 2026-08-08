@@ -15,30 +15,24 @@ export default defineConfig(({ command, mode }) => {
         "@snap-engine/core/collision": path.resolve(root, "src/collision.ts"),
         "@snap-engine/core/debug": path.resolve(root, "src/debug.ts"),
         "@snap-engine/core": path.resolve(root, "src/index.ts"),
-        "@snap-engine/asset-base-react": path.resolve(
+        "@snap-engine/asset-base/react": path.resolve(
           root,
-          "assets/asset-base/react/src/index.ts",
+          "assets/asset-base/src/react",
         ),
         "@snap-engine/asset-base": path.resolve(
           root,
-          "assets/asset-base/core/src/index.ts",
+          "assets/asset-base/src",
         ),
-        "@snap-engine/snapsort-react": path.resolve(
+        "@snap-engine/snapsort/react": path.resolve(
           root,
-          "assets/snapsort/react/src/index.ts",
+          "assets/snapsort/src/react",
         ),
-        "@snap-engine/snapsort": path.resolve(
+        "@snap-engine/snapsort": path.resolve(root, "assets/snapsort/src"),
+        "@snap-engine/snapline/react": path.resolve(
           root,
-          "assets/snapsort/core/src/index.ts",
+          "assets/snapline/src/react",
         ),
-        "@snap-engine/snapline-react": path.resolve(
-          root,
-          "assets/snapline/react/src/index.ts",
-        ),
-        "@snap-engine/snapline": path.resolve(
-          root,
-          "assets/snapline/core/src/index.ts",
-        ),
+        "@snap-engine/snapline": path.resolve(root, "assets/snapline/src"),
       },
     },
     server: {

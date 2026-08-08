@@ -10,13 +10,17 @@ node types, validation, persistence, and styling.
 ## Install
 
 ```bash
-npm install @snap-engine/core @snap-engine/snapline
+npm install @snap-engine/snapline
 ```
 
-## Entry point
+The package root is the framework-neutral API. Framework applications import
+their bindings from `@snap-engine/snapline/svelte` or
+`@snap-engine/snapline/react`.
+
+## Core and Vanilla
 
 `@snap-engine/snapline` — one entry point, no per-module subpaths. Everything
-public is re-exported from the package root; `core/src/internal/` is
+public is re-exported from the package root; `src/internal/` is
 implementation detail and must not be deep-imported.
 
 ```ts
@@ -28,6 +32,53 @@ import {
   setGroupMembershipResolver,
 } from "@snap-engine/snapline";
 ```
+
+## Svelte
+
+```bash
+npm install @snap-engine/snapline @snap-engine/asset-base svelte
+```
+
+```svelte
+<script lang="ts">
+  import { Engine } from "@snap-engine/asset-base/svelte";
+  import { Group, Node, Select } from "@snap-engine/snapline/svelte";
+</script>
+```
+
+The Svelte entry exports `Node`, `Group`, `ResizeRegion`, `Connector`, `Line`,
+`Select`, `Placement`, and `ControlledGraph`. Component subpaths such as
+`@snap-engine/snapline/svelte/Node.svelte` are also supported.
+
+## React
+
+```bash
+npm install @snap-engine/snapline @snap-engine/asset-base react react-dom
+```
+
+```tsx
+import { Engine, Group, Node, Select } from "@snap-engine/snapline/react";
+```
+
+The React entry exposes the same component set plus component prop and ref
+types. Deep imports such as `@snap-engine/snapline/react/Node` remain
+supported.
+
+Svelte, React, React DOM, and Asset Base are optional peers. Consumers of
+the package root do not need to install either framework.
+
+## Upgrading to 0.4
+
+SnapLine 0.4 replaces the separate framework packages with subpath bindings:
+
+| Before | SnapLine 0.4 |
+| --- | --- |
+| `@snap-engine/snapline-svelte` | `@snap-engine/snapline/svelte` |
+| `@snap-engine/snapline-react` | `@snap-engine/snapline/react` |
+
+Remove the old adapter package from your dependencies and install
+`@snap-engine/snapline` instead. Version 0.4 does not include compatibility
+shims for the retired package names.
 
 After assigning a Vanilla-rendered element, call `remeasureDomGeometry()`. Svelte
 and React adapters perform that synchronization automatically.
@@ -73,6 +124,6 @@ Groups maintain an exclusive direct parent. Ordinary nodes use center
 containment, nested groups use full-bounds containment, and the smallest safe
 candidate wins unless an engine-level resolver overrides it.
 
-SnapLine `0.3` is experimental and may make breaking changes before `1.0`.
+SnapLine `0.4` is experimental and may make breaking changes before `1.0`.
 
 Full documentation: https://snapengine.dev/docs/snapline/introduction

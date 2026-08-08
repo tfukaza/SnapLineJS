@@ -7,7 +7,7 @@ import {
   type LineChangeRequest,
   type LineRecord,
   type ReconciliationError,
-} from "../../assets/snapline/core/src";
+} from "../../assets/snapline/src";
 
 // Headless engine stand-in for SnapLine unit tests: a six-stage frame queue,
 // an engine-scoped object table, and the input/collision surface the mirrors

@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { NodeMirror } from "../../assets/snapline/core/src";
+import { NodeMirror } from "../../assets/snapline/src";
 import {
   createEngineHarness,
   installObserverStubs,

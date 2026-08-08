@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Engine } from "@snap-engine/asset-base-svelte";
+  import { Engine } from "@snap-engine/asset-base/svelte";
   import Basic from "./Basic.svelte";
   import Variable from "./Variable.svelte";
   import MultiVariable from "./MultiVariable.svelte";

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Camera, Engine } from "@snap-engine/asset-base-svelte";
+  import { Camera, Engine } from "@snap-engine/asset-base/svelte";
   import DemoGraph from "../node_ui_demo/DemoGraph.svelte";
   import SimpleNode from "../node_ui_demo/SimpleNode.svelte";
 

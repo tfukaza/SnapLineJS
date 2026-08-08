@@ -17,24 +17,24 @@ export default defineConfig(({ command, mode }) => {
         "@snap-engine/core/debug": path.resolve(root, "src/debug.ts"),
         "@snap-engine/core": path.resolve(root, "src/index.ts"),
         // Asset packages (raw source)
-        "@snap-engine/asset-base-svelte": path.resolve(
+        "@snap-engine/asset-base/svelte": path.resolve(
           root,
-          "assets/asset-base/svelte/src/index.ts",
+          "assets/asset-base/src/svelte",
         ),
         "@snap-engine/asset-base": path.resolve(
           root,
-          "assets/asset-base/core/src/index.ts",
+          "assets/asset-base/src",
         ),
-        "@snap-engine/snapsort-svelte": path.resolve(
+        "@snap-engine/snapsort/svelte": path.resolve(
           root,
-          "assets/snapsort/svelte/src/index.ts",
+          "assets/snapsort/src/svelte",
         ),
-        "@snap-engine/snapsort": path.resolve(
+        "@snap-engine/snapsort": path.resolve(root, "assets/snapsort/src"),
+        "@snap-engine/snapline/svelte": path.resolve(
           root,
-          "assets/snapsort/core/src/index.ts",
+          "assets/snapline/src/svelte",
         ),
-        "@snap-engine/snapline-svelte": path.resolve(root, "assets/snapline/svelte/src/index.ts"),
-        "@snap-engine/snapline": path.resolve(root, "assets/snapline/core/src/index.ts"),
+        "@snap-engine/snapline": path.resolve(root, "assets/snapline/src"),
       },
     },
     publicDir: path.resolve(__dirname, "../../website/static"),

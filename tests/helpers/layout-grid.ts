@@ -13,8 +13,8 @@ import {
   flowLayoutPositions,
   type LayoutFilter,
   type VirtualInsertion,
-} from "../../assets/snapsort/core/src/layout";
-import type { ItemSnapshot } from "../../assets/snapsort/core/src/snapshot";
+} from "../../assets/snapsort/src/layout";
+import type { ItemSnapshot } from "../../assets/snapsort/src/snapshot";
 
 export type BoxInit = {
   x: number;

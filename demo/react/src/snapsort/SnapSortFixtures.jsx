@@ -4,7 +4,7 @@ import {
   Ghost,
   Handle,
   Item,
-} from "@snap-engine/snapsort-react";
+} from "@snap-engine/snapsort/react";
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 
 const snapSortCubicAnimation = new URLSearchParams(window.location.search).has("slowFlip")

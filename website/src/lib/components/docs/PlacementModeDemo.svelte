@@ -1,6 +1,6 @@
 <script lang="ts">
   import ClientDemoFrame from "$lib/components/ClientDemoFrame.svelte";
-  import { Engine } from "@snap-engine/asset-base-svelte";
+  import { Engine } from "@snap-engine/asset-base/svelte";
   import type {
     GhostInsertEvent,
     DragItemHoverEvent,
@@ -8,7 +8,7 @@
     ItemSwapEvent,
     SortMode,
   } from "@snap-engine/snapsort";
-  import { Container, Ghost, Item } from "@snap-engine/snapsort-svelte";
+  import { Container, Ghost, Item } from "@snap-engine/snapsort/svelte";
   import { untrack } from "svelte";
 
   let {

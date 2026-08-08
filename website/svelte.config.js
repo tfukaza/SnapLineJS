@@ -11,7 +11,6 @@ import { remarkFrameworkCodeBlocks } from "./src/lib/markdown/remarkFrameworkCod
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const mdsvexLayout = join(__dirname, "src/lib/markdown/MdsvexLayout.svelte");
 
-
 // Create shiki highlighter with custom theme
 const highlighter = await createHighlighter({
   themes: [customTheme],
@@ -33,9 +32,7 @@ const config = {
           // Unknown fence languages (mermaid diagrams in the design docs,
           // etc.) must not break the whole docs build — fall back to plain
           // text instead of letting shiki throw.
-          const resolvedLang = highlighter
-            .getLoadedLanguages()
-            .includes(lang)
+          const resolvedLang = highlighter.getLoadedLanguages().includes(lang)
             ? lang
             : "plaintext";
           const highlighted = highlighter.codeToHtml(code, {
@@ -59,17 +56,17 @@ const config = {
     // See https://svelte.dev/docs/kit/adapters for more information about adapters.
     adapter: adapter(),
     alias: {
-      "@snap-engine/snapline-svelte": "../assets/snapline/svelte/src/index.ts",
-      "@snap-engine/snapline": "../assets/snapline/core/src/index.ts",
+      "@snap-engine/snapline/svelte": "../assets/snapline/src/svelte",
+      "@snap-engine/snapline": "../assets/snapline/src",
       "@snapline": "../src",
       "@svelte-demo": "../demo/svelte/src",
       "@docs": "../docs",
       "@components": "./src/lib/components",
-      "@snap-engine/asset-base-svelte":
-        "../assets/asset-base/svelte/src/index.ts",
-      "@snap-engine/asset-base": "../assets/asset-base/core/src/index.ts",
-      "@snap-engine/snapsort-svelte": "../assets/snapsort/svelte/src/index.ts",
-      "@snap-engine/snapsort": "../assets/snapsort/core/src/index.ts",
+      "@snap-engine/asset-base/svelte":
+        "../assets/asset-base/src/svelte",
+      "@snap-engine/asset-base": "../assets/asset-base/src",
+      "@snap-engine/snapsort/svelte": "../assets/snapsort/src/svelte",
+      "@snap-engine/snapsort": "../assets/snapsort/src",
       "@snap-engine/core/animation": "../src/animation.ts",
       "@snap-engine/core/debug": "../src/debug.ts",
       "@snap-engine/core/collision": "../src/collision.ts",

@@ -1,6 +1,5 @@
 ---
 title: React Overview
-description: Package setup and component map for @snap-engine/snapsort-react.
 order: 0
 project: snapsort
 projectTitle: SnapSort
@@ -11,20 +10,21 @@ framework: react
 frameworkKey: overview
 ---
 
-The React package wraps SnapSort's core objects in React components. Use it when React owns the rendered arrays and your component state remains the source of truth for item order.
+The React binding wraps SnapSort's core objects in React components. Use it when React owns the rendered arrays and your component state remains the source of truth for item order.
 
 ## Install
 
 ```bash
-npm install @snap-engine/core @snap-engine/asset-base-react @snap-engine/snapsort @snap-engine/snapsort-react react react-dom
+npm install @snap-engine/snapsort @snap-engine/asset-base react react-dom
 ```
 
-`react` and `react-dom` are peer dependencies of `@snap-engine/snapsort-react`.
+`react`, `react-dom`, and `@snap-engine/asset-base` are optional peers of
+the unified package and are required only when you import the React binding.
 
 ## Import
 
 ```tsx
-import { Engine, Container, Ghost, Handle, Item } from "@snap-engine/snapsort-react";
+import { Engine, Container, Ghost, Handle, Item } from "@snap-engine/snapsort/react";
 ```
 
 Wrap the sortable tree in an `Engine`, then compose containers and items:
@@ -82,8 +82,8 @@ For the application-state pattern shared by both adapters, see [Session Lifecycl
 
 | Import path | Exports |
 |-------------|---------|
-| `@snap-engine/snapsort-react/Engine` | `Engine`, context, and `useSnapSortEngine` |
-| `@snap-engine/snapsort-react/Container` | Container components and context |
-| `@snap-engine/snapsort-react/Ghost` | Framework-owned flow ghost component |
-| `@snap-engine/snapsort-react/Item` | Item components and context |
-| `@snap-engine/snapsort-react/Handle` | `Handle` |
+| `@snap-engine/snapsort/react/Engine` | `Engine`, context, and `useSnapSortEngine` |
+| `@snap-engine/snapsort/react/Container` | Container components and context |
+| `@snap-engine/snapsort/react/Ghost` | Framework-owned flow ghost component |
+| `@snap-engine/snapsort/react/Item` | Item components and context |
+| `@snap-engine/snapsort/react/Handle` | `Handle` |

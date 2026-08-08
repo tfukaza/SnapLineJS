@@ -2,7 +2,7 @@
   import CardDocsLink from "./CardDocsLink.svelte";
   import { onDestroy, untrack } from "svelte";
   import ClientDemoFrame from "$lib/components/ClientDemoFrame.svelte";
-  import { Engine } from "@snap-engine/asset-base-svelte";
+  import { Engine } from "@snap-engine/asset-base/svelte";
   import { ElementObject } from "@snapline/object";
   import { AnimationObject } from "@snapline/animation";
   import type { Engine as EngineType } from "@snapline/index";

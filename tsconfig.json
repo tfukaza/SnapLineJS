@@ -25,21 +25,28 @@
       "@snap-engine/core/animation": ["./src/animation.ts"],
       "@snap-engine/core/collision": ["./src/collision.ts"],
       "@snap-engine/core/debug": ["./src/debug.ts"],
-      "@snap-engine/asset-base-svelte": [
-        "./assets/asset-base/svelte/src/index.ts"
+      "@snap-engine/asset-base/svelte": [
+        "./assets/asset-base/src/svelte/index.ts"
       ],
-      "@snap-engine/asset-base-react": [
-        "./assets/asset-base/react/src/index.ts"
+      "@snap-engine/asset-base/svelte/*": ["./assets/asset-base/src/svelte/*"],
+      "@snap-engine/asset-base/react": [
+        "./assets/asset-base/src/react/index.ts"
       ],
-      "@snap-engine/asset-base": ["./assets/asset-base/core/src/index.ts"],
-      "@snap-engine/snapsort-svelte": [
-        "./assets/snapsort/svelte/src/index.ts"
-      ],
-      "@snap-engine/snapsort-react": ["./assets/snapsort/react/src/index.ts"],
-      "@snap-engine/snapsort": ["./assets/snapsort/core/src/index.ts"],
-      "@snap-engine/snapline-svelte": ["./assets/snapline/svelte/src/index.ts"],
-      "@snap-engine/snapline-react": ["./assets/snapline/react/src/index.ts"],
-      "@snap-engine/snapline": ["./assets/snapline/core/src/index.ts"]
+      "@snap-engine/asset-base/react/*": ["./assets/asset-base/src/react/*"],
+      "@snap-engine/asset-base": ["./assets/asset-base/src/index.ts"],
+      "@snap-engine/asset-base/*": ["./assets/asset-base/src/*"],
+      "@snap-engine/snapsort/svelte": ["./assets/snapsort/src/svelte/index.ts"],
+      "@snap-engine/snapsort/svelte/*": ["./assets/snapsort/src/svelte/*"],
+      "@snap-engine/snapsort/react": ["./assets/snapsort/src/react/index.ts"],
+      "@snap-engine/snapsort/react/*": ["./assets/snapsort/src/react/*"],
+      "@snap-engine/snapsort": ["./assets/snapsort/src/index.ts"],
+      "@snap-engine/snapsort/*": ["./assets/snapsort/src/*"],
+      "@snap-engine/snapline/svelte": ["./assets/snapline/src/svelte/index.ts"],
+      "@snap-engine/snapline/svelte/*": ["./assets/snapline/src/svelte/*"],
+      "@snap-engine/snapline/react": ["./assets/snapline/src/react/index.ts"],
+      "@snap-engine/snapline/react/*": ["./assets/snapline/src/react/*"],
+      "@snap-engine/snapline": ["./assets/snapline/src/index.ts"],
+      "@snap-engine/snapline/*": ["./assets/snapline/src/*"]
     },
     "jsx": "react-jsx"
   },

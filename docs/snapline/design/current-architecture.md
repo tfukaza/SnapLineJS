@@ -1,6 +1,5 @@
 ---
 title: SnapLine current architecture
-description: Internal design doc — the post-re-architecture implementation.
 hidden: true
 ---
 
@@ -395,8 +394,8 @@ anchors are read-only publicly, and `LineMirrorPhase` is
 
 ### Adapters
 
-Svelte (`@snap-engine/snapline-svelte`) and React
-(`@snap-engine/snapline-react`) export `Node`, `Group`, `Connector`, `Line`,
+Svelte (`@snap-engine/snapline/svelte`) and React
+(`@snap-engine/snapline/react`) export `Node`, `Group`, `Connector`, `Line`,
 `Select`, `Placement`, and **`ControlledGraph`** (React additionally exports
 the asset-base `Engine`, `NodeMirrorContext`, `useNodeHandle`, and prop/ref
 types). Adapter contracts:
@@ -431,20 +430,20 @@ types). Adapter contracts:
 
 | Concern                                  | Primary implementation                          |
 | ---------------------------------------- | ----------------------------------------------- |
-| Public exports                           | `assets/snapline/core/src/index.ts`             |
-| Engine-scoped registry, ids, scheduler   | `assets/snapline/core/src/internal/graph-registry.ts`      |
-| Controlled line reconciliation, records  | `assets/snapline/core/src/line-reconciler.ts`   |
-| Connector rules, gestures, admission     | `assets/snapline/core/src/connector.ts`         |
-| Node lifecycle, drag/resize, geometry    | `assets/snapline/core/src/node.ts`              |
-| Line state, phases, anchors              | `assets/snapline/core/src/line.ts`              |
-| Groups and membership                    | `assets/snapline/core/src/group.ts`             |
-| Rectangle selection                      | `assets/snapline/core/src/select.ts`            |
-| Placement state machine                  | `assets/snapline/core/src/placement.ts`         |
-| Read-only query facade                   | `assets/snapline/core/src/query.ts`             |
-| Shared global.data + attachControlledGraph | `assets/snapline/core/src/internal/shared-data.ts` |
-| Geometry writer type                     | `assets/snapline/core/src/geometry.ts`          |
-| Svelte adapters (incl. ControlledGraph)  | `assets/snapline/svelte/src/*.svelte`           |
-| React adapters (incl. ControlledGraph)   | `assets/snapline/react/src/*.tsx`               |
+| Public exports                           | `assets/snapline/src/index.ts`                    |
+| Engine-scoped registry, ids, scheduler   | `assets/snapline/src/internal/graph-registry.ts`  |
+| Controlled line reconciliation, records  | `assets/snapline/src/internal/line-reconciler.ts` |
+| Connector rules, gestures, admission     | `assets/snapline/src/connector.ts`                |
+| Node lifecycle, drag/resize, geometry    | `assets/snapline/src/node.ts`                     |
+| Line state, phases, anchors              | `assets/snapline/src/line.ts`                     |
+| Groups and membership                    | `assets/snapline/src/group.ts`                    |
+| Rectangle selection                      | `assets/snapline/src/select.ts`                   |
+| Placement state machine                  | `assets/snapline/src/placement.ts`                |
+| Read-only query facade                   | `assets/snapline/src/query.ts`                    |
+| Shared global.data + attachControlledGraph | `assets/snapline/src/internal/shared-data.ts` |
+| Geometry writer type                     | `assets/snapline/src/types.ts`                    |
+| Svelte adapters (incl. ControlledGraph)  | `assets/snapline/src/svelte/*.svelte`             |
+| React adapters (incl. ControlledGraph)   | `assets/snapline/src/react/*.tsx`                 |
 | Controlled-graph demos                   | `demo/svelte/src/demo/node_ui_edges/`, `demo/react/` |
 | Unit tests                               | `tests/ut/snapline-graph-mirror.spec.ts`, `tests/ut/snapline-line-reconciler.spec.ts`, `tests/ut/snapline-connector-config.spec.ts` |
 | Browser tests                            | `tests/e2e/snapline-edges.spec.ts`, `tests/e2e/snapline-edges-react.spec.ts` |

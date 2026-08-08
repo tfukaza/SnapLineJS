@@ -13,7 +13,7 @@ export default defineConfig(({ command, mode }) => {
         "@snap-engine/core": path.resolve(root, "src/index.ts"),
         "@snap-engine/snapsort": path.resolve(
           root,
-          "assets/snapsort/core/src/index.ts",
+          "assets/snapsort/src",
         ),
       },
     },

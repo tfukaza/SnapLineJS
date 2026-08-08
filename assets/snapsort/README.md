@@ -1,6 +1,7 @@
 # @snap-engine/snapsort
 
-Core TypeScript logic for SnapEngine drag-and-drop interactions.
+Framework-neutral drag-and-drop primitives with first-party Svelte and React
+bindings.
 
 A single `Container`/`Item` class pair; each container picks its drag
 behavior with `config.mode`: `"euclidean"` (default), `"progressive"`,
@@ -9,10 +10,14 @@ behavior with `config.mode`: `"euclidean"` (default), `"progressive"`,
 ## Install
 
 ```bash
-npm install @snap-engine/snapsort @snap-engine/core
+npm install @snap-engine/snapsort
 ```
 
-## Includes
+The package root is the framework-neutral API. Framework applications import
+their bindings from `@snap-engine/snapsort/svelte` or
+`@snap-engine/snapsort/react`.
+
+## Core and Vanilla
 
 - `Container`
 - `Item`
@@ -20,13 +25,73 @@ npm install @snap-engine/snapsort @snap-engine/core
 - Event types: `ItemInsertEvent`, `ItemRemoveEvent`, `ItemMoveEvent`, `ItemSwapEvent`, `GhostCreateEvent`, `GhostInsertEvent`, `GhostRemoveEvent`, `DragStartEvent`, `DragEndEvent`, `DropTargetChangeEvent`, `CanDropEvent`, `VisualGeometryInvalidationEvent`, `DragLocation`
 - `ContainerCallbacks`, `ContainerConfig`, `SortMode`, `SortStrategy`
 
-## Usage
-
 ```ts
 import { Container, Item } from "@snap-engine/snapsort";
 
 const container = new Container(engine, parent, { mode: "insertion" });
 ```
+
+## Svelte
+
+Install Svelte and the shared Engine binding alongside SnapSort:
+
+```bash
+npm install @snap-engine/snapsort @snap-engine/asset-base svelte
+```
+
+```svelte
+<script lang="ts">
+  import { Engine } from "@snap-engine/asset-base/svelte";
+  import { Container, Handle, Item } from "@snap-engine/snapsort/svelte";
+  import type { ItemMoveEvent } from "@snap-engine/snapsort";
+</script>
+```
+
+The Svelte entry exports `Container`, `Ghost`, `Item`, and `Handle`. Component
+subpaths such as `@snap-engine/snapsort/svelte/Container.svelte` are also
+supported.
+
+## React
+
+Install the React peers and shared Engine binding alongside SnapSort:
+
+```bash
+npm install @snap-engine/snapsort @snap-engine/asset-base react react-dom
+```
+
+```tsx
+import {
+  Container,
+  Engine,
+  Ghost,
+  Handle,
+  Item,
+} from "@snap-engine/snapsort/react";
+import type { ItemMoveEvent } from "@snap-engine/snapsort";
+```
+
+The React entry also exports `SnapSortEngine`, `useSnapSortEngine`, framework
+contexts, component prop types, and the deprecated
+`useSnapSortAwaitMutation` compatibility helper. Deep imports such as
+`@snap-engine/snapsort/react/Container` remain supported.
+
+Svelte, React, React DOM, and Asset Base are optional peers. Consumers of
+the package root do not need to install either framework.
+
+## Upgrading to 0.5
+
+SnapSort 0.5 replaces the separate framework packages with subpath bindings in
+the main package:
+
+| Before | SnapSort 0.5 |
+| --- | --- |
+| `@snap-engine/snapsort-svelte` | `@snap-engine/snapsort/svelte` |
+| `@snap-engine/snapsort-react` | `@snap-engine/snapsort/react` |
+
+Remove the old adapter package from your dependencies and install
+`@snap-engine/snapsort` instead. The package root remains the framework-neutral
+API. Version 0.5 does not include compatibility shims for the retired package
+names.
 
 ## DOM ownership contract
 

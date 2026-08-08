@@ -3,15 +3,9 @@ name: Publish asset package to npm
 on:
   push:
     tags:
-      - 'asset-base-v*'
-      - 'asset-base-svelte-v*'
-      - 'asset-base-react-v*'
-      - 'snapsort-v*'
-      - 'snapsort-svelte-v*'
-      - 'snapsort-react-v*'
-      - 'snapline-v*'
-      - 'snapline-svelte-v*'
-      - 'snapline-react-v*'
+      - "asset-base-v*"
+      - "snapsort-v*"
+      - "snapline-v*"
 
 jobs:
   publish:
@@ -25,8 +19,8 @@ jobs:
           fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
-          node-version: '24'
-          registry-url: 'https://registry.npmjs.org'
+          node-version: "24"
+          registry-url: "https://registry.npmjs.org"
 
       - name: Verify release commit is on main
         run: |
@@ -41,40 +35,16 @@ jobs:
         run: |
           case "$GITHUB_REF_NAME" in
             asset-base-v*)
-              package_dir="assets/asset-base/core"
+              package_dir="assets/asset-base"
               tag_version="${GITHUB_REF_NAME#asset-base-v}"
               ;;
-            asset-base-svelte-v*)
-              package_dir="assets/asset-base/svelte"
-              tag_version="${GITHUB_REF_NAME#asset-base-svelte-v}"
-              ;;
-            asset-base-react-v*)
-              package_dir="assets/asset-base/react"
-              tag_version="${GITHUB_REF_NAME#asset-base-react-v}"
-              ;;
             snapsort-v*)
-              package_dir="assets/snapsort/core"
+              package_dir="assets/snapsort"
               tag_version="${GITHUB_REF_NAME#snapsort-v}"
               ;;
-            snapsort-svelte-v*)
-              package_dir="assets/snapsort/svelte"
-              tag_version="${GITHUB_REF_NAME#snapsort-svelte-v}"
-              ;;
-            snapsort-react-v*)
-              package_dir="assets/snapsort/react"
-              tag_version="${GITHUB_REF_NAME#snapsort-react-v}"
-              ;;
             snapline-v*)
-              package_dir="assets/snapline/core"
+              package_dir="assets/snapline"
               tag_version="${GITHUB_REF_NAME#snapline-v}"
-              ;;
-            snapline-svelte-v*)
-              package_dir="assets/snapline/svelte"
-              tag_version="${GITHUB_REF_NAME#snapline-svelte-v}"
-              ;;
-            snapline-react-v*)
-              package_dir="assets/snapline/react"
-              tag_version="${GITHUB_REF_NAME#snapline-react-v}"
               ;;
             *)
               echo "Unsupported release tag: $GITHUB_REF_NAME"

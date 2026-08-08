@@ -1,7 +1,6 @@
 export type DocEntry = {
   slug: string;
   title: string;
-  description: string | null;
   order: number;
   project: string;
   projectTitle: string;
@@ -24,7 +23,6 @@ export type DocSection = {
 
 type DocMetadata = {
   title?: string;
-  description?: string;
   order?: number;
   project?: string;
   projectTitle?: string;
@@ -47,7 +45,7 @@ export type DocProject = {
 export const docProjects: readonly DocProject[] = [
   {
     slug: "snapengine",
-    title: "SnapEngine",
+    title: "SnapEngine Core",
     description:
       "Documentation for building draggable, animated, collision-aware web experiences with SnapEngine.",
     href: "/docs/snapengine/introduction",
@@ -121,8 +119,8 @@ const allEntries = Object.entries(modules)
     const metadata = module.metadata ?? {};
     const project = metadata.project ?? derivedProject;
     const projectTitle =
-      metadata.projectTitle ??
       projectTitles[project] ??
+      metadata.projectTitle ??
       (project ? formatTitle(project) : "Docs");
     const section = metadata.section ?? derivedSection;
     const frameworkFromPath =
@@ -139,7 +137,6 @@ const allEntries = Object.entries(modules)
     return {
       slug,
       title: metadata.title || slug || "Home",
-      description: metadata.description ?? null,
       order: metadata.order ?? 999,
       project,
       projectTitle,

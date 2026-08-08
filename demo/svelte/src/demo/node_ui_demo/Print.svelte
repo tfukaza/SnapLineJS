@@ -1,6 +1,6 @@
 <script lang="ts">
   import { NodeMirror } from "@snap-engine/snapline";
-  import { Connector, Node } from "@snap-engine/snapline-svelte";
+  import { Connector, Node } from "@snap-engine/snapline/svelte";
   import DemoLine from "./Line.svelte";
   import { onMount } from "svelte";
 

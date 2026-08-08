@@ -9,16 +9,13 @@ sectionOrder: 1
 ---
 
 SnapSort is a drag-and-drop interface library for the web.
-A core concept of SnapSort is to provide _utilities_ for
-making drag-and-drop, not pre-built components.
-Specifically, this library is built on two key principles:
-- **Primitives over abstraction**: Rather than abstracting core utilities inside APIs, expose them directly. Let developers mix and match for maximum flexibility.
-- **Everything is configurable**: Avoid "sensible defaults" because there is no such thing. Every UI is unique.
-
-For developers, this means:
-  - You only need to know two components: `Item` and `Container`. Every UI are derived from these primitives.
-  - Extensive hooks to define custom behavior.
-  - Wide array of configurations to customize drag and drop behavior, animations, etc.
+Its framework-neutral API and first-party Svelte and React bindings ship from
+the single `@snap-engine/snapsort` package.
+The goal of SnapSort is to provide _utilities_ for
+making drag-and-drop, not pre-built components. This means:
+  - You only need to know two components: `Item` and `Container`. Every UI is derived from these primitives.
+  - Extensive hooks to customize features.
+  - Wide array of configurations for drag and drop behavior, animations, etc.
   - Style-less by default, bring your own CSS.
 
 > [!TIP]

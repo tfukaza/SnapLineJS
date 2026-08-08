@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Container } from "@snap-engine/snapsort-svelte";
+  import { Container } from "@snap-engine/snapsort/svelte";
   import type {
     CanDropEvent,
     ContainerCallbacks,

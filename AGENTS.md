@@ -42,25 +42,26 @@ See `src/AGENTS.md` for module details.
 
 ## Asset Packages (`assets/`)
 
-Organized as npm workspaces following a consistent pattern:
-- `core/` - TypeScript classes extending snap-engine
-- `svelte/` - Svelte component wrappers
-- `react/` - React component wrappers
+Asset Base, SnapSort, and SnapLine use the unified-package layout: core,
+Svelte, and React
+source live in one workspace and are exposed through package subpaths.
 
 ### 1. SnapEngine Asset Base
-- **Packages:** `@snap-engine/asset-base`, `@snap-engine/asset-base-svelte`, `@snap-engine/asset-base-react`
+- **Packages:** `@snap-engine/asset-base`, `@snap-engine/asset-base/svelte`, `@snap-engine/asset-base/react`
 - **Purpose:** Common components (Engine, Camera, Background)
 - **Status:** Active
 - See `assets/asset-base/AGENTS.md`
 
 ### 2. SnapSort
-- **Packages:** `@snap-engine/snapsort`, `@snap-engine/snapsort-svelte`, `@snap-engine/snapsort-react`
+- **Package:** `@snap-engine/snapsort`
+- **Bindings:** `@snap-engine/snapsort/svelte`, `@snap-engine/snapsort/react`
 - **Purpose:** Drag-and-drop list reordering
 - **Status:** Active
 - See `assets/snapsort/AGENTS.md`
 
 ### 3. SnapLine
-- **Packages:** `@snap-engine/snapline`, `@snap-engine/snapline-svelte`, `@snap-engine/snapline-react`
+- **Package:** `@snap-engine/snapline`
+- **Bindings:** `@snap-engine/snapline/svelte`, `@snap-engine/snapline/react`
 - **Purpose:** Node graph UI system
 - **Status:** Experimental public package
 - See `assets/snapline/AGENTS.md`
@@ -75,8 +76,9 @@ Organized as npm workspaces following a consistent pattern:
 All packages use the `@snap-engine` organization:
 
 - **Core engine:** `@snap-engine/core`
-- **Asset base:** `@snap-engine/asset-base`, `@snap-engine/asset-base-svelte`, `@snap-engine/asset-base-react`
-- **Products:** `@snap-engine/{product}`, `@snap-engine/{product}-svelte`, `@snap-engine/{product}-react`
+- **Asset base:** `@snap-engine/asset-base`, `@snap-engine/asset-base/svelte`, `@snap-engine/asset-base/react`
+- **Split products:** `@snap-engine/{product}`, `@snap-engine/{product}-svelte`, `@snap-engine/{product}-react`
+- **Unified products:** `@snap-engine/{product}` with `/{framework}` subpath exports
 
 ## Import Patterns
 
@@ -97,9 +99,9 @@ import { Engine } from "../../../src/index";
 ```json
 {
   "workspaces": [
-    "assets/asset-base/*",
-    "assets/snapsort/*",
-    "assets/snapline/*",
+    "assets/asset-base",
+    "assets/snapsort",
+    "assets/snapline",
     "assets/snapzap/*"
   ]
 }
@@ -122,19 +124,32 @@ import { Engine } from "../../../src/index";
         └── *.svelte
 ```
 
+**Unified asset structure (Asset Base, SnapSort, and SnapLine):**
+```
+{product-name}/
+├── package.json              # @snap-engine/{product}
+├── tsconfig.json
+└── src/
+    ├── index.ts              # Framework-neutral root
+    ├── *.ts                  # Core implementation
+    ├── svelte/               # /svelte binding
+    └── react/                # /react binding
+```
+
 ## TypeScript Configuration
 
-Each asset package needs path mappings:
+Each asset package needs path mappings. A unified package at
+`assets/{product}` resolves core source two levels above it:
 
 ```json
 {
   "compilerOptions": {
     "baseUrl": ".",
     "paths": {
-      "@snap-engine/core": ["../../../src/index.ts"],
-      "@snap-engine/core/animation": ["../../../src/animation.ts"],
-      "@snap-engine/core/collision": ["../../../src/collision.ts"],
-      "@snap-engine/core/debug": ["../../../src/debug.ts"]
+      "@snap-engine/core": ["../../src/index.ts"],
+      "@snap-engine/core/animation": ["../../src/animation.ts"],
+      "@snap-engine/core/collision": ["../../src/collision.ts"],
+      "@snap-engine/core/debug": ["../../src/debug.ts"]
     }
   }
 }
@@ -176,28 +191,35 @@ git push origin core-v{version}
 **Asset package tags:**
 ```bash
 git tag asset-base-v{version}
-git tag asset-base-svelte-v{version}
-git tag asset-base-react-v{version}
 git tag snapsort-v{version}
-git tag snapsort-svelte-v{version}
-git tag snapsort-react-v{version}
 git tag snapline-v{version}
-git tag snapline-svelte-v{version}
-git tag snapline-react-v{version}
 git push origin asset-base-v{version}
-git push origin asset-base-svelte-v{version}
-git push origin asset-base-react-v{version}
 git push origin snapsort-v{version}
-git push origin snapsort-svelte-v{version}
-git push origin snapsort-react-v{version}
 git push origin snapline-v{version}
-git push origin snapline-svelte-v{version}
-git push origin snapline-react-v{version}
 ```
 
 Push release tags one at a time and verify each publish workflow before sending the next tag.
 
 Tag versions must match each package's `package.json` version. The publish workflows live in `.github/workflows/publish.yml` and `.github/workflows/publish-assets.yml`.
+
+Asset Base 0.5 and later publishes the root plus both bindings from
+`@snap-engine/asset-base`; do not create framework-specific Asset Base tags.
+After verifying the unified release, deprecate the old
+`@snap-engine/asset-base-svelte` and `@snap-engine/asset-base-react` packages
+with messages pointing to the new subpaths.
+
+SnapSort 0.5 and later publish core plus both bindings from
+`@snap-engine/snapsort`; do not create `snapsort-svelte-v*` or
+`snapsort-react-v*` tags. After the unified release is verified on npm,
+deprecate the old `@snap-engine/snapsort-svelte` and
+`@snap-engine/snapsort-react` packages with messages pointing to the new
+subpaths. Deprecation is a separate registry operation, not part of the tag
+workflow.
+
+SnapLine 0.4 and later follows the same rule: publish only `snapline-v*`, then
+deprecate `@snap-engine/snapline-svelte` and
+`@snap-engine/snapline-react` after verifying the unified release. Do not
+create framework-specific SnapLine tags.
 
 ## Build System
 
@@ -207,8 +229,8 @@ Tag versions must match each package's `package.json` version. The publish workf
 
 ## Adding New Asset Package
 
-1. Create directory: `assets/{product-name}/{core,svelte}/`
-2. Create package.json for each sub-package
+1. Choose a split or unified package layout and create the source directories
+2. Create the package manifest(s) and explicit subpath exports
 3. Add tsconfig.json with @snap-engine/core path mappings
 4. Create AGENTS.md documenting the package
 5. Update root package.json workspaces (if needed)
@@ -228,7 +250,7 @@ Tag versions must match each package's `package.json` version. The publish workf
 
 ## Key Principles
 
-- **Separation:** Core TypeScript logic separate from framework wrappers
+- **Separation:** Core TypeScript logic stays separate from framework wrappers, even when shipped from one package
 - **No relative imports:** Asset packages import from package names
 - **No build for assets:** Raw source exported, not built bundles
 - **Workspace linking:** Automatic via npm workspaces

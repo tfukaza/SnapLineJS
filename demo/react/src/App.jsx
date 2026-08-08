@@ -5,10 +5,10 @@ import {
   Node,
   ResizeRegion,
   Select,
-} from "@snap-engine/snapline-react";
+} from "@snap-engine/snapline/react";
 import { applyLineChange, RESIZE_HANDLES } from "@snap-engine/snapline";
 import { useCallback, useRef, useState } from "react";
-import { Engine as SnapEngine } from "@snap-engine/asset-base-react";
+import { Engine as SnapEngine } from "@snap-engine/asset-base/react";
 import {
   DropSnapNestedDemo,
   SnapSortComponentsDemo,

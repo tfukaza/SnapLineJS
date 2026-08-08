@@ -2,14 +2,14 @@
   import SeoHead from "$lib/components/SeoHead.svelte";
   import ClientDemoFrame from "$lib/components/ClientDemoFrame.svelte";
   import ExhibitSource from "./ExhibitSource.svelte";
-  import { Engine } from "@snap-engine/asset-base-svelte";
+  import { Engine } from "@snap-engine/asset-base/svelte";
   import type { Engine as SnapEngine } from "@snap-engine/core";
   import {
     Container,
     Ghost,
     Handle,
     Item,
-  } from "@snap-engine/snapsort-svelte";
+  } from "@snap-engine/snapsort/svelte";
   import SnapSortContextBoundary from "../SnapSortContextBoundary.svelte";
   import FileExplorerExample from "../FileExplorerExample.svelte";
   import type {

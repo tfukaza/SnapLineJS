@@ -5,18 +5,18 @@ import {
   contentBoxOrigin,
   flowLayoutPositions,
   virtualEntrySizeFor,
-} from "../../assets/snapsort/core/src/layout";
-import type { ItemSnapshot } from "../../assets/snapsort/core/src/snapshot";
+} from "../../assets/snapsort/src/layout";
+import type { ItemSnapshot } from "../../assets/snapsort/src/snapshot";
 import {
   determineDropTarget,
   determineInsertionDropTarget,
   determineProgressiveDropTarget,
-} from "../../assets/snapsort/core/src/algorithm";
-import { Container as SnapSortContainer } from "../../assets/snapsort/core/src/container";
+} from "../../assets/snapsort/src/algorithm";
+import { Container as SnapSortContainer } from "../../assets/snapsort/src/container";
 import {
   assertCanFireItemMove,
   assertCanFireItemSwap,
-} from "../../assets/snapsort/core/src/mutation";
+} from "../../assets/snapsort/src/mutation";
 import {
   makeContainerSnapshot,
   makeItemSnapshot,

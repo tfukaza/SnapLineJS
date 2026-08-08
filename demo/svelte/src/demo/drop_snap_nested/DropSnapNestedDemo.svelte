@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { Engine } from "@snap-engine/asset-base-svelte";
-  import { Container, Ghost, Item } from "@snap-engine/snapsort-svelte";
+  import { Engine } from "@snap-engine/asset-base/svelte";
+  import { Container, Ghost, Item } from "@snap-engine/snapsort/svelte";
   import type { Engine as EngineClass } from "@snap-engine/core";
   import type { ItemMoveEvent } from "@snap-engine/snapsort";
 

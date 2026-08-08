@@ -3,8 +3,8 @@ import {
   ConnectorMirror,
   NodeMirror,
   type LineRecord,
-} from "../../assets/snapline/core/src";
-import { getGraphRegistry } from "../../assets/snapline/core/src";
+} from "../../assets/snapline/src";
+import { getGraphRegistry } from "../../assets/snapline/src";
 import {
   createControlledHarness,
   nearTargetStrategy,

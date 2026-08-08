@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { Engine } from "@snap-engine/asset-base-svelte";
-  import { ControlledGraph, Select } from "@snap-engine/snapline-svelte";
+  import { Engine } from "@snap-engine/asset-base/svelte";
+  import { ControlledGraph, Select } from "@snap-engine/snapline/svelte";
   import { applyLineChange, query } from "@snap-engine/snapline";
   import type {
     LineChangeRequest,

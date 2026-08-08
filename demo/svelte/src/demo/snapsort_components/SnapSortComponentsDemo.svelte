@@ -1,7 +1,7 @@
 <script lang="ts">
-  import { Engine } from "@snap-engine/asset-base-svelte";
+  import { Engine } from "@snap-engine/asset-base/svelte";
   import SnapSortDuolingoDemo from "../snapsort_duolingo/SnapSortDuolingoDemo.svelte";
-  import { Container, Ghost, Handle, Item } from "@snap-engine/snapsort-svelte";
+  import { Container, Ghost, Handle, Item } from "@snap-engine/snapsort/svelte";
   import type {
     Container as SortContainer,
     GhostInsertEvent,

@@ -1,0 +1,62 @@
+{
+  "name": "@snap-engine/snapsort",
+  "version": "0.5.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tfukaza/SnapEngineJS.git",
+    "directory": "assets/snapsort"
+  },
+  "description": "Framework-neutral drag-and-drop primitives with Svelte and React bindings",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./container": "./src/container.ts",
+    "./item": "./src/item.ts",
+    "./svelte": "./src/svelte/index.ts",
+    "./svelte/*.svelte": "./src/svelte/*.svelte",
+    "./react": "./src/react/index.ts",
+    "./react/useSnapSortAwaitMutation": "./src/react/useSnapSortAwaitMutation.ts",
+    "./react/*": "./src/react/*.tsx"
+  },
+  "dependencies": {
+    "@snap-engine/core": "^0.4.1"
+  },
+  "peerDependencies": {
+    "@snap-engine/asset-base": "^0.5.0",
+    "react": "^18.0.0 || ^19.0.0",
+    "react-dom": "^18.0.0 || ^19.0.0",
+    "svelte": "^5.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@snap-engine/asset-base": {
+      "optional": true
+    },
+    "react": {
+      "optional": true
+    },
+    "react-dom": {
+      "optional": true
+    },
+    "svelte": {
+      "optional": true
+    }
+  },
+  "files": [
+    "src",
+    "README.md"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "keywords": [
+    "drag-and-drop",
+    "react",
+    "svelte",
+    "ui",
+    "snapengine"
+  ],
+  "author": "Tomoki Fukazawa",
+  "license": "MIT"
+}

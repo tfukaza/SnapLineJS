@@ -23,12 +23,10 @@ function linkTitle(title: string, framework: Framework): string {
 function markdownLink(
   slug: string,
   title: string,
-  description: string | null,
   framework: Framework | null,
 ): string {
   const path = `/docs/${slug}.md${framework ? `?framework=${framework}` : ""}`;
-  const notes = description ? `: ${description.replace(/\s+/g, " ").trim()}` : "";
-  return `- [${title}](${absoluteUrl(path)})${notes}`;
+  return `- [${title}](${absoluteUrl(path)})`;
 }
 
 export const GET: RequestHandler = ({ params }) => {
@@ -65,7 +63,6 @@ export const GET: RequestHandler = ({ params }) => {
           markdownLink(
             entry.slug,
             linkTitle(entry.title, entryFramework),
-            entry.description,
             entryFramework,
           ),
         );
@@ -74,9 +71,7 @@ export const GET: RequestHandler = ({ params }) => {
 
       const codeFrameworks = frameworksForDoc(entry.slug);
       if (codeFrameworks.length === 0) {
-        lines.push(
-          markdownLink(entry.slug, entry.title, entry.description, null),
-        );
+        lines.push(markdownLink(entry.slug, entry.title, null));
         continue;
       }
 
@@ -85,7 +80,6 @@ export const GET: RequestHandler = ({ params }) => {
           markdownLink(
             entry.slug,
             `${entry.title} (${frameworkLabel(framework)})`,
-            entry.description,
             framework,
           ),
         );

@@ -3,7 +3,6 @@
 	import "./doc.scss";
 	import { onMount } from "svelte";
 	import FrameworkSelect from "$lib/components/FrameworkSelect.svelte";
-	import ProjectSelect from "$lib/components/ProjectSelect.svelte";
 	import SeoHead from "$lib/components/SeoHead.svelte";
 	import {
 		initializeFrameworkPreference,
@@ -51,14 +50,12 @@
 	// Compute prev/next navigation
 	const currentSlug = $derived($page.params.slug || '');
 	const isDocsHome = $derived(slugParts.length === 0);
-	const currentProject = $derived(slugParts[0] || 'snapengine');
+	const currentProject = $derived(slugParts[0] || '');
 	const currentProjectConfig = $derived(findDocProject(currentProject));
-	const currentProjectTitle = $derived(currentProjectConfig?.title ?? currentProject);
+	const currentProjectTitle = $derived(currentProjectConfig?.title ?? 'SnapEngine');
 	const showFrameworkSelect = $derived((currentProjectConfig?.frameworks.length ?? 0) > 1);
 	const docDescription = $derived(
-		data.metadata?.description ??
-			currentProjectConfig?.description ??
-			'SnapEngine documentation.'
+		currentProjectConfig?.description ?? 'SnapEngine documentation.'
 	);
 	const docTitle = $derived(
 		isDocsHome
@@ -145,100 +142,93 @@
 	imageAlt={`${currentProjectTitle} documentation preview`}
 />
 
-<!-- Mobile sub-navbar with hamburger, breadcrumb, and dropdown menu -->
-<div class="mobile-navbar card">
-	<div class="mobile-navbar-bar">
-		<button
-			bind:this={mobileMenuButton}
-			type="button"
-			class="mobile-menu-btn"
-			onclick={toggleMobileMenu}
-			aria-label="Toggle documentation menu"
-			aria-expanded={mobileMenuOpen}
-			aria-controls="mobile-doc-menu"
-		>
-			<span class="hamburger-line" class:open={mobileMenuOpen}></span>
-			<span class="hamburger-line" class:open={mobileMenuOpen}></span>
-			<span class="hamburger-line" class:open={mobileMenuOpen}></span>
-		</button>
-		<nav class="mobile-breadcrumb" aria-label="Breadcrumb">
-			{#each breadcrumbs as crumb, i}
-				{#if i > 0} <span class="breadcrumb-sep">/</span> {/if}
-				<a href={crumb.href} aria-current={i === breadcrumbs.length - 1 ? 'page' : undefined}>
-					{crumb.name}
-				</a>
-			{/each}
-		</nav>
-	</div>
-
-	<!-- Mobile dropdown menu -->
-	<div class="mobile-menu-dropdown" class:open={mobileMenuOpen}>
-		<nav>
+<div class="doc-layout" class:docs-home={isDocsHome}>
+	{#if !isDocsHome}
+		<aside class="doc-sidebar">
+			<h2 class="doc-sidebar-project">{currentProjectTitle}</h2>
 			{#if showFrameworkSelect}
 				<FrameworkSelect
-					id="mobile-doc-framework"
+					id="desktop-doc-framework"
 					value={$selectedFramework}
 					onFrameworkChange={handleFrameworkChange}
 				/>
 			{/if}
-			{#each visibleDocSections as section}
-				<div class="sidebar-section">
-					{#if section.name}
-						<p class="section-title">{section.title}</p>
-					{/if}
-					<ul>
-						{#each section.entries as entry}
-							<li>
-								<a
-									href={entry.slug ? `/docs/${entry.slug}` : '/docs'}
-									class:active={(entry.slug || '') === currentSlug}
-									aria-current={(entry.slug || '') === currentSlug ? 'page' : undefined}
-									onclick={closeMobileMenu}
-								>
-									{entry.title}
-								</a>
-							</li>
-						{/each}
-					</ul>
-				</div>
-			{/each}
-		</nav>
-	</div>
-</div>
-
-<div class="doc-layout">
-	<aside class="doc-sidebar">
-		{#if showFrameworkSelect}
-			<FrameworkSelect
-				id="desktop-doc-framework"
-				value={$selectedFramework}
-				onFrameworkChange={handleFrameworkChange}
-			/>
-		{/if}
-		<nav aria-label="Documentation">
-			{#each visibleDocSections as section}
-				<div class="sidebar-section">
-					{#if section.name}
-						<p class="section-title">{section.title}</p>
-					{/if}
-					<ul>
-						{#each section.entries as entry}
-							<li>
-								<a
-									href={entry.slug ? `/docs/${entry.slug}` : '/docs'}
-									class:active={(entry.slug || '') === currentSlug}
-									aria-current={(entry.slug || '') === currentSlug ? 'page' : undefined}
-								>
-									{entry.title}
-								</a>
-							</li>
-						{/each}
-					</ul>
-				</div>
-			{/each}
-		</nav>
-	</aside>
+			<nav aria-label="Documentation">
+				{#each visibleDocSections as section}
+					<div class="sidebar-section">
+						{#if section.name}
+							<p class="section-title">{section.title}</p>
+						{/if}
+						<ul>
+							{#each section.entries as entry}
+								<li>
+									<a
+										href={entry.slug ? `/docs/${entry.slug}` : '/docs'}
+										class:active={(entry.slug || '') === currentSlug}
+										aria-current={(entry.slug || '') === currentSlug ? 'page' : undefined}
+									>
+										{entry.title}
+									</a>
+								</li>
+							{/each}
+						</ul>
+					</div>
+				{/each}
+			</nav>
+		</aside>
+	{/if}
 	<div class="doc-content">
+		{#if !isDocsHome}
+			<div class="mobile-doc-navigation">
+				<button
+					bind:this={mobileMenuButton}
+					type="button"
+					class="mobile-doc-menu-btn"
+					onclick={toggleMobileMenu}
+					aria-expanded={mobileMenuOpen}
+					aria-controls="mobile-doc-menu"
+				>
+					<span class="mobile-doc-menu-icon" aria-hidden="true">
+						<span class="hamburger-line" class:open={mobileMenuOpen}></span>
+						<span class="hamburger-line" class:open={mobileMenuOpen}></span>
+						<span class="hamburger-line" class:open={mobileMenuOpen}></span>
+					</span>
+					<span>Browse {currentProjectTitle} docs</span>
+				</button>
+				<div id="mobile-doc-menu" class="mobile-doc-menu card" class:open={mobileMenuOpen}>
+					<nav aria-label={`${currentProjectTitle} documentation`}>
+						{#if showFrameworkSelect}
+							<FrameworkSelect
+								id="mobile-doc-framework"
+								value={$selectedFramework}
+								onFrameworkChange={handleFrameworkChange}
+							/>
+						{/if}
+						{#each visibleDocSections as section}
+							<div class="sidebar-section">
+								{#if section.name}
+									<p class="section-title">{section.title}</p>
+								{/if}
+								<ul>
+									{#each section.entries as entry}
+										<li>
+											<a
+												href={entry.slug ? `/docs/${entry.slug}` : '/docs'}
+												class:active={(entry.slug || '') === currentSlug}
+												aria-current={(entry.slug || '') === currentSlug ? 'page' : undefined}
+												onclick={closeMobileMenu}
+											>
+												{entry.title}
+											</a>
+										</li>
+									{/each}
+								</ul>
+							</div>
+						{/each}
+					</nav>
+				</div>
+			</div>
+		{/if}
 		<nav class="doc-breadcrumb" aria-label="Breadcrumb">
 			{#each breadcrumbs as crumb, i}
 				{#if i > 0} <span class="breadcrumb-sep">/</span> {/if}
@@ -251,9 +241,6 @@
 			{#if data.metadata}
 				{#if data.metadata.title}
 					<h1>{data.metadata.title}</h1>
-				{/if}
-				{#if data.metadata.description}
-					<p class="description">{data.metadata.description}</p>
 				{/if}
 			{/if}
 		</div>
@@ -291,6 +278,14 @@
 	margin: clamp(var(--size-48), 6vw, var(--size-96)) auto;
 	width: clamp(100px, 90%, 1200px);
 	align-items: start;
+}
+
+.doc-layout.docs-home {
+	grid-template-columns: minmax(0, 1fr);
+}
+
+.docs-home .doc-content {
+	max-width: 960px;
 }
 
 .doc-sidebar {
@@ -345,6 +340,15 @@
 			font-weight: 600;
 		}
 	}
+}
+
+.doc-sidebar-project {
+	margin: 0 0 var(--size-20);
+	color: var(--color-background-dark);
+	font-family: "Geist Pixel Circle", sans-serif;
+	font-size: 1.35rem;
+	font-weight: 500;
+	line-height: 1;
 }
 
 .section-title {
@@ -404,15 +408,6 @@
 .breadcrumb-sep {
 	margin: 0 0.35em;
 	color: color-mix(in srgb, var(--color-background-dark) 55%, transparent);
-}
-
-p.description {
-	max-width: 680px;
-	margin: var(--size-24) 0 0;
-	color: var(--color-text);
-	font-size: clamp(1rem, 1.6vw, 1.18rem);
-	font-weight: 300;
-	line-height: 1.6;
 }
 
 .doc-pagination {
@@ -479,42 +474,38 @@ p.description {
 		text-shadow 0.15s ease;
 }
 
-// Mobile navbar (hidden on desktop)
-.mobile-navbar {
+// Inline mobile documentation navigation (hidden on desktop)
+.mobile-doc-navigation {
 	display: none;
-	position: sticky;
-	top: 0;
-	left: 0;
-	right: 0;
-	z-index: 100;
-	--card-color: var(--color-background);
-	padding: 0;
-	flex-direction: column;
+	margin-bottom: var(--size-24);
 }
 
-.mobile-navbar-bar {
+.mobile-doc-menu-btn {
 	display: flex;
 	align-items: center;
-	gap: 0.75rem;
-	padding: 0.75rem 1rem;
-	border-bottom: 1px solid color-mix(in srgb, var(--color-background-dark) 16%, transparent);
-}
-
-// Mobile menu button
-.mobile-menu-btn {
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	min-width: 44px;
+	gap: var(--size-8);
+	max-width: 100%;
 	min-height: 44px;
 	box-sizing: border-box;
 	background: transparent;
-	border: none;
-	padding: 8px 8px;
+	border: 1px solid color-mix(in srgb, var(--color-background-dark) 18%, transparent);
+	border-radius: var(--ui-radius);
+	padding: var(--size-8) var(--size-12);
+	color: var(--color-text);
+	font-family: "Geist", sans-serif;
+	font-size: 0.9rem;
+	font-weight: 600;
+	line-height: 1.3;
 	cursor: pointer;
+	box-shadow: none;
+}
+
+.mobile-doc-menu-icon {
+	display: flex;
+	width: 20px;
+	flex-shrink: 0;
 	flex-direction: column;
 	gap: 5px;
-	flex-shrink: 0;
 
 	.hamburger-line {
 		display: block;
@@ -537,56 +528,16 @@ p.description {
 	}
 }
 
-// Mobile breadcrumb
-.mobile-breadcrumb {
-	font-size: 0.85rem;
-	color: #888;
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
-	font-family: "Bitcount Grid Single", monospace;
-
-	a {
-		color: var(--color-background-dark);
-		font-family: inherit;
-		font-size: inherit;
-		text-decoration: none;
-
-		&:hover {
-			color: var(--color-action);
-			text-decoration: none;
-		}
-	}
-
-	.breadcrumb-sep {
-		margin: 0 0.25em;
-		color: #bbb;
-	}
-}
-
-// Mobile dropdown menu
-.mobile-menu-dropdown {
+.mobile-doc-menu {
 	display: none;
-	max-height: 0;
-	overflow: hidden;
-	visibility: hidden;
-	pointer-events: none;
-	background: var(--color-background);
-	transition:
-		max-height 0.3s ease,
-		visibility 0s linear 0.3s;
+	--card-color: var(--color-background);
+	margin-top: var(--size-8);
+	max-height: min(70vh, 38rem);
+	overflow-y: auto;
+	padding: var(--size-20);
 
 	&.open {
-		max-height: 70vh;
-		overflow-y: auto;
-		visibility: visible;
-		pointer-events: auto;
-		transition-delay: 0s;
-		border-bottom: 1px solid color-mix(in srgb, var(--color-background-dark) 16%, transparent);
-	}
-
-	nav {
-		padding: 2rem 1rem;
+		display: block;
 	}
 
 	.sidebar-section {
@@ -643,11 +594,7 @@ p.description {
 
 // Responsive styles
 @media (max-width: 768px) {
-	.mobile-navbar {
-		display: flex;
-	}
-
-	.mobile-menu-dropdown {
+	.mobile-doc-navigation {
 		display: block;
 	}
 
@@ -657,15 +604,10 @@ p.description {
 		width: clamp(100px, 92%, 720px);
 	}
 
-	// Hide desktop sidebar and breadcrumb on mobile
+	// The desktop sidebar becomes the inline disclosure above the breadcrumb.
 	.doc-sidebar {
 		display: none;
 	}
-
-	.doc-breadcrumb {
-		display: none;
-	}
-
 
 	.doc-header {
 		margin-bottom: 2rem;

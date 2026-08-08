@@ -7,7 +7,7 @@ import {
   virtualDimensions,
   virtualEntrySizeFor,
   type VirtualInsertion,
-} from "../../assets/snapsort/core/src/layout";
+} from "../../assets/snapsort/src/layout";
 import {
   makeBox,
   makeContainerSnapshot,

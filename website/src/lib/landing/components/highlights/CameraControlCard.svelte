@@ -2,7 +2,7 @@
   import CardDocsLink from "./CardDocsLink.svelte";
   import { onMount } from "svelte";
   import ClientDemoFrame from "$lib/components/ClientDemoFrame.svelte";
-  import { Engine, Camera as CameraControlComponent } from "@snap-engine/asset-base-svelte";
+  import { Engine, Camera as CameraControlComponent } from "@snap-engine/asset-base/svelte";
   import type { CameraControl as CameraControlApi } from "@snap-engine/asset-base";
   import { debugState } from "$lib/landing/debugState.svelte";
 

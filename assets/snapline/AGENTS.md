@@ -4,9 +4,10 @@
 
 Node-based graph UI system for creating visual programming interfaces, node editors, and flow-based applications.
 
-SnapLine is experimental and published as synchronized core, Svelte, and React
-packages. Breaking changes are allowed before 1.0 and should replace obsolete
-APIs directly rather than adding compatibility shims.
+SnapLine is experimental and publishes its framework-neutral core plus Svelte
+and React bindings from one package. Breaking changes are allowed before 1.0
+and should replace obsolete APIs directly rather than adding compatibility
+shims.
 
 ## Design rules (from `SNAPZEN.md`)
 
@@ -36,10 +37,10 @@ stays optional rather than defaulting to a no-op.
 A convenience API that duplicates an existing primitive should be rejected on
 these grounds, not merely debated.
 
-## Packages
+## Package and entry points
 
 ### @snap-engine/snapline
-**Location:** `core/src/`
+**Location:** `src/`
 **Language:** TypeScript
 **Dependencies:** `@snap-engine/core`
 
@@ -57,13 +58,13 @@ these grounds, not merely debated.
 - `getGraphRegistry` - The per-engine `GraphRegistry`, lazy-created on first use
 
 Everything is reached through the package root (`@snap-engine/snapline`); the
-package declares a single `.` export and no per-module subpaths. Modules under
-`core/src/internal/` are implementation detail — do not deep-import them.
+core entry declares a single `.` export and no per-module subpaths. Modules
+under `src/internal/` are implementation detail — do not deep-import them.
 
-### @snap-engine/snapline-svelte
-**Location:** `svelte/src/`
+### @snap-engine/snapline/svelte
+**Location:** `src/svelte/`
 **Language:** Svelte 5
-**Dependencies:** `@snap-engine/snapline`, `@snap-engine/core`
+**Dependencies:** the package root and optional `svelte` peer
 
 **Exports:**
 - `Node.svelte` - Node component
@@ -75,10 +76,10 @@ package declares a single `.` export and no per-module subpaths. Modules under
 - `Placement.svelte` - Placement controller binding and preview
 - `ControlledGraph.svelte` - Controlled-graph bridge (canonical line records)
 
-### @snap-engine/snapline-react
-**Location:** `react/src/`
+### @snap-engine/snapline/react
+**Location:** `src/react/`
 **Language:** React/TypeScript
-**Dependencies:** `@snap-engine/snapline`, `@snap-engine/core`
+**Dependencies:** the package root plus optional `react`, `react-dom`, and `@snap-engine/asset-base` peers
 
 Exports `Engine`, `Node`, `Group`, `ResizeRegion`, `Connector`, `Line`, `Select`,
 `Placement`, and `ControlledGraph`, with forwarded refs to core objects
@@ -88,42 +89,35 @@ where applicable.
 
 ```
 snapline/
-├── core/
-│   ├── package.json
-│   ├── tsconfig.json
-│   └── src/
-│       ├── index.ts
-│       ├── node.ts              # NodeMirror
-│       ├── connector.ts         # ConnectorMirror + ConnectorRules
-│       ├── line.ts              # LineMirror
-│       ├── group.ts             # GroupNodeMirror
-│       ├── select.ts            # RectSelectController
-│       ├── placement.ts         # PlacementController
-│       ├── query.ts             # query() GraphQuery facade
-│       ├── types.ts             # pure public types (identity, diagnostics,
-│       │                        #   GeometryWriter, controlled-graph contract)
-│       ├── controlled-graph.ts  # attachControlledGraph
-│       └── internal/            # not part of the public surface
-│           ├── graph-registry.ts   # GraphRegistry (per-engine registry + scheduler)
-│           ├── line-reconciler.ts  # LineReconciler
-│           └── shared-data.ts      # global.data accessors + getGraphRegistry
-├── svelte/
-│   ├── package.json
-│   ├── tsconfig.json
-│   └── src/
-│       ├── index.ts
-│       ├── Node.svelte
-│       ├── Group.svelte
-│       ├── ResizeRegion.svelte
-│       ├── Connector.svelte
-│       ├── Line.svelte
-│       ├── Select.svelte
-│       ├── Placement.svelte
-│       └── ControlledGraph.svelte
-└── react/
-    ├── package.json
-    ├── tsconfig.json
-    └── src/
+├── package.json
+├── tsconfig.json
+├── README.md
+└── src/
+    ├── index.ts
+    ├── node.ts              # NodeMirror
+    ├── connector.ts         # ConnectorMirror + ConnectorRules
+    ├── line.ts              # LineMirror
+    ├── group.ts             # GroupNodeMirror
+    ├── select.ts            # RectSelectController
+    ├── placement.ts         # PlacementController
+    ├── query.ts             # query() GraphQuery facade
+    ├── types.ts             # Public identity, diagnostics, and graph types
+    ├── controlled-graph.ts  # attachControlledGraph
+    ├── internal/            # Not part of the public surface
+    │   ├── graph-registry.ts
+    │   ├── line-reconciler.ts
+    │   └── shared-data.ts
+    ├── svelte/
+    │   ├── index.ts
+    │   ├── Node.svelte
+    │   ├── Group.svelte
+    │   ├── ResizeRegion.svelte
+    │   ├── Connector.svelte
+    │   ├── Line.svelte
+    │   ├── Select.svelte
+    │   ├── Placement.svelte
+    │   └── ControlledGraph.svelte
+    └── react/
         ├── index.ts
         ├── Engine.tsx
         ├── Node.tsx
@@ -324,7 +318,7 @@ Raw input/DOM plumbing stays on the `event.*` slots.
 
 ### GraphRegistry (engine-scoped registry)
 
-`core/src/internal/graph-registry.ts` is the per-engine registry of every live SnapLine
+`src/internal/graph-registry.ts` is the per-engine registry of every live SnapLine
 mirror, lazy-created by `getGraphRegistry(engine)` the first time any mirror
 registers (constructors register, `destroy()` unregisters — no adapter
 wiring). It holds the node/connector sets, the settled-line and preview-line
@@ -347,7 +341,7 @@ Topology is ALWAYS controlled: the CONSUMER's document is the only line
 authority, and there is no imperative public topology API (creation and
 deletion are implementation operations; a gesture on an engine with no
 attached graph owner warns and discards the preview).
-`core/src/line-reconciler.ts` plus the `ControlledGraph` adapter components
+`src/internal/line-reconciler.ts` plus the `ControlledGraph` adapter components
 implement the contract:
 `attachControlledGraph(engine, { onLineChangeRequest, onDiagnosticsChanged? })`
 installs the `LineReconciler` and returns
@@ -377,7 +371,7 @@ inconsistent one.
 ### Shared global registries
 
 Everything SnapLine stores on the engine's shared `global.data` bag is declared
-in `core/src/internal/shared-data.ts` (`SnapLineSharedData`) and accessed through
+in `src/internal/shared-data.ts` (`SnapLineSharedData`) and accessed through
 its typed helpers. It holds the `graphRegistries` WeakMap keying each engine to
 its `GraphRegistry`, plus the deprecated third-party camera-control flag.
 Selection, groups, and `resizingNode` are engine-scoped state on
@@ -467,8 +461,8 @@ resize gestures intentionally do not edge-pan.
 @snap-engine/core
     ↓
 @snap-engine/snapline
-    ↓
-@snap-engine/snapline-svelte
+    ├── /svelte (optional Svelte peer)
+    └── /react  (optional React peers)
 ```
 
 ## Notes

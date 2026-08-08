@@ -2,7 +2,7 @@
   import CardDocsLink from "./CardDocsLink.svelte";
   import type { Action } from "svelte/action";
   import ClientDemoFrame from "$lib/components/ClientDemoFrame.svelte";
-  import { Engine } from "@snap-engine/asset-base-svelte";
+  import { Engine } from "@snap-engine/asset-base/svelte";
   import { CircleCollider, RectCollider } from "@snap-engine/core/collision";
   import type { Collider } from "@snap-engine/core/collision";
   import { ElementObject } from "@snap-engine/core";

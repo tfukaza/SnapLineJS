@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { ControlledGraph } from "@snap-engine/snapline-svelte";
+  import { ControlledGraph } from "@snap-engine/snapline/svelte";
   import { applyLineChange } from "@snap-engine/snapline";
   import type { LineRecord } from "@snap-engine/snapline";
 

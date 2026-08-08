@@ -268,7 +268,6 @@ export function renderMarkdownDoc(
     .trim();
 
   const header = [`# ${entry.title}`];
-  if (entry.description) header.push(entry.description);
   if (removedInteractiveContent) {
     header.push(
       `> This page includes interactive diagrams or demos. [Open the rendered documentation page](${absoluteUrl(`/docs/${entry.slug}`)}).`,

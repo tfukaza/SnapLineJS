@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Camera, Engine } from "@snap-engine/asset-base-svelte";
+  import { Camera, Engine } from "@snap-engine/asset-base/svelte";
   import type { CameraControl } from "@snap-engine/asset-base";
 
   let browserScrollEnabled = $state(false);

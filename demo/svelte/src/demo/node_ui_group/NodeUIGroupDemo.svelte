@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { Engine } from "@snap-engine/asset-base-svelte";
-  import { Group, ResizeRegion } from "@snap-engine/snapline-svelte";
+  import { Engine } from "@snap-engine/asset-base/svelte";
+  import { Group, ResizeRegion } from "@snap-engine/snapline/svelte";
   import SimpleNode from "../node_ui_demo/SimpleNode.svelte";
 
   // The framework hands the member NodeMirror to these callbacks; a consumer

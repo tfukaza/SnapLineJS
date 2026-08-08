@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Engine } from "@snap-engine/asset-base-svelte";
+  import { Engine } from "@snap-engine/asset-base/svelte";
   import { BaseObject } from "@snap-engine/core";
   import type { Engine as EngineType } from "@snap-engine/core";
   import { CircleCollider } from "@snap-engine/core/collision";

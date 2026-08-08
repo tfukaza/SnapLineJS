@@ -3,66 +3,46 @@
   import "../../../css/snapdesign.scss";
   import DebugLayoutToolbar from "$lib/components/DebugLayoutToolbar.svelte";
   import {
-    exploreEntries,
-    getExploreStatusLabel,
-    isExploreEntryBrowsable,
-  } from "$lib/exploreCatalog";
+    findProjectForPath,
+    projectDestination,
+    projectNavigationEntries,
+  } from "$lib/projectNavigation";
   import "$lib/fonts.css";
   import { debugLayoutFooterControl } from "$lib/stores/debugLayoutFooter";
 
   let { children } = $props();
 
   const repositoryUrl = "https://github.com/tfukaza/SnapEngineJS";
-  const assetEntries = [
-    {
-      assetHref: "/snapsort",
-      assetPath: "/snapsort",
-      description: "Unstyled components for sortable lists, kanban boards, and more.",
-      docsHref: "/docs/snapsort/introduction",
-      docsPathPrefix: "/docs/snapsort",
-      label: "SnapSort",
-    },
-    {
-      assetHref: "/#asset-snapzap",
-      assetPath: null,
-      description: "Zoom and pan made simple",
-      docsHref: null,
-      docsPathPrefix: null,
-      label: "SnapZap",
-    },
-    {
-      assetHref: "/snapline",
-      assetPath: "/snapline",
-      description: "Node-based UI",
-      docsHref: "/docs/snapline/introduction",
-      docsPathPrefix: "/docs/snapline",
-      label: "SnapLine",
-    },
-  ];
-  type MenuName = "assets";
+  const engineProjects = projectNavigationEntries.filter(
+    (project) => project.group === "engine",
+  );
+  const assetProjects = projectNavigationEntries.filter(
+    (project) => project.group === "asset",
+  );
+  type MenuName = "projects";
 
   let activeMenu = $state<MenuName | null>(null);
   let mobileNavOpen = $state(false);
   let navRoot = $state<HTMLElement | null>(null);
   let mobileNavTrigger = $state<HTMLButtonElement | null>(null);
-  let assetsMenuTrigger = $state<HTMLButtonElement | null>(null);
+  let projectsMenuTrigger = $state<HTMLButtonElement | null>(null);
   const currentPath = $derived(page.url.pathname as string);
+  const currentProject = $derived(findProjectForPath(currentPath));
   const isHomePath = $derived(currentPath === "/");
-  const isAssetsPath = $derived(
-    currentPath.startsWith("/snapsort") ||
-      currentPath.startsWith("/docs/snapsort") ||
-      currentPath.startsWith("/snapline") ||
-      currentPath.startsWith("/docs/snapline"),
-  );
+  const isDocsContext = $derived(currentPath.startsWith("/docs"));
+  const isDocsPath = $derived(currentPath.startsWith("/docs"));
   const isAboutPath = $derived(currentPath === "/about");
+  const projectSwitchLabel = $derived(currentProject?.title ?? "Explore");
+  const contextualDocsHref = $derived(currentProject?.docsHref ?? "/docs");
 
   function toggleMenu(menu: MenuName) {
     activeMenu = activeMenu === menu ? null : menu;
+    mobileNavOpen = false;
   }
 
   function toggleMobileNav() {
     mobileNavOpen = !mobileNavOpen;
-    if (!mobileNavOpen) activeMenu = null;
+    activeMenu = null;
   }
 
   function closeNavigation() {
@@ -78,12 +58,11 @@
   function handleWindowKeyDown(event: KeyboardEvent) {
     if (event.key !== "Escape") return;
 
-    const focusTarget =
-      activeMenu === "assets"
-        ? assetsMenuTrigger
-        : mobileNavOpen
-          ? mobileNavTrigger
-          : null;
+    const focusTarget = activeMenu === "projects"
+      ? projectsMenuTrigger
+      : mobileNavOpen
+        ? mobileNavTrigger
+        : null;
 
     closeNavigation();
     focusTarget?.focus();
@@ -95,14 +74,75 @@
 <a class="skip-link button primary small" href="#main-content">Skip to content</a>
 
 <nav class="nav-bar" aria-label="Primary navigation" bind:this={navRoot}>
-  <a
-    href="/"
-    class="wordmark"
-    aria-current={isHomePath ? "page" : undefined}
-    onclick={closeNavigation}
-  >
-    SnapEngine
-  </a>
+  <div class="nav-identity">
+    <a
+      href="/"
+      class="wordmark"
+      aria-current={isHomePath ? "page" : undefined}
+      onclick={closeNavigation}
+    >
+      SnapEngine
+    </a>
+
+    <div class="nav-menu project-menu" class:is-open={activeMenu === "projects"}>
+      <button
+        bind:this={projectsMenuTrigger}
+        type="button"
+        class="project-menu-trigger"
+        class:current={Boolean(currentProject)}
+        aria-label={`Switch project. Current project: ${projectSwitchLabel}`}
+        aria-haspopup="true"
+        aria-expanded={activeMenu === "projects"}
+        aria-controls="project-nav-menu"
+        onclick={() => toggleMenu("projects")}
+      >
+        <span>{projectSwitchLabel}</span>
+        <svg
+          class="nav-chevron"
+          width="12"
+          height="12"
+          viewBox="0 0 12 12"
+          fill="none"
+          aria-hidden="true"
+        >
+          <path d="m3 4.5 3 3 3-3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+        </svg>
+      </button>
+      <div id="project-nav-menu" class="nav-dropdown project-nav-dropdown card">
+        <p class="project-group-label">Engine</p>
+        {#each engineProjects as entry}
+          {@const destination = projectDestination(entry, isDocsContext)}
+          <a
+            class="project-nav-link"
+            href={destination ?? undefined}
+            aria-current={currentProject?.slug === entry.slug ? "page" : undefined}
+            onclick={closeNavigation}
+          >
+            <span>{entry.title}</span>
+          </a>
+        {/each}
+        <p class="project-group-label asset-group-label">Assets</p>
+        {#each assetProjects as entry}
+          {@const destination = projectDestination(entry, isDocsContext)}
+          {#if entry.status === "available" && destination}
+            <a
+              class="project-nav-link"
+              href={destination}
+              aria-current={currentProject?.slug === entry.slug ? "page" : undefined}
+              onclick={closeNavigation}
+            >
+              <span>{entry.title}</span>
+            </a>
+          {:else}
+            <span class="project-nav-link project-nav-link-disabled" aria-disabled="true">
+              <span>{entry.title}</span>
+              <small>Coming soon</small>
+            </span>
+          {/if}
+        {/each}
+      </div>
+    </div>
+  </div>
 
   <button
     bind:this={mobileNavTrigger}
@@ -118,57 +158,15 @@
   </button>
 
   <div id="primary-nav-links" class="nav-right" class:is-open={mobileNavOpen}>
-    <div class="nav-menu" class:is-open={activeMenu === "assets"}>
-      <button
-        bind:this={assetsMenuTrigger}
-        type="button"
-        class="nav-link nav-menu-trigger"
-        class:current={isAssetsPath}
-        aria-haspopup="true"
-        aria-expanded={activeMenu === "assets"}
-        aria-controls="assets-nav-menu"
-        onclick={() => toggleMenu("assets")}
-      >
-        Assets
-        <svg
-          class="nav-chevron"
-          width="12"
-          height="12"
-          viewBox="0 0 12 12"
-          fill="none"
-          aria-hidden="true"
-        >
-          <path d="m3 4.5 3 3 3-3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
-        </svg>
-      </button>
-      <div id="assets-nav-menu" class="nav-dropdown card">
-        {#each assetEntries as entry}
-          <div class="nav-dropdown-item">
-            <a
-              class="asset-page-link"
-              href={entry.assetHref}
-              aria-current={entry.assetPath === currentPath ? "page" : undefined}
-              onclick={closeNavigation}
-            >
-              <span>{entry.label}</span>
-              <small>{entry.description}</small>
-            </a>
-            {#if entry.docsHref && entry.docsPathPrefix}
-              <a
-                class="docs-page-link"
-                href={entry.docsHref}
-                aria-current={currentPath.startsWith(entry.docsPathPrefix) ? "page" : undefined}
-                onclick={closeNavigation}
-              >
-                Docs
-              </a>
-            {:else}
-              <span class="docs-page-link docs-page-link-disabled">Docs soon</span>
-            {/if}
-          </div>
-        {/each}
-      </div>
-    </div>
+    <a
+      href={contextualDocsHref}
+      class="nav-link"
+      class:current={isDocsPath}
+      aria-current={isDocsPath ? "page" : undefined}
+      onclick={closeNavigation}
+    >
+      Docs
+    </a>
 
     <a
       href="/about"
@@ -206,28 +204,27 @@
         <span class="copyright">© {new Date().getFullYear()}</span>
       </div>
       <div class="footer-sections">
+        <nav class="footer-column" aria-labelledby="footer-engine">
+          <h2 id="footer-engine">Engine</h2>
+          <a href="/">SnapEngine Core</a>
+          <a href="/docs/snapengine/introduction">Core documentation</a>
+        </nav>
         <nav class="footer-column" aria-labelledby="footer-assets">
           <h2 id="footer-assets">Assets</h2>
-          {#each exploreEntries as entry}
-            {#if isExploreEntryBrowsable(entry)}
-              <a href={entry.href}>{entry.name}</a>
+          {#each assetProjects as entry}
+            {#if entry.status === "available" && entry.marketingHref}
+              <a href={entry.marketingHref}>{entry.title}</a>
             {:else}
-              <span class="footer-link-disabled">{entry.name} · {getExploreStatusLabel(entry)}</span>
+              <span class="footer-link-disabled">{entry.title} · Coming soon</span>
             {/if}
           {/each}
         </nav>
         <nav class="footer-column" aria-labelledby="footer-project">
           <h2 id="footer-project">Project</h2>
           <a href="/about">About</a>
-          <a href="/docs/snapengine/introduction">Docs</a>
-          <a href="https://github.com/tfukaza/SnapLineJS" target="_blank" rel="noopener noreferrer">GitHub</a>
+          <a href="/docs">All documentation</a>
+          <a href={repositoryUrl} target="_blank" rel="noopener noreferrer">GitHub</a>
         </nav>
-        <div class="footer-column">
-          <a href="/#assets"><h4>Assets</h4></a>
-          <span class="footer-link-disabled">SnapZap</span>
-          <a href="/snapsort">SnapSort</a>
-          <a href="/snapline">SnapLine</a>
-        </div>
         {#if $debugLayoutFooterControl}
           <div class="footer-column footer-debug-column">
             <h2>Debug</h2>
@@ -291,6 +288,13 @@
     }
   }
 
+  .nav-identity {
+    display: flex;
+    align-items: center;
+    gap: var(--size-16);
+    min-width: 0;
+  }
+
   .nav-right {
     display: flex;
     align-items: center;
@@ -328,7 +332,7 @@
     margin-block: calc(var(--size-8) * -1);
 
     &.is-open {
-      .nav-menu-trigger {
+      .project-menu-trigger {
         color: var(--color-action);
       }
 
@@ -345,7 +349,7 @@
     }
   }
 
-  .nav-menu-trigger,
+  .project-menu-trigger,
   .mobile-nav-trigger {
     display: inline-flex;
     align-items: center;
@@ -359,6 +363,21 @@
     cursor: pointer;
   }
 
+  .project-menu-trigger {
+    color: #5e4d44;
+    font-family: var(--font-body);
+    font-size: 0.9rem;
+    font-weight: 600;
+    line-height: 1.3;
+    transition: color 160ms ease;
+
+    &:hover,
+    &:focus-visible,
+    &.current {
+      color: var(--color-action);
+    }
+  }
+
   .nav-chevron {
     font-size: 1rem;
     line-height: 1;
@@ -366,7 +385,7 @@
   }
 
   .nav-dropdown {
-    --card-color: rgba(255, 255, 255, 0.98);
+    --card-color: #fff;
     --card-radius: var(--size-12);
 
     position: absolute;
@@ -387,62 +406,63 @@
       transform 150ms ease;
   }
 
-  .nav-dropdown-item {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    align-items: center;
-    gap: var(--size-8);
-    border-radius: var(--size-8);
-    transition: background-color 150ms ease;
-
-    &:hover,
-    &:focus-within {
-      background: rgba(58, 42, 34, 0.05);
-    }
-
-    > a {
-      color: #5e4d44;
-      text-decoration: none;
-    }
-
-    > a:hover,
-    > a:focus-visible,
-    > a[aria-current="page"] {
-      color: var(--color-action);
-    }
+  .project-nav-dropdown {
+    min-width: 14rem;
+    padding: var(--size-12);
   }
 
-  .asset-page-link {
+  .project-group-label {
+    margin: 0;
+    padding: var(--size-4) var(--size-12) var(--size-8);
+    color: var(--color-text-subtle);
+    font-family: var(--font-label);
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    line-height: 1.2;
+    text-transform: uppercase;
+  }
+
+  .asset-group-label {
+    margin-top: var(--size-8);
+    padding-top: var(--size-12);
+    border-top: 1px solid rgba(58, 42, 34, 0.08);
+  }
+
+  .project-nav-link {
     display: flex;
-    flex-direction: column;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--size-16);
     margin: 0;
     padding: var(--size-8) var(--size-12);
-
-    > span {
-      font-size: 0.9rem;
-      font-weight: 600;
-      line-height: 1.3;
-    }
-
-    > small {
-      max-width: 14rem;
-      color: var(--color-text-subtle);
-      font-size: 0.75rem;
-      font-weight: 400;
-      line-height: 1.3;
-    }
-  }
-
-  .docs-page-link {
-    margin-right: var(--size-8);
-    padding: var(--size-8);
     border-radius: var(--size-8);
-    font-size: 0.8rem;
+    color: #5e4d44;
+    font-size: 0.9rem;
     font-weight: 600;
+    line-height: 1.3;
+    text-decoration: none;
+    transition:
+      color 150ms ease,
+      background-color 150ms ease;
+
+    small {
+      color: var(--color-text-subtle);
+      font-size: 0.72rem;
+      font-weight: 400;
+      white-space: nowrap;
+    }
   }
 
-  .docs-page-link-disabled {
-    color: var(--color-text-subtle);
+  a.project-nav-link:hover,
+  a.project-nav-link:focus-visible,
+  a.project-nav-link[aria-current="page"] {
+    color: var(--color-action);
+    background: rgba(58, 42, 34, 0.05);
+  }
+
+  .project-nav-link-disabled {
+    opacity: 0.72;
     cursor: default;
   }
 
@@ -503,8 +523,7 @@
       }
     }
 
-    .nav-link,
-    .nav-menu-trigger {
+    .nav-link {
       width: 100%;
       min-height: 44px;
       justify-content: space-between;
@@ -517,32 +536,16 @@
       justify-content: flex-start;
     }
 
-    .nav-menu {
-      display: block;
-      width: 100%;
-      margin: 0;
-      padding: 0;
+    .project-menu-trigger {
+      max-width: 9.5rem;
 
-      &.is-open .nav-dropdown {
-        position: static;
-        margin-top: var(--size-4);
-        opacity: 1;
-        visibility: visible;
-        transform: none;
-        pointer-events: auto;
+      span {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
       }
     }
 
-    .nav-dropdown {
-      display: none;
-      min-width: 0;
-      padding: var(--size-8);
-      box-shadow: none;
-
-      .nav-menu.is-open & {
-        display: flex;
-      }
-    }
   }
 
   footer {

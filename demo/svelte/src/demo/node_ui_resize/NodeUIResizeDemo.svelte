@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Engine } from "@snap-engine/asset-base-svelte";
+  import { Engine } from "@snap-engine/asset-base/svelte";
   import DemoGraph from "../node_ui_demo/DemoGraph.svelte";
   import ResizableNode from "./ResizableNode.svelte";
   import SimpleNode from "../node_ui_demo/SimpleNode.svelte";

@@ -2,7 +2,7 @@
   import { onMount, tick } from "svelte";
 
   import { NodeMirror } from "@snap-engine/snapline";
-  import { Connector, Node } from "@snap-engine/snapline-svelte";
+  import { Connector, Node } from "@snap-engine/snapline/svelte";
 
   import Line from "./Line.svelte";
   import "./../../node_ui.scss";

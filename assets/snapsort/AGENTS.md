@@ -2,8 +2,10 @@
 
 A single `Container`/`Item` class pair (per framework) whose drag/drop behavior is picked with a `mode` config field (`"euclidean"` | `"progressive"` | `"insertion"` | `"swap"`, default `"euclidean"`) instead of separate per-mode classes.
 
+## Package and entry points
+
 ### @snap-engine/snapsort
-**Location:** `core/src/`
+**Location:** `src/`
 **Language:** TypeScript
 **Dependencies:** `@snap-engine/core`
 
@@ -14,17 +16,17 @@ A single `Container`/`Item` class pair (per framework) whose drag/drop behavior 
 - Event types: `ItemInsertEvent`, `ItemRemoveEvent`, `ItemMoveEvent`, `ItemSwapEvent`, `GhostCreateEvent`, `GhostInsertEvent`, `GhostRemoveEvent`, `DragStartEvent`, `DragEndEvent`, `DropTargetChangeEvent`, `CanDropEvent`, `VisualGeometryInvalidationEvent`, `DragLocation`.
 - `ContainerCallbacks`, `ContainerConfig`, `SortMode`, `SortStrategy`, `DropTargetStrategy`, `DragLifecycleStrategy`.
 
-### @snap-engine/snapsort-svelte
-**Location:** `svelte/src/`
+### @snap-engine/snapsort/svelte
+**Location:** `src/svelte/`
 **Language:** Svelte 5
-**Dependencies:** `@snap-engine/snapsort`, `@snap-engine/core`
+**Dependencies:** the package root and optional `svelte` peer
 
 **Exports:** `Container.svelte`, `Item.svelte`, `Ghost.svelte`, `Handle.svelte`.
 
-### @snap-engine/snapsort-react
-**Location:** `react/src/`
+### @snap-engine/snapsort/react
+**Location:** `src/react/`
 **Language:** React (TSX)
-**Dependencies:** `@snap-engine/snapsort`, `@snap-engine/core`, `react`, `react-dom` (peer)
+**Dependencies:** the package root plus optional `react`, `react-dom`, and `@snap-engine/asset-base` peers
 
 **Exports:** `Engine`/`SnapSortEngine`, `Container`, `Item`, `Ghost`, `Handle`, `useSnapSortEngine`, deprecated `useSnapSortAwaitMutation`, `ContainerObjectContext`, `ItemObjectContext`.
 
@@ -32,38 +34,32 @@ A single `Container`/`Item` class pair (per framework) whose drag/drop behavior 
 
 ```
 snapsort/
-├── core/
-│   ├── package.json
-│   ├── tsconfig.json
-│   └── src/
-│       ├── index.ts
-│       ├── container.ts        # Container class + ContainerConfig
-│       ├── item.ts             # Item class: tree membership, FLIP animation, dispatchers
-│       ├── events.ts           # All callback event interfaces + ContainerCallbacks
-│       ├── mutation.ts         # Mutator: single dispatch point for ContainerCallbacks + defaults
-│       ├── algorithm.ts        # Drop-target candidate resolution (4 modes) + canDrop filtering
-│       ├── layout.ts           # Pure flow-layout simulation used by algorithm.ts
-│       ├── snapshot.ts         # ItemSnapshot / ItemSnapshotMetadata types
-│       └── drag/
-│           ├── session.ts            # DragSession: all per-drag state
-│           ├── lifecycle.ts          # DragLifecycleStrategy interface
-│           ├── drop-strategy.ts      # DropTargetStrategy interface + builtinStrategies map
-│           ├── flow-ghost.ts         # Euclidean/progressive lifecycle (flow-layout spacer ghost)
-│           ├── insertion-marker.ts   # Insertion lifecycle (floating marker line)
-│           └── swap.ts               # Swap lifecycle (pointer ghost + pairwise exchange)
-├── svelte/
-│   ├── package.json
-│   ├── tsconfig.json
-│   └── src/
-│       ├── index.ts
-│       ├── Container.svelte
-│       ├── Item.svelte
-│       ├── Ghost.svelte
-│       └── Handle.svelte
-└── react/
-    ├── package.json
-    ├── tsconfig.json
-    └── src/
+├── package.json
+├── tsconfig.json
+├── README.md
+└── src/
+    ├── index.ts
+    ├── container.ts        # Container class + ContainerConfig
+    ├── item.ts             # Item class: tree membership, FLIP animation, dispatchers
+    ├── events.ts           # Callback event interfaces + ContainerCallbacks
+    ├── mutation.ts         # ContainerCallbacks dispatch + Vanilla defaults
+    ├── algorithm.ts        # Drop-target resolution + canDrop filtering
+    ├── layout.ts           # Pure flow-layout simulation
+    ├── snapshot.ts         # ItemSnapshot / ItemSnapshotMetadata types
+    ├── drag/
+    │   ├── session.ts
+    │   ├── lifecycle.ts
+    │   ├── drop-strategy.ts
+    │   ├── flow-ghost.ts
+    │   ├── insertion-marker.ts
+    │   └── swap.ts
+    ├── svelte/
+    │   ├── index.ts
+    │   ├── Container.svelte
+    │   ├── Item.svelte
+    │   ├── Ghost.svelte
+    │   └── Handle.svelte
+    └── react/
         ├── index.ts
         ├── Engine.tsx
         ├── Container.tsx
@@ -128,6 +124,6 @@ Resolved from the root container's config at drag start; nested containers shoul
 @snap-engine/core
     ↓
 @snap-engine/snapsort
-    ↓
-@snap-engine/snapsort-svelte   @snap-engine/snapsort-react
+    ├── /svelte (optional Svelte peer)
+    └── /react  (optional React peers)
 ```

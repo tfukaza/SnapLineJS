@@ -3,7 +3,7 @@ import {
   ConnectorMirror,
   LineMirror,
   NodeMirror,
-} from "../../assets/snapline/core/src";
+} from "../../assets/snapline/src";
 
 import {
   armGesture,

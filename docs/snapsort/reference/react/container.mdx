@@ -1,6 +1,5 @@
 ---
 title: Container
-description: React Container component props, configuration, callbacks, and imperative ref API.
 order: 1
 project: snapsort
 projectTitle: SnapSort
@@ -18,7 +17,7 @@ callbacks for every structural operation the container accepts; the adapter
 does not fall back to SnapSort's Vanilla DOM callbacks.
 
 ```tsx
-import { Container, Ghost, Item } from "@snap-engine/snapsort-react";
+import { Container, Ghost, Item } from "@snap-engine/snapsort/react";
 
 <Container
   config={{ direction: "column", groupID: "tasks", callbacks }}
@@ -117,7 +116,7 @@ Container components forward refs to their core container object.
 
 ```tsx
 import { useRef } from "react";
-import { Container, Item } from "@snap-engine/snapsort-react";
+import { Container, Item } from "@snap-engine/snapsort/react";
 import type { Container as SnapSortContainer } from "@snap-engine/snapsort";
 
 export function ClickMove() {

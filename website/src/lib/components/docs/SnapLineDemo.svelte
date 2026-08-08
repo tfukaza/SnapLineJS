@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Engine } from "@snap-engine/asset-base-svelte";
+  import { Engine } from "@snap-engine/asset-base/svelte";
   import type { Engine as CoreEngine } from "@snap-engine/core";
   import { PlacementController, RESIZE_HANDLES, applyLineChange } from "@snap-engine/snapline";
   import {
@@ -9,8 +9,8 @@
     Placement,
     ResizeRegion,
     Select,
-  } from "@snap-engine/snapline-svelte";
-  import { ControlledGraph } from "@snap-engine/snapline-svelte";
+  } from "@snap-engine/snapline/svelte";
+  import { ControlledGraph } from "@snap-engine/snapline/svelte";
   import type { LineRecord } from "@snap-engine/snapline";
   import ClientDemoFrame from "$lib/components/ClientDemoFrame.svelte";
 

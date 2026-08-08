@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { Engine } from "@snap-engine/asset-base-svelte";
-  import { Select } from "@snap-engine/snapline-svelte";
+  import { Engine } from "@snap-engine/asset-base/svelte";
+  import { Select } from "@snap-engine/snapline/svelte";
   import DemoGraph from "./DemoGraph.svelte";
   import SimpleNode from "./SimpleNode.svelte";
 </script>
