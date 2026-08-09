@@ -18,19 +18,19 @@
     ...divProps
   }: HandleProps = $props();
 
-  const itemObject: Item | null = getContext("item");
+  const item: Item | null = getContext("item");
   let handleElement: HTMLElement | null = null;
   const mergedClass = $derived(`snapsort-handle ${classValue} ${className}`.trim());
 
   onMount(() => {
-    if (itemObject && handleElement) {
-      itemObject?.addInputAlias(handleElement);
+    if (item && handleElement) {
+      item.addInputAlias(handleElement);
     }
   });
 
   onDestroy(() => {
-    if (itemObject && handleElement) {
-      itemObject?.removeInputAlias(handleElement);
+    if (item && handleElement) {
+      item.removeInputAlias(handleElement);
     }
   });
 </script>

@@ -1,7 +1,7 @@
 import type { Container } from "./container";
 import type { Item } from "./item";
 import type { DragSession } from "./drag/session";
-import type { ItemId, ItemSnapshotMetadata } from "./snapshot";
+import type { ItemId, ItemMetadata } from "./snapshot";
 import type { CollisionRect } from "@snap-engine/core/collision";
 
 /**
@@ -78,11 +78,11 @@ export interface ItemRemoveEvent {
   session: DragSession | null;
   item: Item;
   itemId: ItemId;
-  itemMetadata: ItemSnapshotMetadata;
+  itemMetadata: ItemMetadata;
   /** The full removed run, ordered. `item === items[0]` (single-item case: length 1). */
   items: Item[];
   itemIds: ItemId[];
-  itemsMetadata: ItemSnapshotMetadata[];
+  itemsMetadata: ItemMetadata[];
   container: Container;
   containerMetadata: Record<string, unknown>;
   phase: MutationPhase;
@@ -92,11 +92,11 @@ export interface ItemInsertEvent {
   session: DragSession | null;
   item: Item;
   itemId: ItemId;
-  itemMetadata: ItemSnapshotMetadata;
+  itemMetadata: ItemMetadata;
   /** The full inserted run, ordered. `item === items[0]` (single-item case: length 1). */
   items: Item[];
   itemIds: ItemId[];
-  itemsMetadata: ItemSnapshotMetadata[];
+  itemsMetadata: ItemMetadata[];
   container: Container;
   containerMetadata: Record<string, unknown>;
   /** Index of the first item in the run. */
@@ -109,7 +109,7 @@ export interface ItemInsertEvent {
 export interface ItemSwapParticipant {
   item: Item;
   itemId: ItemId;
-  itemMetadata: ItemSnapshotMetadata;
+  itemMetadata: ItemMetadata;
   container: Container;
   containerMetadata: Record<string, unknown>;
   /** This item's slot before the swap — after committing, `b`'s item occupies this slot (and vice versa). */
@@ -156,11 +156,11 @@ export interface ItemMoveEvent {
   session: DragSession | null;
   item: Item;
   itemId: ItemId;
-  itemMetadata: ItemSnapshotMetadata;
+  itemMetadata: ItemMetadata;
   /** The full moved run, ordered by original (document) index. `item === items[0]` (single-item case: length 1). */
   items: Item[];
   itemIds: ItemId[];
-  itemsMetadata: ItemSnapshotMetadata[];
+  itemsMetadata: ItemMetadata[];
   /** Null when `item` was spawned (copy), not moved from anywhere. */
   from: DragLocation | null;
   to: DragLocation;
@@ -169,11 +169,11 @@ export interface ItemMoveEvent {
   /** The original item `item` was spawned from (copy), or null for a genuinely moved item. */
   originItem: Item | null;
   originItemId: ItemId | null;
-  originItemMetadata: ItemSnapshotMetadata | null;
+  originItemMetadata: ItemMetadata | null;
   /** Parallel to `items`/`froms`. */
   origins: (Item | null)[];
   originItemIds: (ItemId | null)[];
-  originsMetadata: (ItemSnapshotMetadata | null)[];
+  originsMetadata: (ItemMetadata | null)[];
   /** Element the whole run is inserted before (all items share one insertion point). */
   beforeElement: HTMLElement | null;
   phase: MutationPhase;
@@ -184,8 +184,6 @@ export interface GhostRect {
   y: number;
   width: number;
   height: number;
-  insetLeft?: number;
-  insetRight?: number;
 }
 
 /**
@@ -204,13 +202,13 @@ export interface GhostEventBase {
   containerMetadata: Record<string, unknown>;
   original: Item;
   originalItemId: ItemId;
-  originalMetadata: ItemSnapshotMetadata;
+  originalMetadata: ItemMetadata;
   /** The full dragged run this ghost represents, ordered. For a multi-item flow run, `original` is the member represented by this anchor; the single-item case is `items[0]`. */
   items: Item[];
   itemIds: ItemId[];
   ghostItem: Item;
   ghostItemId: ItemId;
-  ghostMetadata: ItemSnapshotMetadata;
+  ghostMetadata: ItemMetadata;
   ghostRect?: GhostRect | null;
 }
 
@@ -246,11 +244,11 @@ export interface DragStartEvent {
   session: DragSession;
   item: Item;
   itemId: ItemId;
-  itemMetadata: ItemSnapshotMetadata;
+  itemMetadata: ItemMetadata;
   /** The full dragged run, ordered. `item === items[0]` (single-item case: length 1). */
   items: Item[];
   itemIds: ItemId[];
-  itemsMetadata: ItemSnapshotMetadata[];
+  itemsMetadata: ItemMetadata[];
   element: HTMLElement | null;
   source: DragLocation;
   /** Each item's source location, parallel to `items`. `source === sources[0]`. */
@@ -261,11 +259,11 @@ export interface DragEndEvent {
   session: DragSession;
   item: Item;
   itemId: ItemId;
-  itemMetadata: ItemSnapshotMetadata;
+  itemMetadata: ItemMetadata;
   /** The full dragged run, ordered. `item === items[0]` (single-item case: length 1). */
   items: Item[];
   itemIds: ItemId[];
-  itemsMetadata: ItemSnapshotMetadata[];
+  itemsMetadata: ItemMetadata[];
   element: HTMLElement | null;
   source: DragLocation;
   /** Each item's source location, parallel to `items`. `source === sources[0]`. */
@@ -282,9 +280,9 @@ export interface DragEndEvent {
  * `session.dropEffect === "copy"`, BEFORE the drag is hoisted. The direct
  * source is carried by `sources`; it is not the callback receiver. The
  * consumer must materialize a clone in their own state for each `cloneItems`
- * entry and render it (bound via `itemObject`) inside a drop container. The
- * framework adapter's synchronous `flushMutation` transaction ensures each
- * clone has a DOM element before core hands the drag off to the clones
+ * entry and render it (passed through the adapter's `item` prop) inside a drop
+ * container. The framework adapter's synchronous `flushMutation` transaction
+ * ensures each clone has a DOM element before core hands the drag off to the clones
  * (`DragSession.handoff`) — the original items stay exactly where they are,
  * untouched and un-ghosted. If the consumer binds no element, the copy drag
  * is vetoed.
@@ -303,10 +301,10 @@ export interface DragCloneEvent {
   /** The original items (never moved). `item === items[0]`. */
   item: Item;
   itemId: ItemId;
-  itemMetadata: ItemSnapshotMetadata;
+  itemMetadata: ItemMetadata;
   items: Item[];
   itemIds: ItemId[];
-  itemsMetadata: ItemSnapshotMetadata[];
+  itemsMetadata: ItemMetadata[];
   sources: DragLocation[];
   /** Fresh clone items, parallel to `items`; the consumer binds each one's element. */
   cloneItems: Item[];
@@ -316,11 +314,11 @@ export interface DropTargetChangeEvent {
   session: DragSession;
   item: Item;
   itemId: ItemId;
-  itemMetadata: ItemSnapshotMetadata;
+  itemMetadata: ItemMetadata;
   /** The full dragged run, ordered. `item === items[0]` (single-item case: length 1). */
   items: Item[];
   itemIds: ItemId[];
-  itemsMetadata: ItemSnapshotMetadata[];
+  itemsMetadata: ItemMetadata[];
   previous: DragLocation | null;
   current: DragLocation | null;
 }
@@ -329,11 +327,11 @@ export interface CanDropEvent {
   session: DragSession | null;
   item: Item;
   itemId: ItemId;
-  itemMetadata: ItemSnapshotMetadata;
+  itemMetadata: ItemMetadata;
   /** The full dragged run, ordered. `item === items[0]` (single-item case: length 1). */
   items: Item[];
   itemIds: ItemId[];
-  itemsMetadata: ItemSnapshotMetadata[];
+  itemsMetadata: ItemMetadata[];
   /** The primary item's source when available. */
   source: DragLocation | null;
   /** Source locations parallel to `items`; spawned items may have no source. */
@@ -352,6 +350,49 @@ export interface CanDropEvent {
 /** A frozen world-space rectangle captured for the current drag resolution. */
 export type DropPriorityRect = CollisionRect;
 
+/** Complete world-space geometry for one pointer-hover hitbox. */
+export type ItemHitbox =
+  | { shape: "rect"; rect: CollisionRect }
+  | { shape: "circle"; center: { x: number; y: number }; radius: number };
+
+/** Geometry supplied to a candidate item's direct owner for hitbox resolution. */
+export interface ItemHitboxEvent {
+  session: DragSession;
+  item: Item;
+  itemId: ItemId;
+  itemMetadata: ItemMetadata;
+  overItem: Item;
+  overItemId: ItemId;
+  overItemMetadata: ItemMetadata;
+  container: Container;
+  containerMetadata: Record<string, unknown>;
+  pointer: { x: number; y: number };
+  /** Frozen world-space border box used when no callback is configured. */
+  defaultRect: CollisionRect;
+}
+
+/** Geometry supplied to an insertion candidate's direct destination. */
+export interface InsertionMarkerRectEvent {
+  session: DragSession | null;
+  item: Item;
+  itemId: ItemId;
+  itemMetadata: ItemMetadata;
+  items: Item[];
+  itemIds: ItemId[];
+  itemsMetadata: ItemMetadata[];
+  source: DragLocation | null;
+  sources: readonly (DragLocation | null)[];
+  container: Container;
+  containerMetadata: Record<string, unknown>;
+  index: number;
+  pointer: { x: number; y: number };
+  dragRect: CollisionRect;
+  containerRect: CollisionRect;
+  containerContentRect: CollisionRect;
+  /** Default final marker rectangle in world coordinates. */
+  defaultRect: GhostRect;
+}
+
 /**
  * Geometry and metadata supplied when a destination computes its candidate
  * priority. The callback runs once per eligible container per resolution;
@@ -361,10 +402,10 @@ export interface DropPriorityEvent {
   session: DragSession | null;
   item: Item;
   itemId: ItemId;
-  itemMetadata: ItemSnapshotMetadata;
+  itemMetadata: ItemMetadata;
   items: Item[];
   itemIds: ItemId[];
-  itemsMetadata: ItemSnapshotMetadata[];
+  itemsMetadata: ItemMetadata[];
   source: DragLocation | null;
   sources: readonly (DragLocation | null)[];
   container: Container;
@@ -386,8 +427,8 @@ export interface DropPriorityEvent {
  * stops matching another item's hitbox. Distinct from `onDropTargetChange`,
  * which tracks the resolved drop slot/gap — this tracks hovering over an
  * *item* within the currently resolved target container. `overItem`'s hitbox
- * is adjustable via `hitboxInset*`/`hitboxShape` metadata (see
- * `ItemSnapshotMetadata`). Used directly by swap mode; also available
+ * can be customized by the direct owner's `getItemHitbox` callback. Used
+ * directly by swap mode; also available
  * generally for hover-driven UI (highlight-on-hover, previews, etc.). Each
  * callback is read from the direct container that owns `overItem`; it does not
  * bubble to the root.
@@ -396,10 +437,10 @@ export interface DragItemHoverEvent {
   session: DragSession;
   item: Item;
   itemId: ItemId;
-  itemMetadata: ItemSnapshotMetadata;
+  itemMetadata: ItemMetadata;
   overItem: Item;
   overItemId: ItemId;
-  overItemMetadata: ItemSnapshotMetadata;
+  overItemMetadata: ItemMetadata;
   container: Container;
   containerMetadata: Record<string, unknown>;
   pointer: { x: number; y: number };
@@ -519,6 +560,20 @@ export interface ContainerCallbacks {
    * or return `undefined` to preserve it.
    */
   getDropPriority?: (event: DropPriorityEvent) => number | undefined;
+
+  /**
+   * Consulted synchronously on an insertion candidate's direct destination.
+   * Return the complete final marker rectangle in world coordinates. This is
+   * a pure geometry calculation and is not wrapped by `flushMutation`.
+   */
+  getInsertionMarkerRect?: (event: InsertionMarkerRectEvent) => GhostRect;
+
+  /**
+   * Consulted synchronously on the direct owner of each hover candidate.
+   * Return a world-space rectangle or circle. This is a pure geometry
+   * calculation and is not wrapped by `flushMutation`.
+   */
+  getItemHitbox?: (event: ItemHitboxEvent) => ItemHitbox;
 
   /**
    * Fires directly on `event.container` when a ghost is created: the initial

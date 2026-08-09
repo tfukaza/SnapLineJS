@@ -57,7 +57,7 @@ snapsort/
     ├── algorithm.ts        # Candidate generation, drop policy, and placement
     ├── callbacks.ts        # Standard drop-policy callbacks
     ├── layout.ts           # Pure flow-layout simulation
-    ├── snapshot.ts         # ItemSnapshot / ItemSnapshotMetadata types
+    ├── snapshot.ts         # ItemSnapshot / ItemMetadata types
     ├── drag/
     │   ├── session.ts
     │   ├── lifecycle.ts
@@ -131,6 +131,10 @@ resulting item/ghost structure.
   resolution. Both are consulted once per container, not once per candidate
   slot, and must be cheap. Only candidates tied at the highest priority reach
   the active placement algorithm.
+- Geometry policy: insertion candidates call `getInsertionMarkerRect` on the
+  direct destination; hover candidates call `getItemHitbox` on the candidate
+  item's direct owner. Both are synchronous calculations outside
+  `flushMutation`; item metadata remains read-only application data.
 - Integration: `onVisualGeometryInvalidated` — one root-coalesced notification
   when drag, ghost, or FLIP transforms may have changed rendered item geometry.
   Consumers use it to invalidate dependent visuals without SnapSort knowing

@@ -9,6 +9,7 @@ import {
   rectsIntersect,
 } from "@snap-engine/core/collision";
 import type { Item as ItemBase } from "./item";
+import type { Container } from "./container";
 import {
   childRelativeOffset,
   contentBoxOrigin,
@@ -25,7 +26,15 @@ import {
 } from "./layout";
 import type { ItemSnapshot } from "./snapshot";
 import type { DragSession } from "./drag/session";
-import type { CanDropEvent, DragLocation, DropPriorityEvent } from "./events";
+import type {
+  CanDropEvent,
+  DragLocation,
+  DropPriorityEvent,
+  GhostRect,
+  InsertionMarkerRectEvent,
+  ItemHitbox,
+  ItemHitboxEvent,
+} from "./events";
 
 const TAG_COLLISIONS = "drop-collisions";
 const TAG_CANDIDATES = "drop-candidates";
@@ -33,7 +42,7 @@ const TAG_LAYOUT = "drop-layout";
 const TOP_CANDIDATE_DEBUG_LIMIT = 3;
 
 type Rect = { x: number; y: number; width: number; height: number };
-type InsertionGhostRect = Rect & { insetLeft?: number; insetRight?: number };
+type InsertionGhostRect = Rect;
 
 export interface VirtualGhost {
   container: ItemBase;
@@ -176,7 +185,7 @@ function dragSnapshotItems(item: ItemBase): ItemBase[] {
   return requireDragSnapshot(item).children.map((snapshot) => snapshot.value);
 }
 
-function isContainerObject(item: ItemBase) {
+function isContainerObject(item: ItemBase): item is Container {
   return (
     "configuration" in item &&
     "direction" in item &&
@@ -187,64 +196,106 @@ function isContainerObject(item: ItemBase) {
 
 const itemHoverCollisionEngine = new CollisionEngine();
 
-function itemHitboxInsets(item: ItemBase): {
-  top: number;
-  right: number;
-  bottom: number;
-  left: number;
-} {
-  const metadata = item.dragSnapshot?.metadata ?? item.metadata;
-  return {
-    top:
-      typeof metadata?.hitboxInsetTop === "number"
-        ? metadata.hitboxInsetTop
-        : 0,
-    right:
-      typeof metadata?.hitboxInsetRight === "number"
-        ? metadata.hitboxInsetRight
-        : 0,
-    bottom:
-      typeof metadata?.hitboxInsetBottom === "number"
-        ? metadata.hitboxInsetBottom
-        : 0,
-    left:
-      typeof metadata?.hitboxInsetLeft === "number"
-        ? metadata.hitboxInsetLeft
-        : 0,
-  };
+function frozenRect(rect: Rect): Rect {
+  return Object.freeze({
+    x: rect.x,
+    y: rect.y,
+    width: rect.width,
+    height: rect.height,
+  });
 }
 
-function itemHitboxShape(item: ItemBase): "rect" | "ellipse" {
-  const metadata = item.dragSnapshot?.metadata ?? item.metadata;
-  return metadata?.hitboxShape === "ellipse" ? "ellipse" : "rect";
+function assertRect(
+  value: unknown,
+  callbackName: string,
+  container: ItemBase,
+): asserts value is Rect {
+  const rect = value as Partial<Rect> | null;
+  if (
+    !rect ||
+    !Number.isFinite(rect.x) ||
+    !Number.isFinite(rect.y) ||
+    !Number.isFinite(rect.width) ||
+    !Number.isFinite(rect.height) ||
+    rect.width! < 0 ||
+    rect.height! < 0
+  ) {
+    throw new TypeError(
+      `SnapSort Container ${container.id}: ${callbackName} must return finite x, y, width, and height values with nonnegative dimensions.`,
+    );
+  }
+}
+
+function resolveItemHitbox(
+  draggedItem: ItemBase,
+  item: ItemBase,
+  container: ItemBase,
+  session: DragSession,
+): ItemHitbox {
+  const box = item.dragSnapshot?.box;
+  if (!box) {
+    throw new Error(`SnapSort Item ${item.id}: missing drag snapshot box.`);
+  }
+  const defaultRect = frozenRect(box);
+  if (!isContainerObject(container)) {
+    return { shape: "rect", rect: defaultRect };
+  }
+  const callback = container.callbacks?.getItemHitbox;
+  if (!callback) return { shape: "rect", rect: defaultRect };
+
+  const hitbox = callback({
+    session,
+    item: draggedItem,
+    itemId: draggedItem.resolvedItemId,
+    itemMetadata: draggedItem.metadata,
+    overItem: item,
+    overItemId: item.resolvedItemId,
+    overItemMetadata: item.metadata,
+    container,
+    containerMetadata: container.metadata,
+    pointer: { x: session.pointer.x, y: session.pointer.y },
+    defaultRect,
+  } satisfies ItemHitboxEvent);
+
+  if (hitbox?.shape === "rect") {
+    assertRect(hitbox.rect, "getItemHitbox", container);
+    return { shape: "rect", rect: frozenRect(hitbox.rect) };
+  }
+  if (
+    hitbox?.shape === "circle" &&
+    Number.isFinite(hitbox.center?.x) &&
+    Number.isFinite(hitbox.center?.y) &&
+    Number.isFinite(hitbox.radius) &&
+    hitbox.radius >= 0
+  ) {
+    return {
+      shape: "circle",
+      center: Object.freeze({ x: hitbox.center.x, y: hitbox.center.y }),
+      radius: hitbox.radius,
+    };
+  }
+  throw new TypeError(
+    `SnapSort Container ${container.id}: getItemHitbox must return a finite rectangle or circle with nonnegative dimensions.`,
+  );
 }
 
 function hitboxColliderForItem(
+  draggedItem: ItemBase,
   item: ItemBase,
-): RectCollider | CircleCollider | null {
-  const box = item.dragSnapshot?.box;
-  if (!box) return null;
-  const insets = itemHitboxInsets(item);
-  const x = box.x + insets.left;
-  const y = box.y + insets.top;
-  const width = Math.max(0, box.width - insets.left - insets.right);
-  const height = Math.max(0, box.height - insets.top - insets.bottom);
-
-  if (itemHitboxShape(item) === "ellipse") {
-    const collider = new CircleCollider(
-      item.engine,
-      item,
-      0,
-      0,
-      Math.min(width, height) / 2,
-    );
-    collider.worldTransform = { x: x + width / 2, y: y + height / 2 };
-    return collider;
+  container: ItemBase,
+  session: DragSession,
+): { collider: RectCollider | CircleCollider; area: number } {
+  const hitbox = resolveItemHitbox(draggedItem, item, container, session);
+  if (hitbox.shape === "circle") {
+    const collider = new CircleCollider(item.engine, item, 0, 0, hitbox.radius);
+    collider.worldTransform = hitbox.center;
+    return { collider, area: Math.PI * hitbox.radius ** 2 };
   }
 
+  const { x, y, width, height } = hitbox.rect;
   const collider = new RectCollider(item.engine, item, 0, 0, width, height);
   collider.worldTransform = { x, y };
-  return collider;
+  return { collider, area: width * height };
 }
 
 /**
@@ -277,16 +328,18 @@ export function findHoveredItem(
   try {
     for (const child of dragSnapshotItems(container)) {
       if (session.itemSet.has(child) || child.isGhost) continue;
-      const collider = hitboxColliderForItem(child);
-      if (!collider) continue;
+      const { collider, area } = hitboxColliderForItem(
+        draggedItem,
+        child,
+        container,
+        session,
+      );
       try {
         if (
           !itemHoverCollisionEngine.isIntersecting(pointerCollider, collider)
         ) {
           continue;
         }
-        const box = child.dragSnapshot!.box;
-        const area = box.width * box.height;
         if (!best || area < best.area) {
           best = { item: child, area };
         }
@@ -976,38 +1029,12 @@ function drawCandidateDebug(
   }
 }
 
-function isInsertionContainer(container: ItemBase): boolean {
+function isInsertionContainer(container: ItemBase): container is Container {
   return isContainerObject(container);
 }
 
-function insertionMarkerInsets(container: ItemBase): {
-  left: number;
-  right: number;
-} {
-  const snapshotInsets = (container as any).dragSnapshotInsertionMarkerInsets;
-  if (
-    snapshotInsets &&
-    typeof snapshotInsets.left === "number" &&
-    typeof snapshotInsets.right === "number"
-  ) {
-    return snapshotInsets;
-  }
-
-  const metadata = (container as any).metadata;
-  return {
-    left:
-      typeof metadata?.insertionMarkerInsetLeft === "number"
-        ? metadata.insertionMarkerInsetLeft
-        : 0,
-    right:
-      typeof metadata?.insertionMarkerInsetRight === "number"
-        ? metadata.insertionMarkerInsetRight
-        : 0,
-  };
-}
-
 function insertionMarkerRect(
-  container: ItemBase,
+  container: Container,
   index: number,
   items: ItemBase[],
   snapshotItems: ItemBase[],
@@ -1015,35 +1042,23 @@ function insertionMarkerRect(
   const direction = getDirection(container);
   const contentRect = containerContentRect(container);
   const thickness = 3;
-  const insets =
-    direction === "column"
-      ? insertionMarkerInsets(container)
-      : { left: 0, right: 0 };
-  const withInsets = (rect: Rect): InsertionGhostRect => {
-    if (insets.left === 0 && insets.right === 0) return rect;
-    return {
-      ...rect,
-      insetLeft: insets.left,
-      insetRight: insets.right,
-    };
-  };
 
   if (items.length === 0) {
     if (direction === "row") {
-      return withInsets({
+      return {
         x: contentRect.x + contentRect.width / 2 - thickness / 2,
         y: contentRect.y,
         width: thickness,
         height: Math.max(1, contentRect.height),
-      });
+      };
     }
 
-    return withInsets({
+    return {
       x: contentRect.x,
       y: contentRect.y + contentRect.height / 2 - thickness / 2,
       width: Math.max(1, contentRect.width),
       height: thickness,
-    });
+    };
   }
 
   if (direction === "row") {
@@ -1060,12 +1075,12 @@ function insertionMarkerRect(
         : previousRect.x + previousRect.width
       : nextRect!.x;
 
-    return withInsets({
+    return {
       x: markerCenter - thickness / 2,
       y: contentRect.y,
       width: thickness,
       height: Math.max(1, contentRect.height),
-    });
+    };
   }
 
   const previous =
@@ -1081,12 +1096,55 @@ function insertionMarkerRect(
       : previousRect.y + previousRect.height
     : nextRect!.y;
 
-  return withInsets({
+  return {
     x: contentRect.x,
     y: markerCenter - thickness / 2,
     width: Math.max(1, contentRect.width),
     height: thickness,
-  });
+  };
+}
+
+function configuredInsertionMarkerRect(
+  container: Container,
+  index: number,
+  item: ItemBase,
+  session: DragSession | null,
+  defaultRect: GhostRect,
+  pointer: { x: number; y: number },
+): GhostRect {
+  const callback = container.callbacks?.getInsertionMarkerRect;
+  if (!callback) return frozenRect(defaultRect);
+
+  const groupItems = session?.items ?? [item];
+  const sources = session?.sources ?? groupItems.map(sourceLocationFor);
+  const itemBox = requireDragSnapshotBox(item);
+  const containerBox = requireDragSnapshotBox(container);
+  const result = callback({
+    session,
+    item,
+    itemId: item.resolvedItemId,
+    itemMetadata: item.metadata,
+    items: groupItems,
+    itemIds: groupItems.map((member) => member.resolvedItemId),
+    itemsMetadata: groupItems.map((member) => member.metadata),
+    source: sources[0] ?? null,
+    sources,
+    container,
+    containerMetadata: container.metadata,
+    index,
+    pointer: { x: pointer.x, y: pointer.y },
+    dragRect: frozenRect({
+      x: item.dragPositionX,
+      y: item.dragPositionY,
+      width: itemBox.width,
+      height: itemBox.height,
+    }),
+    containerRect: frozenRect(containerBox),
+    containerContentRect: frozenRect(containerContentRect(container)),
+    defaultRect: frozenRect(defaultRect),
+  } satisfies InsertionMarkerRectEvent);
+  assertRect(result, "getInsertionMarkerRect", container);
+  return frozenRect(result);
 }
 
 function collectInsertionCandidates(
@@ -1127,11 +1185,19 @@ function collectInsertionCandidates(
     if (isInsertionContainer(container)) {
       for (let index = 0; index <= children.length; index++) {
         const insertionIndex = indexForGap(index);
-        const ghostRect = insertionMarkerRect(
+        const defaultRect = insertionMarkerRect(
           container,
           index,
           children,
           snapshotChildren,
+        );
+        const ghostRect = configuredInsertionMarkerRect(
+          container,
+          insertionIndex,
+          item,
+          session,
+          defaultRect,
+          { x: pointerX, y: pointerY },
         );
         const ghostCenterX = ghostRect.x + ghostRect.width / 2;
         const ghostCenterY = ghostRect.y + ghostRect.height / 2;

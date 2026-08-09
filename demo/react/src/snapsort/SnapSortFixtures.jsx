@@ -1,16 +1,18 @@
 import {
   Container,
+  ContainerObjectContext,
   Engine,
   Ghost,
   Handle,
   Item,
+  useSnapSortEngine,
 } from "@snap-engine/snapsort/react";
-import { defaultAnimations } from "@snap-engine/snapsort";
+import { defaultAnimations, Item as CoreItem } from "@snap-engine/snapsort";
 import {
   prioritizeIntersectingContainer,
   rejectDrop,
 } from "@snap-engine/snapsort/callbacks";
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { useCallback, useContext, useEffect, useId, useMemo, useRef, useState } from "react";
 
 function hasMatchingDropGroup(event) {
   const sourceGroup = event.source?.containerMetadata.dropGroup;
@@ -43,6 +45,109 @@ function DemoItem({ children, className = "demo-item", itemId, metadata, ...prop
     <Item className={className} itemId={itemId ?? generatedItemId} metadata={metadata} {...props}>
       {children}
     </Item>
+  );
+}
+
+function ItemApiEntries() {
+  const engine = useSnapSortEngine();
+  const container = useContext(ContainerObjectContext);
+  const adoptedItemRef = useRef(null);
+  const adoptedIdentityRef = useRef(false);
+  const generatedItemRef = useRef(null);
+  const [showItems, setShowItems] = useState(true);
+  const [report, setReport] = useState("ready");
+  const [generatedMetadata, setGeneratedMetadata] = useState({ version: 1 });
+  const [nativeClicks, setNativeClicks] = useState(0);
+
+  if (!container) {
+    throw new Error("Item API fixture must be rendered inside a Container.");
+  }
+  if (!adoptedItemRef.current) {
+    const item = new CoreItem(engine, container);
+    item.itemId = "item-api-adopted";
+    item.metadata = { origin: "application" };
+    item.selected = true;
+    adoptedItemRef.current = item;
+  }
+  const adoptedItem = adoptedItemRef.current;
+
+  const captureGeneratedItem = useCallback((item) => {
+    if (item) generatedItemRef.current = item;
+  }, []);
+  const captureAdoptedItem = useCallback((item) => {
+    if (item) adoptedIdentityRef.current = item === adoptedItemRef.current;
+  }, []);
+
+  useEffect(
+    () => () => {
+      adoptedItem.destroy(false);
+    },
+    [adoptedItem],
+  );
+
+  const inspect = () => {
+    const generatedItem = generatedItemRef.current;
+    setReport(JSON.stringify({
+      adoptedBound: adoptedIdentityRef.current && adoptedItem.element !== null,
+      adoptedDestroyed: adoptedItem.isDeleteRequested,
+      adoptedDetached: adoptedItem.element === null,
+      adoptedMetadata: adoptedItem.metadata.origin,
+      adoptedParent: adoptedItem.parent === container,
+      adoptedSelected: adoptedItem.selected,
+      generatedBound: generatedItem !== null && generatedItem.element !== null,
+      generatedDestroyed: generatedItem?.isDeleteRequested ?? false,
+      generatedMetadata: generatedItem?.metadata.version ?? null,
+      generatedParent: generatedItem?.parent === container,
+      nativeClicks,
+    }));
+  };
+
+  return (
+    <>
+      {showItems && (
+        <>
+          <Item
+            itemId="item-api-generated"
+            ref={captureGeneratedItem}
+            metadata={generatedMetadata}
+            data-testid="item-api-generated"
+            aria-label="Generated Item"
+            onClick={() => setNativeClicks((count) => count + 1)}
+          >
+            Generated item
+          </Item>
+          <Item item={adoptedItem} ref={captureAdoptedItem}>
+            Adopted item
+          </Item>
+        </>
+      )}
+      <button data-testid="item-api-inspect" onClick={inspect} type="button">
+        Inspect items
+      </button>
+      <button data-testid="item-api-unmount" onClick={() => setShowItems(false)} type="button">
+        Unmount items
+      </button>
+      <button
+        data-testid="item-api-replace-metadata"
+        onClick={() => setGeneratedMetadata({ version: 2 })}
+        type="button"
+      >
+        Replace metadata
+      </button>
+      <output data-testid="item-api-report">{report}</output>
+    </>
+  );
+}
+
+function ItemApiFixture() {
+  return (
+    <section data-testid="item-api-fixture">
+      <Engine id="item-api-engine">
+        <Container config={{ direction: "column" }}>
+          <ItemApiEntries />
+        </Container>
+      </Engine>
+    </section>
   );
 }
 
@@ -1252,6 +1357,7 @@ export function SnapSortComponentsDemo() {
 
   return (
     <div className="snapsort-fixture components-demo">
+      {queryFlag("itemApi") && <ItemApiFixture />}
       <header className="demo-header">
         <div>
           <h1>SnapSort Components</h1>

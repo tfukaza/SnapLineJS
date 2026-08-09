@@ -16,19 +16,15 @@ export const Ghost = forwardRef<HTMLDivElement, GhostProps>(function Ghost(
   ref,
 ) {
   const elementRef = useRef<HTMLDivElement>(null);
-  const original = event.original.dragSnapshot?.box ?? event.original.currentDomProperty;
+  const original =
+    event.original.dragSnapshot?.box ?? event.original.currentDomProperty;
   const ghostItem = event.ghostItem;
   const width = event.ghostRect?.width ?? original.width;
   const height = event.ghostRect?.height ?? original.height;
   const container =
     event.container.dragSnapshot?.box ?? event.container.currentDomProperty;
-  const insetLeft = event.ghostRect?.insetLeft ?? 0;
-  const insetRight = event.ghostRect?.insetRight ?? 0;
   const marker = event.kind === "marker";
-  const left =
-    (event.ghostRect?.x ?? original.x) -
-    container.x +
-    (event.role === "pointer" ? 0 : insetLeft);
+  const left = (event.ghostRect?.x ?? original.x) - container.x;
   const top = (event.ghostRect?.y ?? original.y) - container.y;
 
   useImperativeHandle(ref, () => elementRef.current as HTMLDivElement, []);
@@ -59,8 +55,7 @@ export const Ghost = forwardRef<HTMLDivElement, GhostProps>(function Ghost(
         boxSizing: "border-box",
         background:
           marker && event.role !== "pointer" ? "currentColor" : undefined,
-        borderRadius:
-          marker && event.role !== "pointer" ? "999px" : undefined,
+        borderRadius: marker && event.role !== "pointer" ? "999px" : undefined,
         borderTop:
           marker && event.role !== "pointer"
             ? "3px solid currentColor"
@@ -75,7 +70,7 @@ export const Ghost = forwardRef<HTMLDivElement, GhostProps>(function Ghost(
         pointerEvents: marker ? "none" : undefined,
         position: marker ? "absolute" : undefined,
         top: marker ? top : undefined,
-        width: marker ? Math.max(0, width - insetLeft - insetRight) : width,
+        width,
         zIndex: marker ? 1000 : undefined,
         ...style,
       }}

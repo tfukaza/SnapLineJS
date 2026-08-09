@@ -6,7 +6,7 @@ import { AnimationObject } from "@snap-engine/core/animation";
 import type {
   ItemId,
   ItemSnapshot,
-  ItemSnapshotMetadata,
+  ItemMetadata,
   LayoutDirection,
   LayoutMainAxisAlign,
   LayoutModel,
@@ -104,7 +104,7 @@ function findGroupAnchor(group: Item[], pressed: Item): Item {
 export class Item extends ElementObject {
   #rootContainer: Container | null = null;
   #itemId: ItemId | null = null;
-  #metadata: ItemSnapshotMetadata = {};
+  #metadata: ItemMetadata = {};
   #locked: boolean = false;
   #selected: boolean = false;
   #dragSnapshot: ItemSnapshot<Item> | null = null;
@@ -325,11 +325,11 @@ export class Item extends ElementObject {
     return { index: idx, container: parentContainer };
   }
 
-  get metadata(): ItemSnapshotMetadata {
+  get metadata(): ItemMetadata {
     return this.#metadata;
   }
 
-  set metadata(value: ItemSnapshotMetadata) {
+  set metadata(value: ItemMetadata) {
     this.#metadata = value;
   }
 
@@ -401,24 +401,6 @@ export class Item extends ElementObject {
    */
   get dragSnapshot(): ItemSnapshot<Item> | null {
     return this.#dragSnapshot;
-  }
-
-  /**
-   * Returns the inset values for the insertion drop marker.
-   * TODO: generalize to use bounding rect.
-   */
-  get dragSnapshotInsertionMarkerInsets(): { left: number; right: number } {
-    const metadata = this.#dragSnapshot?.metadata ?? this.#metadata;
-    return {
-      left:
-        typeof metadata.insertionMarkerInsetLeft === "number"
-          ? metadata.insertionMarkerInsetLeft
-          : 0,
-      right:
-        typeof metadata.insertionMarkerInsetRight === "number"
-          ? metadata.insertionMarkerInsetRight
-          : 0,
-    };
   }
 
   /**
@@ -678,7 +660,7 @@ export class Item extends ElementObject {
       value: this,
       key: this.itemKey(this),
       itemId: this.resolvedItemId,
-      metadata: { ...this.#metadata },
+      metadata: Object.freeze({ ...this.#metadata }),
       direction: this.#snapshotDirection(),
       mainAxisAlign: this.#snapshotMainAxisAlign(),
       layoutModel: this.#snapshotLayoutModel(),
@@ -711,7 +693,7 @@ export class Item extends ElementObject {
       value: this,
       key: this.itemKey(this),
       itemId: this.resolvedItemId,
-      metadata: { ...this.#metadata },
+      metadata: Object.freeze({ ...this.#metadata }),
       direction: src.direction,
       mainAxisAlign: src.mainAxisAlign,
       layoutModel: src.layoutModel,

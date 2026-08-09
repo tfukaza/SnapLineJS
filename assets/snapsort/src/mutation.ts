@@ -512,11 +512,7 @@ function defaultCreateMarkerGhost(event: GhostCreateEvent): HTMLElement {
   const ghostElement = document.createElement("div");
   ghostElement.id = "spacer";
   const { ghostRect } = event;
-  const insetLeft = ghostRect?.insetLeft ?? 0;
-  const insetRight = ghostRect?.insetRight ?? 0;
-  const width = ghostRect
-    ? Math.max(0, ghostRect.width - insetLeft - insetRight)
-    : 0;
+  const width = ghostRect?.width ?? 0;
 
   ghostElement.dataset.snapsortGhost = "insertion";
   ghostElement.style.position = "absolute";

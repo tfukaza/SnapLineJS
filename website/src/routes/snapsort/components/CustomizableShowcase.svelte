@@ -320,14 +320,23 @@
       themeId: theme.id,
       listId: containerId,
       insertionDepth: folder ? depth + 1 : 0,
-      insertionMarkerInsetLeft: 6 + (folder ? depth + 1 : 0) * 9,
-      insertionMarkerInsetRight: 6,
     }}
     config={{
       direction: "column",
       name: `customizable-${theme.id}-files-${containerId}`,
       mode: "insertion",
-      callbacks: { onItemMove: (event) => handleFilesMove(theme.id, event) },
+      callbacks: {
+        onItemMove: (event) => handleFilesMove(theme.id, event),
+        getInsertionMarkerRect: ({ containerMetadata, defaultRect }) => {
+          const markerDepth = Number(containerMetadata.insertionDepth ?? 0);
+          const left = 6 + markerDepth * 9;
+          return {
+            ...defaultRect,
+            x: defaultRect.x + left,
+            width: Math.max(0, defaultRect.width - left - 6),
+          };
+        },
+      },
       ...getCustomizableThemeConfig(theme.id),
     }}
     items={theme.fileLists[containerId] ?? []}

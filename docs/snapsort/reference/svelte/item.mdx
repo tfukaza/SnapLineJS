@@ -16,7 +16,8 @@ frameworkKey: item
 
 `Item` connects one rendered entry to a SnapSort `Container`. Every item must
 be rendered beneath an `Engine` and a `Container` so it can join that
-container's drag tree.
+container's drag tree. In normal application code, omit the `item` prop: the
+component creates, configures, and eventually destroys its own core Item.
 
 ## A Basic Item
 
@@ -40,10 +41,10 @@ addition to standard `HTMLDivElement` attributes and events:
 type ItemProps = Omit<HTMLAttributes<HTMLDivElement>, "children"> & {
   children: Snippet;
   className?: string;
+  item?: SnapSortItem | null;
   itemId?: string;
-  metadata?: ItemSnapshotMetadata;
+  metadata?: ItemMetadata;
   selected?: boolean;
-  itemObject?: SnapSortItem | null;
 };
 ```
 
@@ -64,7 +65,7 @@ cards, form controls, or other components.
 
 `itemId` is the stable application identity used by move and remove commands,
 ghosts, keyed collection updates, and callback events. In the Svelte adapter it
-is required unless a supplied `itemObject` already carries an ID.
+is required unless a supplied `item` already carries an ID.
 
 ```svelte
 <Item itemId={task.id}>{task.title}</Item>
@@ -76,7 +77,7 @@ clear error.
 
 ### `metadata`
 
-`metadata` is an open record for application data that SnapSort should carry
+`metadata` is a read-only open record for application data that SnapSort should carry
 alongside the Item. It appears as `itemMetadata` and `itemsMetadata` in drag,
 mutation, hover, eligibility, and priority callbacks, and is frozen into the
 Item's drag snapshot.
@@ -86,19 +87,14 @@ the metadata received by the container callbacks.
 
 <ItemExample kind="metadata" />
 
-`ItemSnapshotMetadata` also recognizes these geometry fields:
+`ItemMetadata` is `Readonly<Record<string, unknown>>`. The application may
+replace the metadata object; Svelte synchronizes the replacement to the core
+Item, while an active drag keeps its shallow frozen snapshot. SnapSort never
+mutates the object supplied by the application.
 
-| Field | Description |
-|-------|-------------|
-| `insertionMarkerInsetLeft` | Moves the left edge of an insertion marker inward. |
-| `insertionMarkerInsetRight` | Moves the right edge of an insertion marker inward. |
-| `hitboxInsetTop` | Shrinks a positive amount, or grows a negative amount, from the top hover edge. |
-| `hitboxInsetRight` | Shrinks or grows the right hover edge. |
-| `hitboxInsetBottom` | Shrinks or grows the bottom hover edge. |
-| `hitboxInsetLeft` | Shrinks or grows the left hover edge. |
-| `hitboxShape` | Uses a `"rect"` or `"ellipse"` hover hitbox. Default `"rect"`. |
-
-All other fields are application-defined and pass through unchanged.
+Geometry is deliberately not metadata. Configure insertion markers with the
+destination container's `getInsertionMarkerRect` callback and item hover/swap
+hitboxes with the candidate owner's `getItemHitbox` callback.
 
 ### `selected` and DOM events
 
@@ -113,19 +109,69 @@ keyboard behavior and ARIA state when the Item itself acts as a control.
 
 <ItemExample kind="selection" />
 
-### `itemObject`
+### `bind:item`
 
-Normally the adapter creates the core Item object and destroys it when the
-component unmounts. Pass `itemObject` to adopt an object created by application
-or integration code instead.
+Use `bind:item` when application controls need to inspect or call the core Item.
+The binding receives the same automatically created instance that SnapSort uses
+internally; it does not change the component's ownership of that instance.
 
-An adopted object must use the same Engine, already belong to the current core
-Container, and carry its stable `itemId` before the component renders. The
-object is treated as an initial ownership decision: do not swap it after mount.
-Because the adapter does not own it, the code that created it must also destroy
-it.
+```svelte
+<script lang="ts">
+  import type { Item as SnapSortItem } from "@snap-engine/snapsort";
 
-<ItemExample kind="item-object" />
+  let item = $state<SnapSortItem | null>(null);
+</script>
+
+<Item itemId={task.id} bind:item>{task.title}</Item>
+
+<button type="button" onclick={() => item?.container.moveItem(task.id, archive, 0)}>
+  Move to archive
+</button>
+```
+
+### `item` (advanced)
+
+Passing a non-null `item` adopts that exact core instance instead of creating a
+new one. This is an advanced integration seam: most Item components should
+omit it and use `bind:item` when they only need access to the generated object.
+
+For an application-created instance, construct it with the same Engine and
+surrounding core Container. The adapter binds its rendered element but does not
+reparent or destroy the instance. Omitted `itemId`, `metadata`, and `selected`
+props preserve the instance's existing values; explicitly supplied props
+override them. The instance cannot be replaced after the component mounts, and
+the code that created it remains responsible for destroying it.
+
+<ItemExample kind="item-instance" />
+
+The other reason to pass `item` is a flow-mode copy drag. `onDragClone` creates
+the core clone before Svelte renders it; store that exact instance in state and
+pass it back so SnapSort can transfer the active drag to the newly rendered
+element:
+
+```svelte
+<script lang="ts">
+  import type {
+    DragCloneEvent,
+    Item as SnapSortItem,
+  } from "@snap-engine/snapsort";
+
+  let clone = $state<{ id: string; item: SnapSortItem } | null>(null);
+
+  function onDragClone(event: DragCloneEvent) {
+    const item = event.cloneItems[0];
+    item.itemId = crypto.randomUUID();
+    clone = { id: item.resolvedItemId, item };
+  }
+</script>
+
+{#if clone}
+  <Item itemId={clone.id} item={clone.item}>Copied entry</Item>
+{/if}
+```
+
+These clone instances are intentionally parentless until the core handoff. Do
+not create a replacement Item or manually add the clone to the Container.
 
 ### `class`, `className`, `style`, and HTML attributes
 

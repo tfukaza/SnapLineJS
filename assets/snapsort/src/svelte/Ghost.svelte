@@ -26,16 +26,11 @@
     if (event.kind === "marker") {
       const containerProp =
         event.container.dragSnapshot?.box ?? event.container.currentDomProperty;
-      const insetLeft = event.ghostRect?.insetLeft ?? 0;
-      const insetRight = event.ghostRect?.insetRight ?? 0;
       const left =
-        (event.ghostRect?.x ?? origProp.x) -
-        containerProp.x +
-        (event.role === "pointer" ? 0 : insetLeft);
+        (event.ghostRect?.x ?? origProp.x) - containerProp.x;
       const top = (event.ghostRect?.y ?? origProp.y) - containerProp.y;
-      const markerWidth = Math.max(0, width - insetLeft - insetRight);
       return (
-        `position:absolute;left:${left}px;top:${top}px;width:${markerWidth}px;` +
+        `position:absolute;left:${left}px;top:${top}px;width:${width}px;` +
         `height:${event.role === "pointer" ? height : 0}px;margin:0;` +
         "pointer-events:none;box-sizing:border-box;z-index:1000;" +
         (event.role === "pointer"

@@ -3,7 +3,7 @@
   import { Item as SnapSortItem } from "@snap-engine/snapsort";
   import type {
     Container,
-    ItemSnapshotMetadata,
+    ItemMetadata,
   } from "@snap-engine/snapsort";
   import type { Engine } from "@snap-engine/core";
   import type { Snippet } from "svelte";
@@ -12,10 +12,10 @@
   type ItemProps = Omit<HTMLAttributes<HTMLDivElement>, "children"> & {
     children: Snippet;
     className?: string;
+    item?: SnapSortItem | null;
     itemId?: string;
-    metadata?: ItemSnapshotMetadata;
+    metadata?: ItemMetadata;
     selected?: boolean;
-    itemObject?: SnapSortItem | null;
   };
 
   let {
@@ -24,50 +24,88 @@
     style = "",
     class: classValue = "",
     className = "",
-    metadata = {},
-    selected = false,
-    itemObject: providedItemObject = null,
+    item = $bindable<SnapSortItem | null>(null),
+    metadata,
+    selected,
     ...divProps
   }: ItemProps = $props();
 
   const engine: Engine = getContext("engine");
   const container: Container | null = getContext("container");
-  const initial = untrack(() => ({ itemId, metadata, providedItemObject }));
-  const ownsItem = initial.providedItemObject == null;
-  const itemObject: SnapSortItem = initial.providedItemObject ?? new SnapSortItem(engine, container);
-  const mergedClass = $derived(`snapsort-item ${classValue} ${className}`.trim());
+  const initial = untrack(() => ({ item, itemId, metadata, selected }));
 
-  if ("itemId" in initial.metadata) {
+  if (!container) {
+    throw new Error("SnapSort Item: must be rendered inside a Container.");
+  }
+  if (initial.metadata && "itemId" in initial.metadata) {
     throw new Error("SnapSort Item: `metadata.itemId` was removed. Pass `itemId` as its own prop instead.");
   }
-
-  if ("itemId" in metadata) {
-    throw new Error("SnapSort Item: `metadata.itemId` was removed. Pass `itemId` as its own prop instead.");
-  }
-
-  setContext("item", itemObject);
-
-  if (initial.itemId !== undefined) {
-    itemObject.itemId = initial.itemId;
-  }
-  if (!itemObject.itemId) {
+  if (initial.item == null && !initial.itemId) {
     throw new Error("SnapSort Item: missing required `itemId` prop.");
   }
 
-  if (ownsItem || Object.keys(initial.metadata).length > 0) {
-    itemObject.metadata = initial.metadata;
+  const ownsItem = initial.item == null;
+  const resolvedItem = initial.item ?? new SnapSortItem(engine, container);
+  const mergedClass = $derived(`snapsort-item ${classValue} ${className}`.trim());
+
+  if (resolvedItem.engine !== engine) {
+    throw new Error("SnapSort Item: the supplied `item` belongs to another Engine.");
+  }
+  const isCopyClone =
+    !ownsItem &&
+    resolvedItem.parent === null &&
+    resolvedItem.rootContainer === container.rootContainer;
+  if (!ownsItem && resolvedItem.parent !== container && !isCopyClone) {
+    throw new Error(
+      "SnapSort Item: the supplied `item` must already belong to the surrounding Container.",
+    );
+  }
+  item = resolvedItem;
+  setContext("item", resolvedItem);
+
+  if (initial.itemId !== undefined) {
+    resolvedItem.itemId = initial.itemId;
+  }
+  if (!resolvedItem.itemId) {
+    throw new Error("SnapSort Item: missing required `itemId` prop.");
+  }
+  if (initial.metadata !== undefined) {
+    resolvedItem.metadata = initial.metadata;
+  }
+  if (initial.selected !== undefined) {
+    resolvedItem.selected = initial.selected;
   }
 
   $effect(() => {
-    if (itemId !== undefined) {
-      itemObject.itemId = itemId;
+    if (item !== resolvedItem) {
+      throw new Error("SnapSort Item: the `item` prop cannot change after mount.");
     }
-    itemObject.selected = selected;
+    if (itemId !== undefined) {
+      resolvedItem.itemId = itemId;
+    }
+    if (metadata !== undefined) {
+      if ("itemId" in metadata) {
+        throw new Error("SnapSort Item: `metadata.itemId` was removed. Pass `itemId` as its own prop instead.");
+      }
+      resolvedItem.metadata = metadata;
+    }
+    if (selected !== undefined) {
+      resolvedItem.selected = selected;
+    }
   });
+
+  function bindItemElement(element: HTMLDivElement) {
+    resolvedItem.element = element;
+    return {
+      destroy() {
+        resolvedItem.detachElement(element);
+      },
+    };
+  }
 
   onDestroy(() => {
     if (ownsItem) {
-      itemObject.destroy(false);
+      resolvedItem.destroy(false);
     }
   });
 </script>
@@ -75,8 +113,8 @@
 <div
   {...divProps}
   class={mergedClass}
-  data-snapsort-item-id={itemObject.resolvedItemId}
-  bind:this={itemObject.element}
+  data-snapsort-item-id={resolvedItem.resolvedItemId}
+  use:bindItemElement
   {style}
 >
   {@render children()}

@@ -614,7 +614,7 @@
     cloneItem.itemId = id;
     cloneItem.metadata = { blockType: type };
     // Materialize the clone in state; the #if below renders it inside the
-    // canvas container, binding its element via `itemObject`. Once its element
+    // canvas container, passing it through Item's `item` prop. Once its element
     // exists (after the adapter's synchronous flush), core hands the drag off to it.
     draggingClone = { id, type: type as PaletteBlockType, item: cloneItem };
   }
@@ -1354,7 +1354,7 @@
                     {#if entry.kind === "clone"}
                       <Item
                         itemId={entry.id}
-                        itemObject={entry.item}
+                        item={entry.item}
                         metadata={{ blockType: entry.type }}
                       >
                         <div class="clone-block clone-block-{entry.type} clone-canvas-block clone-dragging">

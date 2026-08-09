@@ -31,12 +31,15 @@ export type {
   CanDropEvent,
   DropPriorityEvent,
   DropPriorityRect,
+  InsertionMarkerRectEvent,
+  ItemHitbox,
+  ItemHitboxEvent,
   VisualGeometryInvalidationEvent,
   VisualGeometryInvalidationReason,
 } from "./events";
 export type { LayoutMainAxisAlign } from "./layout";
 export { Item } from "./item";
-export type { ItemId, ItemSnapshot, ItemSnapshotMetadata } from "./snapshot";
+export type { ItemId, ItemMetadata, ItemSnapshot } from "./snapshot";
 export { DragSession } from "./drag/session";
 export type { DragSessionStatus } from "./drag/session";
 export type {

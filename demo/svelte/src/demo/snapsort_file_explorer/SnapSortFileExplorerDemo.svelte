@@ -188,6 +188,16 @@
 
   const callbacks: ContainerCallbacks = {
     onItemMove: handleMove,
+    getInsertionMarkerRect: ({ containerMetadata, defaultRect }) => {
+      const depth = Number(containerMetadata.insertionDepth ?? 0);
+      const left = 8 + depth * 14;
+      const right = 8;
+      return {
+        ...defaultRect,
+        x: defaultRect.x + left,
+        width: Math.max(0, defaultRect.width - left - right),
+      };
+    },
   };
 </script>
 
@@ -224,8 +234,6 @@
           containerId: "root",
           treeId: "snapenginejs",
           insertionDepth: 0,
-          insertionMarkerInsetLeft: 8,
-          insertionMarkerInsetRight: 8,
         }}
         items={tree}
         getItemId={(node) => node.id}

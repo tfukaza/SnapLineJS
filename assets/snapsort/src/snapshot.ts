@@ -29,27 +29,14 @@ export type LayoutModel = "flow" | "slots";
  */
 export type LayoutWrap = "auto" | "nowrap";
 
-export interface ItemSnapshotMetadata extends Record<string, unknown> {
-  insertionMarkerInsetLeft?: number;
-  insertionMarkerInsetRight?: number;
-  /**
-   * Shrink (positive) or grow (negative) this item's pointer-hover hitbox
-   * from the given edge. Used for item-hover detection (`onDragItemEnter` /
-   * `onDragItemMove` / `onDragItemLeave`) and by swap mode. Defaults to 0.
-   */
-  hitboxInsetTop?: number;
-  hitboxInsetRight?: number;
-  hitboxInsetBottom?: number;
-  hitboxInsetLeft?: number;
-  /** Hitbox shape for the same hover hit-testing. Defaults to `"rect"`. */
-  hitboxShape?: "rect" | "ellipse";
-}
+/** Read-only application data associated with an item. */
+export type ItemMetadata = Readonly<Record<string, unknown>>;
 
 export interface ItemSnapshot<T> {
   value: T;
   key: string;
   itemId: ItemId;
-  metadata: ItemSnapshotMetadata;
+  metadata: ItemMetadata;
   direction: LayoutDirection;
   mainAxisAlign: LayoutMainAxisAlign;
   layoutModel: LayoutModel;

@@ -65,8 +65,6 @@
     metadata={{
       containerId: node.id,
       insertionDepth: depth + 1,
-      insertionMarkerInsetLeft: 8 + (depth + 1) * 14,
-      insertionMarkerInsetRight: 8,
     }}
     items={node.open !== false ? (node.children ?? []) : []}
     getItemId={(child) => child.id}

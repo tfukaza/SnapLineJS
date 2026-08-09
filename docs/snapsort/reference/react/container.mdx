@@ -278,6 +278,8 @@ and do not change that receiver.
 | `onVisualGeometryInvalidated(event)` | Tree root (`event.root`) | Mode-independent, after transient drag, ghost, animation, or settle geometry changes | Direct notification, including outside an active session; coalesced to at most once per engine frame. |
 | `canDrop(event)` | Each candidate destination (`event.container`) | Every mode, once per candidate container during each target resolution | Runs directly before priority. Return `false` to reject all candidates owned directly by that container for this resolution. Programmatic moves bypass it. |
 | `getDropPriority(event)` | Each eligible candidate destination (`event.container`) | Every mode, once per eligible container during each target resolution | Runs directly after `canDrop`. Return a finite override or `undefined` to keep `dropPriority`. Programmatic moves bypass it. |
+| `getInsertionMarkerRect(event)` | Each direct candidate destination (`event.container`) | Insertion mode, once per candidate gap during resolution | Pure synchronous geometry hook outside `flushMutation`. Return the complete finite, nonnegative world-space marker rectangle; `event.defaultRect` provides SnapSort's default. |
+| `getItemHitbox(event)` | Direct owner of `event.overItem` (`event.container`) | Hover resolution in every mode; directly drives swap targeting | Pure synchronous geometry hook outside `flushMutation`. Return a world-space rectangle or circle; `event.defaultRect` is the candidate item's frozen border box. |
 | `createGhost(event)` | Container where the ghost is first created (`event.container`) | Flow move/none: initial source; flow copy: first valid destination; insertion: first valid destination; swap: root | Creation notification only; moving an existing ghost does not fire it again. Returned DOM nodes are ignored because React owns ghost DOM. Runs directly. |
 | `onGhostInsert(event)` | Current ghost owner (`event.container`) | Flow source/destination placement; insertion target placement; swap root pointer placement and movement | Required on every possible React ghost owner. Store/upsert the event and render `Ghost`; runs through that owner's `flushMutation`. |
 | `onGhostRemove(event)` | Ghost owner it is leaving (`event.container`) | Ghost crosses containers, is replaced, or the session ends | Required on every possible React ghost owner. Remove the matching rendered ghost; runs through the departing owner's `flushMutation`. |
@@ -288,6 +290,29 @@ The table describes **dispatch**, which is separate from startup
 **configuration validation**. For framework-owned trees, SnapSort verifies
 that the source can service mutations before activating a drag even though a
 successful move is later dispatched on the destination.
+
+### Geometry callbacks
+
+Geometry callbacks run during target resolution, so keep them synchronous and
+free of state or DOM writes. `getInsertionMarkerRect` receives the candidate
+destination/index, pointer, dragged run, source locations, frozen drag and
+container rectangles, and `defaultRect`. Return the complete final world-space
+rectangle rather than an inset:
+
+```ts
+getInsertionMarkerRect: ({ containerMetadata, defaultRect }) => {
+  const left = Number(containerMetadata.depth ?? 0) * 16;
+  return {
+    ...defaultRect,
+    x: defaultRect.x + left,
+    width: Math.max(0, defaultRect.width - left),
+  };
+}
+```
+
+`getItemHitbox` receives the dragged item, candidate `overItem`, direct owner,
+pointer, and frozen `defaultRect`. Return either
+`{ shape: "rect", rect }` or `{ shape: "circle", center, radius }`.
 
 - In euclidean, progressive, and insertion trees, configure either
   `onItemMove` or `onItemInsert` on every possible direct source and

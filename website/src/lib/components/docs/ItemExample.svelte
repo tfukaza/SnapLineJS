@@ -6,7 +6,7 @@
   import ItemBasicDemo from "./ItemBasicDemo.svelte";
   import ItemHandleDemo from "./ItemHandleDemo.svelte";
   import ItemMetadataDemo from "./ItemMetadataDemo.svelte";
-  import ItemObjectDemo from "./ItemObjectDemo.svelte";
+  import ItemInstanceDemo from "./ItemInstanceDemo.svelte";
   import ItemSelectionDemo from "./ItemSelectionDemo.svelte";
   import type { ItemExampleKind } from "./itemExampleSources";
 
@@ -32,9 +32,9 @@
       label: "Consumer-owned selection",
       component: ItemSelectionDemo,
     },
-    "item-object": {
-      label: "Adopting a core item object",
-      component: ItemObjectDemo,
+    "item-instance": {
+      label: "Adopting a core item",
+      component: ItemInstanceDemo,
     },
     handle: {
       label: "Dragging from a handle",

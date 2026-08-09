@@ -1,6 +1,7 @@
 <script lang="ts">
   import { Engine } from "@snap-engine/asset-base/svelte";
   import SnapSortDuolingoDemo from "../snapsort_duolingo/SnapSortDuolingoDemo.svelte";
+  import ItemApiFixture from "./ItemApiFixture.svelte";
   import { Container, Ghost, Handle, Item } from "@snap-engine/snapsort/svelte";
   import {
     prioritizeIntersectingContainer,
@@ -78,6 +79,7 @@
         duration: 180,
         timing_function: "cubic-bezier(0.2, 0, 0, 1)",
       };
+  const showItemApiFixture = new URLSearchParams(window.location.search).get("itemApi") === "1";
 
   let progressiveExamples: ProgressiveExample[] = $state([
     {
@@ -346,6 +348,10 @@
 </svelte:head>
 
 <div class="components-demo">
+  {#if showItemApiFixture}
+    <ItemApiFixture />
+  {/if}
+
   <header class="demo-header">
     <div>
       <h1>SnapSort Components</h1>

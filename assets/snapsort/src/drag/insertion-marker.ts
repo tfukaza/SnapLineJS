@@ -33,20 +33,14 @@ function updateInsertionGhostStyle(
   const containerProp =
     (container as unknown as Item).dragSnapshot?.box ??
     container.currentDomProperty;
-  const markerInsetLeft = ghostRect.insetLeft ?? 0;
-  const markerInsetRight = ghostRect.insetRight ?? 0;
-  const left = ghostRect.x - containerProp.x + markerInsetLeft;
+  const left = ghostRect.x - containerProp.x;
   const top = ghostRect.y - containerProp.y;
-  const width = Math.max(
-    0,
-    ghostRect.width - markerInsetLeft - markerInsetRight,
-  );
 
   ghostElement.dataset.snapsortGhost = "insertion";
   ghostElement.style.position = "absolute";
   ghostElement.style.left = `${left}px`;
   ghostElement.style.top = `${top}px`;
-  ghostElement.style.width = `${width}px`;
+  ghostElement.style.width = `${ghostRect.width}px`;
   ghostElement.style.height = "0px";
   ghostElement.style.margin = "0";
   ghostElement.style.borderRadius = "999px";

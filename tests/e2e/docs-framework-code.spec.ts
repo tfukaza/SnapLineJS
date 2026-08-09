@@ -287,21 +287,24 @@ test("Svelte Item reference explains props with live Item and Handle examples", 
     "3 items selected",
   );
 
-  const itemObject = page.locator(
-    '[data-demo-code-tabs="item-example-item-object"]',
+  const itemInstance = page.locator(
+    '[data-demo-code-tabs="item-example-item-instance"]',
   );
-  await itemObject
-    .getByRole("button", { name: "Inspect core object" })
+  await itemInstance
+    .getByRole("button", { name: "Inspect core item" })
     .first()
     .click();
-  await expect(itemObject.locator(".object-report")).toHaveText(
+  await expect(itemInstance.locator(".instance-report")).toHaveText(
     "ID: adopt-one · index: 0 · origin: application",
   );
-  await itemObject.getByRole("tab", { name: "Code" }).click();
-  await expect(itemObject.getByRole("tabpanel")).toContainText(
+  await itemInstance.getByRole("tab", { name: "Code" }).click();
+  await expect(itemInstance.getByRole("tabpanel")).toContainText(
     "new SnapSortItem(engine, container)",
   );
-  await expect(itemObject.getByRole("tabpanel")).toContainText(
+  await expect(itemInstance.getByRole("tabpanel")).toContainText(
+    "<Item {item}",
+  );
+  await expect(itemInstance.getByRole("tabpanel")).toContainText(
     "<!-- AdoptedItemRow.svelte -->",
   );
 
@@ -349,11 +352,24 @@ test("Svelte Item reference explains props with live Item and Handle examples", 
   expect(markdown).toContain("## Component Properties");
   expect(markdown).toContain("<Item itemId={task.id}");
   expect(markdown).toContain("new SnapSortItem(engine, container)");
+  expect(markdown).toContain("<Item {item}");
+  expect(markdown).toContain("bind:item");
+  expect(markdown).toContain("item={clone.item}");
   expect(markdown).toContain("<Handle className=\"drag-grip\"");
   expect(markdown).toContain(
     "This page includes interactive diagrams or demos.",
   );
   expect(markdown).not.toContain("<ItemExample");
+
+  const reactMarkdownResponse = await request.get(
+    "/docs/snapsort/reference/react/item.md",
+  );
+  expect(reactMarkdownResponse.status()).toBe(200);
+  const reactMarkdown = await reactMarkdownResponse.text();
+  expect(reactMarkdown).toContain("## Core Item Access");
+  expect(reactMarkdown).toContain("item={existingItem}");
+  expect(reactMarkdown).toContain("item={clone.item}");
+  expect(reactMarkdown).not.toContain("itemObject");
 });
 
 test("SnapSort callback docs expose receiver routing and mutation boundaries", async ({
@@ -656,6 +672,8 @@ test("SnapSort callback docs expose receiver routing and mutation boundaries", a
     "onVisualGeometryInvalidated",
     "canDrop",
     "getDropPriority",
+    "getInsertionMarkerRect",
+    "getItemHitbox",
     "createGhost",
     "onGhostInsert",
     "onGhostRemove",
@@ -673,7 +691,7 @@ test("SnapSort callback docs expose receiver routing and mutation boundaries", a
       has: page.getByRole("columnheader", { name: "Fires on" }),
     });
     await expect(callbackTable).toHaveCount(1);
-    await expect(callbackTable.getByRole("row")).toHaveCount(20);
+    await expect(callbackTable.getByRole("row")).toHaveCount(22);
     expect(
       await callbackTable.evaluate(
         (element) => element.getBoundingClientRect().width,

@@ -23,7 +23,7 @@ their bindings from `@snap-engine/snapsort/svelte` or
 - `Item`
 - `DragSession`
 - `defaultAnimations` - opt-in 100ms reorder, drop, and click-move animation preset
-- Event types: `ItemInsertEvent`, `ItemRemoveEvent`, `ItemMoveEvent`, `ItemSwapEvent`, `GhostCreateEvent`, `GhostInsertEvent`, `GhostRemoveEvent`, `DragStartEvent`, `DragEndEvent`, `DropTargetChangeEvent`, `CanDropEvent`, `DropPriorityEvent`, `VisualGeometryInvalidationEvent`, `DragLocation`
+- Event types: `ItemInsertEvent`, `ItemRemoveEvent`, `ItemMoveEvent`, `ItemSwapEvent`, `GhostCreateEvent`, `GhostInsertEvent`, `GhostRemoveEvent`, `DragStartEvent`, `DragEndEvent`, `DropTargetChangeEvent`, `CanDropEvent`, `DropPriorityEvent`, `InsertionMarkerRectEvent`, `ItemHitboxEvent`, `VisualGeometryInvalidationEvent`, `DragLocation`
 - `ContainerCallbacks`, `ContainerConfig`, `SortMode`, `SortStrategy`
 
 ```ts
@@ -83,6 +83,15 @@ through the dragged item's direct, pre-swap source `onItemSwap`.
 Ghost callbacks follow the container currently owning the ghost. Item hover is
 semantically separate from slot changes: hit-testing is scoped to the resolved
 target container, then dispatched on the direct owner of the hovered item.
+That owner can customize a candidate's rectangle/circle through
+`getItemHitbox`; insertion destinations can return a complete world-space
+marker rectangle from `getInsertionMarkerRect`. Both are synchronous geometry
+calculations outside `flushMutation`.
+
+Item `metadata` is read-only application data (`ItemMetadata`), not behavior
+configuration. Applications may replace it; SnapSort shallow-copies and freezes
+the current value for each drag snapshot. Framework Item components also pass
+native root-element attributes and events through directly.
 
 An ordinary move does not also fire source `onItemRemove`. That callback is
 for an item actually removed from its current owner, including

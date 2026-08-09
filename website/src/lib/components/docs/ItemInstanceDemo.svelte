@@ -14,7 +14,7 @@
     { id: "adopt-one", label: "Application-owned item" },
     { id: "adopt-two", label: "Another adopted item" },
   ]);
-  let report = $state("Choose an item to inspect its adopted core object.");
+  let report = $state("Choose an item to inspect its adopted core Item.");
 
   function inspect(item: SnapSortItem) {
     const { index } = item.getIndexAndContainer();
@@ -32,10 +32,10 @@
   }
 </script>
 
-<div class="item-object-demo">
-  <p class="object-report" aria-live="polite">{report}</p>
+<div class="item-instance-demo">
+  <p class="instance-report" aria-live="polite">{report}</p>
 
-  <Engine id="item-example-object">
+  <Engine id="item-example-instance">
     <Container
       className="adopted-list"
       items={tasks}
@@ -53,12 +53,12 @@
 </div>
 
 <style>
-  .item-object-demo {
+  .item-instance-demo {
     display: grid;
     gap: 0.75rem;
   }
 
-  .object-report {
+  .instance-report {
     min-height: 1.25rem;
     margin: 0;
     color: color-mix(in srgb, var(--color-text) 72%, transparent);
@@ -66,13 +66,13 @@
     text-align: center;
   }
 
-  :global(.item-object-demo .adopted-list) {
+  :global(.item-instance-demo .adopted-list) {
     gap: 0.5rem;
     width: min(100%, 24rem);
     margin: 0 auto;
   }
 
-  :global(.item-object-demo .adopted-card) {
+  :global(.item-instance-demo .adopted-card) {
     align-items: center !important;
     flex-direction: row !important;
     justify-content: space-between !important;
@@ -85,7 +85,7 @@
     cursor: grab;
   }
 
-  :global(.item-object-demo button) {
+  :global(.item-instance-demo button) {
     flex: 0 0 auto;
     padding: 0.3rem 0.55rem;
     border: 1px solid rgb(58 42 34 / 18%);

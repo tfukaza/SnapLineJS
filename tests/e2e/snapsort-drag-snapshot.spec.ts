@@ -24,6 +24,7 @@ import {
   Container as SnapSortContainer,
   defaultAnimations,
 } from "../../assets/snapsort/src/container";
+import { Item as SnapSortItem } from "../../assets/snapsort/src/item";
 import type {
   CanDropEvent,
   DropPriorityEvent,
@@ -77,12 +78,43 @@ test("container animations are opt-in and expose the standard preset", () => {
     defaultAnimations.reorder,
   );
   expect(animated.dropAnimationConfig(animated)).toBe(defaultAnimations.drop);
-  expect(partiallyDisabled.reorderAnimationConfig(partiallyDisabled)).toBeNull();
+  expect(
+    partiallyDisabled.reorderAnimationConfig(partiallyDisabled),
+  ).toBeNull();
   expect(partiallyDisabled.dropAnimationConfig(partiallyDisabled)).toBe(
     defaultAnimations.drop,
   );
   expect(disabled.reorderAnimationConfig(disabled)).toBeNull();
   expect(disabled.dropAnimationConfig(disabled)).toBeNull();
+});
+
+test("item drag snapshots freeze a shallow copy of current metadata", () => {
+  let nextId = 0;
+  const engine = {
+    global: {
+      data: {},
+      queue: {},
+      createId: () => `metadata-snapshot-${++nextId}`,
+      registerObject: () => {},
+      unregisterObject: () => {},
+    },
+    input: {
+      subscribeGlobalCursorEvent: () => {},
+      unsubscribeGlobalCursorEvent: () => {},
+    },
+  };
+  const item = new SnapSortItem(engine as never, null);
+  const original = { version: 1 };
+  item.itemId = "metadata-item";
+  item.metadata = original;
+
+  const snapshot = item.captureDragSnapshotTree();
+  item.metadata = { version: 2 };
+
+  expect(snapshot.metadata).not.toBe(original);
+  expect(snapshot.metadata.version).toBe(1);
+  expect(Object.isFrozen(snapshot.metadata)).toBe(true);
+  expect(item.metadata.version).toBe(2);
 });
 
 test("framework container ownership never inherits Vanilla DOM callbacks", () => {
@@ -1077,6 +1109,27 @@ test("swap collects every hovered container before applying priority", () => {
   smallContainer.depth = 1;
   preferredContainer.depth = 1;
   preferredContainer.dropPriority = 1;
+  let smallHitboxOwner: unknown = null;
+  let preferredHitboxOwner: unknown = null;
+  smallContainer.callbacks = {
+    getItemHitbox: (event: any) => {
+      smallHitboxOwner = event.container;
+      return {
+        shape: "rect",
+        rect: { x: 80, y: 80, width: 10, height: 10 },
+      };
+    },
+  };
+  preferredContainer.callbacks = {
+    getItemHitbox: (event: any) => {
+      preferredHitboxOwner = event.container;
+      return {
+        shape: "circle",
+        center: { x: 10, y: 10 },
+        radius: 8,
+      };
+    },
+  };
   const root = makeItem(
     "root",
     { x: 0, y: 0, width: 120, height: 120 },
@@ -1104,6 +1157,18 @@ test("swap collects every hovered container before applying priority", () => {
   );
   expect(target?.container).toBe(preferredContainer);
   expect(target?.index).toBe(0);
+  expect(smallHitboxOwner).toBe(smallContainer);
+  expect(preferredHitboxOwner).toBe(preferredContainer);
+
+  preferredContainer.callbacks = {
+    getItemHitbox: () => ({
+      shape: "rect",
+      rect: { x: 0, y: 0, width: Number.NaN, height: 10 },
+    }),
+  };
+  expect(() =>
+    determineSwapDropTarget(dragged as never, root as never, session as never),
+  ).toThrow(/getItemHitbox/);
 });
 
 function virtualInsertionPosition<T>(
@@ -1479,7 +1544,7 @@ test("insertion placement spans the container content box on the marker cross ax
   expect(target?.ghostRect?.width).toBe(184);
 });
 
-test("insertion placement carries snapshot marker insets on the ghost rect", () => {
+test("insertion placement uses the destination marker rectangle callback", () => {
   const itemA = mockSnapSortItem("a", {
     x: 34,
     y: 40,
@@ -1504,20 +1569,31 @@ test("insertion placement carries snapshot marker insets on the ghost rect", () 
     [itemA, dragged, itemB],
     "column",
   );
-  Object.defineProperty(container, "dragSnapshotInsertionMarkerInsets", {
-    get: () => ({ left: 18, right: 6 }),
-  });
-  (container as any).metadata = {
-    insertionMarkerInsetLeft: 2,
-    insertionMarkerInsetRight: 2,
+  container.callbacks = {
+    getInsertionMarkerRect: ({ defaultRect }: any) => ({
+      ...defaultRect,
+      x: defaultRect.x + 18,
+      width: defaultRect.width - 24,
+    }),
   };
   dragged.worldTransform = { x: 34, y: 112, scaleX: 1, scaleY: 1 };
 
   const target = determineInsertionDropTarget(dragged as any, container as any);
 
-  expect(target?.ghostRect?.insetLeft).toBe(18);
-  expect(target?.ghostRect?.insetRight).toBe(6);
-  expect(target?.ghostRect?.width).toBe(220);
+  expect(target?.ghostRect?.x).toBe(28);
+  expect(target?.ghostRect?.width).toBe(196);
+
+  container.callbacks = {
+    getInsertionMarkerRect: () => ({
+      x: 0,
+      y: 0,
+      width: -1,
+      height: 3,
+    }),
+  };
+  expect(() =>
+    determineInsertionDropTarget(dragged as any, container as any),
+  ).toThrow(/getInsertionMarkerRect/);
 });
 
 test("insertion placement shows a centered marker for an empty row container", () => {

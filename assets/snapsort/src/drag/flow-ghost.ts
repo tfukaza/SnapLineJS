@@ -265,9 +265,9 @@ function containerForElement(
  * `dropEffect = "copy"` at drag start: create one clone item per dragged
  * member and hand the drag off to them (see `DragSession.handoff`). The
  * consumer materializes each clone in their own state and renders it inside a
- * drop container (binding its element via `itemObject`); the original items
- * are never touched, so they produce no ghosts. Returns false (vetoing the
- * drag) if the consumer binds no element to a clone.
+ * drop container (passing it through the adapter's `item` prop); the original
+ * items are never touched, so they produce no ghosts. Returns false (vetoing
+ * the drag) if the consumer binds no element to a clone.
  */
 async function startCopyHandoff(session: DragSession): Promise<boolean> {
   const root = session.root;
