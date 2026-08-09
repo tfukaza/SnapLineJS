@@ -1,6 +1,7 @@
 <script lang="ts">
   import { Engine } from "@snap-engine/asset-base/svelte";
   import type { ItemMoveEvent } from "@snap-engine/snapsort";
+  import { rejectDrop } from "@snap-engine/snapsort/callbacks";
   import { Container, Item } from "@snap-engine/snapsort/svelte";
 
   type Group = { id: string; label: string };
@@ -49,7 +50,7 @@
           selected={selectedIds.has(group.id)}
           className={`nested-card${selectedIds.has(group.id) ? " is-selected" : ""}`}
           items={[]}
-          config={{ noDrop: true }}
+          config={{ callbacks: { canDrop: rejectDrop } }}
         >
           {#snippet before()}
             <div class="nested-card-content">

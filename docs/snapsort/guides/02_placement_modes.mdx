@@ -16,6 +16,12 @@ SnapSort offers several _modes_, selected per container with `config.mode`.
 A mode decides how the dragged item leaves the current layout, how the
 ghost is placed, and which container/index the item is placed when the user drops.
 
+Drop policy runs before mode-specific placement. `canDrop` removes ineligible
+containers, priority retains only the most preferred containers, and then the
+mode ranks their remaining positions. When every priority is the default `0`,
+the mode ranks all eligible positions globally. See
+[Drop Policies](/docs/snapsort/guides/04_drop_policies).
+
 > [!WARNING]
 > Root container and all nested containers must have the same `mode` configured.
 

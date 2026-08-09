@@ -246,7 +246,7 @@
         </div>
         <div class="demo-body">
             <Container
-                config={{ direction: "column", groupID: "flat-group", callbacks: { onItemMove: handleFlatMove } }}
+                config={{ direction: "column", callbacks: { onItemMove: handleFlatMove } }}
                 metadata={{ frameworkList: "flat" }}
                 locked={true}
                 items={flatItems}
@@ -267,7 +267,7 @@
         </div>
         <div class="demo-body">
             <Container
-                config={{ direction: "column", groupID: "nested-group", callbacks: { onItemMove: handleNestedMove } }}
+                config={{ direction: "column", callbacks: { onItemMove: handleNestedMove } }}
                 metadata={{ frameworkList: "nested-outer" }}
                 locked={true}
                 items={nestedGroupEntries}
@@ -279,7 +279,7 @@
                     {:else}
                         <Container
                             itemId="nested-sub-group"
-                            config={{ direction: "column", groupID: "nested-group", callbacks: { onItemMove: handleNestedMove } }}
+                            config={{ direction: "column", callbacks: { onItemMove: handleNestedMove } }}
                             metadata={{ frameworkList: "nested-inner" }}
                             locked={false}
                             items={nestedGroupChildren}
@@ -303,7 +303,7 @@
         </div>
         <div class="demo-body">
             <Container
-                config={{ direction: "column", groupID: "drag-nested-group", callbacks: { onItemMove: handleDragNestedMove } }}
+                config={{ direction: "column", callbacks: { onItemMove: handleDragNestedMove } }}
                 metadata={{ frameworkList: "drag-outer" }}
                 locked={true}
                 items={dragNestedEntries}
@@ -313,7 +313,7 @@
                     {#if e.kind === "group"}
                         <Container
                             itemId={e.id}
-                            config={{ direction: "column", groupID: "drag-nested-group", callbacks: { onItemMove: handleDragNestedMove } }}
+                            config={{ direction: "column", callbacks: { onItemMove: handleDragNestedMove } }}
                             metadata={{ frameworkList: `drag-${e.id}` }}
                             locked={false}
                             items={e.labels}
@@ -339,7 +339,7 @@
         </div>
         <div class="demo-body">
             <Container
-                config={{ direction: "row", groupID: "row-group", callbacks: { onItemMove: handleRowMove } }}
+                config={{ direction: "row", callbacks: { onItemMove: handleRowMove } }}
                 metadata={{ frameworkList: "row" }}
                 locked={true}
                 items={rowItems}
@@ -360,7 +360,7 @@
         </div>
         <div class="demo-body">
             <Container
-                config={{ direction: "row", groupID: "nested-row-group", callbacks: { onItemMove: handleNestedRowMove } }}
+                config={{ direction: "row", callbacks: { onItemMove: handleNestedRowMove } }}
                 metadata={{ frameworkList: "nested-row-outer" }}
                 locked={true}
                 items={nestedRowEntries}
@@ -372,7 +372,7 @@
                     {:else}
                         <Container
                             itemId="nested-row-sub-group"
-                            config={{ direction: "row", groupID: "nested-row-group", callbacks: { onItemMove: handleNestedRowMove } }}
+                            config={{ direction: "row", callbacks: { onItemMove: handleNestedRowMove } }}
                             metadata={{ frameworkList: "nested-row-inner" }}
                             locked={false}
                             items={nestedRowChildren}
@@ -396,7 +396,7 @@
         </div>
         <div class="demo-body">
             <Container
-                config={{ direction: "row", groupID: "wrap-row", callbacks: { onItemMove: handleWrapMove } }}
+                config={{ direction: "row", callbacks: { onItemMove: handleWrapMove } }}
                 metadata={{ frameworkList: "wrap" }}
                 locked={true}
                 items={wrapRowItems}
@@ -417,7 +417,7 @@
         </div>
         <div class="layers-panel">
             <Container
-                config={{ direction: "column", groupID: "layers", callbacks: { onItemMove: handleLayerMove } }}
+                config={{ direction: "column", callbacks: { onItemMove: handleLayerMove } }}
                 metadata={{ frameworkList: "layers-outer" }}
                 locked={true}
                 items={layerEntries}
@@ -434,7 +434,7 @@
                     {:else}
                         <Container
                             itemId={e.id}
-                            config={{ direction: "column", groupID: "layers", callbacks: { onItemMove: handleLayerMove } }}
+                            config={{ direction: "column", callbacks: { onItemMove: handleLayerMove } }}
                             metadata={{ frameworkList: `layers-${e.id}` }}
                             locked={false}
                             items={e.children}

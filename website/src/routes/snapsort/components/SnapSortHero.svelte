@@ -78,7 +78,6 @@
             className="hero-stack"
             config={{
               direction: "column",
-              groupID: "snapsort-hero-content",
               callbacks: { onItemMove: handleHeroStackMove },
             }}
             items={heroStackEntries}
@@ -103,7 +102,6 @@
                         <Container
                           config={{
                             direction: "row",
-                            groupID: "snapsort-title",
                             callbacks: { onItemMove: handleTitleMove },
                           }}
                           items={titleChars}

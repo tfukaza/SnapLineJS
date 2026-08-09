@@ -25,6 +25,10 @@
     ItemRemoveEvent,
     ItemSwapEvent,
   } from "@snap-engine/snapsort";
+  import {
+    prioritizeIntersectingContainer,
+    rejectDrop,
+  } from "@snap-engine/snapsort/callbacks";
 
   type SentenceZone = "answer" | "bank";
 
@@ -1013,7 +1017,7 @@
         </div>
         <div class="project-list">
           <Container
-            config={{ direction: "column", groupID: "project-list", callbacks: { onItemMove: handleTodoMove } }}
+            config={{ direction: "column", callbacks: { onItemMove: handleTodoMove } }}
             items={todoItems}
             getItemId={(todo) => todo.id}
           >
@@ -1045,14 +1049,18 @@
         <div class="example-placard">
           <h3>Kanban Board</h3>
           <p class="example-caption">
-            Three linked columns sharing one drop group — drag cards between
+            Three linked columns on one board — drag cards between
             stages, or click one to advance it.
           </p>
           <ExhibitSource href={data.sourceLinks["kanban-board"]} label="Kanban Board" />
         </div>
         <div class="kanban-board">
           <Container
-            config={{ direction: "row", name: "kanban-root", noDrop: true }}
+            config={{
+              direction: "row",
+              name: "kanban-root",
+              callbacks: { canDrop: rejectDrop },
+            }}
             locked={true}
             items={kanbanColumns}
             getItemId={(column) => column.id}
@@ -1064,7 +1072,6 @@
                 config={{
                   direction: "column",
                   name: column.id,
-                  groupID: "kanban-cards",
                   callbacks: { onItemMove: handleKanbanMove },
                   ...({ onClickAction: { action: "moveTo", target: column.target } } as object),
                 }}
@@ -1133,7 +1140,12 @@
           <div class="sentence-container-area">
             <Container
               className="sentence-workspace-root"
-              config={{ mode: "progressive", direction: "column", name: "sentence-root", noDrop: true }}
+              config={{
+                mode: "progressive",
+                direction: "column",
+                name: "sentence-root",
+                callbacks: { canDrop: rejectDrop },
+              }}
               locked={true}
               items={sentenceZones}
               getItemId={(zone) => `sentence-zone-${zone}`}
@@ -1147,9 +1159,7 @@
                     config={{
                       mode: "progressive",
                       direction: "row",
-                      groupID: "sentence",
                       name: "sentence-target",
-                      dropArea: true,
                       animation: {
                         reorder: sentenceAnimation,
                         drop: sentenceAnimation,
@@ -1158,6 +1168,7 @@
                       callbacks: {
                         onItemMove: handleSentenceMove,
                         onItemRemove: handleSentenceRemove,
+                        getDropPriority: prioritizeIntersectingContainer,
                       },
                     }}
                     locked={true}
@@ -1194,9 +1205,7 @@
                       mode: "progressive",
                       direction: "row",
                       mainAxisAlign: "center",
-                      groupID: "sentence",
                       name: "sentence-source",
-                      dropArea: true,
                       animation: {
                         reorder: sentenceAnimation,
                         drop: sentenceAnimation,
@@ -1205,6 +1214,7 @@
                       callbacks: {
                         onItemMove: handleSentenceMove,
                         onItemRemove: handleSentenceRemove,
+                        getDropPriority: prioritizeIntersectingContainer,
                       },
                     }}
                     locked={true}
@@ -1276,8 +1286,8 @@
             config={{
               direction: "row",
               name: "clone-root",
-              noDrop: true,
               callbacks: {
+                canDrop: rejectDrop,
                 onDragStart: handleCloneDragStart,
                 onDragClone: handleDragClone,
               },
@@ -1293,10 +1303,9 @@
                   itemId="clone-palette"
                   config={{
                     direction: "column",
-                    groupID: "clone-demo",
                     name: "clone-palette",
-                    noDrop: true,
                     callbacks: {
+                      canDrop: rejectDrop,
                     },
                   }}
                   locked={true}
@@ -1318,12 +1327,11 @@
                   itemId="clone-canvas"
                   config={{
                     direction: "column",
-                    groupID: "clone-demo",
                     name: "clone-canvas",
-                    dropArea: true,
                     callbacks: {
                       onItemMove: handleCanvasMove,
                       onItemRemove: handleCanvasRemove,
+                      getDropPriority: prioritizeIntersectingContainer,
                     },
                   }}
                   locked={true}
@@ -1391,8 +1399,8 @@
             config={{
               direction: "column",
               name: "trash-root",
-              noDrop: true,
               callbacks: {
+                canDrop: rejectDrop,
                 onDropTargetChange: handleTrashDropTargetChange,
                 onDragEnd: handleTrashDragEnd,
               },
@@ -1408,7 +1416,6 @@
                   itemId="trash-zone-list"
                   config={{
                     direction: "column",
-                    groupID: "trash-demo",
                     name: "trash-list",
                     callbacks: {
                       onItemMove: handleTrashListMove,
@@ -1434,10 +1441,11 @@
                     itemId="trash-zone-bin"
                     config={{
                       direction: "column",
-                      groupID: "trash-demo",
                       name: "trash-bin",
-                      dropArea: true,
-                      callbacks: { onItemMove: handleTrashBinMove },
+                      callbacks: {
+                        onItemMove: handleTrashBinMove,
+                        getDropPriority: prioritizeIntersectingContainer,
+                      },
                     }}
                     locked={true}
                     metadata={{ role: "trash" }}
@@ -1563,7 +1571,7 @@
             </div>
             <Container
               className="editor-field-list"
-              config={{ direction: "column", groupID: "editor-fields", callbacks: { onItemMove: handleEditorFieldMove } }}
+              config={{ direction: "column", callbacks: { onItemMove: handleEditorFieldMove } }}
               items={editorFields}
               getItemId={(field) => field.id}
             >
@@ -1595,7 +1603,6 @@
                             config={{
                               mode: "progressive",
                               direction: "column",
-                              groupID: `editor-options-${field.id}`,
                               name: `editor-options-${field.id}`,
                               callbacks: {
                                 onItemMove: handleEditorOptionMove,
@@ -1663,7 +1670,6 @@
                             config={{
                               mode: "progressive",
                               direction: "column",
-                              groupID: `editor-options-${field.id}`,
                               name: `editor-options-${field.id}`,
                               callbacks: {
                                 onItemMove: handleEditorOptionMove,
@@ -1731,7 +1737,6 @@
                             config={{
                               mode: "progressive",
                               direction: "column",
-                              groupID: `editor-options-${field.id}`,
                               name: `editor-options-${field.id}`,
                               callbacks: {
                                 onItemMove: handleEditorOptionMove,

@@ -142,7 +142,7 @@ test.describe("SnapSort gallery — new drag primitives", () => {
 
       // Drag a palette block toward the canvas, sampling the palette DOM
       // mid-drag: the handoff model must never place a ghost or hoisted item
-      // in the (noDrop) palette — the original template just sits there.
+      // in the policy-rejected palette — the original template just sits there.
       const src = await rect(dividerTemplate);
       const dst = await rect(canvas);
       const start = { x: src.x + src.width / 2, y: src.y + src.height / 2 };
@@ -171,7 +171,7 @@ test.describe("SnapSort gallery — new drag primitives", () => {
       await expect(palette.locator(".snapsort-item")).toHaveCount(4);
       await expect(canvas.locator(".clone-canvas-block")).toHaveCount(1);
 
-      // Now drag another block but release back over the palette (a noDrop
+      // Now drag another block but release back over the palette (a rejected
       // zone): the copy is cancelled and the clone discarded — canvas unchanged.
       const spacerTemplate = palette
         .locator(".snapsort-item")

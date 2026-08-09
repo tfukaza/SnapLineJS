@@ -224,7 +224,6 @@
               <Container
                 config={{
                   direction: "row",
-                  groupID: "hero-synth-pads",
                   mode: "euclidean",
                   callbacks: {
                     onDragStart: handlePadDragStart,

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { Engine } from "@snap-engine/asset-base/svelte";
   import type {
+    CanDropEvent,
     Container as SnapSortContainer,
     ItemMoveEvent,
   } from "@snap-engine/snapsort";
@@ -66,12 +67,20 @@
       task,
     );
   }
+
+  function canDropWithinGroup(event: CanDropEvent) {
+    return (
+      event.source?.containerMetadata.dropGroup ===
+      event.containerMetadata.dropGroup
+    );
+  }
 </script>
 
 <Engine id="container-intro-mixed">
   <Container
     items={entries}
-    config={{ groupID: "board-entries", callbacks: { onItemMove: onBoardMove } }}
+    metadata={{ dropGroup: "board-entries" }}
+    config={{ callbacks: { onItemMove: onBoardMove, canDrop: canDropWithinGroup } }}
   >
     {#snippet entry(boardEntry)}
       {#if boardEntry.kind === "task"}
@@ -82,7 +91,8 @@
           itemId={boardEntry.id}
           locked={false}
           items={boardEntry.items}
-          config={{ groupID: "group-tasks", callbacks: { onItemMove: onTaskMove } }}
+          metadata={{ dropGroup: "group-tasks" }}
+          config={{ callbacks: { onItemMove: onTaskMove, canDrop: canDropWithinGroup } }}
         >
           {#snippet before()}
             <strong>{boardEntry.label}</strong>

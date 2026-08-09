@@ -104,7 +104,7 @@
       <Engine id={`placement-mode-${mode}-${comparison ? "comparison" : "default"}`} {debug}>
       <Container
         className={`placement-demo-list placement-demo-${mode}${comparison ? " placement-demo-comparison" : ""} card`}
-        config={{ mode, direction, groupID: `placement-${mode}`, callbacks }}
+        config={{ mode, direction, callbacks }}
         items={items}
       >
         {#snippet entry(item)}

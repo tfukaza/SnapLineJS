@@ -2,7 +2,12 @@
   import { Engine } from "@snap-engine/asset-base/svelte";
   import SnapSortDuolingoDemo from "../snapsort_duolingo/SnapSortDuolingoDemo.svelte";
   import { Container, Ghost, Handle, Item } from "@snap-engine/snapsort/svelte";
+  import {
+    prioritizeIntersectingContainer,
+    rejectDrop,
+  } from "@snap-engine/snapsort/callbacks";
   import type {
+    CanDropEvent,
     Container as SortContainer,
     GhostInsertEvent,
     ItemMoveEvent,
@@ -35,6 +40,11 @@
   };
   type ProgressiveZone = "answer" | "bank";
   const progressiveZones: ProgressiveZone[] = ["answer", "bank"];
+
+  function hasMatchingDropGroup(event: CanDropEvent): boolean {
+    const sourceGroup = event.source?.containerMetadata.dropGroup;
+    return sourceGroup !== undefined && sourceGroup === event.containerMetadata.dropGroup;
+  }
 
   const initialColumns: DemoColumn[] = [
     {
@@ -364,7 +374,7 @@
                 config={{
                   direction: "row",
                   name: "component-kanban-root",
-                  noDrop: true,
+                  callbacks: { canDrop: rejectDrop },
                 }}
                 locked={true}
                 metadata={{ boardId: "component-kanban" }}
@@ -466,7 +476,7 @@
             mode: "progressive",
             direction: "column",
             name: "progressive-components-root",
-            noDrop: true,
+            callbacks: { canDrop: rejectDrop },
           }}
           locked={true}
           metadata={{ boardId: "progressive-components" }}
@@ -481,7 +491,7 @@
                 mode: "progressive",
                 direction: "column",
                 name: `progressive-example-${example.id}`,
-                noDrop: true,
+                callbacks: { canDrop: rejectDrop },
               }}
               locked={true}
               metadata={{ exampleId: example.id }}
@@ -503,17 +513,23 @@
                       mode: "progressive",
                       direction: "row",
                       name: `progressive-answer-${example.id}`,
-                      groupID: `progressive-${example.id}`,
-                      dropArea: true,
                       gap: 8,
                       animation: {
                         reorder: snapSortCubicAnimation,
                         drop: snapSortCubicAnimation,
                       },
-                      callbacks: { onItemMove: handleProgressiveMove },
+                      callbacks: {
+                        canDrop: hasMatchingDropGroup,
+                        getDropPriority: prioritizeIntersectingContainer,
+                        onItemMove: handleProgressiveMove,
+                      },
                     }}
                     locked={true}
-                    metadata={{ zone: "answer", exampleId: example.id }}
+                    metadata={{
+                      zone: "answer",
+                      exampleId: example.id,
+                      dropGroup: `progressive-${example.id}`,
+                    }}
                     items={example.answerTiles}
                     getItemId={(tile) => tile.id}
                   >
@@ -531,17 +547,23 @@
                       mode: "progressive",
                       direction: "row",
                       name: `progressive-bank-${example.id}`,
-                      groupID: `progressive-${example.id}`,
-                      dropArea: true,
                       gap: 8,
                       animation: {
                         reorder: snapSortCubicAnimation,
                         drop: snapSortCubicAnimation,
                       },
-                      callbacks: { onItemMove: handleProgressiveMove },
+                      callbacks: {
+                        canDrop: hasMatchingDropGroup,
+                        getDropPriority: prioritizeIntersectingContainer,
+                        onItemMove: handleProgressiveMove,
+                      },
                     }}
                     locked={true}
-                    metadata={{ zone: "bank", exampleId: example.id }}
+                    metadata={{
+                      zone: "bank",
+                      exampleId: example.id,
+                      dropGroup: `progressive-${example.id}`,
+                    }}
                     items={example.bankTiles}
                     getItemId={(tile) => tile.id}
                   >

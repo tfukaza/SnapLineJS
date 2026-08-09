@@ -249,7 +249,6 @@
       config={{
         mode: "insertion",
         direction: "column",
-        groupID: "website-file-explorer",
         name: "website-file-explorer-root",
         callbacks,
         animation: {

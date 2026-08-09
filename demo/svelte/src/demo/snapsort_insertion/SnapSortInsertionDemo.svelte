@@ -1,6 +1,7 @@
 <script lang="ts">
   import { Engine } from "@snap-engine/asset-base/svelte";
   import { Container, Item } from "@snap-engine/snapsort/svelte";
+  import { rejectDrop } from "@snap-engine/snapsort/callbacks";
   import type {
     Container as SortContainer,
     DragStartEvent,
@@ -194,8 +195,8 @@
         mode: "insertion",
         direction: "row",
         name: "insertion-board-root",
-        noDrop: true,
         callbacks: {
+          canDrop: rejectDrop,
           onDragStart: handleDragStart,
         },
       }}
@@ -212,7 +213,6 @@
           config={{
             mode: "insertion",
             direction: "column",
-            groupID: "insertion-demo",
             name: `insertion-${column.id}`,
             callbacks: {
               onItemMove: handleMove,

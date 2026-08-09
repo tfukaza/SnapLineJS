@@ -212,14 +212,13 @@
         config={{
           mode: "insertion",
           direction: "column",
-          groupID: "code-file-tree-demo",
-            name: "code-file-tree-root",
-            callbacks,
-            animation: {
-              reorder: treeAnimation,
-              drop: treeAnimation,
-            },
-          }}
+          name: "code-file-tree-root",
+          callbacks,
+          animation: {
+            reorder: treeAnimation,
+            drop: treeAnimation,
+          },
+        }}
         locked={true}
         metadata={{
           containerId: "root",

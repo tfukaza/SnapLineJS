@@ -7,6 +7,7 @@
     Container as ContainerType,
     ItemMoveEvent,
   } from "@snap-engine/snapsort";
+  import { rejectDrop } from "@snap-engine/snapsort/callbacks";
   import CustomizableShowcase from "./CustomizableShowcase.svelte";
   import { moveEntries, moveEntriesAcrossLists } from "./listState";
 
@@ -418,7 +419,6 @@
             className="basic-list sortable-list"
             config={{
               direction: "column",
-              groupID: "core-sortable",
               callbacks: { onItemMove: handleSortableMove },
             }}
             items={sortableItems}
@@ -445,7 +445,6 @@
             className={`sideways-list ${sidewaysSolved ? "solved" : ""}`}
             config={{
               direction: "row",
-              groupID: "core-sideways",
               mainAxisAlign: "center",
               callbacks: { onItemMove: handleSidewaysMove },
             }}
@@ -477,7 +476,6 @@
             metadata={{ listId: "root" }}
             config={{
               direction: "column",
-              groupID: "core-nested",
               callbacks: { onItemMove: handleNestedMove },
             }}
             items={nestedLists.root}
@@ -504,7 +502,6 @@
                   metadata={{ listId: "child" }}
                   config={{
                     direction: "column",
-                    groupID: "core-nested",
                     callbacks: { onItemMove: handleNestedMove },
                   }}
                   locked={false}
@@ -551,7 +548,6 @@
             metadata={{ listId: "root" }}
             config={{
               direction: "column",
-              groupID: "core-insert",
               mode: "insertion",
               callbacks: { onItemMove: handleInsertMove },
             }}
@@ -579,7 +575,6 @@
                   metadata={{ listId: "child" }}
                   config={{
                     direction: "column",
-                    groupID: "core-insert",
                     mode: "insertion",
                     callbacks: { onItemMove: handleInsertMove },
                   }}
@@ -626,7 +621,6 @@
             className="multi-row-list"
             config={{
               direction: "row",
-              groupID: "core-multi-row",
               mode: "progressive",
               callbacks: { onItemMove: handleMultiRowMove },
             }}
@@ -652,7 +646,11 @@
         <div class="core-demo-surface multi-container-surface">
           <Container
             className="multi-container-board"
-            config={{ direction: "row", name: "core-multi-root", noDrop: true }}
+            config={{
+              direction: "row",
+              name: "core-multi-root",
+              callbacks: { canDrop: rejectDrop },
+            }}
             locked={true}
             items={multiContainers}
             getItemId={(column) => column.id}
@@ -668,7 +666,6 @@
                 metadata={{ columnId: column.id }}
                 config={{
                   direction: "column",
-                  groupID: "core-multi-container",
                   name: column.id,
                   callbacks: { onItemMove: handleMultiContainerMove },
                 }}

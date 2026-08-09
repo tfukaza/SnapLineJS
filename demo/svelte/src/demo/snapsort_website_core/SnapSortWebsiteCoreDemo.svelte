@@ -2,6 +2,7 @@
   import { Engine } from "@snap-engine/asset-base/svelte";
   import { Container, Handle, Item } from "@snap-engine/snapsort/svelte";
   import type { Container as ContainerType, ItemMoveEvent } from "@snap-engine/snapsort";
+  import { rejectDrop } from "@snap-engine/snapsort/callbacks";
 
   type MultiContainerItem = {
     id: string;
@@ -202,7 +203,6 @@
               className={`sideways-list ${sidewaysSolved ? "solved" : ""}`}
               config={{
                 direction: "row",
-                groupID: "core-sideways",
                 mainAxisAlign: "center",
                 callbacks: {
                   onItemMove: handleSidewaysMove,
@@ -230,7 +230,7 @@
           <div class="core-demo-surface card">
             <Container
               className="basic-list bounded-demo-list"
-              config={{ direction: "column", groupID: "core-nested", callbacks: { onItemMove: handleNestedMove } }}
+              config={{ direction: "column", callbacks: { onItemMove: handleNestedMove } }}
               metadata={{ list: "outer" }}
               items={nestedEntries}
               getItemId={(e) => (e.kind === "item" ? e.label : "nested-group")}
@@ -253,7 +253,7 @@
                   <Container
                     itemId="nested-group"
                     className="nested-list bounded-demo-list card shallow"
-                    config={{ direction: "column", groupID: "core-nested", callbacks: { onItemMove: handleNestedMove } }}
+                    config={{ direction: "column", callbacks: { onItemMove: handleNestedMove } }}
                     metadata={{ list: "inner" }}
                     locked={false}
                     items={nestedItems}
@@ -294,7 +294,11 @@
           <div class="core-demo-surface multi-container-surface">
             <Container
               className="multi-container-board"
-              config={{ direction: "row", name: "core-multi-root", noDrop: true }}
+              config={{
+                direction: "row",
+                name: "core-multi-root",
+                callbacks: { canDrop: rejectDrop },
+              }}
               locked={true}
               items={multiContainers}
               getItemId={(column) => column.id}
@@ -307,7 +311,6 @@
                   metadata={{ columnId: column.id }}
                   config={{
                     direction: "column",
-                    groupID: "core-multi-container",
                     name: column.id,
                     callbacks: { onItemMove: handleMultiContainerMove },
                   }}

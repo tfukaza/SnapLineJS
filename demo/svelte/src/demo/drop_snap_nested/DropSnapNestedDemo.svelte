@@ -1,6 +1,7 @@
 <script lang="ts">
   import { Engine } from "@snap-engine/asset-base/svelte";
   import { Container, Ghost, Item } from "@snap-engine/snapsort/svelte";
+  import { rejectDrop } from "@snap-engine/snapsort/callbacks";
   import type { Engine as EngineClass } from "@snap-engine/core";
   import type { ItemMoveEvent } from "@snap-engine/snapsort";
 
@@ -374,7 +375,7 @@
             <h2>Vertical Column</h2>
             <p class="demo-hint">Cmd/ctrl-click to multi-select, then drag any selected item.</p>
             <Container
-              config={{ groupID: "vertical-group", callbacks: { onItemMove: handleVerticalMove } }}
+              config={{ callbacks: { onItemMove: handleVerticalMove } }}
               metadata={{ frameworkList: "vertical" }}
               items={verticalItems}
               getItemId={(n) => `vertical-${n}`}
@@ -395,7 +396,7 @@
           <article class="demo-cell">
             <h2>Horizontal Row</h2>
             <Container
-              config={{ direction: "row", groupID: "wrap-row", callbacks: { onItemMove: handleHorizontalMove } }}
+              config={{ direction: "row", callbacks: { onItemMove: handleHorizontalMove } }}
               metadata={{ frameworkList: "horizontal" }}
               locked={true}
               items={horizontalRowItems}
@@ -410,7 +411,7 @@
           <article class="demo-cell wide">
             <h2>Horizontal Double Row</h2>
             <Container
-              config={{ direction: "row", groupID: "double-row-group", callbacks: { onItemMove: handleDoubleRowMove } }}
+              config={{ direction: "row", callbacks: { onItemMove: handleDoubleRowMove } }}
               metadata={{ frameworkList: "double" }}
               items={doubleRowItems}
               getItemId={(n) => `double-row-${n}`}
@@ -429,7 +430,7 @@
           <article class="demo-cell wide size-demo">
             <h2>Different Sizes</h2>
             <Container
-              config={{ direction: "row", groupID: "sizes-group", callbacks: { onItemMove: handleSizedMove } }}
+              config={{ direction: "row", callbacks: { onItemMove: handleSizedMove } }}
               metadata={{ frameworkList: "sizes" }}
               items={sizedItems}
               getItemId={(entry) => entry.label}
@@ -445,7 +446,11 @@
           <article class="demo-cell">
             <h2>Multiple Drop Areas</h2>
             <Container
-              config={{ direction: "row", name: "multi-root", noDrop: true }}
+              config={{
+                direction: "row",
+                name: "multi-root",
+                callbacks: { canDrop: rejectDrop },
+              }}
               locked={true}
               items={multiAreaZones}
               getItemId={(area) => `multi-root-${area}`}
@@ -471,7 +476,7 @@
           <article class="demo-cell">
             <h2>Nested Container</h2>
             <Container
-              config={{ direction: "column", groupID: "nested-group", callbacks: { onItemMove: handleNestedGroupMove }, ...nestedAnimationConfig }}
+              config={{ direction: "column", callbacks: { onItemMove: handleNestedGroupMove }, ...nestedAnimationConfig }}
               metadata={{ frameworkList: "nested-outer" }}
               locked={true}
               items={nestedGroupEntries}
@@ -483,7 +488,7 @@
                 {:else}
                   <Container
                     itemId="nested-sub-group"
-                    config={{ direction: "column", groupID: "nested-group", callbacks: { onItemMove: handleNestedGroupMove }, ...nestedAnimationConfig }}
+                    config={{ direction: "column", callbacks: { onItemMove: handleNestedGroupMove }, ...nestedAnimationConfig }}
                     metadata={{ frameworkList: "nested-inner" }}
                     locked={lockNestedChild}
                     items={nestedGroupChildren}
@@ -503,7 +508,7 @@
             <p class="demo-hint">Items fill their container (100% width); the nested list is narrower.</p>
             <Container
               className="stretch-list"
-              config={{ direction: "column", wrap: "nowrap", stretchItems: true, groupID: "stretch-nested", callbacks: { onItemMove: handleStretchMove }, ...nestedAnimationConfig }}
+              config={{ direction: "column", wrap: "nowrap", stretchItems: true, callbacks: { onItemMove: handleStretchMove }, ...nestedAnimationConfig }}
               metadata={{ frameworkList: "stretch-outer" }}
               locked={true}
               items={stretchEntries}
@@ -516,7 +521,7 @@
                   <Container
                     itemId="stretch-sub-group"
                     className="stretch-sublist"
-                    config={{ direction: "column", wrap: "nowrap", stretchItems: true, groupID: "stretch-nested", callbacks: { onItemMove: handleStretchMove }, ...nestedAnimationConfig }}
+                    config={{ direction: "column", wrap: "nowrap", stretchItems: true, callbacks: { onItemMove: handleStretchMove }, ...nestedAnimationConfig }}
                     metadata={{ frameworkList: "stretch-inner" }}
                     items={stretchGroupChildren}
                     getItemId={(label) => label}
@@ -535,7 +540,7 @@
               <h2>Compact Nested List</h2>
               <Container
                 className="compact-basic-list"
-                config={{ direction: "column", groupID: "compact-nested", callbacks: { onItemMove: handleCompactMove }, ...nestedAnimationConfig }}
+                config={{ direction: "column", callbacks: { onItemMove: handleCompactMove }, ...nestedAnimationConfig }}
                 metadata={{ frameworkList: "compact-outer" }}
                 items={compactEntries}
                 getItemId={(e) => (e.kind === "item" ? e.label : "compact-sub-group")}
@@ -547,7 +552,7 @@
                     <Container
                       itemId="compact-sub-group"
                       className="compact-nested-list"
-                      config={{ direction: "column", groupID: "compact-nested", callbacks: { onItemMove: handleCompactMove }, ...nestedAnimationConfig }}
+                      config={{ direction: "column", callbacks: { onItemMove: handleCompactMove }, ...nestedAnimationConfig }}
                       metadata={{ frameworkList: "compact-inner" }}
                       items={compactGroupChildren}
                       getItemId={(label) => label}
@@ -565,7 +570,7 @@
           <article class="demo-cell">
             <h2>Draggable Sub-Containers</h2>
             <Container
-              config={{ direction: "column", groupID: "drag-nested-group", callbacks: { onItemMove: handleDragNestedMove } }}
+              config={{ direction: "column", callbacks: { onItemMove: handleDragNestedMove } }}
               metadata={{ frameworkList: "drag-outer" }}
               locked={true}
               items={dragNestedEntries}
@@ -575,7 +580,7 @@
                 {#if e.kind === "group"}
                   <Container
                     itemId={e.id}
-                    config={{ direction: "column", groupID: "drag-nested-group", callbacks: { onItemMove: handleDragNestedMove } }}
+                    config={{ direction: "column", callbacks: { onItemMove: handleDragNestedMove } }}
                     metadata={{ frameworkList: `drag-${e.id}` }}
                     locked={false}
                     items={e.labels}
@@ -595,7 +600,7 @@
           <article class="demo-cell">
             <h2>Nested Row Groups</h2>
             <Container
-              config={{ direction: "row", groupID: "nested-row-group", callbacks: { onItemMove: handleNestedRowMove } }}
+              config={{ direction: "row", callbacks: { onItemMove: handleNestedRowMove } }}
               metadata={{ frameworkList: "row-outer" }}
               locked={true}
               items={nestedRowEntries}
@@ -607,7 +612,7 @@
                 {:else}
                   <Container
                     itemId="nested-row-sub-group"
-                    config={{ direction: "row", groupID: "nested-row-group", callbacks: { onItemMove: handleNestedRowMove } }}
+                    config={{ direction: "row", callbacks: { onItemMove: handleNestedRowMove } }}
                     metadata={{ frameworkList: "row-inner" }}
                     locked={false}
                     items={nestedRowChildren}
@@ -625,7 +630,7 @@
           <article class="demo-cell">
             <h2>Layers Panel</h2>
             <Container
-              config={{ direction: "column", groupID: "layers", callbacks: { onItemMove: handleLayerMove } }}
+              config={{ direction: "column", callbacks: { onItemMove: handleLayerMove } }}
               metadata={{ frameworkList: "layers-outer" }}
               locked={true}
               items={layerEntries}
@@ -642,7 +647,7 @@
                 {:else}
                   <Container
                     itemId={e.id}
-                    config={{ direction: "column", groupID: "layers", callbacks: { onItemMove: handleLayerMove } }}
+                    config={{ direction: "column", callbacks: { onItemMove: handleLayerMove } }}
                     metadata={{ frameworkList: `layers-${e.id}` }}
                     locked={false}
                     items={e.children}

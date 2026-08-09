@@ -15,6 +15,7 @@
     Item,
   } from "@snap-engine/snapsort/svelte";
   import type { ContainerCallbacks } from "@snap-engine/snapsort";
+  import { rejectDrop } from "@snap-engine/snapsort/callbacks";
   import FileExplorerNode from "./FileExplorerNode.svelte";
 
   let {
@@ -68,10 +69,11 @@
     config={{
       mode: "insertion",
       direction: "column",
-      groupID: "website-file-explorer",
       name: `website-file-explorer-${node.id}`,
-      noDrop: node.open === false,
-      callbacks,
+      callbacks: {
+        ...callbacks,
+        canDrop: node.open === false ? rejectDrop : callbacks.canDrop,
+      },
       animation: {
         reorder: fileTreeAnimation,
         drop: fileTreeAnimation,

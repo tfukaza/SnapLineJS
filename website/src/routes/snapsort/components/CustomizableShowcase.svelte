@@ -323,7 +323,6 @@
     }}
     config={{
       direction: "column",
-      groupID: `customizable-${theme.id}-files`,
       name: `customizable-${theme.id}-files-${containerId}`,
       mode: "insertion",
       callbacks: { onItemMove: (event) => handleFilesMove(theme.id, event) },
@@ -421,7 +420,6 @@
                         metadata={{ themeId: theme.id, listId: "rows" }}
                         config={{
                           direction: "column",
-                          groupID: `customizable-${theme.id}-list`,
                           callbacks: { onItemMove: (event) => handleRowsMove(theme.id, event) },
                           ...getCustomizableThemeConfig(theme.id),
                         }}
@@ -465,7 +463,6 @@
                         metadata={{ themeId: theme.id, listId: "words" }}
                         config={{
                           direction: "row",
-                          groupID: `customizable-${theme.id}-words`,
                           mode: "progressive",
                           callbacks: { onItemMove: (event) => handleWordsMove(theme.id, event) },
                           ...getCustomizableThemeConfig(theme.id),
@@ -500,7 +497,6 @@
                         metadata={{ themeId: theme.id, listId: "tasks" }}
                         config={{
                           direction: "column",
-                          groupID: `customizable-${theme.id}-tasks`,
                           callbacks: { onItemMove: (event) => handleTasksMove(theme.id, event) },
                           ...getCustomizableThemeConfig(theme.id),
                         }}
@@ -549,7 +545,6 @@
                         metadata={{ themeId: theme.id, listId: "root" }}
                         config={{
                           direction: "column",
-                          groupID: `customizable-${theme.id}-nested`,
                           callbacks: { onItemMove: (event) => handleNestedMove(theme.id, event) },
                           ...getCustomizableThemeConfig(theme.id),
                         }}
@@ -581,7 +576,6 @@
                               metadata={{ themeId: theme.id, listId: "child" }}
                               config={{
                                 direction: "column",
-                                groupID: `customizable-${theme.id}-nested`,
                                 callbacks: { onItemMove: (event) => handleNestedMove(theme.id, event) },
                                 ...getCustomizableThemeConfig(theme.id),
                               }}
@@ -633,7 +627,6 @@
                           metadata={{ themeId: theme.id, listId: "fields" }}
                           config={{
                             direction: "column",
-                            groupID: `customizable-${theme.id}-editor`,
                             callbacks: { onItemMove: (event) => handleFieldsMove(theme.id, event) },
                             ...getCustomizableThemeConfig(theme.id),
                           }}
@@ -662,7 +655,6 @@
                                       metadata={{ themeId: theme.id, listId: field.id }}
                                       config={{
                                         direction: "column",
-                                        groupID: `customizable-${theme.id}-editor-${field.id}`,
                                         mode: "progressive",
                                         callbacks: {
                                           onItemMove: (event) => handleOptionsMove(theme.id, field.id, event),

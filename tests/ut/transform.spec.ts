@@ -3,9 +3,36 @@ import { BaseObject, CoreObject, ElementObject } from "../../src/object";
 import {
   CircleCollider,
   CollisionEngine,
+  distanceToRect,
+  pointIntersectsRect,
   PointCollider,
   RectCollider,
+  rectsIntersect,
 } from "../../src/collision";
+
+test.describe("allocation-free collision geometry", () => {
+  const rect = { x: 10, y: 20, width: 30, height: 40 };
+
+  test("point containment includes rectangle edges", () => {
+    expect(pointIntersectsRect({ x: 10, y: 20 }, rect)).toBe(true);
+    expect(pointIntersectsRect({ x: 40, y: 60 }, rect)).toBe(true);
+    expect(pointIntersectsRect({ x: 40.01, y: 60 }, rect)).toBe(false);
+  });
+
+  test("rectangle collision requires positive overlap", () => {
+    expect(rectsIntersect(rect, { x: 39, y: 59, width: 5, height: 5 })).toBe(
+      true,
+    );
+    expect(rectsIntersect(rect, { x: 40, y: 20, width: 5, height: 40 })).toBe(
+      false,
+    );
+  });
+
+  test("point distance is zero inside and euclidean outside", () => {
+    expect(distanceToRect({ x: 25, y: 30 }, rect)).toBe(0);
+    expect(distanceToRect({ x: 43, y: 64 }, rect)).toBe(5);
+  });
+});
 
 function createEngine() {
   let nextId = 0;

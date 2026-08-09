@@ -22,7 +22,7 @@ their bindings from `@snap-engine/snapsort/svelte` or
 - `Container`
 - `Item`
 - `DragSession`
-- Event types: `ItemInsertEvent`, `ItemRemoveEvent`, `ItemMoveEvent`, `ItemSwapEvent`, `GhostCreateEvent`, `GhostInsertEvent`, `GhostRemoveEvent`, `DragStartEvent`, `DragEndEvent`, `DropTargetChangeEvent`, `CanDropEvent`, `VisualGeometryInvalidationEvent`, `DragLocation`
+- Event types: `ItemInsertEvent`, `ItemRemoveEvent`, `ItemMoveEvent`, `ItemSwapEvent`, `GhostCreateEvent`, `GhostInsertEvent`, `GhostRemoveEvent`, `DragStartEvent`, `DragEndEvent`, `DropTargetChangeEvent`, `CanDropEvent`, `DropPriorityEvent`, `VisualGeometryInvalidationEvent`, `DragLocation`
 - `ContainerCallbacks`, `ContainerConfig`, `SortMode`, `SortStrategy`
 
 ```ts
@@ -30,6 +30,42 @@ import { Container, Item } from "@snap-engine/snapsort";
 
 const container = new Container(engine, parent, { mode: "insertion" });
 ```
+
+## Drop eligibility and priority
+
+Candidate selection has three stages. Destination `canDrop` callbacks first
+exclude containers, `getDropPriority` then assigns a per-resolution preference,
+and the selected placement mode ranks positions only within the
+highest-priority containers. `dropPriority` is `0` by default, so omitting
+policy keeps the normal global placement behavior.
+
+Use item and container metadata for application-specific rules:
+
+```ts
+import type { CanDropEvent } from "@snap-engine/snapsort";
+
+function canDropInSameLane(event: CanDropEvent) {
+  const lane = event.containerMetadata.lane;
+  return event.sources.every(
+    (source) => source?.containerMetadata.lane === lane,
+  );
+}
+```
+
+Common policies are available from the optional callbacks subpath:
+
+```ts
+import {
+  prioritizeIntersectingContainer,
+  prioritizeNearestContainerEdge,
+  prioritizePointerContainer,
+  rejectDrop,
+} from "@snap-engine/snapsort/callbacks";
+```
+
+These helpers are pure, use the core collision geometry, and work with Vanilla,
+Svelte, and React. Programmatic `moveItem` calls are authoritative and bypass
+drop eligibility and priority.
 
 ## Svelte
 

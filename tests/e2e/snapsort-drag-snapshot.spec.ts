@@ -11,8 +11,20 @@ import {
   determineDropTarget,
   determineInsertionDropTarget,
   determineProgressiveDropTarget,
+  determineSwapDropTarget,
 } from "../../assets/snapsort/src/algorithm";
+import { BaseObject } from "../../src/object";
+import {
+  prioritizeIntersectingContainer,
+  prioritizeNearestContainerEdge,
+  prioritizePointerContainer,
+  rejectDrop,
+} from "../../assets/snapsort/src/callbacks";
 import { Container as SnapSortContainer } from "../../assets/snapsort/src/container";
+import type {
+  CanDropEvent,
+  DropPriorityEvent,
+} from "../../assets/snapsort/src/events";
 import {
   assertCanFireItemMove,
   assertCanFireItemSwap,
@@ -216,11 +228,18 @@ type SelfInsertProbeState = {
 
 type MockSnapSortItem = {
   id: string;
+  resolvedItemId: string;
+  metadata: Record<string, unknown>;
   direction: "row" | "column";
   mainAxisAlign: "start";
   locked: boolean;
   isGhost: boolean;
-  noDrop: boolean;
+  parent?: MockSnapSortItem | null;
+  callbacks?: {
+    canDrop?: (event: CanDropEvent) => boolean;
+    getDropPriority?: (event: DropPriorityEvent) => number | undefined;
+  };
+  dropPriority?: number;
   dragSnapshot: ItemSnapshot<MockSnapSortItem>;
   currentDomProperty: Box;
   itemOrderedList: MockSnapSortItem[];
@@ -449,11 +468,15 @@ function mockSnapSortItem(
   const box = layoutBox(rect);
   const item: MockSnapSortItem = {
     id,
+    resolvedItemId: id,
+    metadata: {},
     direction,
     mainAxisAlign: "start",
     locked: false,
     isGhost: false,
-    noDrop: false,
+    parent: null,
+    callbacks: undefined,
+    dropPriority: 0,
     dragSnapshot: null as unknown as ItemSnapshot<MockSnapSortItem>,
     currentDomProperty: box,
     itemOrderedList: children,
@@ -491,6 +514,7 @@ function mockSnapSortItem(
   );
   for (const child of children) {
     child.depth = item.depth + 1;
+    child.parent = item;
   }
   return item;
 }
@@ -507,6 +531,533 @@ function mockSnapSortContainer(
   item.numberOfItems = children.length;
   return item;
 }
+
+function dropPriorityFixture() {
+  const dragged = mockSnapSortItem("dragged", {
+    x: 10,
+    y: 10,
+    width: 20,
+    height: 20,
+  });
+  const source = mockSnapSortContainer(
+    "source",
+    { x: -100, y: 0, width: 50, height: 50 },
+    [dragged],
+    "column",
+  );
+  const near = mockSnapSortContainer(
+    "near",
+    { x: 0, y: 0, width: 100, height: 50 },
+    [],
+    "column",
+  );
+  const far = mockSnapSortContainer(
+    "far",
+    { x: 0, y: 65, width: 100, height: 50 },
+    [],
+    "column",
+  );
+  const root = mockSnapSortContainer(
+    "root",
+    { x: 0, y: 0, width: 100, height: 115 },
+    [near, far],
+    "column",
+  );
+  root.callbacks = { canDrop: rejectDrop };
+  return { dragged, source, near, far, root };
+}
+
+test.describe("standard SnapSort drop callbacks", () => {
+  const event = {
+    pointer: { x: 15, y: 25 },
+    dragRect: { x: 5, y: 5, width: 10, height: 10 },
+    containerRect: { x: 10, y: 20, width: 30, height: 40 },
+  } as DropPriorityEvent;
+
+  test("pointer and drag intersection priorities share core collision semantics", () => {
+    expect(prioritizePointerContainer(event)).toBe(1);
+    expect(
+      prioritizePointerContainer({
+        ...event,
+        pointer: { x: 9, y: 25 },
+      }),
+    ).toBeUndefined();
+    expect(prioritizeIntersectingContainer(event)).toBeUndefined();
+    expect(
+      prioritizeIntersectingContainer({
+        ...event,
+        dragRect: { x: 5, y: 25, width: 10, height: 10 },
+      }),
+    ).toBe(1);
+    expect(
+      prioritizeIntersectingContainer({
+        ...event,
+        dragRect: { x: 0, y: 20, width: 10, height: 10 },
+      }),
+    ).toBeUndefined();
+  });
+
+  test("nearest-container scoring and unconditional rejection are reusable", () => {
+    expect(
+      prioritizeNearestContainerEdge({
+        ...event,
+        pointer: { x: 7, y: 16 },
+      }),
+    ).toBe(-5);
+    expect(rejectDrop({} as CanDropEvent)).toBe(false);
+  });
+});
+
+test("drop priority filters containers before each placement mode ranks slots", () => {
+  const { dragged, near, far, root } = dropPriorityFixture();
+
+  expect(determineDropTarget(dragged as any, root as any)?.container).toBe(
+    near,
+  );
+  far.dropPriority = 1;
+
+  expect(determineDropTarget(dragged as any, root as any)?.container).toBe(far);
+  expect(
+    determineProgressiveDropTarget(dragged as any, root as any)?.container,
+  ).toBe(far);
+  expect(
+    determineInsertionDropTarget(dragged as any, root as any)?.container,
+  ).toBe(far);
+});
+
+test("Euclidean priority resolves mismatched zones before ranking their slots", () => {
+  const dragged = mockSnapSortItem("dragged", {
+    x: 300,
+    y: 170,
+    width: 20,
+    height: 20,
+  });
+  const largeZone = mockSnapSortContainer(
+    "large-zone",
+    { x: 0, y: 0, width: 400, height: 200 },
+    [],
+    "row",
+  );
+  const smallZone = mockSnapSortContainer(
+    "small-zone",
+    { x: 0, y: 200, width: 400, height: 40 },
+    [],
+    "column",
+  );
+  const root = mockSnapSortContainer(
+    "root",
+    { x: 0, y: 0, width: 400, height: 240 },
+    [largeZone, smallZone],
+    "column",
+  );
+  root.callbacks = { canDrop: rejectDrop };
+
+  expect(determineDropTarget(dragged as any, root as any)?.container).toBe(
+    smallZone,
+  );
+
+  smallZone.callbacks = {
+    getDropPriority: prioritizeIntersectingContainer,
+  };
+  largeZone.callbacks = {
+    getDropPriority: prioritizeIntersectingContainer,
+  };
+  expect(determineDropTarget(dragged as any, root as any)?.container).toBe(
+    largeZone,
+  );
+});
+
+test("canDrop rejects a container before its priority callback runs", () => {
+  const { dragged, near, far, root } = dropPriorityFixture();
+  let canDropCalls = 0;
+  let priorityCalls = 0;
+  far.dropPriority = 100;
+  far.callbacks = {
+    canDrop: () => {
+      canDropCalls++;
+      return false;
+    },
+    getDropPriority: () => {
+      priorityCalls++;
+      return 200;
+    },
+  };
+
+  expect(determineDropTarget(dragged as any, root as any)?.container).toBe(
+    near,
+  );
+  expect(canDropCalls).toBe(1);
+  expect(priorityCalls).toBe(0);
+});
+
+test("drop callbacks run once for a container with multiple candidate slots", () => {
+  const dragged = mockSnapSortItem("dragged", {
+    x: 10,
+    y: 10,
+    width: 20,
+    height: 20,
+  });
+  const first = mockSnapSortItem("first", {
+    x: 0,
+    y: 0,
+    width: 100,
+    height: 20,
+  });
+  const second = mockSnapSortItem("second", {
+    x: 0,
+    y: 20,
+    width: 100,
+    height: 20,
+  });
+  const target = mockSnapSortContainer(
+    "target",
+    { x: 0, y: 0, width: 100, height: 60 },
+    [first, second],
+    "column",
+  );
+  const root = mockSnapSortContainer(
+    "root",
+    { x: 0, y: 0, width: 100, height: 60 },
+    [target],
+    "column",
+  );
+  root.callbacks = { canDrop: rejectDrop };
+
+  let canDropCalls = 0;
+  let priorityCalls = 0;
+  target.callbacks = {
+    canDrop: () => {
+      canDropCalls++;
+      return true;
+    },
+    getDropPriority: () => {
+      priorityCalls++;
+      return undefined;
+    },
+  };
+
+  expect(determineDropTarget(dragged as any, root as any)?.container).toBe(
+    target,
+  );
+  expect(canDropCalls).toBe(1);
+  expect(priorityCalls).toBe(1);
+});
+
+test("priority supports fallback, absolute overrides, and signed fractions", () => {
+  const { dragged, near, far, root } = dropPriorityFixture();
+  near.dropPriority = -1;
+  far.dropPriority = -0.5;
+  near.callbacks = { getDropPriority: () => undefined };
+
+  expect(determineDropTarget(dragged as any, root as any)?.container).toBe(far);
+
+  near.callbacks = { getDropPriority: () => 0.25 };
+  expect(determineDropTarget(dragged as any, root as any)?.container).toBe(
+    near,
+  );
+});
+
+test("drop policy events expose source, destination, metadata, and geometry", () => {
+  const { dragged, source, near, far, root } = dropPriorityFixture();
+  dragged.metadata = { kind: "card" };
+  source.metadata = { dropGroup: "cards" };
+  near.metadata = { dropGroup: "cards" };
+  let canDropEvent: CanDropEvent | null = null;
+  let priorityEvent: DropPriorityEvent | null = null;
+  near.callbacks = {
+    canDrop: (event) => {
+      canDropEvent = event;
+      return true;
+    },
+    getDropPriority: (event) => {
+      priorityEvent = event;
+      return undefined;
+    },
+  };
+  far.callbacks = { canDrop: rejectDrop };
+
+  determineDropTarget(dragged as any, root as any);
+
+  expect(canDropEvent).toMatchObject({
+    itemId: "dragged",
+    itemMetadata: { kind: "card" },
+    source: {
+      container: source,
+      containerMetadata: { dropGroup: "cards" },
+      index: 0,
+    },
+    sources: [
+      {
+        container: source,
+        containerMetadata: { dropGroup: "cards" },
+        index: 0,
+      },
+    ],
+    container: near,
+    containerMetadata: { dropGroup: "cards" },
+  });
+  expect(priorityEvent).toMatchObject({
+    staticPriority: 0,
+    pointer: { x: 20, y: 20 },
+    dragRect: { x: 10, y: 10, width: 20, height: 20 },
+    containerRect: { x: 0, y: 0, width: 100, height: 50 },
+    containerContentRect: { x: 0, y: 0, width: 100, height: 50 },
+    depth: 1,
+  });
+});
+
+test("applications can replace grouping with source and destination metadata", () => {
+  const { dragged, source, near, far, root } = dropPriorityFixture();
+  source.metadata = { dropGroup: "cards" };
+  near.metadata = { dropGroup: "cards" };
+  far.metadata = { dropGroup: "files" };
+  far.dropPriority = 10;
+  const canDropInGroup = (event: CanDropEvent) =>
+    event.source?.containerMetadata.dropGroup ===
+    event.containerMetadata.dropGroup;
+  near.callbacks = { canDrop: canDropInGroup };
+  far.callbacks = { canDrop: canDropInGroup };
+
+  expect(determineDropTarget(dragged as any, root as any)?.container).toBe(
+    near,
+  );
+});
+
+test("drop policy events preserve every source in a multi-item drag", () => {
+  const { dragged, source, near, far, root } = dropPriorityFixture();
+  const companion = mockSnapSortItem("companion", {
+    x: -80,
+    y: 20,
+    width: 20,
+    height: 20,
+  });
+  const companionSource = mockSnapSortContainer(
+    "companion-source",
+    { x: -100, y: 0, width: 50, height: 50 },
+    [companion],
+    "column",
+  );
+  dragged.metadata = { order: 1 };
+  companion.metadata = { order: 2 };
+  source.metadata = { dropGroup: "cards" };
+  companionSource.metadata = { dropGroup: "cards" };
+  let event: CanDropEvent | null = null;
+  near.callbacks = {
+    canDrop: (nextEvent) => {
+      event = nextEvent;
+      return true;
+    },
+  };
+  far.callbacks = { canDrop: rejectDrop };
+  const session = {
+    items: [dragged, companion],
+    sources: [
+      {
+        container: source,
+        containerMetadata: source.metadata,
+        index: 0,
+      },
+      {
+        container: companionSource,
+        containerMetadata: companionSource.metadata,
+        index: 0,
+      },
+    ],
+    itemSet: new Set([dragged, companion]),
+    pointer: { x: 20, y: 20 },
+  };
+
+  determineInsertionDropTarget(dragged as any, root as any, session as any);
+
+  expect(event?.items.map((item) => item.resolvedItemId)).toEqual([
+    "dragged",
+    "companion",
+  ]);
+  expect(event?.itemsMetadata).toEqual([{ order: 1 }, { order: 2 }]);
+  expect(event?.source?.container).toBe(source);
+  expect(event?.sources.map((location) => location?.container)).toEqual([
+    source,
+    companionSource,
+  ]);
+});
+
+test("drop priority rejects malformed configured and callback values", () => {
+  const configured = dropPriorityFixture();
+  configured.far.dropPriority = Number.POSITIVE_INFINITY;
+  expect(() =>
+    determineDropTarget(configured.dragged as any, configured.root as any),
+  ).toThrow(/dropPriority must be a finite number/);
+
+  for (const value of ["1", null, {}]) {
+    const malformed = dropPriorityFixture();
+    malformed.far.dropPriority = value as never;
+    expect(() =>
+      determineDropTarget(malformed.dragged as any, malformed.root as any),
+    ).toThrow(/dropPriority must be a finite number/);
+  }
+
+  for (const value of [Number.NaN, "1", null, {}]) {
+    const callback = dropPriorityFixture();
+    callback.far.callbacks = { getDropPriority: () => value as never };
+    expect(() =>
+      determineDropTarget(callback.dragged as any, callback.root as any),
+    ).toThrow(/getDropPriority must return a finite number or undefined/);
+  }
+});
+
+test("a container priority does not propagate to nested containers", () => {
+  const dragged = mockSnapSortItem("dragged", {
+    x: 10,
+    y: 10,
+    width: 20,
+    height: 20,
+  });
+  const child = mockSnapSortContainer(
+    "child",
+    { x: 0, y: 0, width: 50, height: 50 },
+    [],
+    "column",
+  );
+  const parent = mockSnapSortContainer(
+    "parent",
+    { x: 0, y: 0, width: 100, height: 100 },
+    [child],
+    "column",
+  );
+  const root = mockSnapSortContainer(
+    "root",
+    { x: 0, y: 0, width: 100, height: 100 },
+    [parent],
+    "column",
+  );
+  root.callbacks = { canDrop: rejectDrop };
+  parent.dropPriority = 1;
+  let childStaticPriority: number | null = null;
+  child.callbacks = {
+    getDropPriority: (event) => {
+      childStaticPriority = event.staticPriority;
+      return undefined;
+    },
+  };
+
+  const target = determineDropTarget(dragged as any, root as any);
+  expect(childStaticPriority).toBe(0);
+  expect(target?.container).toBe(parent);
+});
+
+test("swap collects every hovered container before applying priority", () => {
+  let nextId = 0;
+  const engine = {
+    global: {
+      data: {},
+      queue: {},
+      createId: () => `swap-priority-${++nextId}`,
+      registerObject: () => {},
+      unregisterObject: () => {},
+    },
+    input: {
+      subscribeGlobalCursorEvent: () => {},
+      unsubscribeGlobalCursorEvent: () => {},
+    },
+    collisionEngine: null,
+    animationList: [],
+  };
+  const makeItem = (
+    itemId: string,
+    rect: Rect,
+    children: BaseObject[] = [],
+    container = false,
+  ) => {
+    const item = new BaseObject(engine as never) as BaseObject &
+      Record<string, any>;
+    const box = layoutBox(rect);
+    item.resolvedItemId = itemId;
+    item.metadata = {};
+    item.direction = "column";
+    item.mainAxisAlign = "start";
+    item.locked = false;
+    item.isGhost = false;
+    item.itemOrderedList = children;
+    item.children = children;
+    item.currentDomProperty = box;
+    item.depth = 0;
+    item.callbacks = undefined;
+    item.dropPriority = 0;
+    item.worldTransform = { x: rect.x, y: rect.y };
+    Object.defineProperties(item, {
+      dragPositionX: { get: () => item.worldTransform.x },
+      dragPositionY: { get: () => item.worldTransform.y },
+      dragPointerPosition: { get: () => null },
+    });
+    if (container) {
+      item.configuration = {};
+      item.name = itemId;
+      item.numberOfItems = children.length;
+    }
+    item.dragSnapshot = itemSnapshot(
+      item,
+      box,
+      children.map((child) => (child as any).dragSnapshot),
+      "column",
+    );
+    return item;
+  };
+
+  const smallTarget = makeItem("small-target", {
+    x: 0,
+    y: 0,
+    width: 20,
+    height: 20,
+  });
+  const largeTarget = makeItem("large-target", {
+    x: 0,
+    y: 0,
+    width: 60,
+    height: 60,
+  });
+  const smallContainer = makeItem(
+    "small-container",
+    { x: 0, y: 0, width: 50, height: 50 },
+    [smallTarget],
+    true,
+  );
+  const preferredContainer = makeItem(
+    "preferred-container",
+    { x: 0, y: 0, width: 100, height: 100 },
+    [largeTarget],
+    true,
+  );
+  smallContainer.depth = 1;
+  preferredContainer.depth = 1;
+  preferredContainer.dropPriority = 1;
+  const root = makeItem(
+    "root",
+    { x: 0, y: 0, width: 120, height: 120 },
+    [smallContainer, preferredContainer],
+    true,
+  );
+  root.callbacks = { canDrop: rejectDrop };
+  const dragged = makeItem("dragged", {
+    x: 150,
+    y: 150,
+    width: 20,
+    height: 20,
+  });
+  const session = {
+    items: [dragged],
+    sources: [null],
+    itemSet: new Set([dragged]),
+    pointer: { x: 10, y: 10 },
+  };
+
+  const target = determineSwapDropTarget(
+    dragged as never,
+    root as never,
+    session as never,
+  );
+  expect(target?.container).toBe(preferredContainer);
+  expect(target?.index).toBe(0);
+});
 
 function virtualInsertionPosition<T>(
   container: ItemSnapshot<T>,

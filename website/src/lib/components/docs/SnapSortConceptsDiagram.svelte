@@ -63,7 +63,7 @@
             itemId="1"
             className="snapsort-concepts-container slot shallow"
             metadata={{ zone: "outer" }}
-            config={{ mode: "progressive", direction: "column", groupID: "concepts", callbacks }}
+            config={{ mode: "progressive", direction: "column", callbacks }}
             items={outerEntries}
           >
             {#snippet before()}
@@ -80,7 +80,7 @@
                   locked={false}
                   className="snapsort-concepts-container is-nested slot shallow"
                   metadata={{ zone: "nested" }}
-                  config={{ mode: "progressive", direction: "column", groupID: "concepts", callbacks }}
+                  config={{ mode: "progressive", direction: "column", callbacks }}
                   items={nestedItems}
                 >
                   {#snippet before()}

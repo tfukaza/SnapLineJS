@@ -37,16 +37,17 @@ A `Container` represents a region that can hold an ordered set of items.
 Containers themselves are also considered an item, so it can be placed within
 other container as well. That also means containers must also maintain an `itemId`.
 
-In addition, containers can optionally carry a `groupID`.
-Containers with different groups are isolated from one another,
-meaning an item in a container with one group ID cannot be dragged into
-a container with a different group ID.
-
 For every drag-and-drop interface, there is always a single _root container_
 that serves as the top-level parent for all draggable items and containers.
 Containers that need to exchange items must be descendants of that same root.
-Matching `groupID` values determine which containers within the tree are
-compatible; they do not connect separate root trees.
+Within the tree, the application decides which destinations are compatible by
+putting its own identifiers on item or container metadata and inspecting them
+in a destination's `canDrop` callback. Separate root trees never exchange items.
+
+Eligibility and preference are separate. After `canDrop` rejects incompatible
+containers, `dropPriority` and `getDropPriority` can prefer one destination
+before the active placement mode chooses an exact position. See
+[Drop Policies](/docs/snapsort/guides/04_drop_policies) for the complete order.
 
 > [!WARNING]
 > Root containers must never be destroyed during the lifetime of the application,

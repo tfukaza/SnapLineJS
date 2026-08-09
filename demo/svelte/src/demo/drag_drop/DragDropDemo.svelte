@@ -1,6 +1,7 @@
 <script lang="ts">
     import { Engine } from "@snap-engine/asset-base/svelte";
     import { Container, Item } from "@snap-engine/snapsort/svelte";
+    import { rejectDrop } from "@snap-engine/snapsort/callbacks";
     import type { Engine as EngineClass } from "@snap-engine/core";
     import type { ItemMoveEvent } from "@snap-engine/snapsort";
 
@@ -130,7 +131,7 @@
         <h3>Vertical Column</h3>
         <div class="container-wrapper">
             <Container
-                config={{ direction: "column", groupID: "vertical-group", callbacks: { onItemMove: handleFlatMove } }}
+                config={{ direction: "column", callbacks: { onItemMove: handleFlatMove } }}
                 metadata={{ list: "vertical" }}
                 items={verticalItems}
                 getItemId={(n) => `vertical-${n}`}
@@ -147,7 +148,7 @@
         <h3>Horizontal Row</h3>
         <div class="container-wrapper" style="min-height: 60px;">
             <Container
-                config={{ direction: "row", groupID: "horizontal-group", callbacks: { onItemMove: handleFlatMove } }}
+                config={{ direction: "row", callbacks: { onItemMove: handleFlatMove } }}
                 metadata={{ list: "horizontal" }}
                 items={horizontalItems}
                 getItemId={(n) => `horizontal-${n}`}
@@ -164,7 +165,7 @@
         <h3>Horizontal Double Row</h3>
         <div class="container-wrapper">
             <Container
-                config={{ direction: "row", groupID: "double-row-group", callbacks: { onItemMove: handleFlatMove } }}
+                config={{ direction: "row", callbacks: { onItemMove: handleFlatMove } }}
                 metadata={{ list: "double" }}
                 items={doubleRowItems}
                 getItemId={(n) => `double-row-${n}`}
@@ -181,7 +182,7 @@
         <h3>Different Sizes</h3>
         <div class="container-wrapper">
             <Container
-                config={{ direction: "row", groupID: "sizes-group", callbacks: { onItemMove: handleFlatMove } }}
+                config={{ direction: "row", callbacks: { onItemMove: handleFlatMove } }}
                 metadata={{ list: "sizes" }}
                 items={sizedItems}
                 getItemId={(entry) => entry.label}
@@ -200,7 +201,11 @@
         <h3>Multiple Drop Areas</h3>
         <div class="areas-wrapper">
             <Container
-                config={{ direction: "row", name: "multi-root", noDrop: true }}
+                config={{
+                    direction: "row",
+                    name: "multi-root",
+                    callbacks: { canDrop: rejectDrop },
+                }}
                 locked={true}
                 items={areaZones}
                 getItemId={(zone) => `multi-${zone}`}
@@ -229,7 +234,11 @@
         <h3>Multiple Drop Areas (Row)</h3>
         <div class="areas-wrapper-row">
             <Container
-                config={{ direction: "column", name: "multi-row-root", noDrop: true }}
+                config={{
+                    direction: "column",
+                    name: "multi-row-root",
+                    callbacks: { canDrop: rejectDrop },
+                }}
                 locked={true}
                 items={rowAreaZones}
                 getItemId={(zone) => `multi-row-${zone}`}

@@ -53,9 +53,9 @@ items. The nested container needs its own `itemId` because it is also an entry
 in the parent; set `locked={false}` when that entire container should be
 movable.
 
-The example remains one SnapSort tree. Its two nested groups share a `groupID`,
-so their tasks can move between them, while the parent uses a separate group for
-its top-level mixture of items and containers.
+The example remains one SnapSort tree. Its two nested groups use application
+metadata and a `canDrop` callback so their tasks can move between them while
+the parent rejects task drops into its top-level mixture.
 
 <ContainerIntroExample kind="mixed" />
 
@@ -91,8 +91,8 @@ callback to move an item. The callback still updates Svelte state synchronously;
 <ContainerPropertyExample kind="metadata" />
 
 > [!WARNING]
-> Containers that need to interact must share one root `Container`. A matching
-> `groupID` filters compatible destinations inside that tree; it does not connect
+> Containers that need to interact must share one root `Container`. Drop-policy
+> callbacks can filter destinations inside that tree; they cannot connect
 > otherwise independent roots.
 
 ### `itemId`, `locked`, and `selected`
@@ -241,15 +241,13 @@ Use `kind` and `role` when different ghost forms need different content:
 | Option | Default | Description |
 |--------|---------|-------------|
 | `mode` | `"euclidean"` | Drag/drop mode for this tree: `"euclidean"`, `"progressive"`, `"insertion"`, or `"swap"`. |
-| `strategy` | Resolved from `mode` | Advanced custom `{ dropTarget, lifecycle }` strategy pair that overrides `mode`. |
+| `strategy` | Resolved from `mode` | Advanced custom `{ dropTarget, lifecycle }` pair that overrides `mode`; its resolver owns eligibility and priority policy. |
 | `direction` | `"column"` | Main layout direction: `"column"` or `"row"`. |
-| `groupID` | `"default-group"` | Within one root tree, containers with the same group can exchange items. |
 | `mainAxisAlign` | `"start"` | Main-axis alignment for virtual placement. Supports `"start"` and `"center"`. |
 | `name` | Generated | Human-readable container name. |
 | `animation` | Default 100ms animations | Reorder, drop, and click-move animation settings. Set to `null` to disable configured animations. |
 | `disableFlip` | `false` | Disables FLIP movement animation. |
-| `noDrop` | `false` | Prevents the container from being a drop target. Useful for root layout containers. |
-| `dropArea` | `false` | Treats the container as an explicit drop area for collision filtering. |
+| `dropPriority` | `0` | Base preference for candidate positions owned directly by this container. Higher eligible priorities are considered first. |
 | `callbacks` | No persistent mutation default | Required framework-state callbacks plus lifecycle and validation hooks. |
 
 Mode is resolved from the root container when a drag starts, so nested containers in one drag tree should use the same mode.
@@ -265,7 +263,8 @@ Mode is resolved from the root container when a drag starts, so nested container
 | `onDragStart(event)` | A drag is starting. Return `false` to veto it. |
 | `onDragEnd(event)` | A drag has ended and its mutation has committed. |
 | `onDropTargetChange(event)` | The prospective drop container or index changed. Fires on the root container. |
-| `canDrop(event)` | Resolves whether this container accepts the current drag. Keep it cheap. |
+| `canDrop(event)` | Runs once for this destination before priority. Return `false` to exclude its directly owned candidates. |
+| `getDropPriority(event)` | Runs once after eligibility. Return a finite priority override, or `undefined` to preserve `dropPriority`. |
 | `onGhostInsert(event)` | Optional notification after the Svelte adapter inserts or moves its framework-owned ghost entry. |
 | `onGhostRemove(event)` | Optional notification after the Svelte adapter removes its framework-owned ghost entry. |
 | `createGhost(event)` | Core/Vanilla hook. Unsupported by the Svelte adapter; customize framework-owned ghosts with the `ghost` snippet. |
@@ -276,6 +275,19 @@ Update Svelte arrays synchronously in `onItemMove` or `onItemSwap`. The adapter
 uses `flushSync`, allowing SnapSort to read final DOM geometry before paint.
 Missing callbacks fail clearly instead of mutating framework-rendered DOM.
 
+### Drop policy events
+
+Drop targeting follows eligibility, priority, then the selected placement
+mode. `CanDropEvent` includes `itemMetadata`/`itemsMetadata`, destination
+`containerMetadata`, the primary `source`, and `sources` parallel to the full
+multi-item drag. `DropPriorityEvent` adds `staticPriority`, pointer and frozen
+rectangle geometry, and destination depth. Priority applies only to candidates
+owned directly by this container and does not propagate to nested containers.
+
+See [Drop Policies](/docs/snapsort/guides/04_drop_policies) for metadata-driven
+grouping, exact resolution rules, and reusable callbacks from
+`@snap-engine/snapsort/callbacks`.
+
 ## Core Object API
 
 After capturing the object with `bind:container`, these are the most commonly
@@ -283,13 +295,12 @@ used core properties and methods.
 
 | API | Description |
 |-----|-------------|
-| `container.moveItem(id, targetContainer, index)` | Moves an item into another container or index. |
+| `container.moveItem(id, targetContainer, index)` | Authoritatively moves an item into another container or index, bypassing drop eligibility and priority. |
 | `container.removeItem(id)` | Removes an item by `itemId` or internal object ID. |
 | `container.numberOfItems` | Number of tracked child items. |
-| `container.groupID` | Configured group ID. |
+| `container.dropPriority` | Gets or sets the container's base candidate priority. |
 | `container.direction` | Gets or sets `"column"` or `"row"`. |
 | `container.mainAxisAlign` | Gets or sets `"start"` or `"center"`. |
-| `container.dropArea` | Gets or sets explicit drop-area behavior. |
 | `container.mode` | Gets or sets the drag/drop mode. |
 | `container.config` | Live `ContainerConfig` object. |
 | `container.callbacks` | Configured callback object. |

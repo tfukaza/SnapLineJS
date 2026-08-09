@@ -26,7 +26,7 @@ npm install @snap-engine/snapsort
 
 ## Your First Sortable List
 
-Wrap SnapSort components in an `Engine`, give a `Container` a group,
+Wrap SnapSort components in an `Engine`, configure the collection callback,
 and render one `Item` per entry. This creates a working drag-and-drop list:
 
 ```svelte framework=Svelte
@@ -54,7 +54,6 @@ and render one `Item` per entry. This creates a working drag-and-drop list:
 <Engine id="quick-start">
   <Container
     config={{
-      groupID: "tasks",
       callbacks: { onItemMove },
     }}
     items={tasks}
@@ -121,7 +120,6 @@ export function QuickStart() {
     <Engine id="quick-start">
       <Container
         config={{
-          groupID: "tasks",
           callbacks: {
             onItemMove,
             onGhostInsert: setGhost,
@@ -155,9 +153,7 @@ const engine = new Engine();
 engine.setCollisionEngine(new CollisionEngine());
 engine.assignDom(root);
 
-const container = new Container(engine, null, {
-  groupID: "tasks",
-});
+const container = new Container(engine, null);
 container.element = list;
 
 for (const element of list.querySelectorAll("[data-item-id]")) {

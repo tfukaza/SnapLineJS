@@ -1,6 +1,7 @@
 import { Engine } from "@snap-engine/core";
 import { CollisionEngine } from "@snap-engine/core/collision";
 import { Container, Item } from "@snap-engine/snapsort";
+import { rejectDrop } from "@snap-engine/snapsort/callbacks";
 
 const snapSortAnimation = {
   duration: 180,
@@ -157,7 +158,7 @@ function buildBoard() {
     {
       direction: "row",
       name: "vanilla-kanban-root",
-      noDrop: true,
+      callbacks: { canDrop: rejectDrop },
     },
     { boardId: "vanilla-kanban" },
   );
@@ -198,7 +199,6 @@ function createColumn(column) {
     rootContainer,
     {
       direction: "column",
-      groupID: "vanilla-kanban",
       name: `vanilla-${column.id}`,
       animation: {
         reorder: snapSortAnimation,
@@ -236,7 +236,6 @@ function buildFileTree() {
     null,
     {
       direction: "column",
-      groupID: "vanilla-file-tree",
       name: "vanilla-file-tree-root",
       animation: {
         reorder: fileTreeAnimation,
@@ -290,9 +289,8 @@ function createFileTreeFolder(node, depth, parentContainer) {
     parentContainer,
     {
       direction: "column",
-      groupID: "vanilla-file-tree",
       name: `vanilla-file-tree-${node.id}`,
-      noDrop: node.open === false,
+      callbacks: node.open === false ? { canDrop: rejectDrop } : undefined,
       animation: {
         reorder: fileTreeAnimation,
         drop: fileTreeAnimation,

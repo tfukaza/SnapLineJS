@@ -1,6 +1,10 @@
 <script lang="ts">
   import { Engine } from "@snap-engine/asset-base/svelte";
   import { Container, Ghost, Item } from "@snap-engine/snapsort/svelte";
+  import {
+    prioritizeIntersectingContainer,
+    rejectDrop,
+  } from "@snap-engine/snapsort/callbacks";
   import type {
     Container as SortContainer,
     GhostInsertEvent,
@@ -195,7 +199,12 @@
       <Engine id="sentence-builder-snapsort-demo">
         <Container
           className="sentence-builder-root"
-          config={{ mode: "progressive", direction: "column", name: "sentence-builder-root", noDrop: true }}
+          config={{
+            mode: "progressive",
+            direction: "column",
+            name: "sentence-builder-root",
+            callbacks: { canDrop: rejectDrop },
+          }}
           locked={true}
           metadata={{ purpose: "sentence-builder" }}
           items={tileZones}
@@ -211,14 +220,13 @@
                   mode: "progressive",
                   direction: "row",
                   name: "sentence-answer",
-                  groupID: "sentence-builder",
-                  dropArea: true,
                   animation: {
                     reorder: snapSortAnimation,
                     drop: snapSortAnimation,
                     clickMove: snapSortAnimation,
                   },
                   callbacks: {
+                    getDropPriority: prioritizeIntersectingContainer,
                     onItemMove: handleSnapSortDomMove,
                     onItemRemove: handleSnapSortDomRemove,
                   },
@@ -266,14 +274,13 @@
                   direction: "row",
                   mainAxisAlign: "center",
                   name: "sentence-bank",
-                  groupID: "sentence-builder",
-                  dropArea: true,
                   animation: {
                     reorder: snapSortAnimation,
                     drop: snapSortAnimation,
                     clickMove: snapSortAnimation,
                   },
                   callbacks: {
+                    getDropPriority: prioritizeIntersectingContainer,
                     onItemMove: handleSnapSortDomMove,
                     onItemRemove: handleSnapSortDomRemove,
                   },

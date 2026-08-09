@@ -5,7 +5,16 @@ import {
   Handle,
   Item,
 } from "@snap-engine/snapsort/react";
+import {
+  prioritizeIntersectingContainer,
+  rejectDrop,
+} from "@snap-engine/snapsort/callbacks";
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+
+function hasMatchingDropGroup(event) {
+  const sourceGroup = event.source?.containerMetadata.dropGroup;
+  return sourceGroup !== undefined && sourceGroup === event.containerMetadata.dropGroup;
+}
 
 const snapSortCubicAnimation = new URLSearchParams(window.location.search).has("slowFlip")
   ? { duration: 800, timing_function: "linear" }
@@ -317,7 +326,6 @@ export function SnapSortWebsiteCoreDemo() {
                   className="sideways-list"
                   config={{
                     direction: "row",
-                    groupID: "core-sideways",
                     mainAxisAlign: "center",
                     callbacks: {
                       ...ghostCallbacks,
@@ -347,7 +355,6 @@ export function SnapSortWebsiteCoreDemo() {
                   className="basic-list bounded-demo-list"
                   config={{
                     direction: "column",
-                    groupID: "core-nested",
                     callbacks: { ...ghostCallbacks, onItemMove: handleNestedMove },
                   }}
                   metadata={{ frameworkList: "website-nested-outer", zone: "outer" }}
@@ -358,7 +365,6 @@ export function SnapSortWebsiteCoreDemo() {
                         className="nested-list bounded-demo-list card shallow"
                         config={{
                           direction: "column",
-                          groupID: "core-nested",
                           callbacks: { ...ghostCallbacks, onItemMove: handleNestedMove },
                         }}
                         itemId="nested-group"
@@ -402,7 +408,7 @@ export function SnapSortWebsiteCoreDemo() {
                   config={{
                     direction: "row",
                     name: "core-multi-root",
-                    noDrop: true,
+                    callbacks: { canDrop: rejectDrop },
                   }}
                   locked
                 >
@@ -411,7 +417,6 @@ export function SnapSortWebsiteCoreDemo() {
                       className="basic-column card"
                       config={{
                         direction: "column",
-                        groupID: "core-multi-container",
                         name: column.id,
                         callbacks: {
                           ...ghostCallbacks,
@@ -574,7 +579,6 @@ export function DropSnapNestedDemo() {
         <Container
           config={{
             direction: "column",
-            groupID: "drag-nested-group",
             callbacks: frameworkCallbacks,
           }}
           itemId={itemId}
@@ -614,7 +618,7 @@ export function DropSnapNestedDemo() {
                 <h2>Vertical Column</h2>
                 <p className="demo-hint">Cmd/ctrl-click to multi-select, then drag any selected item.</p>
                 <Container
-                  config={{ direction: "column", groupID: "vertical-group", callbacks: frameworkCallbacks }}
+                  config={{ direction: "column", callbacks: frameworkCallbacks }}
                   metadata={{ frameworkList: "vertical" }}
                 >
                   {renderWithGhosts("vertical", fixtureLists.vertical, String, (itemId) => (
@@ -634,7 +638,7 @@ export function DropSnapNestedDemo() {
               <article className="demo-cell">
                 <h2>Horizontal Row</h2>
                 <Container
-                  config={{ direction: "row", groupID: "wrap-row", callbacks: frameworkCallbacks }}
+                  config={{ direction: "row", callbacks: frameworkCallbacks }}
                   locked
                   metadata={{ frameworkList: "horizontal" }}
                 >
@@ -649,7 +653,7 @@ export function DropSnapNestedDemo() {
               <article className="demo-cell wide">
                 <h2>Horizontal Double Row</h2>
                 <Container
-                  config={{ direction: "row", groupID: "double-row-group", callbacks: frameworkCallbacks }}
+                  config={{ direction: "row", callbacks: frameworkCallbacks }}
                   metadata={{ frameworkList: "double" }}
                 >
                   {renderWithGhosts("double", fixtureLists.double, String, (itemId) => (
@@ -663,7 +667,7 @@ export function DropSnapNestedDemo() {
               <article className="demo-cell wide size-demo">
                 <h2>Different Sizes</h2>
                 <Container
-                  config={{ direction: "row", groupID: "sizes-group", callbacks: frameworkCallbacks }}
+                  config={{ direction: "row", callbacks: frameworkCallbacks }}
                   metadata={{ frameworkList: "sizes" }}
                 >
                   {renderWithGhosts("sizes", fixtureLists.sizes, String, (itemId) => {
@@ -679,7 +683,14 @@ export function DropSnapNestedDemo() {
 
               <article className="demo-cell">
                 <h2>Multiple Drop Areas</h2>
-                <Container config={{ direction: "row", name: "multi-root", noDrop: true }} locked>
+                <Container
+                  config={{
+                    direction: "row",
+                    name: "multi-root",
+                    callbacks: { canDrop: rejectDrop },
+                  }}
+                  locked
+                >
                   <Container
                     config={{ direction: "column", name: "multi-area-1", callbacks: frameworkCallbacks }}
                     locked
@@ -706,14 +717,14 @@ export function DropSnapNestedDemo() {
               <article className="demo-cell">
                 <h2>Nested Container</h2>
                 <Container
-                  config={{ direction: "column", groupID: "nested-group", callbacks: frameworkCallbacks, ...nestedAnimationConfig }}
+                  config={{ direction: "column", callbacks: frameworkCallbacks, ...nestedAnimationConfig }}
                   locked
                   metadata={{ frameworkList: "nested-outer" }}
                 >
                   {renderWithGhosts("nested-outer", fixtureLists["nested-outer"], String, (id) =>
                     id === "nested-sub-group" ? (
                       <Container
-                        config={{ direction: "column", groupID: "nested-group", callbacks: frameworkCallbacks, ...nestedAnimationConfig }}
+                        config={{ direction: "column", callbacks: frameworkCallbacks, ...nestedAnimationConfig }}
                         itemId={id}
                         key={id}
                         locked={lockNestedChild}
@@ -737,7 +748,7 @@ export function DropSnapNestedDemo() {
                 <p className="demo-hint">Items fill their container (100% width); the nested list is narrower.</p>
                 <Container
                   className="stretch-list"
-                  config={{ direction: "column", wrap: "nowrap", stretchItems: true, groupID: "stretch-nested", callbacks: frameworkCallbacks, ...nestedAnimationConfig }}
+                  config={{ direction: "column", wrap: "nowrap", stretchItems: true, callbacks: frameworkCallbacks, ...nestedAnimationConfig }}
                   locked
                   metadata={{ frameworkList: "stretch-outer" }}
                 >
@@ -745,7 +756,7 @@ export function DropSnapNestedDemo() {
                     itemId === "stretch-sub-group" ? (
                       <Container
                         className="stretch-sublist"
-                        config={{ direction: "column", wrap: "nowrap", stretchItems: true, groupID: "stretch-nested", callbacks: frameworkCallbacks, ...nestedAnimationConfig }}
+                        config={{ direction: "column", wrap: "nowrap", stretchItems: true, callbacks: frameworkCallbacks, ...nestedAnimationConfig }}
                         itemId={itemId}
                         key={itemId}
                         metadata={{ frameworkList: "stretch-inner" }}
@@ -770,14 +781,14 @@ export function DropSnapNestedDemo() {
                   <h2>Compact Nested List</h2>
                   <Container
                     className="compact-basic-list"
-                    config={{ direction: "column", groupID: "compact-nested", callbacks: frameworkCallbacks, ...nestedAnimationConfig }}
+                    config={{ direction: "column", callbacks: frameworkCallbacks, ...nestedAnimationConfig }}
                     metadata={{ frameworkList: "compact-outer" }}
                   >
                     {renderWithGhosts("compact-outer", fixtureLists["compact-outer"], String, (itemId) =>
                       itemId === "compact-sub-group" ? (
                         <Container
                           className="compact-nested-list"
-                          config={{ direction: "column", groupID: "compact-nested", callbacks: frameworkCallbacks, ...nestedAnimationConfig }}
+                          config={{ direction: "column", callbacks: frameworkCallbacks, ...nestedAnimationConfig }}
                           itemId={itemId}
                           key={itemId}
                           metadata={{ frameworkList: "compact-inner" }}
@@ -801,7 +812,7 @@ export function DropSnapNestedDemo() {
               <article className="demo-cell">
                 <h2>Draggable Sub-Containers</h2>
                 <Container
-                  config={{ direction: "column", groupID: "drag-nested-group", callbacks: frameworkCallbacks }}
+                  config={{ direction: "column", callbacks: frameworkCallbacks }}
                   locked
                   metadata={{ frameworkList: "drag-outer" }}
                 >
@@ -817,14 +828,14 @@ export function DropSnapNestedDemo() {
               <article className="demo-cell">
                 <h2>Nested Row Groups</h2>
                 <Container
-                  config={{ direction: "row", groupID: "nested-row-group", callbacks: frameworkCallbacks }}
+                  config={{ direction: "row", callbacks: frameworkCallbacks }}
                   locked
                   metadata={{ frameworkList: "row-outer" }}
                 >
                   {renderWithGhosts("row-outer", fixtureLists["row-outer"], String, (itemId) =>
                     itemId === "row-sub-group" ? (
                       <Container
-                        config={{ direction: "row", groupID: "nested-row-group", callbacks: frameworkCallbacks }}
+                        config={{ direction: "row", callbacks: frameworkCallbacks }}
                         itemId={itemId}
                         key={itemId}
                         locked={false}
@@ -848,14 +859,14 @@ export function DropSnapNestedDemo() {
               <article className="demo-cell">
                 <h2>Layers Panel</h2>
                 <Container
-                  config={{ direction: "column", groupID: "layers", callbacks: frameworkCallbacks }}
+                  config={{ direction: "column", callbacks: frameworkCallbacks }}
                   locked
                   metadata={{ frameworkList: "layers-outer" }}
                 >
                   {renderWithGhosts("layers-outer", fixtureLists["layers-outer"], String, (itemId) =>
                     itemId === "layer-hero" ? (
                       <Container
-                        config={{ direction: "column", groupID: "layers", callbacks: frameworkCallbacks }}
+                        config={{ direction: "column", callbacks: frameworkCallbacks }}
                         itemId={itemId}
                         key={itemId}
                         locked={false}
@@ -1111,6 +1122,8 @@ export function SnapSortComponentsDemo() {
   const progressiveCallbacks = useMemo(
     () => ({
       ...progressiveGhostCallbacks,
+      canDrop: hasMatchingDropGroup,
+      getDropPriority: prioritizeIntersectingContainer,
       onItemMove: handleProgressiveMove,
     }),
     [handleProgressiveMove, progressiveGhostCallbacks],
@@ -1253,7 +1266,11 @@ export function SnapSortComponentsDemo() {
               <div className="board-frame">
                 <Container
                   className="board"
-                  config={{ direction: "row", name: "component-kanban-root", noDrop: true }}
+                  config={{
+                    direction: "row",
+                    name: "component-kanban-root",
+                    callbacks: { canDrop: rejectDrop },
+                  }}
                   locked
                   metadata={{ boardId: "component-kanban" }}
                 >
@@ -1356,14 +1373,24 @@ export function SnapSortComponentsDemo() {
           <Engine id="snapsort-progressive-components-demo-canvas">
             <Container
               className="progressive-root"
-              config={{ direction: "column", mode: "progressive", name: "progressive-components-root", noDrop: true }}
+              config={{
+                direction: "column",
+                mode: "progressive",
+                name: "progressive-components-root",
+                callbacks: { canDrop: rejectDrop },
+              }}
               locked
               metadata={{ boardId: "progressive-components" }}
             >
               {progressiveExampleState.map((example) => (
                 <Container
                   className="progressive-example"
-                  config={{ direction: "column", mode: "progressive", name: `progressive-example-${example.id}`, noDrop: true }}
+                  config={{
+                    direction: "column",
+                    mode: "progressive",
+                    name: `progressive-example-${example.id}`,
+                    callbacks: { canDrop: rejectDrop },
+                  }}
                   key={example.id}
                   locked
                   metadata={{ exampleId: example.id }}
@@ -1375,8 +1402,6 @@ export function SnapSortComponentsDemo() {
                       direction: "row",
                       mode: "progressive",
                       name: `progressive-answer-${example.id}`,
-                      groupID: `progressive-${example.id}`,
-                      dropArea: true,
                       animation: { reorder: snapSortCubicAnimation, drop: snapSortCubicAnimation },
                       callbacks: progressiveCallbacks,
                     }}
@@ -1384,6 +1409,7 @@ export function SnapSortComponentsDemo() {
                     metadata={{
                       zone: "answer",
                       exampleId: example.id,
+                      dropGroup: `progressive-${example.id}`,
                       frameworkList: `progressive-${example.id}-answer`,
                     }}
                   >
@@ -1404,8 +1430,6 @@ export function SnapSortComponentsDemo() {
                       direction: "row",
                       mode: "progressive",
                       name: `progressive-bank-${example.id}`,
-                      groupID: `progressive-${example.id}`,
-                      dropArea: true,
                       animation: { reorder: snapSortCubicAnimation, drop: snapSortCubicAnimation },
                       callbacks: progressiveCallbacks,
                     }}
@@ -1413,6 +1437,7 @@ export function SnapSortComponentsDemo() {
                     metadata={{
                       zone: "bank",
                       exampleId: example.id,
+                      dropGroup: `progressive-${example.id}`,
                       frameworkList: `progressive-${example.id}-bank`,
                     }}
                   >
@@ -1604,6 +1629,7 @@ export function SnapSortDuolingoDemo({ embedded = false }) {
 
   const callbacks = useMemo(
     () => ({
+      getDropPriority: prioritizeIntersectingContainer,
       onItemMove: handleMove,
       onItemRemove: handleRemove,
       onGhostInsert: handleGhostInsert,
@@ -1708,7 +1734,12 @@ export function SnapSortDuolingoDemo({ embedded = false }) {
           <Engine id="sentence-builder-snapsort-demo">
             <Container
               className="sentence-builder-root"
-              config={{ direction: "column", mode: "progressive", name: "sentence-builder-root", noDrop: true }}
+              config={{
+                direction: "column",
+                mode: "progressive",
+                name: "sentence-builder-root",
+                callbacks: { canDrop: rejectDrop },
+              }}
               locked
               metadata={{ purpose: "sentence-builder" }}
             >
@@ -1718,8 +1749,6 @@ export function SnapSortDuolingoDemo({ embedded = false }) {
                   direction: "row",
                   mode: "progressive",
                   name: "sentence-answer",
-                  groupID: "sentence-builder",
-                  dropArea: true,
                   animation: {
                     reorder: snapSortCubicAnimation,
                     drop: snapSortCubicAnimation,
@@ -1755,8 +1784,6 @@ export function SnapSortDuolingoDemo({ embedded = false }) {
                   mainAxisAlign: "center",
                   mode: "progressive",
                   name: "sentence-bank",
-                  groupID: "sentence-builder",
-                  dropArea: true,
                   animation: {
                     reorder: snapSortCubicAnimation,
                     drop: snapSortCubicAnimation,
@@ -1941,7 +1968,12 @@ export function SnapSortInsertionDemo() {
       <Engine id="snapsort-insertion-demo-canvas">
         <Container
           className="insertion-board"
-          config={{ direction: "row", mode: "insertion", name: "insertion-board-root", noDrop: true }}
+          config={{
+            direction: "row",
+            mode: "insertion",
+            name: "insertion-board-root",
+            callbacks: { canDrop: rejectDrop },
+          }}
           locked
           metadata={{ boardId: "insertion-demo" }}
         >
@@ -1950,7 +1982,6 @@ export function SnapSortInsertionDemo() {
               className="insertion-list"
               config={{
                 direction: "column",
-                groupID: "insertion-demo",
                 mode: "insertion",
                 name: `insertion-${column.id}`,
                 callbacks,

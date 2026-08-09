@@ -708,7 +708,7 @@ export class FlowGhostLifecycle implements DragLifecycleStrategy {
       }
       // No initial ghost: the target ghost run is created on the first
       // dragMove when the pointer resolves to a valid drop container (which is
-      // never the noDrop source), so nothing appears in the source list.
+      // never the policy-rejected source), so nothing appears in the source list.
     } else {
       const pressedIndex = session.items.indexOf(session.pressedItem);
       const pressedSource = session.sources[pressedIndex];

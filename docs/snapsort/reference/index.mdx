@@ -25,10 +25,11 @@ SnapSort ships one package with framework bindings exposed as subpaths.
 | Import path | Purpose |
 |---------|---------|
 | `@snap-engine/snapsort` | Framework-agnostic SnapEngine objects and types used by framework bindings. |
+| `@snap-engine/snapsort/callbacks` | Reusable drop eligibility and priority callbacks. |
 | `@snap-engine/snapsort/svelte` | Svelte components that wrap the core objects. |
 | `@snap-engine/snapsort/react` | React components that wrap the core objects. |
 
-## Vanilla Container and Callback Helpers
+## Vanilla Container and Collection Helpers
 
 Without a framework adapter, callbacks may update application data and then
 render the resulting DOM directly. Keep the collection operation separate from
@@ -36,6 +37,7 @@ the SnapSort callback just as you would with a framework.
 
 ```javascript
 import { Container } from "@snap-engine/snapsort";
+import { rejectDrop } from "@snap-engine/snapsort/callbacks";
 
 function moveTask(columns, event) {
   const itemId = String(event.itemId);
@@ -54,9 +56,8 @@ function moveTask(columns, event) {
   });
 }
 
-function createTaskContainer(engine, columnId, onItemMove) {
-  const container = new Container(engine, null, {
-    groupID: "tasks",
+function createTaskContainer(engine, parent, columnId, onItemMove) {
+  const container = new Container(engine, parent, {
     callbacks: { onItemMove },
   });
   container.metadata = { columnId };
@@ -70,6 +71,9 @@ function onItemMove(event) {
   renderColumns(columns);
 }
 
-const todo = createTaskContainer(engine, "todo", onItemMove);
-const done = createTaskContainer(engine, "done", onItemMove);
+const board = new Container(engine, null, {
+  callbacks: { canDrop: rejectDrop },
+});
+const todo = createTaskContainer(engine, board, "todo", onItemMove);
+const done = createTaskContainer(engine, board, "done", onItemMove);
 ```

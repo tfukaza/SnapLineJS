@@ -35,7 +35,7 @@ elements. See the Container and Setup pages for the full implementation.
 
 ```tsx
 <Engine id="tasks">
-  <Container config={{ groupID: "tasks", callbacks }}>
+  <Container config={{ callbacks }}>
     {renderedEntries}
   </Container>
 </Engine>
@@ -69,6 +69,7 @@ import type {
   ContainerConfig,
   DragEndEvent,
   DragStartEvent,
+  DropPriorityEvent,
   Item as SnapSortItem,
   ItemMoveEvent,
   ItemSnapshotMetadata,

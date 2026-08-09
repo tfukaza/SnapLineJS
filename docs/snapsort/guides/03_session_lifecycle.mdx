@@ -1,6 +1,6 @@
 ---
 title: Session Lifecycle
-order: 2
+order: 3
 project: snapsort
 projectTitle: SnapSort
 section: guides
@@ -41,6 +41,10 @@ prospective destination. In euclidean and progressive mode, this is the dragged 
 insertion and swap placement update their marker or pointer preview instead.
 This work belongs to SnapSort, and the framework is not asked to reorder its
 persistent item state on every pointer movement.
+
+For each resolution, destination `canDrop` callbacks reject ineligible
+containers before `getDropPriority` chooses the preferred candidate set. The
+active placement mode then chooses a position within that set.
 
 When the prospective destination changes, SnapSort asks the framework to move
 the temporary ghost to the new container and index by calling `onGhostInsert`

@@ -11,6 +11,7 @@
 
 <script lang="ts">
   import { Container, Item } from "@snap-engine/snapsort/svelte";
+  import { rejectDrop } from "@snap-engine/snapsort/callbacks";
   import type { ContainerCallbacks } from "@snap-engine/snapsort";
   import FileTreeNode from "./FileTreeNode.svelte";
 
@@ -50,10 +51,11 @@
     config={{
       mode: "insertion",
       direction: "column",
-      groupID: "code-file-tree-demo",
       name: `code-file-tree-${node.id}`,
-      noDrop: node.open === false,
-      callbacks,
+      callbacks: {
+        ...callbacks,
+        ...(node.open === false ? { canDrop: rejectDrop } : {}),
+      },
       animation: {
         reorder: treeAnimation,
         drop: treeAnimation,

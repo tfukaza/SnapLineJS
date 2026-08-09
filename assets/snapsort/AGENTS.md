@@ -13,8 +13,13 @@ A single `Container`/`Item` class pair (per framework) whose drag/drop behavior 
 - `Container` - The only container class. `new Container(engine, parent, { mode, ... })`.
 - `Item` - The only item class (including ghosts/markers). Never needs a mode.
 - `DragSession` - Owns all per-drag state (pointer, ghost, drop target); lives at `container.dragSession` on the root while a drag is active.
-- Event types: `ItemInsertEvent`, `ItemRemoveEvent`, `ItemMoveEvent`, `ItemSwapEvent`, `GhostCreateEvent`, `GhostInsertEvent`, `GhostRemoveEvent`, `DragStartEvent`, `DragEndEvent`, `DropTargetChangeEvent`, `CanDropEvent`, `VisualGeometryInvalidationEvent`, `DragLocation`.
+- Event types: `ItemInsertEvent`, `ItemRemoveEvent`, `ItemMoveEvent`, `ItemSwapEvent`, `GhostCreateEvent`, `GhostInsertEvent`, `GhostRemoveEvent`, `DragStartEvent`, `DragEndEvent`, `DropTargetChangeEvent`, `CanDropEvent`, `DropPriorityEvent`, `VisualGeometryInvalidationEvent`, `DragLocation`.
 - `ContainerCallbacks`, `ContainerConfig`, `SortMode`, `SortStrategy`, `DropTargetStrategy`, `DragLifecycleStrategy`.
+
+### @snap-engine/snapsort/callbacks
+**Location:** `src/callbacks.ts`
+
+**Exports:** Pure, framework-neutral drop-policy callbacks: `prioritizePointerContainer`, `prioritizeIntersectingContainer`, `prioritizeNearestContainerEdge`, and `rejectDrop`.
 
 ### @snap-engine/snapsort/svelte
 **Location:** `src/svelte/`
@@ -43,7 +48,8 @@ snapsort/
     ├── item.ts             # Item class: tree membership, FLIP animation, dispatchers
     ├── events.ts           # Callback event interfaces + ContainerCallbacks
     ├── mutation.ts         # ContainerCallbacks dispatch + Vanilla defaults
-    ├── algorithm.ts        # Drop-target resolution + canDrop filtering
+    ├── algorithm.ts        # Candidate generation, drop policy, and placement
+    ├── callbacks.ts        # Standard drop-policy callbacks
     ├── layout.ts           # Pure flow-layout simulation
     ├── snapshot.ts         # ItemSnapshot / ItemSnapshotMetadata types
     ├── drag/
@@ -76,7 +82,9 @@ Sort mode is really two orthogonal choices, each resolved once per drag from the
 - **Drop-target resolution** (`DropTargetStrategy`, `drag/drop-strategy.ts`): which algorithm (`determineDropTarget` / `determineProgressiveDropTarget` / `determineInsertionDropTarget` / `determineSwapDropTarget` in `algorithm.ts`) picks the winning candidate.
 - **Drag/ghost lifecycle** (`DragLifecycleStrategy`, `drag/lifecycle.ts`): how the ghost is created/moved/removed and whether the dragged item itself is hoisted out of flow. Three implementations: `FlowGhostLifecycle` (full-size spacer, FLIP-animated; euclidean + progressive), `InsertionMarkerLifecycle` (floating absolutely-positioned line; insertion), and `SwapLifecycle` (pointer ghost + pairwise exchange; swap).
 
-`ContainerConfig.mode` picks a built-in pair from `builtinStrategies`; `ContainerConfig.strategy` overrides with a custom pair.
+`ContainerConfig.mode` picks a built-in pair from `builtinStrategies`;
+`ContainerConfig.strategy` overrides with a custom pair. A custom drop-target
+resolver owns its full resolution policy, including eligibility and priority.
 
 ### DragSession
 Created on `dragStart` and stored at `root.dragSession`; holds pointer/offset/start, the live ghost item, `pendingGhostTarget`, the resolved `SortStrategy`, and `status` (`pending → active → dropping → ended`). All per-drag state that used to live as `#private` fields on the dragged item now lives here so drag lifecycle strategies (separate classes) can read/write it without needing access to `Item`'s private fields. `items`/`sources` represent the ordered multi-item drag run; selection is consumer-owned through each item's `selected` property.
@@ -88,7 +96,11 @@ Every `ContainerCallbacks` invocation goes through one of the `fire*` functions 
 - Primitives: `onItemInsert`, `onItemRemove`, `onGhostInsert`, `onGhostRemove`, `createGhost` (was `createItemGhost`; dispatches on `event.kind: "flow" | "marker"`), synchronous `flushMutation`; `awaitMutation` is deprecated.
 - Semantic: `onItemMove` (preferred — carries `from`/`to` `DragLocation`s).
 - Lifecycle: `onDragStart` (return `false` to veto before any state changes), `onDragEnd`, `onDropTargetChange` (fires only when the prospective container/index actually changes).
-- Validation: `canDrop` — consulted once per container per drop-target resolution (not per candidate slot); must be cheap.
+- Drop policy: `canDrop` first rejects an ineligible destination, then
+  `getDropPriority` can override its configured `dropPriority` for the current
+  resolution. Both are consulted once per container, not once per candidate
+  slot, and must be cheap. Only candidates tied at the highest priority reach
+  the active placement algorithm.
 - Integration: `onVisualGeometryInvalidated` — one root-coalesced notification
   when drag, ghost, or FLIP transforms may have changed rendered item geometry.
   Consumers use it to invalidate dependent visuals without SnapSort knowing
@@ -108,10 +120,17 @@ Every `ContainerCallbacks` invocation goes through one of the `fire*` functions 
 
 ## Key Concepts
 
-### Grouping
-Items can only move between containers that belong to the same root tree and
-share the same `groupID`. A `groupID` filters compatible containers within a
-tree; it does not connect independent roots.
+### Drop policy
+Containers that exchange items must belong to the same root tree. Eligibility
+within that tree is application-defined: put domain identifiers on item or
+container metadata, then inspect `itemMetadata`/`itemsMetadata`, `source`/
+`sources`, and destination `containerMetadata` in `canDrop`. Preference is
+separate from eligibility: configure `dropPriority` or return a per-drag value
+from `getDropPriority` before the active mode ranks candidate positions.
+
+`moveItem` is an authoritative programmatic operation. It bypasses `canDrop`
+and priority resolution while still committing through the configured mutation
+callbacks.
 
 ### Mode is per-tree
 Resolved from the root container's config at drag start; nested containers should share one mode. Mixed-mode trees are unsupported.
