@@ -32,6 +32,7 @@ export interface ContainerConfig {
   /** Advanced: a custom strategy pair, overriding `mode`. Lets consumers plug in their own drop-target resolution and/or drag lifecycle. */
   strategy?: SortStrategy;
   groupID?: string;
+  /** Main layout direction. Default `"column"`. */
   direction?: "column" | "row";
   mainAxisAlign?: LayoutMainAxisAlign;
   /** `"nowrap"`: this list never wraps, it just keeps growing along its main axis. Default `"auto"` (inferred from measurements). */

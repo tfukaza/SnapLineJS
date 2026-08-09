@@ -8,302 +8,60 @@ sectionTitle: Guides
 sectionOrder: 2
 ---
 
+<script>
+  import SessionLifecycleDiagram from "$lib/components/docs/SessionLifecycleDiagram.svelte";
+</script>
 
 When an item is being dragged, it follows the _session lifecycle_.
 
-### 1. Start a Drag
+<SessionLifecycleDiagram />
 
-A pointer-driven movement begins with a drag session. `onDragStart` fires after SnapSort captures the starting layout and before it creates the drag preview. Return `false` to cancel the gesture, or set `session.dropEffect` when the drag should copy or discard instead of move.
+### 0. Initial State
 
-An imperative move does not create a drag session, so it skips this stage.
+Frontend frameworks are built on the concept of states.
+In other words, more often than not you will be defining containers
+and items as a data structure, and using the framework syntax to render them.
 
-### 2. Preview a Destination
+### 1. Drag Start
 
-As the pointer crosses valid positions, `onDropTargetChange` reports the prospective container and index. Use it for temporary preview UI; it does not commit application state.
+Once a drag starts, SnapSort creates a ghost and asks the
+framework to add it to the render state through `onGhostInsert`.
+The framework renders `<Ghost>` into the DOM at the requested container
+and index.
 
-`onDragItemEnter`, `onDragItemMove`, and `onDragItemLeave` describe the item currently under the pointer. `canDrop` runs while SnapSort evaluates a candidate container and can reject that destination. These are also drag-only callbacks.
+Rendering `<Ghost>` binds the new DOM element to `event.ghostItem.element`.
+The adapter performs the state update inside a synchronous `flushMutation`,
+and returning from that transaction tells SnapSort that the DOM is ready.
+At this point, the application's persistent item collection has not changed.
 
-### 3. Request the Move
+### 2. Move and Preview
 
-Releasing a dragged item commits the destination that SnapSort resolved during the session.
-Optionally, buttons, keyboard commands, and other application controls can instead request a destination directly:
+As the pointer moves, SnapSort updates the active drag visual and resolves a
+prospective destination. In euclidean and progressive mode, this is the dragged item;
+insertion and swap placement update their marker or pointer preview instead.
+This work belongs to SnapSort, and the framework is not asked to reorder its
+persistent item state on every pointer movement.
 
-```javascript
-sourceContainer.moveItem(itemId, targetContainer, targetIndex);
-```
+When the prospective destination changes, SnapSort asks the framework to move
+the temporary ghost to the new container and index by calling `onGhostInsert`
+again.
 
-### 4. Update Application State
+### 3. Drop
 
-Both paths converge on `onItemMove`. The event identifies the moved item, its previous location, and its destination container and index. Remove the corresponding record from its current collection, insert it at `event.to.index` in the destination collection, and let the framework render that result.
+Releasing the pointer ends the move phase and requests the destination SnapSort
+resolved during the session. A valid move or copy proceeds to an item mutation.
 
-Register `onItemMove` on every container that can receive an item because the destination container emits the callback. Keeping the state change in this shared handler means pointer drags and imperative controls cannot produce different data-update behavior.
+For Euclidean, progressive, and insertion placement, SnapSort calls `onItemMove`.
+The event identifies the moved item, its previous location,
+and its destination container and index. Remove the corresponding
+record from its current collection, insert it at `event.to.index`
+in the destination collection, and let the framework render that result.
 
+### 4. Render and Animate
 
-### 5. Render and Animate
-
-The supplied framework adapter runs the callback inside its synchronous `flushMutation` transaction. The framework commits the new container contents before SnapSort measures final layout and installs the inverse FLIP transform. Custom adapters must provide the same synchronous transaction; asynchronous state updates are outside the paint-atomic FLIP contract.
-
-### 6. Finish a Drag
-
-`onDragEnd` fires after a pointer-driven drop settles or is cancelled. Imperative moves do not invoke it because they do not have a drag session. Put persistence or other business logic in the shared state-update path when it must run for both pointer and programmatic movements; reserve `onDragEnd` for effects that specifically concern a drag session.
-
-## One State Update for Both Paths
-
-The example below renders two containers from the same application-owned data. Dragging a task and clicking its **Move** button both reach `onItemMove`, so there is only one function responsible for changing the arrays. Container metadata connects the destination engine object back to the corresponding state record.
-
-```svelte framework=Svelte
-<script lang="ts">
-  import { Engine } from "@snap-engine/asset-base/svelte";
-  import { Container, Item } from "@snap-engine/snapsort/svelte";
-  import type {
-    Container as SnapSortContainer,
-    ItemMoveEvent,
-  } from "@snap-engine/snapsort";
-
-  type Task = { id: string; label: string };
-  type Column = {
-    id: string;
-    title: string;
-    items: Task[];
-    container?: SnapSortContainer;
-  };
-
-  let columns: Column[] = $state([
-    {
-      id: "todo",
-      title: "To do",
-      items: [
-        { id: "task-1", label: "Sketch layout" },
-        { id: "task-2", label: "Wire behavior" },
-      ],
-    },
-    { id: "done", title: "Done", items: [] },
-  ]);
-
-  function onItemMove(event: ItemMoveEvent) {
-    const itemId = String(event.itemId);
-    const targetId = String(event.to.containerMetadata.columnId);
-    const source = columns.find((column) =>
-      column.items.some((item) => item.id === itemId),
-    );
-    const task = source?.items.find((item) => item.id === itemId);
-    if (!task) return;
-
-    columns = columns.map((column) => {
-      const items = column.items.filter((item) => item.id !== itemId);
-      if (column.id !== targetId) return { ...column, items };
-
-      items.splice(event.to.index, 0, task);
-      return { ...column, items };
-    });
-  }
-
-  function moveToOtherColumn(itemId: string) {
-    const source = columns.find((column) =>
-      column.items.some((item) => item.id === itemId),
-    );
-    const target = columns.find((column) => column !== source);
-    if (!source?.container || !target?.container) return;
-
-    source.container.moveItem(
-      itemId,
-      target.container,
-      target.container.numberOfItems,
-    );
-  }
-</script>
-
-<Engine id="state-backed-lists">
-  {#each columns as column (column.id)}
-    <section>
-      <h2>{column.title}</h2>
-      <Container
-        bind:container={column.container}
-        items={column.items}
-        getItemId={(task) => task.id}
-        metadata={{ columnId: column.id }}
-        config={{ direction: "column", callbacks: { onItemMove } }}
-      >
-        {#snippet entry(task)}
-          <Item itemId={task.id}>
-            <span>{task.label}</span>
-            <button type="button" onclick={() => moveToOtherColumn(task.id)}>
-              Move
-            </button>
-          </Item>
-        {/snippet}
-      </Container>
-    </section>
-  {/each}
-</Engine>
-```
-```tsx framework=React
-import { useCallback, useRef, useState } from "react";
-import { Engine, Container, Ghost, Item } from "@snap-engine/snapsort/react";
-import type {
-  Container as SnapSortContainer,
-  GhostInsertEvent,
-  GhostRemoveEvent,
-  ItemMoveEvent,
-} from "@snap-engine/snapsort";
-
-const initialColumns = [
-  {
-    id: "todo",
-    title: "To do",
-    items: [
-      { id: "task-1", label: "Sketch layout" },
-      { id: "task-2", label: "Wire behavior" },
-    ],
-  },
-  { id: "done", title: "Done", items: [] },
-];
-type Task = (typeof initialColumns)[number]["items"][number];
-type RenderEntry =
-  | { kind: "task"; task: Task }
-  | { kind: "ghost"; event: GhostInsertEvent };
-
-export function TaskBoard() {
-  const [columns, setColumns] = useState(initialColumns);
-  const [ghost, setGhost] = useState<GhostInsertEvent | null>(null);
-  const todo = useRef<SnapSortContainer>(null);
-  const done = useRef<SnapSortContainer>(null);
-
-  const onItemMove = useCallback((event: ItemMoveEvent) => {
-    setColumns((current) => {
-      const itemId = String(event.itemId);
-      const targetId = String(event.to.containerMetadata.columnId);
-      const source = current.find((column) =>
-        column.items.some((item) => item.id === itemId),
-      );
-      const task = source?.items.find((item) => item.id === itemId);
-      if (!task) return current;
-
-      return current.map((column) => {
-        const items = column.items.filter((item) => item.id !== itemId);
-        if (column.id !== targetId) return { ...column, items };
-
-        items.splice(event.to.index, 0, task);
-        return { ...column, items };
-      });
-    });
-  }, []);
-
-  const onGhostRemove = useCallback((event: GhostRemoveEvent) => {
-    setGhost((current) =>
-      current?.ghostItem === event.ghostItem ? null : current,
-    );
-  }, []);
-
-  function renderColumnEntries(column: (typeof initialColumns)[number]) {
-    const entries: RenderEntry[] = column.items.map((task) => ({ kind: "task", task }));
-    if (ghost?.containerMetadata.columnId === column.id) {
-      const originalIndex = column.items.findIndex(
-        (task) => task.id === ghost.originalItemId,
-      );
-      const coreIndex = Math.max(0, Math.min(ghost.index, entries.length));
-      entries.splice(
-        originalIndex !== -1 && originalIndex <= coreIndex ? coreIndex + 1 : coreIndex,
-        0,
-        { kind: "ghost", event: ghost },
-      );
-    }
-    return entries;
-  }
-
-  function moveToOtherColumn(itemId: string, sourceId: string) {
-    const source = sourceId === "todo" ? todo.current : done.current;
-    const target = sourceId === "todo" ? done.current : todo.current;
-    if (!source || !target) return;
-
-    source.moveItem(itemId, target, target.numberOfItems);
-  }
-
-  return (
-    <Engine id="state-backed-lists">
-      {columns.map((column) => (
-        <section key={column.id}>
-          <h2>{column.title}</h2>
-          <Container
-            ref={column.id === "todo" ? todo : done}
-            metadata={{ columnId: column.id }}
-            config={{
-              direction: "column",
-              callbacks: {
-                onItemMove,
-                onGhostInsert: setGhost,
-                onGhostRemove,
-              },
-            }}
-          >
-            {renderColumnEntries(column).map((entry) =>
-              entry.kind === "ghost" ? (
-                <Ghost key={`ghost-${entry.event.ghostItem.id}`} event={entry.event} />
-              ) : (
-                <Item key={entry.task.id} itemId={entry.task.id}>
-                  <span>{entry.task.label}</span>
-                  <button
-                    type="button"
-                    onClick={() => moveToOtherColumn(entry.task.id, column.id)}
-                  >
-                    Move
-                  </button>
-                </Item>
-              ),
-            )}
-          </Container>
-        </section>
-      ))}
-    </Engine>
-  );
-}
-```
-```javascript framework=Vanilla
-import { Container } from "@snap-engine/snapsort";
-
-let columns = [
-  {
-    id: "todo",
-    items: [
-      { id: "task-1", label: "Sketch layout" },
-      { id: "task-2", label: "Wire behavior" },
-    ],
-  },
-  { id: "done", items: [] },
-];
-
-function onItemMove(event) {
-  const itemId = String(event.itemId);
-  const targetId = String(event.to.containerMetadata.columnId);
-  const source = columns.find((column) =>
-    column.items.some((item) => item.id === itemId),
-  );
-  const task = source?.items.find((item) => item.id === itemId);
-  if (!task) return;
-
-  columns = columns.map((column) => {
-    const items = column.items.filter((item) => item.id !== itemId);
-    if (column.id !== targetId) return { ...column, items };
-
-    items.splice(event.to.index, 0, task);
-    return { ...column, items };
-  });
-  renderColumns(columns);
-}
-
-const todo = new Container(engine, null, {
-  direction: "column",
-  callbacks: { onItemMove },
-});
-todo.metadata = { columnId: "todo" };
-
-const done = new Container(engine, null, {
-  direction: "column",
-  callbacks: { onItemMove },
-});
-done.metadata = { columnId: "done" };
-
-function moveToDone(itemId) {
-  todo.moveItem(itemId, done, done.numberOfItems);
-}
-```
+The framework adapter runs the callback inside its synchronous
+`flushMutation` transaction. The framework commits the new container
+contents before SnapSort measures final layout and initiates the
+animation. Custom adapters must therefore also provide the same synchronous
+transaction; asynchronous state updates are outside the paint-atomic
+animation contract.

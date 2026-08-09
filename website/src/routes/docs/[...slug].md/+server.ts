@@ -41,6 +41,9 @@ export const GET: RequestHandler = ({ params, url }) => {
     headers: {
       "content-disposition": "inline",
       "content-type": "text/markdown; charset=utf-8",
+      ...(slug.startsWith("snapline/")
+        ? { "x-robots-tag": "noindex, nofollow" }
+        : {}),
     },
   });
 };

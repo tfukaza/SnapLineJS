@@ -13,7 +13,9 @@ sectionOrder: 2
   import SnapSortEntityCue from "$lib/components/docs/SnapSortEntityCue.svelte";
 </script>
 
-SnapSort models a drag-and-drop interface with two primitives: _containers_ define where things can be placed, and _items_ represent the things that can move.
+SnapSort models a drag-and-drop interface with two primitives:
+_items_ represent the things that can move, and
+_containers_ define where things can be placed.
 
 <SnapSortConceptsDiagram />
 
@@ -25,9 +27,7 @@ An `Item` is an UI element that can be dragged and placed in different locations
 
 Each item carries a globally unique `itemId`, which helps the library identify
 items even after they get moved around. `itemId` must be defined by the developer,
-and be consistent and unique for an item throughout its lifetime. This becomes
-essential in frontend frameworks which can completely destroy and recreate an items'
-DOM element and component as it gets moved around, making `itemId` the last bastion of identity.
+and be consistent and unique for an item throughout its lifetime.
 
 ## Containers Define Placement
 
@@ -44,8 +44,13 @@ a container with a different group ID.
 
 For every drag-and-drop interface, there is always a single _root container_
 that serves as the top-level parent for all draggable items and containers.
-**Root containers must never be destroyed during the lifetime of the application,
-since they are responsible for maintaining the state of the entire drag-and-drop system.**
+Containers that need to exchange items must be descendants of that same root.
+Matching `groupID` values determine which containers within the tree are
+compatible; they do not connect separate root trees.
+
+> [!WARNING]
+> Root containers must never be destroyed during the lifetime of the application,
+> since they are responsible for maintaining the state of the entire drag-and-drop system.
 
 ## Ghosts Are Placeholders
 
@@ -60,9 +65,3 @@ This both preserves the layout and provides visual feedback on where the item ca
 A `DragSession` is the temporary state SnapSort creates for one drag gesture.
 It lives on the root container while the drag is active and keeps track of
 the drag-and-drop life cycle.
-
-A session has three visible stages:
-
-1. **Drag start.** The item still belongs to its original container, but it is taken out of the normal layout and moved with the pointer using absolute positioning. A ghost temporarily occupies the item's original position so the surrounding layout does not collapse.
-2. **Moving.** As the pointer moves, SnapSort resolves a prospective index and container. The ghost moves to preview that location—even in another container—while the real item remains attached to its original container for the duration of the drag.
-3. **Drop.** When the pointer is released, the move is committed. The item officially moves to the ghost's location, the ghost is destroyed, normal positioning is restored, and the drag session ends.

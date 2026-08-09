@@ -2,7 +2,6 @@
   import ClientDemoFrame from "$lib/components/ClientDemoFrame.svelte";
   import { Engine } from "@snap-engine/asset-base/svelte";
   import type {
-    GhostInsertEvent,
     DragItemHoverEvent,
     ItemMoveEvent,
     ItemSwapEvent,
@@ -42,8 +41,6 @@
         ],
   );
   let hoveredItemId = $state<string | null>(null);
-  let dragging = $state(false);
-
   function handleMove(event: ItemMoveEvent) {
     const id = String(event.itemId);
     const item = items.find((entry) => entry.id === id);
@@ -66,13 +63,6 @@
     items = next;
   }
 
-  function ghostLabel(event: GhostInsertEvent) {
-    return (
-      items.find((item) => item.id === String(event.originalItemId))?.label ??
-      "Item"
-    );
-  }
-
   function highlightTarget(event: DragItemHoverEvent) {
     hoveredItemId = String(event.overItemId);
   }
@@ -83,24 +73,25 @@
     }
   }
 
-  function startDrag() {
-    dragging = true;
-  }
-
-  function endDrag() {
-    dragging = false;
+  function clearHighlight() {
     hoveredItemId = null;
   }
 
-  const callbacks = {
+  const baseCallbacks = {
     onItemMove: handleMove,
     onItemSwap: handleSwap,
-    onDragStart: startDrag,
-    onDragItemEnter: highlightTarget,
-    onDragItemMove: highlightTarget,
-    onDragItemLeave: clearTarget,
-    onDragEnd: endDrag,
   };
+  const callbacks = $derived(
+    mode === "swap"
+      ? {
+          ...baseCallbacks,
+          onDragItemEnter: highlightTarget,
+          onDragItemMove: highlightTarget,
+          onDragItemLeave: clearTarget,
+          onDragEnd: clearHighlight,
+        }
+      : baseCallbacks,
+  );
   const direction = $derived(
     mode === "insertion" || (mode === "euclidean" && !comparison)
       ? "column"
@@ -119,13 +110,13 @@
         {#snippet entry(item)}
           <Item
             itemId={item.id}
-            className={`placement-demo-item is-${item.id}${dragging && hoveredItemId === item.id ? " is-targeted" : ""}`}
+            className={`placement-demo-item is-${item.id}${mode === "swap" && hoveredItemId === item.id ? " is-targeted" : ""}`}
           >
             <span>{item.label}</span>
           </Item>
         {/snippet}
         {#snippet ghost(event)}
-          <Ghost {event} className="placement-demo-ghost"><span>{ghostLabel(event)}</span></Ghost>
+          <Ghost {event} className="placement-demo-ghost" />
         {/snippet}
       </Container>
     </Engine>
@@ -186,10 +177,10 @@
   }
 
   :global(.placement-demo-item[data-snapsort-dragging="true"]) {
-    opacity: 0.38;
+    opacity: 1 !important;
   }
 
-  :global(.placement-demo-item.is-targeted) {
+  :global(.placement-demo-swap .placement-demo-item.is-targeted) {
     border-color: var(--color-primary);
     outline: 2px solid color-mix(in srgb, var(--color-primary) 38%, transparent);
     outline-offset: -2px;
@@ -261,36 +252,34 @@
     height: 64px !important;
   }
 
-  :global(.placement-demo-item span),
-  :global(.placement-demo-ghost span) {
+  :global(.placement-demo-item span) {
     font-family: "Bitcount Grid Single", monospace;
     font-size: 0.8rem;
     font-weight: 350;
   }
 
   :global(.placement-demo-ghost) {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: var(--size-4) var(--size-8);
-    border: 1px solid color-mix(in srgb, var(--color-background-dark) 24%, transparent);
+    padding: 0;
+    border: 2px dashed color-mix(in srgb, var(--color-primary) 62%, transparent) !important;
     border-radius: var(--size-4);
-    background: color-mix(in srgb, var(--color-background) 88%, var(--color-background-tint));
+    background: color-mix(in srgb, var(--color-primary) 14%, var(--color-background)) !important;
     box-sizing: border-box;
-    opacity: 0.38;
-  }
-
-  :global(.placement-demo-ghost span) {
-    color: var(--color-text);
+    opacity: 1;
   }
 
   :global(.placement-demo [data-snapsort-ghost="insertion"]) {
+    height: 0 !important;
+    min-height: 0;
+    padding: 0;
+    border: 0 !important;
+    border-top: 3px solid var(--color-primary) !important;
+    border-radius: 999px !important;
+    background: transparent !important;
     color: var(--color-primary) !important;
   }
 
   :global(.placement-demo [data-snapsort-ghost="pointer"]) {
     border-radius: var(--size-8) !important;
-    opacity: 0.72;
   }
 
   @media (max-width: 720px) {

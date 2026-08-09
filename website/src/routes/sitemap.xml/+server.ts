@@ -5,7 +5,6 @@ const staticPaths = [
   "/",
   "/snapsort",
   "/snapsort/gallery",
-  "/snapline",
   "/about",
   "/docs",
 ];
@@ -20,7 +19,9 @@ function xmlEscape(value: string) {
 }
 
 export function GET() {
-  const docPaths = entries().map((entry) => `/docs/${entry.slug}`);
+  const docPaths = entries()
+    .filter((entry) => entry.project !== "snapline")
+    .map((entry) => `/docs/${entry.slug}`);
   const urls = Array.from(new Set([...staticPaths, ...docPaths]))
     .map(canonicalPath)
     .map(absoluteUrl);

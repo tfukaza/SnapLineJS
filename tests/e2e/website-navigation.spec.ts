@@ -30,22 +30,25 @@ test("switches projects without leaving the current marketing or docs context", 
   ).toHaveAttribute("href", "/snapsort");
   await expect(
     projectMenu.getByRole("link", { name: "SnapLine" }),
-  ).toHaveAttribute("href", "/snapline");
+  ).toHaveCount(0);
   await expect(projectMenu.getByRole("link", { name: "SnapZap" })).toHaveCount(
     0,
   );
-  await expect(projectMenu.locator(".project-nav-link-disabled")).toContainText(
-    "SnapZap",
-  );
-  await expect(projectMenu.locator(".project-nav-link-disabled")).toContainText(
-    "Coming soon",
-  );
+  const disabledSnapLine = projectMenu.locator(".project-nav-link-disabled", {
+    hasText: "SnapLine",
+  });
+  const disabledSnapZap = projectMenu.locator(".project-nav-link-disabled", {
+    hasText: "SnapZap",
+  });
+  await expect(disabledSnapLine).toContainText("Coming soon");
+  await expect(disabledSnapZap).toContainText("Coming soon");
 
   await projectMenu.getByRole("link", { name: "SnapSort" }).click();
   await expect(page).toHaveURL(/\/snapsort$/);
   await expect(docsLink).toHaveAttribute("href", "/docs/snapsort/introduction");
 
   await page.goto("/docs/snapline/introduction", { waitUntil: "networkidle" });
+  await expect(docsLink).toHaveAttribute("href", "/docs");
   const docsProjectTrigger = primaryNav.getByRole("button", {
     name: /Switch project\. Current project: SnapLine/,
   });
@@ -101,7 +104,7 @@ test("puts project documentation inside the icon-only mobile menu", async ({
   await expect(mobileHeaderTrigger).toHaveText("×");
   await expect(
     primaryNav.getByRole("link", { name: "Docs", exact: true }),
-  ).toHaveAttribute("href", "/docs/snapline/introduction");
+  ).toHaveAttribute("href", "/docs");
 
   const mobileDocs = primaryNav.locator(".mobile-doc-navigation");
   await expect(mobileDocs).toBeVisible();
@@ -113,6 +116,73 @@ test("puts project documentation inside the icon-only mobile menu", async ({
   await expect(
     mobileDocs.getByRole("link", { name: "SnapLine", exact: true }),
   ).toHaveAttribute("aria-current", "page");
+});
+
+test("keeps coming-soon SnapLine pages unlisted but directly accessible", async ({
+  page,
+  request,
+}) => {
+  await page.goto("/", { waitUntil: "networkidle" });
+
+  const snapLineCard = page.locator("#asset-snapline");
+  const snapZapCard = page.locator("#asset-snapzap");
+  await expect(snapLineCard).toContainText("Coming soon");
+  await expect(snapLineCard.getByRole("link")).toHaveCount(0);
+  await expect(
+    snapLineCard.getByRole("button", { name: "Learn more" }),
+  ).toBeDisabled();
+  await expect(snapZapCard).toContainText("Coming soon");
+  await expect(
+    page.locator(".planned-asset-node", { hasText: "SnapLine" }),
+  ).toContainText("Coming soon");
+  await expect(
+    page.locator("footer").getByText("SnapLine · Coming soon"),
+  ).toBeVisible();
+
+  await page.goto("/docs", { waitUntil: "networkidle" });
+  await expect(page.locator(".doc-article")).toContainText(
+    "SnapLine is a planned toolkit",
+  );
+  await expect(page.locator('a[href^="/docs/snapline"]')).toHaveCount(0);
+
+  await page.goto("/snapline", { waitUntil: "networkidle" });
+  await expect(
+    page.getByRole("heading", { name: "Node-based UI primitives" }),
+  ).toBeVisible();
+  await expect(page.locator('meta[name="robots"]')).toHaveAttribute(
+    "content",
+    "noindex, nofollow",
+  );
+  await expect(
+    page.getByRole("link", {
+      name: /SnapLine docs|Read the docs|Install SnapLine/,
+    }),
+  ).toHaveCount(0);
+
+  await page.goto("/docs/snapline/introduction", { waitUntil: "networkidle" });
+  await expect(page.locator('meta[name="robots"]')).toHaveAttribute(
+    "content",
+    "noindex, nofollow",
+  );
+  await expect(
+    page.getByRole("heading", { name: "SnapLine", level: 1 }),
+  ).toBeVisible();
+
+  const rootLlms = await request.get("/llms.txt");
+  expect(rootLlms.ok()).toBe(true);
+  expect(await rootLlms.text()).not.toContain("SnapLine");
+
+  const sitemap = await request.get("/sitemap.xml");
+  expect(sitemap.ok()).toBe(true);
+  expect(await sitemap.text()).not.toContain("/snapline");
+
+  const markdown = await request.get("/docs/snapline/introduction.md");
+  expect(markdown.ok()).toBe(true);
+  expect(markdown.headers()["x-robots-tag"]).toBe("noindex, nofollow");
+
+  const projectLlms = await request.get("/docs/snapline/llms.txt");
+  expect(projectLlms.ok()).toBe(true);
+  expect(projectLlms.headers()["x-robots-tag"]).toBe("noindex, nofollow");
 });
 
 test("uses one reading width for documentation chrome and article content", async ({

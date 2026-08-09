@@ -1,8 +1,4 @@
-import {
-  entries,
-  findDocEntry,
-  type DocEntry,
-} from "$lib/docsCatalog";
+import { entries, findDocEntry, type DocEntry } from "$lib/docsCatalog";
 import {
   frameworkLabels,
   frameworks,
@@ -10,6 +6,8 @@ import {
   type Framework,
 } from "$lib/frameworks";
 import { absoluteUrl } from "$lib/seo";
+import { containerIntroExampleSources } from "$lib/components/docs/containerIntroExampleSources";
+import { containerPropertyExampleSources } from "$lib/components/docs/containerPropertyExampleSources";
 
 type MarkdownSegment = {
   kind: "text" | "code";
@@ -49,15 +47,16 @@ const rawDocs = Object.entries(rawModules)
   })
   .filter((doc): doc is RawDocSource => doc !== null);
 
-const frameworkPattern =
-  /(?:^|\s)framework=(?:"([^"]+)"|'([^']+)'|([^\s]+))/i;
+const frameworkPattern = /(?:^|\s)framework=(?:"([^"]+)"|'([^']+)'|([^\s]+))/i;
 
 function stripFrontmatter(source: string): string {
   const normalized = source.replace(/\r\n?/g, "\n");
   const lines = normalized.split("\n");
   if (lines[0]?.trim() !== "---") return normalized;
 
-  const end = lines.findIndex((line, index) => index > 0 && line.trim() === "---");
+  const end = lines.findIndex(
+    (line, index) => index > 0 && line.trim() === "---",
+  );
   return end === -1 ? normalized : lines.slice(end + 1).join("\n");
 }
 
@@ -68,10 +67,7 @@ function frameworkFromInfo(info: string): Framework | null {
 }
 
 function cleanFenceInfo(info: string): string {
-  return info
-    .replace(frameworkPattern, " ")
-    .trim()
-    .replace(/\s+/g, " ");
+  return info.replace(frameworkPattern, " ").trim().replace(/\s+/g, " ");
 }
 
 function parseMarkdownSegments(source: string): MarkdownSegment[] {
@@ -81,7 +77,11 @@ function parseMarkdownSegments(source: string): MarkdownSegment[] {
 
   const flushText = () => {
     if (textLines.length === 0) return;
-    segments.push({ kind: "text", value: textLines.join("\n"), framework: null });
+    segments.push({
+      kind: "text",
+      value: textLines.join("\n"),
+      framework: null,
+    });
     textLines = [];
   };
 
@@ -129,7 +129,8 @@ function rewriteDocTarget(
   const hash = hashIndex === -1 ? "" : target.slice(hashIndex);
   const withoutHash = hashIndex === -1 ? target : target.slice(0, hashIndex);
   const queryIndex = withoutHash.indexOf("?");
-  const path = queryIndex === -1 ? withoutHash : withoutHash.slice(0, queryIndex);
+  const path =
+    queryIndex === -1 ? withoutHash : withoutHash.slice(0, queryIndex);
   const query = queryIndex === -1 ? "" : withoutHash.slice(queryIndex + 1);
 
   if (path.endsWith("/llms.txt")) return target;
@@ -159,14 +160,34 @@ function cleanTextSegment(
 ): { value: string; removedInteractiveContent: boolean } {
   let removedInteractiveContent = false;
   const inlineCode: string[] = [];
+  const interactiveExamples: string[] = [];
   let cleaned = value.replace(/(`+)[\s\S]*?\1/g, (code) => {
     const token = `\u0000INLINE_CODE_${inlineCode.length}\u0000`;
     inlineCode.push(code);
     return token;
   });
+  cleaned = cleaned.replace(/^\s*<script\b[^>]*>[\s\S]*?<\/script>\s*$/gim, "");
+
   cleaned = cleaned.replace(
-    /^\s*<script\b[^>]*>[\s\S]*?<\/script>\s*$/gim,
-    "",
+    /^\s*<(ContainerIntroExample|ContainerPropertyExample)\s+kind=(?:"([^"]+)"|'([^']+)')\s*\/>\s*$/gm,
+    (
+      match,
+      componentName: "ContainerIntroExample" | "ContainerPropertyExample",
+      doubleQuotedKind: string,
+      singleQuotedKind: string,
+    ) => {
+      const kind = doubleQuotedKind ?? singleQuotedKind;
+      const sources: Record<string, string> =
+        componentName === "ContainerIntroExample"
+          ? containerIntroExampleSources
+          : containerPropertyExampleSources;
+      const source = sources[kind];
+      if (!source) return match;
+      removedInteractiveContent = true;
+      const token = `\u0000INTERACTIVE_EXAMPLE_${interactiveExamples.length}\u0000`;
+      interactiveExamples.push(`\`\`\`svelte\n${source.trimEnd()}\n\`\`\``);
+      return token;
+    },
   );
 
   cleaned = cleaned.replace(
@@ -192,8 +213,13 @@ function cleanTextSegment(
     (_, index: string) => inlineCode[Number(index)] ?? "",
   );
 
+  const normalized = cleaned.replace(/\n{3,}/g, "\n\n").trim();
+
   return {
-    value: cleaned.replace(/\n{3,}/g, "\n\n").trim(),
+    value: normalized.replace(
+      /\u0000INTERACTIVE_EXAMPLE_(\d+)\u0000/g,
+      (_, index: string) => interactiveExamples[Number(index)] ?? "",
+    ),
     removedInteractiveContent,
   };
 }

@@ -374,7 +374,7 @@
             <h2>Vertical Column</h2>
             <p class="demo-hint">Cmd/ctrl-click to multi-select, then drag any selected item.</p>
             <Container
-              config={{ direction: "column", groupID: "vertical-group", callbacks: { onItemMove: handleVerticalMove } }}
+              config={{ groupID: "vertical-group", callbacks: { onItemMove: handleVerticalMove } }}
               metadata={{ frameworkList: "vertical" }}
               items={verticalItems}
               getItemId={(n) => `vertical-${n}`}

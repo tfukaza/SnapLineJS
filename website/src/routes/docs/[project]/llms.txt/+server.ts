@@ -91,6 +91,9 @@ export const GET: RequestHandler = ({ params }) => {
     headers: {
       "content-disposition": "inline",
       "content-type": "text/plain; charset=utf-8",
+      ...(project === "snapline"
+        ? { "x-robots-tag": "noindex, nofollow" }
+        : {}),
     },
   });
 };

@@ -27,3 +27,49 @@ SnapSort ships one package with framework bindings exposed as subpaths.
 | `@snap-engine/snapsort` | Framework-agnostic SnapEngine objects and types used by framework bindings. |
 | `@snap-engine/snapsort/svelte` | Svelte components that wrap the core objects. |
 | `@snap-engine/snapsort/react` | React components that wrap the core objects. |
+
+## Vanilla Container and Callback Helpers
+
+Without a framework adapter, callbacks may update application data and then
+render the resulting DOM directly. Keep the collection operation separate from
+the SnapSort callback just as you would with a framework.
+
+```javascript
+import { Container } from "@snap-engine/snapsort";
+
+function moveTask(columns, event) {
+  const itemId = String(event.itemId);
+  const targetId = String(event.to.containerMetadata.columnId);
+  const task = columns
+    .flatMap((column) => column.items)
+    .find((entry) => entry.id === itemId);
+  if (!task) return columns;
+
+  return columns.map((column) => {
+    const items = column.items.filter((entry) => entry.id !== itemId);
+    if (column.id === targetId) {
+      items.splice(Math.min(event.to.index, items.length), 0, task);
+    }
+    return { ...column, items };
+  });
+}
+
+function createTaskContainer(engine, columnId, onItemMove) {
+  const container = new Container(engine, null, {
+    groupID: "tasks",
+    callbacks: { onItemMove },
+  });
+  container.metadata = { columnId };
+  return container;
+}
+```
+
+```javascript
+function onItemMove(event) {
+  columns = moveTask(columns, event);
+  renderColumns(columns);
+}
+
+const todo = createTaskContainer(engine, "todo", onItemMove);
+const done = createTaskContainer(engine, "done", onItemMove);
+```

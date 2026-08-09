@@ -12,15 +12,45 @@ frameworkKey: item
 
 `Item` connects rendered React content to a SnapSort container. The same component works in every container mode.
 
+## Define an Item
+
+Extract item markup into a component when every entry shares the same content
+and controls. The stable application ID is passed directly to `Item`.
+
 ```tsx
 import { Handle, Item } from "@snap-engine/snapsort/react";
 
-<Item itemId="task-1">
-  <article>
-    <Handle className="drag-handle">Drag</Handle>
-    <span>Task 1</span>
-  </article>
-</Item>
+type Task = { id: string; label: string };
+
+function TaskItem({
+  task,
+  onMove,
+}: {
+  task: Task;
+  onMove?: (id: string) => void;
+}) {
+  return (
+    <Item itemId={task.id}>
+      <article>
+        <Handle className="drag-handle">Drag</Handle>
+        <span>{task.label}</span>
+        {onMove && (
+          <button type="button" onClick={() => onMove(task.id)}>
+            Move
+          </button>
+        )}
+      </article>
+    </Item>
+  );
+}
+```
+
+Use the component when mapping a container's rendered entries:
+
+```tsx
+{tasks.map((task) => (
+  <TaskItem key={task.id} task={task} onMove={moveToOtherColumn} />
+))}
 ```
 
 ## Props

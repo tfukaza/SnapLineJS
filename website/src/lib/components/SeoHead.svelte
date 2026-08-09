@@ -18,6 +18,7 @@
     image = defaultImage,
     imageAlt = "SnapEngine website preview",
     type = "website",
+    noIndex = false,
   }: {
     title?: string;
     description?: string;
@@ -25,6 +26,7 @@
     image?: string;
     imageAlt?: string;
     type?: string;
+    noIndex?: boolean;
   } = $props();
 
   const resolvedTitle = $derived(pageTitle(title));
@@ -35,6 +37,9 @@
 <svelte:head>
   <title>{resolvedTitle}</title>
   <meta name="description" content={description} />
+  {#if noIndex}
+    <meta name="robots" content="noindex, nofollow" />
+  {/if}
   <link rel="canonical" href={canonicalUrl} />
 
   <meta property="og:site_name" content={siteName} />

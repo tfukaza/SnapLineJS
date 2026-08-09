@@ -120,6 +120,7 @@
 	description={docDescription}
 	path={`/docs/${currentSlug}`}
 	imageAlt={`${currentProjectTitle} documentation preview`}
+	noIndex={currentProject === 'snapline'}
 />
 
 <div class="doc-layout" class:docs-home={isDocsHome}>
@@ -242,7 +243,7 @@
 
 	a {
 		display: block;
-		padding: var(--size-8) var(--size-12);
+		padding: var(--size-8) 0;
 		border-radius: calc(var(--ui-radius) - 2px);
 		color: var(--color-text);
 		font-weight: 400;

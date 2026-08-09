@@ -185,6 +185,43 @@
     margin: var(--size-24) 0 var(--size-48);
   }
 
+  pre.shiki.display {
+    padding: 0;
+    border: 1px solid
+      color-mix(in srgb, var(--color-background-dark) 22%, transparent);
+    border-radius: var(--ui-radius);
+    box-shadow: none;
+    overflow: hidden;
+
+    &::before,
+    &::after {
+      display: none;
+    }
+
+    code {
+      display: block;
+      box-sizing: border-box;
+      padding: var(--size-16) 0;
+      overflow-x: auto;
+      background: transparent;
+      line-height: 1.6;
+    }
+
+    .line::before {
+      content: attr(data-line);
+      display: inline-block;
+      width: 3ch;
+      margin-right: var(--size-16);
+      padding: 0 var(--size-12);
+      border-right: 1px solid
+        color-mix(in srgb, var(--color-background-dark) 18%, transparent);
+      color: var(--color-text-subtle);
+      font-variant-numeric: tabular-nums;
+      text-align: right;
+      user-select: none;
+    }
+  }
+
   .doc-article > .doc-callout {
     width: 100%;
     max-width: var(--doc-reading-width);

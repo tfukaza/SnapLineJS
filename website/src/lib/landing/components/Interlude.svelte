@@ -50,7 +50,7 @@
             </strong>
             <span class="asset-connector" aria-hidden="true">↓</span>
           </li>
-          <li class="asset-column">
+          <li class="asset-column planned-asset-column">
             <div
               class="framework-logos"
               aria-label="Svelte, React, and vanilla JavaScript adapters"
@@ -68,16 +68,19 @@
                 <span class="asset-connector" aria-hidden="true">↓</span>
               </span>
             </div>
-            <strong class="asset-node card">
+            <strong class="asset-node planned-asset-node card">
               <span
                 class="asset-icon snapline-icon"
                 aria-hidden="true"
               ></span>
-              <span>SnapLine</span>
+              <span class="asset-node-copy">
+                <span>SnapLine</span>
+                <small>Coming soon</small>
+              </span>
             </strong>
             <span class="asset-connector" aria-hidden="true">↓</span>
           </li>
-          <li class="asset-column">
+          <li class="asset-column planned-asset-column">
             <div
               class="framework-logos"
               aria-label="Svelte, React, and vanilla JavaScript adapters"
@@ -95,12 +98,15 @@
                 <span class="asset-connector" aria-hidden="true">↓</span>
               </span>
             </div>
-            <strong class="asset-node card">
+            <strong class="asset-node planned-asset-node card">
               <span
                 class="asset-icon snapzap-icon"
                 aria-hidden="true"
               ></span>
-              <span>SnapZap</span>
+              <span class="asset-node-copy">
+                <span>SnapZap</span>
+                <small>Coming soon</small>
+              </span>
             </strong>
             <span class="asset-connector" aria-hidden="true">↓</span>
           </li>
@@ -212,6 +218,30 @@
     font-weight: 350;
     line-height: var(--leading-caption);
     box-sizing: border-box;
+  }
+
+  .planned-asset-column .framework-logos {
+    opacity: 0.45;
+  }
+
+  .planned-asset-node {
+    color: var(--color-text-subtle);
+  }
+
+  .asset-node-copy {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: var(--size-2);
+  }
+
+  .asset-node-copy small {
+    color: var(--color-text-subtle);
+    font-size: 0.65rem;
+    font-weight: 450;
+    letter-spacing: 0.04em;
+    line-height: 1.2;
+    text-transform: uppercase;
   }
 
   .asset-icon {

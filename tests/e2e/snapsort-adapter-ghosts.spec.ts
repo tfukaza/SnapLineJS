@@ -45,6 +45,14 @@ test.describe("SnapSort adapter-rendered ghost entries (items mode)", () => {
     await page.goto("/?demo=drop_snap_nested", { waitUntil: "networkidle" });
   });
 
+  test("omitted direction renders a column layout", async ({ page }) => {
+    const column = await demoBoxByHeading(page, "Vertical Column");
+    await expect(column.locator(".snapsort-container").first()).toHaveCSS(
+      "flex-direction",
+      "column",
+    );
+  });
+
   test("single drag renders exactly one framework-owned ghost entry sized to the dragged item", async ({
     page,
   }) => {

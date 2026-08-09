@@ -22,45 +22,48 @@ ghost is placed, and which container/index the item is placed when the user drop
 ## Euclidean
 
 Euclidean placement is the default mode (`mode: "euclidean"`, or omit `mode` entirely).
-During a drag, SnapSort creates a full-size ghost and evaluates valid insertion positions.
-The position whose final ghost center is closest to the dragged item wins.
+This is a simple nearest-neighbor algorithm that places the item at the location
+with the closest center to the dragged item's center.
 
 <PlacementModeDemo mode="euclidean" />
 
-Euclidean placement is simple and direct, and the visible ghost usually matches the result the user expects.
-Use Euclidean placement for general reorderable UI:
-
-- Kanban columns
+Euclidean placement is simple and direct, making it 
+suitable for most common drag and drop layouts:
+- Kanban boards
 - Vertical lists
-- Horizontal button rows
-- Nested containers with predictable item sizes
+- Grid layouts
+- etc.
 
 ## Insertion
 
-Insertion placement (`mode: "insertion"`) replaces the full-size ghost with a thin floating marker line that shows exactly where the item will land, without reflowing the surrounding layout during the drag. The dragged item itself stays in its original DOM position until drop.
+Insertion placement (`mode: "insertion"`) replaces the full-size 
+ghost with a thin floating marker line that shows where the 
+item will be inserted after drop. The item itself 
+stays in its original DOM position until drop.
 
 <PlacementModeDemo mode="insertion" />
 
 Use Insertion placement for line-marker UIs:
-
 - File/folder trees and outlines
 - Nested, collapsible structures
 - Any list where a full-size ghost reflowing sibling items would be visually noisy
 
 ## Swap
 
-Swap placement (`mode: "swap"`) keeps the original item in its slot during the drag and shows a pointer ghost as the visual preview. Instead of inserting into a gap, the target is the item under the pointer; on drop, SnapSort swaps the dragged item with that target.
+Swap placement (`mode: "swap"`) keeps the original item in its slot 
+during the drag and shows a pointer ghost as the visual preview. 
+The target is the item under the pointer; on drop, SnapSort swaps 
+the dragged item with that target.
 
 <PlacementModeDemo mode="swap" />
 
-Use Swap placement for pairwise exchange UIs:
-
-- Tile grids
-- Ranked card sets
 
 ## Progressive
 
-Progressive placement (`mode: "progressive"`) is designed for ordered, variable-size items. Instead of choosing the closest final ghost center, it treats the layout as a progression of placement regions and chooses the region occupied by the dragged item's center.
+Progressive placement (`mode: "progressive"`) is designed for ordered, 
+variable-size items. Instead of a nearest neighbor approach, it treats 
+the layout as a progression of placement regions and chooses the first
+region occupied by the dragged item's center.
 
 <div class="placement-mode-comparison">
   <div>
@@ -78,12 +81,6 @@ in the above demo and move it around in the second row. Notice that
 in the Euclidean version, sometimes the item's ghost may jump back
 to the top, because mathematically speaking that is the closest possible
 location the item can be dropped given the current position of the item.
-As humans we're often trained to read text from top left to bottom right,
+As humans we're trained to read text from top left to bottom right,
 so this feels unnatural. The progressive algorithm is specifically designed
 to take that perception into account.
-
-Use Progressive placement when users think in reading order:
-
-- Sentence builders
-- List of tags and chips
-- Wrapped rows with highly variable item widths

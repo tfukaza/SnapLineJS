@@ -5,15 +5,22 @@ import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 import { createHighlighter } from "shiki";
 import { remarkAlerts } from "./src/lib/markdown/remarkAlerts.js";
-import { customTheme, shikiLangs } from "./src/lib/markdown/shikiTheme.js";
+import { shikiLangs } from "./src/lib/markdown/shikiTheme.js";
 import { remarkFrameworkCodeBlocks } from "./src/lib/markdown/remarkFrameworkCodeBlocks.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const mdsvexLayout = join(__dirname, "src/lib/markdown/MdsvexLayout.svelte");
+const docsCodeTheme = "github-light-default";
+const lineNumberTransformer = {
+  name: "docs-line-numbers",
+  line(node, line) {
+    node.properties["data-line"] = line;
+  },
+};
 
-// Create shiki highlighter with custom theme
+// Create the docs highlighter once so Shiki stays out of the client bundle.
 const highlighter = await createHighlighter({
-  themes: [customTheme],
+  themes: [docsCodeTheme],
   langs: shikiLangs,
 });
 
@@ -37,7 +44,8 @@ const config = {
             : "plaintext";
           const highlighted = highlighter.codeToHtml(code, {
             lang: resolvedLang,
-            theme: "custom-theme",
+            theme: docsCodeTheme,
+            transformers: [lineNumberTransformer],
           });
           const html = escapeSvelte(
             highlighted.replace('<pre class="', '<pre class="display '),

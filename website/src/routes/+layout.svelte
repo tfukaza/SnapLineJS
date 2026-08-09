@@ -58,7 +58,11 @@
   const isDocsPath = $derived(currentPath.startsWith("/docs"));
   const isAboutPath = $derived(currentPath === "/about");
   const projectSwitchLabel = $derived(currentProject?.title ?? "Explore");
-  const contextualDocsHref = $derived(currentProject?.docsHref ?? "/docs");
+  const contextualDocsHref = $derived(
+    currentProject?.status === "available" && currentProject.docsHref
+      ? currentProject.docsHref
+      : "/docs",
+  );
   const mobileDocsNavigation = $derived(
     (page.data as { mobileDocsNavigation?: MobileDocsNavigation | null })
       .mobileDocsNavigation ?? null,

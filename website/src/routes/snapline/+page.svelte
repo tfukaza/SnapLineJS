@@ -7,21 +7,18 @@
   description="Build node editors, diagrams, and connection-based interfaces with unstyled primitives powered by SnapEngine Core."
   path="/snapline"
   imageAlt="SnapLine node graph preview"
+  noIndex
 />
 
 <section class="snapline-placeholder">
-  <p class="eyebrow">SnapLine</p>
+  <p class="eyebrow">SnapLine · Coming soon</p>
   <h1>Node-based UI primitives</h1>
   <p class="pitch">
     Draggable nodes, connector rules, live connection lines, rectangle
     selection, nested groups, and palette placement — unstyled and
     application-owned, powered by SnapEngine Core.
   </p>
-  <p class="wip-note">This page is a work in progress — a full showcase is on the way. The documentation is ready today.</p>
-  <div class="actions">
-    <a class="button primary" href="/docs/snapline/introduction">Read the docs</a>
-    <a class="button" href="/docs/snapline/introduction/01_setup">Install SnapLine</a>
-  </div>
+  <p class="wip-note">SnapLine is still in development. A full showcase and public documentation are on the way.</p>
 </section>
 
 <style lang="scss">
@@ -59,11 +56,4 @@
     opacity: 0.7;
   }
 
-  .actions {
-    display: flex;
-    gap: 0.75rem;
-    margin-top: 1rem;
-    flex-wrap: wrap;
-    justify-content: center;
-  }
 </style>

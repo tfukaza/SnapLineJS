@@ -109,7 +109,9 @@ Every `ContainerCallbacks` invocation goes through one of the `fire*` functions 
 ## Key Concepts
 
 ### Grouping
-Items can only move between containers sharing the same `groupID`.
+Items can only move between containers that belong to the same root tree and
+share the same `groupID`. A `groupID` filters compatible containers within a
+tree; it does not connect independent roots.
 
 ### Mode is per-tree
 Resolved from the root container's config at drag start; nested containers should share one mode. Mixed-mode trees are unsupported.

@@ -1,6 +1,4 @@
 <script lang="ts">
-  import SnapLinePreviewConnector from "./SnapLinePreviewConnector.svelte";
-
   const pendingPlusCells = Array.from({ length: 96 }, (_, index) => index);
   const kanbanGroups = [
     {
@@ -76,6 +74,30 @@
       </div>
     </article>
 
+    <div id="asset-snapline" class="asset-card planned-card">
+      <div class="asset-preview pending-preview" aria-hidden="true">
+        <div class="pending-plus-grid">
+          {#each pendingPlusCells as cell (cell)}
+            <span>+</span>
+          {/each}
+        </div>
+        <span>Coming soon</span>
+      </div>
+      <div class="asset-copy">
+        <div class="asset-card-header">
+          <h3>SnapLine</h3>
+        </div>
+        <p>Node-based UI</p>
+        <button
+          type="button"
+          class="button primary learn-more-button planned-button-placeholder"
+          disabled
+        >
+          Learn more
+        </button>
+      </div>
+    </div>
+
     <div id="asset-snapzap" class="asset-card planned-card">
       <div class="asset-preview pending-preview" aria-hidden="true">
         <div class="pending-plus-grid">
@@ -99,36 +121,6 @@
         </button>
       </div>
     </div>
-
-    <article id="asset-snapline" class="asset-card snapline-card">
-      <div class="asset-preview snapline-preview" aria-hidden="true">
-        <div class="pending-plus-grid">
-          {#each pendingPlusCells as cell (cell)}
-            <span>+</span>
-          {/each}
-        </div>
-        <div class="snapline-connection">
-          <SnapLinePreviewConnector />
-        </div>
-        <div class="snapline-node snapline-node-bottom-left card">
-          <div class="snapline-connector disk">
-            <div class="snapline-connector-core disk"></div>
-          </div>
-        </div>
-        <div class="snapline-node snapline-node-top-right card">
-          <div class="snapline-connector disk">
-            <div class="snapline-connector-core disk"></div>
-          </div>
-        </div>
-      </div>
-      <div class="asset-copy">
-        <div class="asset-card-header">
-          <h3>SnapLine</h3>
-        </div>
-        <p>Node-based UI</p>
-        <a class="button primary learn-more-button" href="/snapline">Learn more</a>
-      </div>
-    </article>
   </div>
 </section>
 
@@ -203,16 +195,6 @@
 
   .planned-card {
     min-height: 0;
-  }
-
-  .snapline-card {
-    gap: 0;
-    padding: 0;
-    overflow: hidden;
-  }
-
-  .snapline-card .asset-copy {
-    padding: var(--asset-card-padding);
   }
 
   .drop-snap-card {
@@ -414,90 +396,6 @@
   .pending-plus-grid span {
     margin: 0;
     color: inherit;
-  }
-
-  .snapline-preview {
-    min-height: 180px;
-    overflow: hidden;
-    border-radius: var(--size-8);
-  }
-
-  .snapline-preview::before {
-    position: absolute;
-    right: 0;
-    bottom: 0;
-    left: 0;
-    z-index: 4;
-    height: 72px;
-    background: linear-gradient(
-      to top,
-      var(--color-background-tint) 5%,
-      color-mix(in srgb, var(--color-background-tint) 82%, transparent) 54%,
-      transparent 100%
-    );
-    content: "";
-    pointer-events: none;
-  }
-
-  .snapline-node {
-    position: absolute;
-    width: 62%;
-    height: 208px;
-    box-sizing: border-box;
-  }
-
-  .snapline-connection {
-    position: absolute;
-    top: 116px;
-    right: 35%;
-    bottom: 92px;
-    left: 35%;
-    z-index: 1;
-    overflow: visible;
-    pointer-events: none;
-  }
-
-  .snapline-node-bottom-left {
-    bottom: -12px;
-    left: -27%;
-  }
-
-  .snapline-node-top-right {
-    top: 12px;
-    right: -27%;
-  }
-
-  .snapline-connector {
-    position: absolute;
-    top: 50%;
-    width: 20px;
-    height: 20px;
-    padding: 0;
-    background: var(--color-primary);
-    transform: translateY(-50%);
-  }
-
-  .snapline-connector::after {
-    border-width: 1.5px;
-  }
-
-  .snapline-connector-core {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    width: 8px;
-    height: 8px;
-    padding: 0;
-    background: var(--color-background);
-    transform: translate(-50%, -50%);
-  }
-
-  .snapline-node-bottom-left .snapline-connector {
-    right: -10px;
-  }
-
-  .snapline-node-top-right .snapline-connector {
-    left: -10px;
   }
 
   @media (max-width: 900px) {

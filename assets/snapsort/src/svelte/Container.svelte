@@ -17,7 +17,7 @@
   import Ghost from "./Ghost.svelte";
 
   type ContainerProps<T> = Omit<HTMLAttributes<HTMLDivElement>, "children"> & {
-    config: ContainerConfig;
+    config?: ContainerConfig;
     before?: Snippet<[]>;
     after?: Snippet<[]>;
     itemId?: string;
@@ -33,7 +33,7 @@
   };
 
   let {
-    config,
+    config = {},
     before,
     after,
     itemId,
@@ -158,12 +158,13 @@
   itemContainer.stretchItems = initial.config.stretchItems ?? false;
   itemContainer.dropArea = initial.config.dropArea ?? false;
   itemContainer.noDrop = initial.config.noDrop ?? false;
+  const direction = $derived(config.direction ?? "column");
   const justifyContent = $derived(config.mainAxisAlign === "center" ? "center" : "flex-start");
   const mergedClass = $derived(
     `snapsort-container snapsort-mode-${itemContainer.mode} ${classValue} ${className}`.trim(),
   );
   const mergedStyle = $derived(
-    `flex-direction:${config.direction};justify-content:${justifyContent};${style ?? ""}`,
+    `flex-direction:${direction};justify-content:${justifyContent};${style ?? ""}`,
   );
   setContext("container", itemContainer);
   setContext("item", itemContainer);
@@ -174,7 +175,7 @@
     itemContainer.locked = locked;
     itemContainer.selected = selected;
     itemContainer.metadata = metadata;
-    itemContainer.direction = config.direction ?? "column";
+    itemContainer.direction = direction;
     itemContainer.mainAxisAlign = config.mainAxisAlign ?? "start";
     itemContainer.wrap = config.wrap ?? "auto";
     itemContainer.stretchItems = config.stretchItems ?? false;

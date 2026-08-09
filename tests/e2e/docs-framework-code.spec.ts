@@ -1,26 +1,214 @@
 import { expect, test } from "@playwright/test";
 
-test("SnapSort exposes one canonical Svelte overview entry", async ({
+test("SnapSort Svelte reference lists only its component pages", async ({
   page,
 }) => {
   const response = await page.goto(
     "/docs/snapsort/reference/svelte?framework=svelte",
   );
   expect(response?.status()).toBe(200);
+  await expect(page).toHaveURL(
+    /\/docs\/snapsort\/reference\/svelte\/container(?:\?framework=svelte)?$/,
+  );
 
   const sidebar = page.locator(".doc-sidebar");
   await expect(sidebar.getByRole("heading", { name: "SnapSort" })).toHaveCount(
     1,
   );
   await expect(
-    sidebar.getByRole("link", { name: "Svelte Overview", exact: true }),
+    sidebar.getByRole("link", { name: "Container", exact: true }),
   ).toHaveCount(1);
   await expect(
-    sidebar.getByRole("link", { name: "Svelte API", exact: true }),
+    sidebar.getByRole("link", { name: "Item", exact: true }),
+  ).toHaveCount(1);
+  await expect(
+    sidebar.getByRole("link", { name: /Svelte (?:Overview|API)/ }),
   ).toHaveCount(0);
+
+  const referenceTitle = sidebar.getByText("Reference", { exact: true });
+  const containerLink = sidebar.getByRole("link", {
+    name: "Container",
+    exact: true,
+  });
+  const [titleBox, linkBox] = await Promise.all([
+    referenceTitle.boundingBox(),
+    containerLink.boundingBox(),
+  ]);
+  expect(titleBox).not.toBeNull();
+  expect(linkBox).not.toBeNull();
+  expect(linkBox!.x).toBeCloseTo(titleBox!.x, 0);
+});
+
+test("Svelte Container properties use live, keyboard-accessible Demo and Code tabs", async ({
+  page,
+}) => {
+  const response = await page.goto(
+    "/docs/snapsort/reference/svelte/container?framework=svelte",
+  );
+  expect(response?.status()).toBe(200);
+
   await expect(
-    page.getByRole("heading", { name: "Svelte Overview" }),
-  ).toHaveCount(1);
+    page.getByRole("heading", { name: "Component Properties", level: 2 }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Snippet Parameters", level: 2 }),
+  ).toBeVisible();
+  await expect(page.locator(".doc-article")).toContainText(
+    '"flow" | "marker"',
+  );
+  await expect(
+    page.getByRole("heading", {
+      name: "Move Items Between Containers",
+      level: 2,
+    }),
+  ).toHaveCount(0);
+  await expect(page.locator("[data-demo-code-tabs]")).toHaveCount(10);
+
+  const basic = page.locator('[data-demo-code-tabs="container-intro-basic"]');
+  await expect(basic.locator(".snapsort-item")).toHaveCount(2);
+  await basic.getByRole("tab", { name: "Code" }).click();
+  await expect(basic.getByRole("tabpanel")).toContainText(
+    "const todos: Task[] = [",
+  );
+  await expect(basic.locator("pre.shiki.display")).toHaveCount(1);
+
+  const sortable = page.locator(
+    '[data-demo-code-tabs="container-intro-sortable"]',
+  );
+  await expect(sortable.locator(".snapsort-item")).toHaveCount(2);
+  await sortable.getByRole("tab", { name: "Code" }).click();
+  await expect(sortable.getByRole("tabpanel")).toContainText(
+    "config={{ callbacks: { onItemMove } }}",
+  );
+
+  const mixed = page.locator('[data-demo-code-tabs="container-intro-mixed"]');
+  await expect(mixed.locator(".snapsort-container")).toHaveCount(3);
+  await expect(mixed.getByText("Today", { exact: true })).toBeVisible();
+  await expect(mixed.getByText("Later", { exact: true })).toBeVisible();
+
+  const collection = page.locator(
+    '[data-demo-code-tabs="container-property-collection"]',
+  );
+  const demoTab = collection.getByRole("tab", { name: "Demo" });
+  const codeTab = collection.getByRole("tab", { name: "Code" });
+  await expect(collection.locator(".property-list")).toBeVisible();
+  await expect(demoTab).toHaveAttribute("aria-selected", "true");
+  await codeTab.click();
+  await expect(codeTab).toHaveAttribute("aria-selected", "true");
+  await expect(collection.getByRole("tabpanel")).toContainText(
+    "getItemId={(task) => task.key}",
+  );
+  const codePanel = collection.locator(".code-panel");
+  const highlightedCode = codePanel.locator("pre.shiki.display");
+  await expect(highlightedCode).toHaveCount(1);
+  await expect(highlightedCode).toHaveCSS(
+    "background-color",
+    "rgb(255, 255, 255)",
+  );
+  await expect(highlightedCode).toHaveCSS("color", "rgb(31, 35, 40)");
+  await expect(codePanel.locator("pre")).toHaveCount(1);
+  await expect(codePanel).toContainText("@snap-engine/snapsort/svelte");
+  await expect(codePanel).not.toContainText("@snap-engine/snapsort/react");
+  const firstLine = highlightedCode.locator('.line[data-line="1"]');
+  await expect(firstLine).toBeVisible();
+  expect(
+    await firstLine.evaluate(
+      (line) => getComputedStyle(line, "::before").content,
+    ),
+  ).toBe('"1"');
+
+  await codeTab.press("Home");
+  await expect(demoTab).toBeFocused();
+  await expect(demoTab).toHaveAttribute("aria-selected", "true");
+  await demoTab.press("End");
+  await expect(codeTab).toBeFocused();
+  await expect(codeTab).toHaveAttribute("aria-selected", "true");
+  await codeTab.press("ArrowLeft");
+  await expect(demoTab).toBeFocused();
+
+  const config = page.locator(
+    '[data-demo-code-tabs="container-property-config"]',
+  );
+  await config.getByRole("button", { name: "Row" }).click();
+  await expect(config.locator(".config-list")).toHaveCSS(
+    "flex-direction",
+    "row",
+  );
+
+  const beforeAfter = page.locator(
+    '[data-demo-code-tabs="container-property-before-after"]',
+  );
+  await expect(beforeAfter.locator(".before-after-item")).toHaveCount(2);
+  await beforeAfter.getByRole("button", { name: "Add task" }).click();
+  await expect(beforeAfter.locator(".before-after-item")).toHaveCount(3);
+
+  const metadata = page.locator(
+    '[data-demo-code-tabs="container-property-metadata"]',
+  );
+  await metadata.evaluate(() => {
+    const animationState = window as typeof window & {
+      __metadataMoveTransforms?: string[];
+    };
+    animationState.__metadataMoveTransforms = [];
+    const startedAt = performance.now();
+    const sampleTransform = () => {
+      const draftItem = Array.from(
+        document.querySelectorAll<HTMLElement>(".metadata-item"),
+      ).find((item) => item.textContent?.includes("Draft copy"));
+      if (draftItem) {
+        animationState.__metadataMoveTransforms!.push(
+          getComputedStyle(draftItem).transform,
+        );
+      }
+      if (performance.now() - startedAt < 500) {
+        requestAnimationFrame(sampleTransform);
+      }
+    };
+    requestAnimationFrame(sampleTransform);
+  });
+  await metadata
+    .getByRole("button", { name: "Move Draft copy to Done" })
+    .click();
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const animationState = window as typeof window & {
+          __metadataMoveTransforms?: string[];
+        };
+        return animationState.__metadataMoveTransforms?.some(
+          (transform) => transform !== "none",
+        );
+      }),
+    )
+    .toBe(true);
+  await expect(metadata.getByText("Draft copy", { exact: true })).toHaveCount(
+    1,
+  );
+  await expect(metadata.locator(".move-status")).toHaveText(
+    "Draft copy moved to Done",
+  );
+
+  const nested = page.locator(
+    '[data-demo-code-tabs="container-property-nested"]',
+  );
+  const shipSelection = nested.getByRole("button", {
+    name: "Select",
+    exact: true,
+  });
+  await shipSelection.click();
+  await expect(nested.getByRole("button", { name: "Selected" })).toHaveCount(3);
+
+  const presentation = page.locator(
+    '[data-demo-code-tabs="container-property-presentation"]',
+  );
+  const styledContainer = presentation.getByLabel("Styled task list");
+  await expect(styledContainer).toHaveAttribute(
+    "data-example-kind",
+    "presentation",
+  );
+  await expect(styledContainer).toHaveClass(/is-emphasized/);
+  await presentation.getByRole("button", { name: "Toggle emphasis" }).click();
+  await expect(styledContainer).not.toHaveClass(/is-emphasized/);
 });
 
 test("framework selector shows only its matching install code block", async ({
@@ -106,7 +294,7 @@ test("raw Markdown selects one framework without damaging fenced code", async ({
   expect(svelteResponse.headers()["content-type"]).toContain("text/markdown");
 
   const svelteMarkdown = await svelteResponse.text();
-  expect(svelteMarkdown).toContain("# Setup");
+  expect(svelteMarkdown).toContain("# Quickstart");
   expect(svelteMarkdown).toContain('```svelte\n<script lang="ts">');
   expect(svelteMarkdown).toContain("@snap-engine/snapsort/svelte");
   expect(svelteMarkdown).not.toContain("@snap-engine/snapsort/react");
@@ -154,9 +342,19 @@ test("raw Markdown switches paired reference pages and cleans interactive MDX", 
     "/docs/snapsort/reference/svelte/container.md",
   );
   expect(svelteReferenceResponse.status()).toBe(200);
-  expect(await svelteReferenceResponse.text()).toContain(
-    "`<Ghost {event}>...</Ghost>`",
+  const svelteReferenceMarkdown = await svelteReferenceResponse.text();
+  expect(svelteReferenceMarkdown).toContain("## Component Properties");
+  expect(svelteReferenceMarkdown).toContain("const todos: Task[] = [");
+  expect(svelteReferenceMarkdown).toContain(
+    '{#if boardEntry.kind === "task"}',
   );
+  expect(svelteReferenceMarkdown).toContain("getItemId={(task) => task.key}");
+  expect(svelteReferenceMarkdown).toContain("{#snippet ghost(event)}");
+  expect(svelteReferenceMarkdown).toContain(
+    "This page includes interactive diagrams or demos.",
+  );
+  expect(svelteReferenceMarkdown).not.toContain("<ContainerIntroExample");
+  expect(svelteReferenceMarkdown).not.toContain("<ContainerPropertyExample");
 
   const interactiveResponse = await request.get(
     "/docs/snapsort/guides/01_core_concepts.md",
@@ -252,13 +450,13 @@ test("project llms.txt files expose ordered framework-aware Markdown trees", asy
     snapSortIndex.indexOf("## Reference"),
   );
   expect(snapSortIndex).toContain(
-    "[Setup (Svelte)](https://snapengine.dev/docs/snapsort/introduction/01_setup.md?framework=svelte)",
+    "[Quickstart (Svelte)](https://snapengine.dev/docs/snapsort/introduction/01_setup.md?framework=svelte)",
   );
   expect(snapSortIndex).toContain(
-    "[Setup (React)](https://snapengine.dev/docs/snapsort/introduction/01_setup.md?framework=react)",
+    "[Quickstart (React)](https://snapengine.dev/docs/snapsort/introduction/01_setup.md?framework=react)",
   );
   expect(snapSortIndex).toContain(
-    "[Setup (Vanilla JS)](https://snapengine.dev/docs/snapsort/introduction/01_setup.md?framework=vanilla)",
+    "[Quickstart (Vanilla JS)](https://snapengine.dev/docs/snapsort/introduction/01_setup.md?framework=vanilla)",
   );
   expect(snapSortIndex).toContain(
     "https://snapengine.dev/docs/snapsort/reference/svelte/container.md?framework=svelte",

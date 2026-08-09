@@ -27,7 +27,7 @@ function mobileDocsNavigationForSlug(slug: string) {
   };
 }
 
-export async function load({ params }) {
+export async function load({ params, data }) {
   const modules = import.meta.glob("@docs/**/*.{md,mdx}");
 
   const slug = params.slug || "";
@@ -52,6 +52,7 @@ export async function load({ params }) {
         if (slug === "") {
           const mdx: any = await resolver();
           return {
+            ...data,
             component: mdx.default,
             metadata: mdx.metadata,
             mobileDocsNavigation: null,
@@ -61,6 +62,7 @@ export async function load({ params }) {
         if (pathSlug === slug && slug !== "") {
           const mdx: any = await resolver();
           return {
+            ...data,
             component: mdx.default,
             metadata: mdx.metadata,
             mobileDocsNavigation: mobileDocsNavigationForSlug(slug),

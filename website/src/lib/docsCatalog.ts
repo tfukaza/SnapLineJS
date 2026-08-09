@@ -90,7 +90,8 @@ export const projectDescriptions = Object.fromEntries(
 export const legacyDocRedirects: Record<string, string> = {
   "snapsort/introduction/01_core_concepts":
     "snapsort/guides/01_core_concepts",
-  "snapsort/reference/svelte-api": "snapsort/reference/svelte",
+  "snapsort/reference/svelte": "snapsort/reference/svelte/container",
+  "snapsort/reference/svelte-api": "snapsort/reference/svelte/container",
   "snapsort/reference/react-api": "snapsort/reference/react",
 };
 

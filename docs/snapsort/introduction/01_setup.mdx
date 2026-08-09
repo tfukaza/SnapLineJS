@@ -1,5 +1,5 @@
 ---
-title: Setup
+title: Quickstart
 order: 1
 project: snapsort
 projectTitle: SnapSort
@@ -10,8 +10,8 @@ sectionOrder: 1
 
 ## Install
 
-SnapSort ships its framework-neutral core and framework bindings in one
-package. Install the shared Engine binding for your framework alongside it.
+SnapSort comes in two packages, `@snap-engine/snapsort` itself 
+and the `@snap-engine/asset-base` dependency.
 
 ```bash framework=Svelte
 npm install @snap-engine/snapsort @snap-engine/asset-base
@@ -54,7 +54,6 @@ and render one `Item` per entry. This creates a working drag-and-drop list:
 <Engine id="quick-start">
   <Container
     config={{
-      direction: "column",
       groupID: "tasks",
       callbacks: { onItemMove },
     }}
@@ -122,7 +121,6 @@ export function QuickStart() {
     <Engine id="quick-start">
       <Container
         config={{
-          direction: "column",
           groupID: "tasks",
           callbacks: {
             onItemMove,
@@ -158,7 +156,6 @@ engine.setCollisionEngine(new CollisionEngine());
 engine.assignDom(root);
 
 const container = new Container(engine, null, {
-  direction: "column",
   groupID: "tasks",
 });
 container.element = list;

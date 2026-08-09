@@ -41,7 +41,7 @@ const svelteSample = [
   "",
   '<Engine id="quick-start">',
   "  <Container",
-  '    config={{ direction: "column", groupID: "tasks", callbacks: { onItemMove } }}',
+  '    config={{ groupID: "tasks", callbacks: { onItemMove } }}',
   "    items={tasks}",
   "  >",
   "    {#snippet entry(task)}",
@@ -78,7 +78,7 @@ export function QuickStart() {
   // Ghost previews need onGhostInsert / onGhostRemove — see the setup guide.
   return (
     <Engine id="quick-start">
-      <Container config={{ direction: "column", groupID: "tasks", callbacks: { onItemMove } }}>
+      <Container config={{ groupID: "tasks", callbacks: { onItemMove } }}>
         {tasks.map((task) => (
           <Item key={task.id} itemId={task.id}>{task.label}</Item>
         ))}
@@ -99,7 +99,6 @@ engine.setCollisionEngine(new CollisionEngine());
 engine.assignDom(root);
 
 const container = new Container(engine, null, {
-  direction: "column",
   groupID: "tasks",
 });
 container.element = list;

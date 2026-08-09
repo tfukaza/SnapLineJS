@@ -16,27 +16,190 @@ React owns the rendered collection. Supply synchronous state and ghost
 callbacks for every structural operation the container accepts; the adapter
 does not fall back to SnapSort's Vanilla DOM callbacks.
 
-```tsx
-import { Container, Ghost, Item } from "@snap-engine/snapsort/react";
+## Define Container State
 
-<Container
-  config={{ direction: "column", groupID: "tasks", callbacks }}
->
-  {renderedEntries.map((entry) =>
-    entry.kind === "ghost" ? (
-      <Ghost key={entry.id} event={entry.event} />
-    ) : (
-      <Item key={entry.task.id} itemId={entry.task.id}>{entry.task.label}</Item>
-    ),
-  )}
-</Container>
+Keep persistent items and temporary ghosts in separate state collections.
+
+```tsx
+import { useCallback, useState } from "react";
+import type {
+  GhostInsertEvent,
+  GhostRemoveEvent,
+  ItemMoveEvent,
+} from "@snap-engine/snapsort";
+
+type Task = { id: string; label: string };
+type Column = { id: string; title: string; items: Task[] };
+
+const initialColumns: Column[] = [
+  {
+    id: "todo",
+    title: "To do",
+    items: [
+      { id: "task-1", label: "Sketch layout" },
+      { id: "task-2", label: "Wire behavior" },
+    ],
+  },
+  { id: "done", title: "Done", items: [] },
+];
 ```
 
-Here `callbacks.onItemMove` synchronously updates the task array,
-`onGhostInsert`/`onGhostRemove` update the temporary ghost entry, and
-`renderedEntries` merges that ghost into the React-rendered list. See
-[Setup](/docs/snapsort/introduction/01_setup) for the complete single-list
-implementation.
+## Define Callback Functions
+
+Pure helpers keep the framework callbacks small and make their state changes
+easy to test independently.
+
+```tsx
+function moveTask(current: Column[], event: ItemMoveEvent): Column[] {
+  const itemId = String(event.itemId);
+  const targetId = String(event.to.containerMetadata.columnId);
+  const task = current
+    .flatMap((column) => column.items)
+    .find((entry) => entry.id === itemId);
+  if (!task) return current;
+
+  return current.map((column) => {
+    const items = column.items.filter((entry) => entry.id !== itemId);
+    if (column.id === targetId) {
+      items.splice(Math.min(event.to.index, items.length), 0, task);
+    }
+    return { ...column, items };
+  });
+}
+
+function upsertGhost(
+  current: GhostInsertEvent[],
+  event: GhostInsertEvent,
+): GhostInsertEvent[] {
+  return [
+    ...current.filter((entry) => entry.ghostItem !== event.ghostItem),
+    event,
+  ];
+}
+
+function removeGhost(
+  current: GhostInsertEvent[],
+  event: GhostRemoveEvent,
+): GhostInsertEvent[] {
+  return current.filter((entry) => entry.ghostItem !== event.ghostItem);
+}
+```
+
+Use those helpers inside the component callbacks. These state updates remain
+synchronous because the adapter invokes them through `flushMutation`.
+
+```tsx
+function useTaskBoardState() {
+  const [columns, setColumns] = useState(initialColumns);
+  const [ghosts, setGhosts] = useState<GhostInsertEvent[]>([]);
+
+  const onItemMove = useCallback((event: ItemMoveEvent) => {
+    setColumns((current) => moveTask(current, event));
+  }, []);
+
+  const onGhostInsert = useCallback((event: GhostInsertEvent) => {
+    setGhosts((current) => upsertGhost(current, event));
+  }, []);
+
+  const onGhostRemove = useCallback((event: GhostRemoveEvent) => {
+    setGhosts((current) => removeGhost(current, event));
+  }, []);
+
+  return {
+    columns,
+    ghosts,
+    callbacks: { onItemMove, onGhostInsert, onGhostRemove },
+  };
+}
+```
+
+## Merge Ghosts into Rendered Entries
+
+`onGhostInsert` supplies a core index that excludes dragged items. Convert it
+into the keyed entry list React will render.
+
+```tsx
+type RenderEntry =
+  | { kind: "task"; task: Task }
+  | { kind: "ghost"; event: GhostInsertEvent };
+
+function renderColumnEntries(
+  column: Column,
+  ghosts: GhostInsertEvent[],
+): RenderEntry[] {
+  const entries: RenderEntry[] = column.items.map((task) => ({
+    kind: "task",
+    task,
+  }));
+  const relevantGhosts = ghosts
+    .filter((event) => event.containerMetadata.columnId === column.id)
+    .sort((a, b) => a.index - b.index);
+  const draggedIds = new Set(
+    relevantGhosts[0]?.itemIds.map(String) ?? [],
+  );
+
+  for (const event of relevantGhosts) {
+    let persistentIndex = 0;
+    let renderedIndex = 0;
+    while (renderedIndex < entries.length && persistentIndex < event.index) {
+      const entry = entries[renderedIndex];
+      if (entry.kind === "task" && !draggedIds.has(entry.task.id)) {
+        persistentIndex += 1;
+      }
+      renderedIndex += 1;
+    }
+    while (renderedIndex < entries.length) {
+      const entry = entries[renderedIndex];
+      if (entry.kind !== "task" || !draggedIds.has(entry.task.id)) break;
+      renderedIndex += 1;
+    }
+    entries.splice(renderedIndex, 0, { kind: "ghost", event });
+  }
+
+  return entries;
+}
+```
+
+## Define a Container
+
+Render the keyed item and ghost entries owned by React.
+
+```tsx
+import { Container, Ghost, Item } from "@snap-engine/snapsort/react";
+import type { ContainerCallbacks, GhostInsertEvent } from "@snap-engine/snapsort";
+
+function TaskContainer({
+  column,
+  ghosts,
+  callbacks,
+}: {
+  column: Column;
+  ghosts: GhostInsertEvent[];
+  callbacks: ContainerCallbacks;
+}) {
+  const renderedEntries = renderColumnEntries(column, ghosts);
+
+  return (
+    <Container
+      metadata={{ columnId: column.id }}
+      config={{ groupID: "tasks", callbacks }}
+    >
+      {renderedEntries.map((entry) =>
+        entry.kind === "ghost" ? (
+          <Ghost key={`ghost-${entry.event.ghostItem.id}`} event={entry.event} />
+        ) : (
+          <Item key={entry.task.id} itemId={entry.task.id}>
+            {entry.task.label}
+          </Item>
+        ),
+      )}
+    </Container>
+  );
+}
+```
+
+See the [Item reference](/docs/snapsort/reference/react/item) for extracting
+the item branch into a reusable component.
 
 ## Props
 
@@ -44,7 +207,7 @@ implementation.
 type ContainerProps = {
   children?: ReactNode;
   className?: string;
-  config: ContainerConfig;
+  config?: ContainerConfig;
   containerObject?: SnapSortContainer | null;
   itemId?: string;
   locked?: boolean;
@@ -58,7 +221,7 @@ type ContainerProps = {
 |------|---------|-------------|
 | `children` | `undefined` | Item and nested container content. |
 | `className` | `""` | Extra class string applied to the rendered element. |
-| `config` | Required | SnapSort container configuration. |
+| `config` | `{}` | Optional SnapSort container configuration. |
 | `containerObject` | `null` | Optional existing core container object. The component does not own its creation. |
 | `itemId` | `undefined` | Required when this container is a sortable entry inside another container. |
 | `locked` | `true` | Keeps a nested container from being dragged. Set to `false` to make it draggable. |
@@ -75,7 +238,7 @@ type ContainerProps = {
 | `mode` | `"euclidean"` | Drag/drop mode for this tree: `"euclidean"`, `"progressive"`, `"insertion"`, or `"swap"`. |
 | `strategy` | Resolved from `mode` | Advanced custom `{ dropTarget, lifecycle }` strategy pair that overrides `mode`. |
 | `direction` | `"column"` | Main layout direction: `"column"` or `"row"`. |
-| `groupID` | `"default-group"` | Containers with the same group can exchange items. |
+| `groupID` | `"default-group"` | Within one root tree, containers with the same group can exchange items. |
 | `mainAxisAlign` | `"start"` | Main-axis alignment for virtual placement. Supports `"start"` and `"center"`. |
 | `name` | Generated | Human-readable container name. |
 | `animation` | Default 100ms animations | Reorder, drop, and click-move animation settings. Set to `null` to disable configured animations. |
@@ -130,10 +293,10 @@ export function ClickMove() {
 
   return (
     <>
-      <Container ref={source} config={{ direction: "column", groupID: "cards", callbacks }}>
+      <Container ref={source} config={{ groupID: "cards", callbacks }}>
         {renderedSourceEntries}
       </Container>
-      <Container ref={target} config={{ direction: "column", groupID: "cards", callbacks }}>
+      <Container ref={target} config={{ groupID: "cards", callbacks }}>
         {renderedTargetEntries}
       </Container>
     </>

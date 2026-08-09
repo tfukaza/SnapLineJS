@@ -12,17 +12,43 @@ frameworkKey: item
 
 `Item` connects rendered Svelte content to a SnapSort container. The same component works in every container mode.
 
+## Define an Item
+
+Extract item markup into a component when every entry shares the same content
+and controls. The stable application ID is passed directly to `Item`.
+
 ```svelte
+<!-- TaskItem.svelte -->
 <script lang="ts">
   import { Handle, Item } from "@snap-engine/snapsort/svelte";
+
+  type Task = { id: string; label: string };
+  let {
+    task,
+    onMove,
+  }: {
+    task: Task;
+    onMove?: (id: string) => void;
+  } = $props();
 </script>
 
-<Item itemId="task-1">
+<Item itemId={task.id}>
   <article>
     <Handle className="drag-handle">Drag</Handle>
-    <span>Task 1</span>
+    <span>{task.label}</span>
+    {#if onMove}
+      <button type="button" onclick={() => onMove(task.id)}>Move</button>
+    {/if}
   </article>
 </Item>
+```
+
+Use that component from a container's `entry` snippet:
+
+```svelte
+{#snippet entry(task)}
+  <TaskItem {task} onMove={moveToOtherColumn} />
+{/snippet}
 ```
 
 ## Props

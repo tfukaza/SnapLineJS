@@ -2,7 +2,7 @@ import { entries, projectDescriptions } from "$lib/docsCatalog";
 import { absoluteUrl } from "$lib/seo";
 import type { RequestHandler } from "./$types";
 
-const projects = ["snapengine", "snapsort", "snapline"];
+const projects = ["snapengine", "snapsort"];
 
 /**
  * Root llms.txt — the conventional entry point for coding agents. Points at the
@@ -36,7 +36,6 @@ export const GET: RequestHandler = () => {
     `- [About](${absoluteUrl("/about")}): why SnapEngine exists.`,
     `- [SnapSort](${absoluteUrl("/snapsort")}): drag-and-drop primitives powered by SnapEngine Core.`,
     `- [Gallery](${absoluteUrl("/snapsort/gallery")}): eight complete interactive examples.`,
-    `- [SnapLine](${absoluteUrl("/snapline")}): node-based UI primitives powered by SnapEngine Core.`,
   );
 
   return new Response(`${lines.join("\n")}\n`, {

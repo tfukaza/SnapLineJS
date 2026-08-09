@@ -29,7 +29,7 @@ export interface ContainerProps
   extends Omit<HTMLAttributes<HTMLDivElement>, "children"> {
   children?: ReactNode;
   className?: string;
-  config: ContainerConfig;
+  config?: ContainerConfig;
   containerObject?: ContainerObject | null;
   itemId?: string;
   locked?: boolean;
@@ -84,7 +84,7 @@ export const Container = forwardRef<ContainerObject, ContainerProps>(
     {
       children,
       className = "",
-      config,
+      config = {},
       containerObject = null,
       itemId,
       locked = true,

@@ -35,7 +35,7 @@ elements. See the Container and Setup pages for the full implementation.
 
 ```tsx
 <Engine id="tasks">
-  <Container config={{ direction: "column", groupID: "tasks", callbacks }}>
+  <Container config={{ groupID: "tasks", callbacks }}>
     {renderedEntries}
   </Container>
 </Engine>
@@ -76,7 +76,7 @@ import type {
 } from "@snap-engine/snapsort";
 ```
 
-For the application-state pattern shared by both adapters, see [Session Lifecycle](/docs/snapsort/guides/03_session_lifecycle).
+For application-state, ghost, and callback examples, see the [Container reference](/docs/snapsort/reference/react/container).
 
 ## Subpath Exports
 

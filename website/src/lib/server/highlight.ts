@@ -1,12 +1,24 @@
-import { createHighlighter, type Highlighter } from "shiki";
+import {
+  createHighlighter,
+  type Highlighter,
+  type ShikiTransformer,
+} from "shiki";
 import { customTheme, shikiLangs } from "$lib/markdown/shikiTheme.js";
+
+const docsCodeTheme = "github-light-default";
+const docsLineNumberTransformer: ShikiTransformer = {
+  name: "docs-line-numbers",
+  line(node, line) {
+    node.properties["data-line"] = line;
+  },
+};
 
 let highlighterPromise: Promise<Highlighter> | null = null;
 
 function getHighlighter(): Promise<Highlighter> {
   highlighterPromise ??= createHighlighter({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    themes: [customTheme as any],
+    themes: [customTheme as any, docsCodeTheme],
     langs: shikiLangs,
   });
   return highlighterPromise;
@@ -20,5 +32,21 @@ function getHighlighter(): Promise<Highlighter> {
 export async function highlightCode(code: string, lang: string): Promise<string> {
   const highlighter = await getHighlighter();
   const html = highlighter.codeToHtml(code, { lang, theme: "custom-theme" });
+  return html.replace('<pre class="', '<pre class="display ');
+}
+
+export async function highlightDocsCode(
+  code: string,
+  lang: string,
+): Promise<string> {
+  const highlighter = await getHighlighter();
+  const resolvedLang = highlighter.getLoadedLanguages().includes(lang)
+    ? lang
+    : "plaintext";
+  const html = highlighter.codeToHtml(code.trimEnd(), {
+    lang: resolvedLang,
+    theme: docsCodeTheme,
+    transformers: [docsLineNumberTransformer],
+  });
   return html.replace('<pre class="', '<pre class="display ');
 }

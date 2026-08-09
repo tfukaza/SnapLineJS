@@ -10,81 +10,231 @@ framework: svelte
 frameworkKey: container
 ---
 
-`Container` wraps a core SnapSort container and provides it to descendant `Item` and nested `Container` components through Svelte context.
-
-Svelte owns the rendered collection. Supply a synchronous state mutation
-callback for every persistent operation the container accepts; the adapter
-does not fall back to SnapSort's Vanilla DOM callbacks.
-
-```svelte
-<script lang="ts">
-  import { Container, Item } from "@snap-engine/snapsort/svelte";
-  import type { ItemMoveEvent } from "@snap-engine/snapsort";
-
-  let tasks = $state([
-    { id: "design", label: "Design" },
-    { id: "build", label: "Build" },
-  ]);
-
-  function onItemMove(event: ItemMoveEvent) {
-    const task = tasks.find((entry) => entry.id === event.itemId);
-    if (!task) return;
-    const next = tasks.filter((entry) => entry.id !== event.itemId);
-    next.splice(Math.max(0, Math.min(event.to.index, next.length)), 0, task);
-    tasks = next;
-  }
+<script>
+  import ContainerIntroExample from "$lib/components/docs/ContainerIntroExample.svelte";
+  import ContainerPropertyExample from "$lib/components/docs/ContainerPropertyExample.svelte";
 </script>
 
-<Container
-  config={{ direction: "column", groupID: "tasks", callbacks: { onItemMove } }}
-  items={tasks}
-  getItemId={(task) => task.id}
->
+`Container` groups `Item` components into a sortable region and manages their
+drag session. Every container must be rendered inside an `Engine`.
+
+## A Basic Container
+
+We start with a basic to-do list with two items.
+A container receives an array through `items`, then uses its `entry`
+snippet to render one `Item` for each entry.
+
+<ContainerIntroExample kind="basic" />
+
+Each item needs a stable `id`. By default, `Container` reads that ID from the
+entry's `id` property, and the same value is passed to `Item` as `itemId`.
+
+This first example only shows the component structure. Its `todos` array is
+fixed, so it does not commit a new order when an item is dropped. The next step
+makes the list reorderable with Svelte state.
+
+### Make the List Sortable
+
+Change the array to `$state`, then add an `onItemMove` callback. SnapSort tells
+the callback which item moved and its destination index; the callback updates
+the array, and Svelte renders the new order.
+
+<ContainerIntroExample kind="sortable" />
+
+Svelte owns the rendered collection, so persistent callbacks such as
+`onItemMove` must update state synchronously. The adapter commits that render
+before SnapSort measures and animates the final DOM.
+
+### Mix Items and Containers
+
+An `entry` snippet can choose between an `Item` and a nested `Container`. This
+lets one ordered collection mix loose items with groups that hold their own
+items. The nested container needs its own `itemId` because it is also an entry
+in the parent; set `locked={false}` when that entire container should be
+movable.
+
+The example remains one SnapSort tree. Its two nested groups share a `groupID`,
+so their tasks can move between them, while the parent uses a separate group for
+its top-level mixture of items and containers.
+
+<ContainerIntroExample kind="mixed" />
+
+## Component Properties
+
+### `items`, `getItemId`, and `entry`
+
+`items` is the collection Svelte renders. `entry` renders exactly one `Item` or
+nested `Container` for each value. The default `getItemId` reads `entry.id`; pass
+your own function when the stable key has another name.
+
+<ContainerPropertyExample kind="collection" />
+
+### `config`
+
+`config` changes the container's sorting behavior. The most prominent
+configuration is `direction`, which sets the main layout direction.
+
+<ContainerPropertyExample kind="config" />
+
+The full set of configuration options is listed in [Config](#config).
+
+### `bind:container`
+
+`bind:container` provides the core object when a button, keyboard command,
+or other control needs to move an item imperatively. This property lets devs hook
+directly into SnapSort's core API and imperatively invoke actions.
+
+In the example below, clicking "Move ->" directly triggers the
+callback to move an item. The callback still updates Svelte state synchronously;
+`moveItem` requests the move but does not take ownership of the rendered collection.
+
+<ContainerPropertyExample kind="metadata" />
+
+> [!WARNING]
+> Containers that need to interact must share one root `Container`. A matching
+> `groupID` filters compatible destinations inside that tree; it does not connect
+> otherwise independent roots.
+
+### `itemId`, `locked`, and `selected`
+
+A `Container` can itself be an entry in a parent container. Give that nested
+container an `itemId`, then set `locked={false}` to let it drag. `locked` defaults
+to `true`, which is safer for containers that only organize child items.
+
+`selected` is a consumer-owned flag. Dragging one selected entry moves the other
+selected entries with it; your interface remains responsible for the selection
+controls and state.
+
+> [!NOTE]
+> As you may have noticed, currently this is a minor bug where
+> margins between items being dragged are always 0, regardless
+> of the gap or margin in the original layout.
+
+<ContainerPropertyExample kind="nested" />
+
+### `class`, `className`, `style`, and HTML attributes
+
+`Container` renders a `div`, so standard div attributes such as `aria-label` and
+`data-*` pass through. Both Svelte's `class` prop and the cross-framework
+`className` alias are merged with SnapSort's own classes; `style` is appended to
+the layout styles SnapSort needs.
+
+<ContainerPropertyExample kind="presentation" />
+
+## Snippets
+
+### `before` and `after`
+
+These snippets render fixed content around the sortable entries. They are useful
+for headings, footers, empty-state controls, or any element that is not a
+draggable item.
+
+<ContainerPropertyExample kind="before-after" />
+
+### `ghost`
+
+The `ghost` snippet customizes the framework-owned placeholder used during a
+drag. Render the provided event with `Ghost` so SnapSort can bind and size the
+placeholder while your markup supplies its content and style.
+
+<ContainerPropertyExample kind="ghost" />
+
+
+
+## Snippet Parameters
+
+Snippet parameters are positional; names such as `entry`, `task`, and `event`
+are local names chosen by the application. The Svelte adapter exposes these
+contracts:
+
+```ts
+type ContainerSnippets<T> = {
+  entry: Snippet<[entry: T]>;
+  ghost?: Snippet<[event: GhostInsertEvent]>;
+  before?: Snippet<[]>;
+  after?: Snippet<[]>;
+};
+```
+
+### `entry(entry)`
+
+The `entry` snippet receives exactly one value from `items`. Its type is the
+array's entry type `T`; SnapSort does not wrap it or add fields. `getItemId`
+receives the same value and must return the stable ID passed to the rendered
+`Item` or nested `Container`.
+
+```svelte
+<Container items={tasks} getItemId={(task) => task.key}>
   {#snippet entry(task)}
-    <Item itemId={task.id}>{task.label}</Item>
+    <Item itemId={task.key}>{task.label}</Item>
   {/snippet}
 </Container>
 ```
 
-Each `entry` must render exactly one `Item` or nested `Container` whose `itemId` matches `getItemId(entry)`.
+- First parameter (`T`) — the original entry from `items`. Its available
+  properties are defined entirely by the application.
 
-## Props
+The snippet must render one `Item` or nested `Container` for that entry. Its
+`itemId` should match `getItemId(entry)`, which defaults to `entry.id`.
+
+### `ghost(event)`
+
+The `ghost` snippet receives a `GhostInsertEvent` for each framework-owned ghost
+entry. Always pass the complete event to `<Ghost {event}>`; the component uses
+it to bind the ghost's core object and calculate its size and position. A ghost
+can represent an entire multi-item drag, so use `items` or `itemIds` when the
+interface supports multi-selection.
 
 ```ts
-type ContainerProps<T> = {
-  config: ContainerConfig;
-  items?: T[];
-  getItemId?: (entry: T) => string;
-  entry: Snippet<[T]>;
-  ghost?: Snippet<[GhostInsertEvent]>;
-  before?: Snippet;
-  after?: Snippet;
-  itemId?: string;
-  container?: Container;
-  locked?: boolean;
-  selected?: boolean;
-  className?: string;
-  metadata?: Record<string, unknown>;
-};
+type GhostKind = "flow" | "marker";
+type GhostRole = "target" | "source" | "pointer";
 ```
 
-| Prop | Default | Description |
-|------|---------|-------------|
-| `config` | Required | SnapSort container configuration. |
-| `items` | `[]` | Data entries for this container. Omit for containers that only receive drops or hold static children. |
-| `getItemId` | `(entry) => entry.id` | Stable ID for each entry. |
-| `entry` | Required | Renders one `Item` or nested `Container` for each entry. |
-| `ghost` | Default spacer | Renders flow-mode target ghosts. Custom snippets should render `<Ghost {event}>...</Ghost>`. |
-| `before` | `undefined` | Non-sortable content rendered before entries. |
-| `after` | `undefined` | Non-sortable content rendered after entries. |
-| `itemId` | `undefined` | Required when this container is rendered as a sortable entry inside another container. |
-| `container` | Bindable | Receives the created core container object. |
-| `locked` | `true` | Keeps the container itself from being dragged when nested. Set to `false` for draggable nested containers. |
-| `selected` | `false` | Consumer-owned selection flag for multi-item drags. Only meaningful when `locked` is `false`. |
-| `className` | `""` | Extra class string applied to the rendered element. |
-| `metadata` | `{}` | Metadata assigned to the container object and exposed in callback events. |
+- `kind` (`GhostKind`) — the ghost geometry. `flow` is a full-size layout
+  placeholder. `marker` is an insertion marker or swap pointer; inspect `role`
+  to distinguish those cases.
 
-`Container` renders a `div` with `snapsort-container` plus a mode-specific class.
+- `role` (`GhostRole`) — the ghost's job in the session: `target` destination
+  preview, `source` position placeholder, or `pointer` floating visual.
+
+- `container` (`Container`) and `containerMetadata`
+  (`Record<string, unknown>`) — the core container currently rendering the
+  ghost and its application metadata.
+
+- `index` (`number`) and `beforeElement` (`HTMLElement | null`) — the
+  prospective insertion slot and the element after it. The index excludes
+  dragged items; pointer ghosts use `-1` because they have no list position.
+
+- `original`, `originalItemId`, and `originalMetadata` — the original `Item`,
+  its `ItemId`, and its `ItemSnapshotMetadata` represented by this ghost anchor.
+
+- `items` and `itemIds` — the complete ordered drag run as `Item[]` and
+  `ItemId[]`.
+
+- `ghostItem`, `ghostItemId`, and `ghostMetadata` — the temporary core ghost
+  object and its identity. `<Ghost>` binds its DOM element to `ghostItem`.
+
+- `ghostRect` (`GhostRect | null | undefined`) — precomputed geometry used for
+  sizing and positioning when provided.
+
+- `session` (`DragSession`) — the active drag session, including the pointer,
+  source locations, dragged items, and drop effect.
+
+Use `kind` and `role` when different ghost forms need different content:
+
+```svelte
+{#snippet ghost(event)}
+  <Ghost {event}>
+    {#if event.kind === "marker"}
+      {event.role === "pointer" ? "Dragging" : "Insert here"}
+    {:else}
+      Drop {String(event.originalItemId)} here
+    {/if}
+  </Ghost>
+{/snippet}
+```
+
+`before` and `after` receive no parameters.
 
 ## Config
 
@@ -93,7 +243,7 @@ type ContainerProps<T> = {
 | `mode` | `"euclidean"` | Drag/drop mode for this tree: `"euclidean"`, `"progressive"`, `"insertion"`, or `"swap"`. |
 | `strategy` | Resolved from `mode` | Advanced custom `{ dropTarget, lifecycle }` strategy pair that overrides `mode`. |
 | `direction` | `"column"` | Main layout direction: `"column"` or `"row"`. |
-| `groupID` | `"default-group"` | Containers with the same group can exchange items. |
+| `groupID` | `"default-group"` | Within one root tree, containers with the same group can exchange items. |
 | `mainAxisAlign` | `"start"` | Main-axis alignment for virtual placement. Supports `"start"` and `"center"`. |
 | `name` | Generated | Human-readable container name. |
 | `animation` | Default 100ms animations | Reorder, drop, and click-move animation settings. Set to `null` to disable configured animations. |
@@ -126,61 +276,10 @@ Update Svelte arrays synchronously in `onItemMove` or `onItemSwap`. The adapter
 uses `flushSync`, allowing SnapSort to read final DOM geometry before paint.
 Missing callbacks fail clearly instead of mutating framework-rendered DOM.
 
-## Bindable Core Object
+## Core Object API
 
-Use `bind:container` when buttons, keyboard handlers, or other controls need the core container API.
-
-```svelte
-<script lang="ts">
-  import { Container, Item } from "@snap-engine/snapsort/svelte";
-  import type { Container as SnapSortContainer, ItemMoveEvent } from "@snap-engine/snapsort";
-
-  let source: SnapSortContainer | undefined = $state();
-  let target: SnapSortContainer | undefined = $state();
-  let sourceCards = $state([{ id: "card-1", label: "Card 1" }]);
-  let targetCards = $state<{ id: string; label: string }[]>([]);
-
-  function onItemMove(event: ItemMoveEvent) {
-    const card = [...sourceCards, ...targetCards].find((entry) => entry.id === event.itemId);
-    if (!card) return;
-    sourceCards = sourceCards.filter((entry) => entry.id !== event.itemId);
-    targetCards = targetCards.filter((entry) => entry.id !== event.itemId);
-    const targetList = event.to.container === target ? targetCards : sourceCards;
-    targetList.splice(Math.max(0, Math.min(event.to.index, targetList.length)), 0, card);
-    if (event.to.container === target) targetCards = targetList;
-    else sourceCards = targetList;
-  }
-
-  function moveToTarget(id: string) {
-    if (!source || !target) return;
-    source.moveItem(id, target, target.numberOfItems);
-  }
-</script>
-
-<Container
-  bind:container={source}
-  config={{ direction: "column", groupID: "cards", callbacks: { onItemMove } }}
-  items={sourceCards}
-  getItemId={(card) => card.id}
->
-  {#snippet entry(card)}
-    <Item itemId={card.id}>
-      <button type="button" onclick={() => moveToTarget(card.id)}>Move card</button>
-    </Item>
-  {/snippet}
-</Container>
-
-<Container
-  bind:container={target}
-  config={{ direction: "column", groupID: "cards", callbacks: { onItemMove } }}
-  items={targetCards}
-  getItemId={(card) => card.id}
->
-  {#snippet entry(card)}
-    <Item itemId={card.id}>{card.label}</Item>
-  {/snippet}
-</Container>
-```
+After capturing the object with `bind:container`, these are the most commonly
+used core properties and methods.
 
 | API | Description |
 |-----|-------------|
@@ -195,21 +294,3 @@ Use `bind:container` when buttons, keyboard handlers, or other controls need the
 | `container.config` | Live `ContainerConfig` object. |
 | `container.callbacks` | Configured callback object. |
 | `container.dragSession` | Active `DragSession`, or `null`. |
-
-## Custom Ghost
-
-Use a `ghost` snippet with `Ghost` to customize every framework-owned ghost kind: flow spacers, insertion markers, and swap pointers.
-
-```svelte
-<Container config={{ mode: "progressive", direction: "row", callbacks: { onItemMove } }} items={tiles}>
-  {#snippet entry(tile)}
-    <Item itemId={tile.id}>{tile.text}</Item>
-  {/snippet}
-
-  {#snippet ghost(event)}
-    <Ghost {event}>
-      <span class="tile-ghost">{event.originalItemId}</span>
-    </Ghost>
-  {/snippet}
-</Container>
-```
