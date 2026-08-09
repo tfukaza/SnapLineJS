@@ -29,9 +29,12 @@ export interface ContainerConfig {
   domOwnership?: "core" | "framework";
   /** Which built-in drop-target/lifecycle strategy pair to use for this tree. Default `"euclidean"`. */
   mode?: SortMode;
-  /** Advanced: a custom strategy pair, overriding `mode`. Lets consumers plug in their own drop-target resolution and/or drag lifecycle. */
+  /**
+   * Advanced: a custom strategy pair, overriding `mode`. Custom drop-target
+   * resolvers own their complete resolution policy, including any eligibility
+   * and priority checks that the built-in resolvers normally apply.
+   */
   strategy?: SortStrategy;
-  groupID?: string;
   /** Main layout direction. Default `"column"`. */
   direction?: "column" | "row";
   mainAxisAlign?: LayoutMainAxisAlign;
@@ -42,22 +45,21 @@ export interface ContainerConfig {
   name?: string;
   animation?: ContainerAnimations | null;
   disableFlip?: boolean;
-  noDrop?: boolean;
-  dropArea?: boolean;
+  /** Base priority assigned to every drop candidate owned directly by this container. Default `0`. */
+  dropPriority?: number;
   callbacks?: ContainerCallbacks;
 }
 
 const defaultConfig: ContainerConfig = {
   domOwnership: "core",
   mode: "euclidean",
-  groupID: "default-group",
   direction: "column",
   animation: {
     reorder: { duration: 100, timing_function: "ease-out" },
     drop: { duration: 100, timing_function: "ease-out" },
     clickMove: { duration: 100, timing_function: "ease-out" },
   },
-  noDrop: false,
+  dropPriority: 0,
   callbacks: defaultCallbacks,
 };
 
@@ -105,10 +107,6 @@ export class Container extends Item {
     this.global.data["dragAndDropContainers"].push(this);
   }
 
-  get groupID() {
-    return this.#config.groupID;
-  }
-
   /** @internal */
   get domOwnership() {
     return this.#config.domOwnership ?? "core";
@@ -150,12 +148,12 @@ export class Container extends Item {
     this.#config.stretchItems = value;
   }
 
-  get dropArea() {
-    return this.#config.dropArea ?? false;
+  get dropPriority() {
+    return this.#config.dropPriority ?? 0;
   }
 
-  set dropArea(value: boolean) {
-    this.#config.dropArea = value;
+  set dropPriority(value: number) {
+    this.#config.dropPriority = value;
   }
 
   get mode(): SortMode {

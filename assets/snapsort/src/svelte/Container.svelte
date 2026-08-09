@@ -156,8 +156,7 @@
   itemContainer.mainAxisAlign = initial.config.mainAxisAlign ?? "start";
   itemContainer.wrap = initial.config.wrap ?? "auto";
   itemContainer.stretchItems = initial.config.stretchItems ?? false;
-  itemContainer.dropArea = initial.config.dropArea ?? false;
-  itemContainer.noDrop = initial.config.noDrop ?? false;
+  itemContainer.dropPriority = initial.config.dropPriority ?? 0;
   const direction = $derived(config.direction ?? "column");
   const justifyContent = $derived(config.mainAxisAlign === "center" ? "center" : "flex-start");
   const mergedClass = $derived(
@@ -179,8 +178,7 @@
     itemContainer.mainAxisAlign = config.mainAxisAlign ?? "start";
     itemContainer.wrap = config.wrap ?? "auto";
     itemContainer.stretchItems = config.stretchItems ?? false;
-    itemContainer.dropArea = config.dropArea ?? false;
-    itemContainer.noDrop = config.noDrop ?? false;
+    itemContainer.dropPriority = config.dropPriority ?? 0;
     itemContainer.config.domOwnership = "framework";
     itemContainer.config.callbacks = frameworkCallbacks(config.callbacks);
   });

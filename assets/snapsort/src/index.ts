@@ -29,6 +29,8 @@ export type {
   DropTargetChangeEvent,
   DragItemHoverEvent,
   CanDropEvent,
+  DropPriorityEvent,
+  DropPriorityRect,
   VisualGeometryInvalidationEvent,
   VisualGeometryInvalidationReason,
 } from "./events";

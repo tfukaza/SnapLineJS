@@ -7,6 +7,84 @@ import type { Engine } from "./engine";
 
 type ColliderType = "rect" | "circle" | "point";
 
+/** A world-space point used by allocation-free collision helpers. */
+interface CollisionPoint {
+  x: number;
+  y: number;
+}
+
+/** A normalized world-space rectangle with non-negative dimensions. */
+interface CollisionRect extends CollisionPoint {
+  width: number;
+  height: number;
+}
+
+function pointIntersectsBounds(
+  x: number,
+  y: number,
+  left: number,
+  top: number,
+  right: number,
+  bottom: number,
+): boolean {
+  return x >= left && x <= right && y >= top && y <= bottom;
+}
+
+function rectBoundsIntersect(
+  aLeft: number,
+  aTop: number,
+  aRight: number,
+  aBottom: number,
+  bLeft: number,
+  bTop: number,
+  bRight: number,
+  bBottom: number,
+): boolean {
+  return (
+    aLeft < bRight &&
+    aRight > bLeft &&
+    aTop < bBottom &&
+    aBottom > bTop
+  );
+}
+
+/** Point/rectangle collision with edge-inclusive containment. */
+function pointIntersectsRect(
+  point: CollisionPoint,
+  rect: CollisionRect,
+): boolean {
+  return pointIntersectsBounds(
+    point.x,
+    point.y,
+    rect.x,
+    rect.y,
+    rect.x + rect.width,
+    rect.y + rect.height,
+  );
+}
+
+/** Rectangle collision requiring positive overlap; touching edges do not collide. */
+function rectsIntersect(a: CollisionRect, b: CollisionRect): boolean {
+  return rectBoundsIntersect(
+    a.x,
+    a.y,
+    a.x + a.width,
+    a.y + a.height,
+    b.x,
+    b.y,
+    b.x + b.width,
+    b.y + b.height,
+  );
+}
+
+/** Euclidean distance from a point to a rectangle; zero inside its bounds. */
+function distanceToRect(point: CollisionPoint, rect: CollisionRect): number {
+  if (pointIntersectsRect(point, rect)) return 0;
+  const x = Math.max(rect.x, Math.min(point.x, rect.x + rect.width));
+  const y = Math.max(rect.y, Math.min(point.y, rect.y + rect.height));
+  return Math.hypot(point.x - x, point.y - y);
+}
+
 interface ColliderWorldBounds {
   x: number;
   y: number;
@@ -303,11 +381,13 @@ class Collider extends CoreObject {
       const dy = y - bounds.y;
       return Math.sqrt(dx * dx + dy * dy) <= bounds.radius;
     }
-    return (
-      x >= bounds.left &&
-      x <= bounds.right &&
-      y >= bounds.top &&
-      y <= bounds.bottom
+    return pointIntersectsBounds(
+      x,
+      y,
+      bounds.left,
+      bounds.top,
+      bounds.right,
+      bounds.bottom,
     );
   }
 
@@ -601,10 +681,16 @@ class CollisionEngine {
     const boundsB = b.getWorldBoundsSnapshot();
     return (
       a.id !== b.id &&
-      boundsA.left < boundsB.right &&
-      boundsA.right > boundsB.left &&
-      boundsA.top < boundsB.bottom &&
-      boundsA.bottom > boundsB.top
+      rectBoundsIntersect(
+        boundsA.left,
+        boundsA.top,
+        boundsA.right,
+        boundsA.bottom,
+        boundsB.left,
+        boundsB.top,
+        boundsB.right,
+        boundsB.bottom,
+      )
     );
   }
 
@@ -634,11 +720,13 @@ class CollisionEngine {
   #isRectPointIntersecting(rect: RectCollider, point: PointCollider) {
     const rectBounds = rect.getWorldBoundsSnapshot();
     const pointBounds = point.getWorldBoundsSnapshot();
-    return (
-      pointBounds.x >= rectBounds.left &&
-      pointBounds.x <= rectBounds.right &&
-      pointBounds.y >= rectBounds.top &&
-      pointBounds.y <= rectBounds.bottom
+    return pointIntersectsBounds(
+      pointBounds.x,
+      pointBounds.y,
+      rectBounds.left,
+      rectBounds.top,
+      rectBounds.right,
+      rectBounds.bottom,
     );
   }
 
@@ -674,6 +762,11 @@ class CollisionEngine {
 }
 
 export {
+  type CollisionPoint,
+  type CollisionRect,
+  pointIntersectsRect,
+  rectsIntersect,
+  distanceToRect,
   CollisionEngine,
   Collider,
   RectCollider,

@@ -114,7 +114,6 @@ export class Item extends ElementObject {
   #visualAnimationOffset: TransformOffset = { x: 0, y: 0 };
 
   frameworkManagedGhostElement: boolean = false;
-  noDrop: boolean = false;
 
   constructor(engine: any, parent: Container | null, isGhost: boolean = false) {
     super(engine, parent);

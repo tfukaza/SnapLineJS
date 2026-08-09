@@ -2,6 +2,7 @@ import type { Container } from "./container";
 import type { Item } from "./item";
 import type { DragSession } from "./drag/session";
 import type { ItemId, ItemSnapshotMetadata } from "./snapshot";
+import type { CollisionRect } from "@snap-engine/core/collision";
 
 /**
  * A container + index location, used both for drag sources/destinations and
@@ -315,6 +316,10 @@ export interface CanDropEvent {
   items: Item[];
   itemIds: ItemId[];
   itemsMetadata: ItemSnapshotMetadata[];
+  /** The primary item's source when available. */
+  source: DragLocation | null;
+  /** Source locations parallel to `items`; spawned items may have no source. */
+  sources: readonly (DragLocation | null)[];
   container: Container;
   containerMetadata: Record<string, unknown>;
   /**
@@ -324,6 +329,38 @@ export interface CanDropEvent {
    * first and should not be used for per-slot gating.
    */
   index: number;
+}
+
+/** A frozen world-space rectangle captured for the current drag resolution. */
+export type DropPriorityRect = CollisionRect;
+
+/**
+ * Geometry and metadata supplied when a destination computes its candidate
+ * priority. The callback runs once per eligible container per resolution;
+ * its result applies to candidates owned directly by that container.
+ */
+export interface DropPriorityEvent {
+  session: DragSession | null;
+  item: Item;
+  itemId: ItemId;
+  itemMetadata: ItemSnapshotMetadata;
+  items: Item[];
+  itemIds: ItemId[];
+  itemsMetadata: ItemSnapshotMetadata[];
+  source: DragLocation | null;
+  sources: readonly (DragLocation | null)[];
+  container: Container;
+  containerMetadata: Record<string, unknown>;
+  /** The container's configured `dropPriority` before this callback overrides it. */
+  staticPriority: number;
+  pointer: { x: number; y: number };
+  /** The primary dragged item's current world-space rectangle. */
+  dragRect: DropPriorityRect;
+  /** The destination's frozen border-box rectangle. */
+  containerRect: DropPriorityRect;
+  /** The destination's frozen content-box rectangle. */
+  containerContentRect: DropPriorityRect;
+  depth: number;
 }
 
 /**
@@ -395,6 +432,13 @@ export interface ContainerCallbacks {
 
   /** Consulted while resolving candidates for `container`; return false to reject it for this drag. */
   canDrop?: (event: CanDropEvent) => boolean;
+
+  /**
+   * Override `container.dropPriority` for this drag resolution. Return
+   * `undefined` to preserve the configured value. Higher-priority candidates
+   * are considered before the active placement mode ranks candidate slots.
+   */
+  getDropPriority?: (event: DropPriorityEvent) => number | undefined;
 
   /** Ghost customization, unified across both drag lifecycles via `event.kind`. */
   createGhost?: (event: GhostCreateEvent) => HTMLElement | void | null;

@@ -15,7 +15,11 @@ import { SwapLifecycle } from "./swap";
 
 export type SortMode = "euclidean" | "progressive" | "insertion" | "swap";
 
-/** Picks a drop candidate (container + index) given the dragged item's current position. */
+/**
+ * Picks a drop candidate (container + index) given the dragged item's current
+ * position. A custom resolver owns its complete policy; call or reproduce any
+ * eligibility and priority behavior it needs before returning a candidate.
+ */
 export interface DropTargetStrategy {
   resolve(
     item: Item,

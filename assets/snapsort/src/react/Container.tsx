@@ -134,7 +134,8 @@ export const Container = forwardRef<ContainerObject, ContainerProps>(
     }
     const container = containerRef.current;
     const resolvedItemId =
-      itemId ?? (typeof metadata.itemId === "string" ? metadata.itemId : undefined);
+      itemId ??
+      (typeof metadata.itemId === "string" ? metadata.itemId : undefined);
     const direction = config.direction ?? "column";
     const mainAxisAlign = config.mainAxisAlign ?? "start";
     container.itemId = resolvedItemId;
@@ -143,7 +144,6 @@ export const Container = forwardRef<ContainerObject, ContainerProps>(
     container.metadata = metadata;
     container.config.mode = config.mode ?? container.config.mode;
     container.config.strategy = config.strategy ?? container.config.strategy;
-    container.config.groupID = config.groupID ?? container.config.groupID;
     container.config.name = config.name ?? container.config.name;
     container.config.animation = config.animation ?? container.config.animation;
     container.config.disableFlip =
@@ -154,8 +154,7 @@ export const Container = forwardRef<ContainerObject, ContainerProps>(
     container.mainAxisAlign = mainAxisAlign;
     container.wrap = config.wrap ?? "auto";
     container.stretchItems = config.stretchItems ?? false;
-    container.dropArea = config.dropArea ?? false;
-    container.noDrop = config.noDrop ?? false;
+    container.dropPriority = config.dropPriority ?? 0;
 
     useImperativeHandle(ref, () => container, [container]);
 

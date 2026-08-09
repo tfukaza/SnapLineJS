@@ -2,8 +2,11 @@ import type { DomProperty } from "@snap-engine/core";
 import {
   CollisionEngine,
   CircleCollider,
+  distanceToRect,
+  pointIntersectsRect,
   PointCollider,
   RectCollider,
+  rectsIntersect,
 } from "@snap-engine/core/collision";
 import type { Item as ItemBase } from "./item";
 import {
@@ -22,16 +25,15 @@ import {
 } from "./layout";
 import type { ItemSnapshot } from "./snapshot";
 import type { DragSession } from "./drag/session";
+import type { CanDropEvent, DragLocation, DropPriorityEvent } from "./events";
 
 const TAG_COLLISIONS = "drop-collisions";
 const TAG_CANDIDATES = "drop-candidates";
 const TAG_LAYOUT = "drop-layout";
-const TAG_ZONES = "drop-zones";
 const TOP_CANDIDATE_DEBUG_LIMIT = 3;
 
 type Rect = { x: number; y: number; width: number; height: number };
 type InsertionGhostRect = Rect & { insetLeft?: number; insetRight?: number };
-type WorldRect = Rect;
 
 export interface VirtualGhost {
   container: ItemBase;
@@ -139,34 +141,12 @@ function groupCandidateDistance(
   return sum;
 }
 
-function containsPoint(rect: Rect, x: number, y: number): boolean {
-  return (
-    x >= rect.x &&
-    x <= rect.x + rect.width &&
-    y >= rect.y &&
-    y <= rect.y + rect.height
-  );
-}
-
-function rectsIntersect(a: Rect, b: Rect): boolean {
-  return (
-    a.x <= b.x + b.width &&
-    a.x + a.width >= b.x &&
-    a.y <= b.y + b.height &&
-    a.y + a.height >= b.y
-  );
-}
-
-function distanceToRect(rect: Rect, x: number, y: number): number {
-  if (containsPoint(rect, x, y)) return 0;
-
-  const clampedX = Math.max(rect.x, Math.min(x, rect.x + rect.width));
-  const clampedY = Math.max(rect.y, Math.min(y, rect.y + rect.height));
-  return euclidean(x, y, clampedX, clampedY);
-}
-
-function distanceToNearestContentEdge(rect: Rect, x: number, y: number): number {
-  if (containsPoint(rect, x, y)) {
+function distanceToNearestContentEdge(
+  rect: Rect,
+  x: number,
+  y: number,
+): number {
+  if (pointIntersectsRect({ x, y }, rect)) {
     return Math.min(
       Math.abs(x - rect.x),
       Math.abs(rect.x + rect.width - x),
@@ -175,7 +155,7 @@ function distanceToNearestContentEdge(rect: Rect, x: number, y: number): number 
     );
   }
 
-  return distanceToRect(rect, x, y);
+  return distanceToRect({ x, y }, rect);
 }
 
 function requireDragSnapshot(item: ItemBase): ItemSnapshot<ItemBase> {
@@ -205,105 +185,6 @@ function isContainerObject(item: ItemBase) {
   );
 }
 
-function isNoDropContainer(item: ItemBase) {
-  const configNoDrop =
-    "configuration" in item &&
-    (item as { configuration?: { noDrop?: boolean } }).configuration?.noDrop === true;
-
-  return item.noDrop || configNoDrop;
-}
-
-function isDropAreaContainer(item: ItemBase) {
-  return (
-    isContainerObject(item) &&
-    !isNoDropContainer(item) &&
-    "dropArea" in item &&
-    (item as any).dropArea === true
-  );
-}
-
-const dropAreaCollisionEngine = new CollisionEngine();
-
-function rectColliderForWorldRect(
-  owner: ItemBase,
-  rect: WorldRect,
-): RectCollider | null {
-  const scaleX = owner.worldTransform.scaleX;
-  const scaleY = owner.worldTransform.scaleY;
-  if (scaleX === 0 || scaleY === 0) return null;
-
-  const collider = new RectCollider(
-    owner.engine,
-    owner,
-    0,
-    0,
-    rect.width / Math.abs(scaleX),
-    rect.height / Math.abs(scaleY),
-  );
-  collider.worldTransform = {
-    x: scaleX < 0 ? rect.x + rect.width : rect.x,
-    y: scaleY < 0 ? rect.y + rect.height : rect.y,
-  };
-  return collider;
-}
-
-function filterCandidatesByDropArea(
-  candidates: DropCandidate[],
-  item: ItemBase,
-  dragRect: WorldRect,
-) {
-  const dropAreaContainers = Array.from(
-    new Set(candidates.map((candidate) => candidate.container)),
-  ).filter(isDropAreaContainer);
-  if (dropAreaContainers.length === 0) return candidates;
-
-  const dragCollider = rectColliderForWorldRect(item, dragRect);
-  if (!dragCollider) return candidates;
-
-  const collidingContainers: ItemBase[] = [];
-  try {
-    for (const container of dropAreaContainers) {
-      const prop = requireDragSnapshotBox(container);
-      const containerCollider = rectColliderForWorldRect(container, prop);
-      const isColliding =
-        !!containerCollider &&
-        dropAreaCollisionEngine.isIntersecting(dragCollider, containerCollider);
-      containerCollider?.destroy();
-
-      container.addDebugRect(
-        prop.x,
-        prop.y,
-        prop.width,
-        prop.height,
-        isColliding ? "rgba(34, 197, 94, 0.35)" : "rgba(148, 163, 184, 0.18)",
-        true,
-        `drop-area-hitbox-${container.id}`,
-        false,
-        isColliding ? 3 : 1,
-        TAG_ZONES,
-      );
-
-      if (isColliding) {
-        collidingContainers.push(container);
-      }
-    }
-  } finally {
-    dragCollider.destroy();
-  }
-
-  if (collidingContainers.length === 0) return candidates;
-
-  const deepestDepth = Math.max(
-    ...collidingContainers.map((container) => container.depth),
-  );
-  const allowedContainers = new Set(
-    collidingContainers.filter((container) => container.depth === deepestDepth),
-  );
-  return candidates.filter((candidate) =>
-    allowedContainers.has(candidate.container),
-  );
-}
-
 const itemHoverCollisionEngine = new CollisionEngine();
 
 function itemHitboxInsets(item: ItemBase): {
@@ -314,15 +195,22 @@ function itemHitboxInsets(item: ItemBase): {
 } {
   const metadata = item.dragSnapshot?.metadata ?? item.metadata;
   return {
-    top: typeof metadata?.hitboxInsetTop === "number" ? metadata.hitboxInsetTop : 0,
+    top:
+      typeof metadata?.hitboxInsetTop === "number"
+        ? metadata.hitboxInsetTop
+        : 0,
     right:
-      typeof metadata?.hitboxInsetRight === "number" ? metadata.hitboxInsetRight : 0,
+      typeof metadata?.hitboxInsetRight === "number"
+        ? metadata.hitboxInsetRight
+        : 0,
     bottom:
       typeof metadata?.hitboxInsetBottom === "number"
         ? metadata.hitboxInsetBottom
         : 0,
     left:
-      typeof metadata?.hitboxInsetLeft === "number" ? metadata.hitboxInsetLeft : 0,
+      typeof metadata?.hitboxInsetLeft === "number"
+        ? metadata.hitboxInsetLeft
+        : 0,
   };
 }
 
@@ -331,7 +219,9 @@ function itemHitboxShape(item: ItemBase): "rect" | "ellipse" {
   return metadata?.hitboxShape === "ellipse" ? "ellipse" : "rect";
 }
 
-function hitboxColliderForItem(item: ItemBase): RectCollider | CircleCollider | null {
+function hitboxColliderForItem(
+  item: ItemBase,
+): RectCollider | CircleCollider | null {
   const box = item.dragSnapshot?.box;
   if (!box) return null;
   const insets = itemHitboxInsets(item);
@@ -372,8 +262,16 @@ export function findHoveredItem(
 ): ItemBase | null {
   if (!container.dragSnapshot) return null;
 
-  const pointerCollider = new PointCollider(draggedItem.engine, draggedItem, 0, 0);
-  pointerCollider.worldTransform = { x: session.pointer.x, y: session.pointer.y };
+  const pointerCollider = new PointCollider(
+    draggedItem.engine,
+    draggedItem,
+    0,
+    0,
+  );
+  pointerCollider.worldTransform = {
+    x: session.pointer.x,
+    y: session.pointer.y,
+  };
 
   let best: { item: ItemBase; area: number } | null = null;
   try {
@@ -382,7 +280,9 @@ export function findHoveredItem(
       const collider = hitboxColliderForItem(child);
       if (!collider) continue;
       try {
-        if (!itemHoverCollisionEngine.isIntersecting(pointerCollider, collider)) {
+        if (
+          !itemHoverCollisionEngine.isIntersecting(pointerCollider, collider)
+        ) {
           continue;
         }
         const box = child.dragSnapshot!.box;
@@ -520,8 +420,9 @@ function chooseByContentBox(
 ): DropCandidate {
   const aRect = containerContentRect(a.container);
   const bRect = containerContentRect(b.container);
-  const aContains = containsPoint(aRect, dragCenterX, dragCenterY);
-  const bContains = containsPoint(bRect, dragCenterX, dragCenterY);
+  const point = { x: dragCenterX, y: dragCenterY };
+  const aContains = pointIntersectsRect(point, aRect);
+  const bContains = pointIntersectsRect(point, bRect);
   if (aContains !== bContains) return aContains ? a : b;
 
   const aEdge = distanceToNearestContentEdge(aRect, dragCenterX, dragCenterY);
@@ -688,10 +589,7 @@ function virtualLayoutRecursiveFromSnapshot(
     };
     const layout = flowLayoutPositions(containerSnapshot, startX, startY, {
       filter,
-      insertions: [
-        ...descendantBaseInsertions,
-        insertion,
-      ],
+      insertions: [...descendantBaseInsertions, insertion],
     });
     const rect = layout.virtualRects.get(insertion) ?? {
       ...fallbackPosition,
@@ -724,23 +622,17 @@ function virtualLayoutRecursiveFromSnapshot(
       nextPosition,
       placementRect,
       placementDistance: distanceToRect(
+        { x: dragCenterX, y: dragCenterY },
         placementRect,
-        dragCenterX,
-        dragCenterY,
       ),
-      placementContainsDragCenter: containsPoint(
+      placementContainsDragCenter: pointIntersectsRect(
+        { x: dragCenterX, y: dragCenterY },
         placementRect,
-        dragCenterX,
-        dragCenterY,
       ),
     };
   };
 
-  if (
-    itemSnapshots.length === 0 &&
-    isContainerObject(container) &&
-    !isNoDropContainer(container)
-  ) {
+  if (itemSnapshots.length === 0 && isContainerObject(container)) {
     candidates.push(makeCandidate(0, { x: startX, y: startY }));
   }
 
@@ -815,9 +707,7 @@ function virtualLayoutRecursiveFromSnapshot(
   }
 
   return {
-    candidates: isNoDropContainer(container)
-      ? candidates.filter((candidate) => candidate.container !== container)
-      : candidates,
+    candidates,
     endX: startX + contentSize.width,
     endY: startY + contentSize.height,
   };
@@ -854,19 +744,13 @@ function collectDropCandidates(
     session,
   );
 
-  const dragRect = {
-    x: item.dragPositionX,
-    y: item.dragPositionY,
-    width: dragGhostW,
-    height: dragGhostH,
+  return {
+    candidates: virtualCandidates,
+    dragCenterX,
+    dragCenterY,
+    dragGhostW,
+    dragGhostH,
   };
-  const candidates = filterCandidatesByDropArea(
-    virtualCandidates,
-    item,
-    dragRect,
-  );
-
-  return { candidates, dragCenterX, dragCenterY, dragGhostW, dragGhostH };
 }
 
 /**
@@ -904,8 +788,7 @@ function chooseProgressiveCandidate(
     }
 
     if (
-      candidate.placementContainsDragCenter !==
-      best.placementContainsDragCenter
+      candidate.placementContainsDragCenter !== best.placementContainsDragCenter
     ) {
       best = candidate.placementContainsDragCenter ? candidate : best;
       continue;
@@ -1093,18 +976,8 @@ function drawCandidateDebug(
   }
 }
 
-function groupIDOf(item: ItemBase): string | undefined {
-  return "groupID" in item ? (item as any).groupID : undefined;
-}
-
-function compatibleInsertionContainer(
-  container: ItemBase,
-  sourceGroupID: string | undefined,
-): boolean {
-  if (!isContainerObject(container)) return false;
-  if (isNoDropContainer(container)) return false;
-  const targetGroupID = groupIDOf(container);
-  return !sourceGroupID || !targetGroupID || sourceGroupID === targetGroupID;
+function isInsertionContainer(container: ItemBase): boolean {
+  return isContainerObject(container);
 }
 
 function insertionMarkerInsets(container: ItemBase): {
@@ -1230,8 +1103,6 @@ function collectInsertionCandidates(
   const dragProp = requireDragSnapshotBox(item);
   const pointerX = pointer?.x ?? item.dragPositionX + dragProp.width / 2;
   const pointerY = pointer?.y ?? item.dragPositionY + dragProp.height / 2;
-  const sourceParent = "parent" in item ? (item as any).parent : null;
-  const sourceGroupID = sourceParent ? groupIDOf(sourceParent) : undefined;
   const excludeSet = session ? session.itemSet : new Set([item]);
   const candidates: DropCandidate[] = [];
 
@@ -1253,7 +1124,7 @@ function collectInsertionCandidates(
       return snapshotIndex === -1 ? index : snapshotIndex;
     };
 
-    if (compatibleInsertionContainer(container, sourceGroupID)) {
+    if (isInsertionContainer(container)) {
       for (let index = 0; index <= children.length; index++) {
         const insertionIndex = indexForGap(index);
         const ghostRect = insertionMarkerRect(
@@ -1269,8 +1140,11 @@ function collectInsertionCandidates(
           index: insertionIndex,
           ghostCenterX,
           ghostCenterY,
-          distance: distanceToRect(ghostRect, pointerX, pointerY),
-          groupDistance: distanceToRect(ghostRect, pointerX, pointerY),
+          distance: distanceToRect({ x: pointerX, y: pointerY }, ghostRect),
+          groupDistance: distanceToRect(
+            { x: pointerX, y: pointerY },
+            ghostRect,
+          ),
           priority: 0,
           lineIndex: index,
           dragLineIndex: index,
@@ -1279,11 +1153,13 @@ function collectInsertionCandidates(
           prevPosition: null,
           nextPosition: null,
           placementRect: ghostRect,
-          placementDistance: distanceToRect(ghostRect, pointerX, pointerY),
-          placementContainsDragCenter: containsPoint(
+          placementDistance: distanceToRect(
+            { x: pointerX, y: pointerY },
             ghostRect,
-            pointerX,
-            pointerY,
+          ),
+          placementContainsDragCenter: pointIntersectsRect(
+            { x: pointerX, y: pointerY },
+            ghostRect,
           ),
           ghostRect,
         });
@@ -1329,47 +1205,135 @@ function chooseInsertionCandidate(
   return best;
 }
 
+// TODO: Check if similar function already exists.
+function sourceLocationFor(item: ItemBase): DragLocation | null {
+  const container = "parent" in item ? (item as any).parent : null;
+  if (!container || !isContainerObject(container)) return null;
+  const index = container.itemOrderedList.indexOf(item);
+  if (index === -1) return null;
+  return {
+    container: container as DragLocation["container"],
+    containerMetadata: (container as any).metadata,
+    index,
+  };
+}
+
+function configuredDropPriority(container: ItemBase): number {
+  const value =
+    "dropPriority" in container
+      ? (container as any).dropPriority
+      : (container as any).configuration?.dropPriority;
+  if (value !== undefined && !Number.isFinite(value)) {
+    throw new TypeError(
+      `SnapSort Container ${container.id}: dropPriority must be a finite number.`,
+    );
+  }
+  return value ?? 0;
+}
+
+function dropPolicyEvent(
+  candidate: DropCandidate,
+  item: ItemBase,
+  session: DragSession | null,
+): Omit<DropPriorityEvent, "staticPriority"> & Pick<CanDropEvent, "index"> {
+  const groupItems = session?.items ?? [item];
+  const sources = session?.sources ?? groupItems.map(sourceLocationFor);
+  const itemBox = requireDragSnapshotBox(item);
+  const containerBox = requireDragSnapshotBox(candidate.container);
+  const pointer = session?.pointer ??
+    ("dragPointerPosition" in item ? item.dragPointerPosition : null) ?? {
+      x: item.dragPositionX + itemBox.width / 2,
+      y: item.dragPositionY + itemBox.height / 2,
+    };
+
+  return {
+    session,
+    item: item as DropPriorityEvent["item"],
+    itemId: item.resolvedItemId,
+    itemMetadata: item.metadata,
+    items: groupItems as DropPriorityEvent["items"],
+    itemIds: groupItems.map((member) => member.resolvedItemId),
+    itemsMetadata: groupItems.map((member) => member.metadata),
+    source: sources[0] ?? null,
+    sources,
+    container: candidate.container as DropPriorityEvent["container"],
+    containerMetadata: (candidate.container as any).metadata,
+    index: candidate.index,
+    pointer: { x: pointer.x, y: pointer.y },
+    dragRect: {
+      x: item.dragPositionX,
+      y: item.dragPositionY,
+      width: itemBox.width,
+      height: itemBox.height,
+    },
+    containerRect: {
+      x: containerBox.x,
+      y: containerBox.y,
+      width: containerBox.width,
+      height: containerBox.height,
+    },
+    containerContentRect: containerContentRect(candidate.container),
+    depth: candidate.container.depth,
+  };
+}
+
 /**
- * Filter out candidates whose container's `canDrop` callback rejects this
- * drag. Evaluated once per distinct container (not once per candidate slot)
- * so a container with many open gaps only pays for one callback invocation
- * per drop-target resolution; `canDrop` must be cheap/pure.
+ * Apply destination-owned drop policy once per distinct container. Eligibility
+ * is resolved before priority; only candidates tied at the highest effective
+ * priority continue to the active placement mode's slot-ranking algorithm.
  */
-function filterCandidatesByCanDrop(
+function applyDropPolicy(
   candidates: DropCandidate[],
   item: ItemBase,
   session: DragSession | null,
 ): DropCandidate[] {
   if (candidates.length === 0) return candidates;
-  const cache = new Map<ItemBase, boolean>();
-  const isAllowed = (candidate: DropCandidate): boolean => {
-    const container = candidate.container;
-    let allowed = cache.get(container);
-    if (allowed === undefined) {
-      const canDrop =
-        "callbacks" in container
-          ? (container as any).callbacks?.canDrop
-          : undefined;
-      const groupItems = session?.items ?? [item];
-      allowed = canDrop
-          ? canDrop({
-              session,
-              item,
-              itemId: item.resolvedItemId,
-              itemMetadata: item.metadata,
-              items: groupItems,
-              itemIds: groupItems.map((member) => member.resolvedItemId),
-              itemsMetadata: groupItems.map((member) => member.metadata),
-            container,
-            containerMetadata: (container as any).metadata,
-            index: candidate.index,
-          }) !== false
-        : true;
-      cache.set(container, allowed);
+  const byContainer = new Map<ItemBase, DropCandidate[]>();
+  for (const candidate of candidates) {
+    const group = byContainer.get(candidate.container);
+    if (group) {
+      group.push(candidate);
+    } else {
+      byContainer.set(candidate.container, [candidate]);
     }
-    return allowed;
-  };
-  return candidates.filter(isAllowed);
+  }
+
+  const eligible: DropCandidate[] = [];
+  for (const [container, directCandidates] of byContainer) {
+    const callbacks =
+      "callbacks" in container ? (container as any).callbacks : undefined;
+    let event:
+      | (Omit<DropPriorityEvent, "staticPriority"> &
+          Pick<CanDropEvent, "index">)
+      | undefined;
+    const getEvent = () =>
+      (event ??= dropPolicyEvent(directCandidates[0], item, session));
+    if (callbacks?.canDrop?.(getEvent() as CanDropEvent) === false) continue;
+
+    const staticPriority = configuredDropPriority(container);
+    const override = callbacks?.getDropPriority
+      ? callbacks.getDropPriority({
+          ...getEvent(),
+          staticPriority,
+        } as DropPriorityEvent)
+      : undefined;
+    if (override !== undefined && !Number.isFinite(override)) {
+      throw new TypeError(
+        `SnapSort Container ${container.id}: getDropPriority must return a finite number or undefined.`,
+      );
+    }
+    const priority = override ?? staticPriority;
+    for (const candidate of directCandidates) {
+      candidate.priority = priority;
+      eligible.push(candidate);
+    }
+  }
+
+  if (eligible.length === 0) return eligible;
+  const highestPriority = Math.max(
+    ...eligible.map((candidate) => candidate.priority),
+  );
+  return eligible.filter((candidate) => candidate.priority === highestPriority);
 }
 
 export function determineDropTarget(
@@ -1382,7 +1346,7 @@ export function determineDropTarget(
     root,
     session,
   );
-  const allowed = filterCandidatesByCanDrop(candidates, item, session);
+  const allowed = applyDropPolicy(candidates, item, session);
   const best = chooseEuclideanCandidate(allowed);
   drawCandidateDebug(root, item, allowed, best, {
     topCandidates: true,
@@ -1402,7 +1366,7 @@ export function determineProgressiveDropTarget(
     root,
     session,
   );
-  const allowed = filterCandidatesByCanDrop(candidates, item, session);
+  const allowed = applyDropPolicy(candidates, item, session);
   const best = chooseProgressiveCandidate(allowed, dragCenterX, dragCenterY);
   drawCandidateDebug(root, item, allowed, best);
   debugDropTargetTree(root, item);
@@ -1419,7 +1383,7 @@ export function determineInsertionDropTarget(
     root,
     session,
   );
-  const allowed = filterCandidatesByCanDrop(candidates, item, session);
+  const allowed = applyDropPolicy(candidates, item, session);
   const best = chooseInsertionCandidate(allowed, pointerX, pointerY);
   drawCandidateDebug(root, item, allowed, best);
   debugDropTargetTree(root, item);
@@ -1430,7 +1394,7 @@ export function determineInsertionDropTarget(
  * Resolve swap mode's drop target: unlike the other modes, this doesn't
  * resolve a gap — it resolves whichever *item* the pointer's hitbox
  * currently matches (via `findHoveredItem`), anywhere in the tree reachable
- * from `root` under the dragged item's group. `index` is that item's live
+ * from `root`. `index` is that item's live
  * position in its own container, meaning "swap with whatever is here."
  */
 export function determineSwapDropTarget(
@@ -1438,75 +1402,67 @@ export function determineSwapDropTarget(
   root: ItemBase,
   session: DragSession | null = null,
 ): DropCandidate | null {
-  const sourceParent = "parent" in item ? (item as any).parent : null;
-  const sourceGroupID = sourceParent ? groupIDOf(sourceParent) : undefined;
+  if (!session) return null;
+  const candidates: DropCandidate[] = [];
 
-  let best: DropCandidate | null = null;
-  let bestArea = Infinity;
-
-  const visit = (container: ItemBase) => {
+  const visit = (container: ItemBase, treeDepth = 0) => {
     if (container === item) return;
 
-    if (session && compatibleInsertionContainer(container, sourceGroupID)) {
+    if (isInsertionContainer(container)) {
       const hovered = findHoveredItem(item, container, session);
       const index = hovered ? container.itemOrderedList.indexOf(hovered) : -1;
       if (hovered && index !== -1) {
         const box = requireDragSnapshotBox(hovered);
-        const area = box.width * box.height;
-        if (area < bestArea) {
-          bestArea = area;
-          const centerX = box.x + box.width / 2;
-          const centerY = box.y + box.height / 2;
-          best = {
-            container,
-            index,
-            ghostCenterX: centerX,
-            ghostCenterY: centerY,
-            distance: euclidean(
-              centerX,
-              centerY,
-              session.pointer.x,
-              session.pointer.y,
-            ),
-            groupDistance: euclidean(
-              centerX,
-              centerY,
-              session.pointer.x,
-              session.pointer.y,
-            ),
-            priority: 0,
-            lineIndex: 0,
-            dragLineIndex: 0,
-            lineDistance: 0,
-            treeDepth: 0,
-            prevPosition: null,
-            nextPosition: null,
-            placementRect: box,
-            placementDistance: distanceToRect(
-              box,
-              session.pointer.x,
-              session.pointer.y,
-            ),
-            placementContainsDragCenter: containsPoint(
-              box,
-              session.pointer.x,
-              session.pointer.y,
-            ),
-          };
-        }
+        const centerX = box.x + box.width / 2;
+        const centerY = box.y + box.height / 2;
+        const distance = euclidean(
+          centerX,
+          centerY,
+          session.pointer.x,
+          session.pointer.y,
+        );
+        candidates.push({
+          container,
+          index,
+          ghostCenterX: centerX,
+          ghostCenterY: centerY,
+          distance,
+          groupDistance: distance,
+          priority: 0,
+          lineIndex: 0,
+          dragLineIndex: 0,
+          lineDistance: 0,
+          treeDepth,
+          prevPosition: null,
+          nextPosition: null,
+          placementRect: box,
+          placementDistance: distanceToRect(session.pointer, box),
+          placementContainsDragCenter: pointIntersectsRect(
+            session.pointer,
+            box,
+          ),
+        });
       }
     }
 
     for (const child of dragSnapshotItems(container)) {
       if (isContainerObject(child)) {
-        visit(child);
+        visit(child, treeDepth + 1);
       }
     }
   };
 
   visit(root);
-  const allowed = best ? filterCandidatesByCanDrop([best], item, session) : [];
-  return allowed[0] ?? null;
+  const allowed = applyDropPolicy(candidates, item, session);
+  let best: DropCandidate | null = null;
+  for (const candidate of allowed) {
+    const area = candidate.placementRect.width * candidate.placementRect.height;
+    const bestArea = best
+      ? best.placementRect.width * best.placementRect.height
+      : Infinity;
+    if (area < bestArea) best = candidate;
+  }
+  return best;
 }
 
 export function debugDropTargetTree(node: ItemBase, draggedItem: ItemBase) {

@@ -12,6 +12,7 @@
   "types": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",
+    "./callbacks": "./src/callbacks.ts",
     "./container": "./src/container.ts",
     "./item": "./src/item.ts",
     "./svelte": "./src/svelte/index.ts",
