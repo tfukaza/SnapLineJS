@@ -1,6 +1,6 @@
 <script lang="ts">
   import { Engine } from "@snap-engine/asset-base/svelte";
-  import type { CanDropEvent, ItemMoveEvent } from "@snap-engine/snapsort";
+  import { defaultAnimations, type CanDropEvent, type ItemMoveEvent } from "@snap-engine/snapsort";
   import { Container, Ghost, Item } from "@snap-engine/snapsort/svelte";
   import ClientDemoFrame from "$lib/components/ClientDemoFrame.svelte";
 
@@ -63,7 +63,7 @@
             itemId="1"
             className="snapsort-concepts-container slot shallow"
             metadata={{ zone: "outer" }}
-            config={{ mode: "progressive", direction: "column", callbacks }}
+            config={{ animation: defaultAnimations, mode: "progressive", direction: "column", callbacks }}
             items={outerEntries}
           >
             {#snippet before()}
@@ -80,7 +80,7 @@
                   locked={false}
                   className="snapsort-concepts-container is-nested slot shallow"
                   metadata={{ zone: "nested" }}
-                  config={{ mode: "progressive", direction: "column", callbacks }}
+                  config={{ animation: defaultAnimations, mode: "progressive", direction: "column", callbacks }}
                   items={nestedItems}
                 >
                   {#snippet before()}

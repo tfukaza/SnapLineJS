@@ -1,6 +1,6 @@
 <script lang="ts">
   import { Container, Handle, Item } from "@snap-engine/snapsort/svelte";
-  import type { ContainerConfig, ItemMoveEvent } from "@snap-engine/snapsort";
+  import { defaultAnimations, type ContainerConfig, type ItemMoveEvent } from "@snap-engine/snapsort";
   import SnapSortContextBoundary from "../SnapSortContextBoundary.svelte";
   import { moveEntries, moveEntriesAcrossLists } from "./listState";
 
@@ -98,7 +98,9 @@
   }
 
   function getCustomizableThemeConfig(themeId: string): Partial<ContainerConfig> {
-    return themeId === "retro" || themeId === "terminal" ? { animation: null } : {};
+    return themeId === "retro" || themeId === "terminal"
+      ? { animation: null }
+      : { animation: defaultAnimations };
   }
 
   $effect(() => {

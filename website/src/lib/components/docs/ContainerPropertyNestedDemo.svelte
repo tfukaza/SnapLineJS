@@ -1,6 +1,6 @@
 <script lang="ts">
   import { Engine } from "@snap-engine/asset-base/svelte";
-  import type { ItemMoveEvent } from "@snap-engine/snapsort";
+  import { defaultAnimations, type ItemMoveEvent } from "@snap-engine/snapsort";
   import { rejectDrop } from "@snap-engine/snapsort/callbacks";
   import { Container, Item } from "@snap-engine/snapsort/svelte";
 
@@ -41,7 +41,7 @@
     <Container
       className="nested-root"
       items={groups}
-      config={{ callbacks: { onItemMove } }}
+      config={{ animation: defaultAnimations, callbacks: { onItemMove } }}
     >
       {#snippet entry(group)}
         <Container
@@ -50,7 +50,7 @@
           selected={selectedIds.has(group.id)}
           className={`nested-card${selectedIds.has(group.id) ? " is-selected" : ""}`}
           items={[]}
-          config={{ callbacks: { canDrop: rejectDrop } }}
+          config={{ animation: defaultAnimations, callbacks: { canDrop: rejectDrop } }}
         >
           {#snippet before()}
             <div class="nested-card-content">

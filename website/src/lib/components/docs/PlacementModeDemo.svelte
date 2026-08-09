@@ -7,6 +7,7 @@
     ItemSwapEvent,
     SortMode,
   } from "@snap-engine/snapsort";
+  import { defaultAnimations } from "@snap-engine/snapsort";
   import { Container, Ghost, Item } from "@snap-engine/snapsort/svelte";
   import { untrack } from "svelte";
 
@@ -104,7 +105,7 @@
       <Engine id={`placement-mode-${mode}-${comparison ? "comparison" : "default"}`} {debug}>
       <Container
         className={`placement-demo-list placement-demo-${mode}${comparison ? " placement-demo-comparison" : ""} card`}
-        config={{ mode, direction, callbacks }}
+        config={{ animation: defaultAnimations, mode, direction, callbacks }}
         items={items}
       >
         {#snippet entry(item)}

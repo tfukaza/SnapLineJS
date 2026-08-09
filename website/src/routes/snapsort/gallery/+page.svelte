@@ -25,6 +25,7 @@
     ItemRemoveEvent,
     ItemSwapEvent,
   } from "@snap-engine/snapsort";
+  import { defaultAnimations } from "@snap-engine/snapsort";
   import {
     prioritizeIntersectingContainer,
     rejectDrop,
@@ -1017,7 +1018,7 @@
         </div>
         <div class="project-list">
           <Container
-            config={{ direction: "column", callbacks: { onItemMove: handleTodoMove } }}
+            config={{ animation: defaultAnimations, direction: "column", callbacks: { onItemMove: handleTodoMove } }}
             items={todoItems}
             getItemId={(todo) => todo.id}
           >
@@ -1057,6 +1058,7 @@
         <div class="kanban-board">
           <Container
             config={{
+              animation: defaultAnimations,
               direction: "row",
               name: "kanban-root",
               callbacks: { canDrop: rejectDrop },
@@ -1070,6 +1072,7 @@
                 className="kanban-column"
                 itemId={column.id}
                 config={{
+                  animation: defaultAnimations,
                   direction: "column",
                   name: column.id,
                   callbacks: { onItemMove: handleKanbanMove },
@@ -1141,6 +1144,7 @@
             <Container
               className="sentence-workspace-root"
               config={{
+                animation: defaultAnimations,
                 mode: "progressive",
                 direction: "column",
                 name: "sentence-root",
@@ -1284,6 +1288,7 @@
           <Container
             className="clone-root"
             config={{
+              animation: defaultAnimations,
               direction: "row",
               name: "clone-root",
               callbacks: {
@@ -1302,6 +1307,7 @@
                   className="clone-palette"
                   itemId="clone-palette"
                   config={{
+                    animation: defaultAnimations,
                     direction: "column",
                     name: "clone-palette",
                     callbacks: {
@@ -1326,6 +1332,7 @@
                   className="clone-canvas"
                   itemId="clone-canvas"
                   config={{
+                    animation: defaultAnimations,
                     direction: "column",
                     name: "clone-canvas",
                     callbacks: {
@@ -1397,6 +1404,7 @@
           <Container
             className="trash-root"
             config={{
+              animation: defaultAnimations,
               direction: "column",
               name: "trash-root",
               callbacks: {
@@ -1415,6 +1423,7 @@
                   className="trash-list"
                   itemId="trash-zone-list"
                   config={{
+                    animation: defaultAnimations,
                     direction: "column",
                     name: "trash-list",
                     callbacks: {
@@ -1440,6 +1449,7 @@
                     className="trash-drop-target"
                     itemId="trash-zone-bin"
                     config={{
+                      animation: defaultAnimations,
                       direction: "column",
                       name: "trash-bin",
                       callbacks: {
@@ -1571,7 +1581,7 @@
             </div>
             <Container
               className="editor-field-list"
-              config={{ direction: "column", callbacks: { onItemMove: handleEditorFieldMove } }}
+              config={{ animation: defaultAnimations, direction: "column", callbacks: { onItemMove: handleEditorFieldMove } }}
               items={editorFields}
               getItemId={(field) => field.id}
             >
@@ -1601,6 +1611,7 @@
                           <Container
                             className="editor-option-stack"
                             config={{
+                              animation: defaultAnimations,
                               mode: "progressive",
                               direction: "column",
                               name: `editor-options-${field.id}`,
@@ -1668,6 +1679,7 @@
                           <Container
                             className="editor-option-stack"
                             config={{
+                              animation: defaultAnimations,
                               mode: "progressive",
                               direction: "column",
                               name: `editor-options-${field.id}`,
@@ -1735,6 +1747,7 @@
                           <Container
                             className="editor-option-stack"
                             config={{
+                              animation: defaultAnimations,
                               mode: "progressive",
                               direction: "column",
                               name: `editor-options-${field.id}`,

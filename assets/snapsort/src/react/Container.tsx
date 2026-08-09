@@ -145,9 +145,7 @@ export const Container = forwardRef<ContainerObject, ContainerProps>(
     container.config.mode = config.mode ?? container.config.mode;
     container.config.strategy = config.strategy ?? container.config.strategy;
     container.config.name = config.name ?? container.config.name;
-    container.config.animation = config.animation ?? container.config.animation;
-    container.config.disableFlip =
-      config.disableFlip ?? container.config.disableFlip;
+    container.config.animation = config.animation;
     container.config.domOwnership = "framework";
     container.config.callbacks = callbacks;
     container.direction = direction;

@@ -78,7 +78,7 @@ test("Svelte Container properties use live, keyboard-accessible Demo and Code ta
   await expect(sortable.locator(".snapsort-item")).toHaveCount(2);
   await sortable.getByRole("tab", { name: "Code" }).click();
   await expect(sortable.getByRole("tabpanel")).toContainText(
-    "config={{ callbacks: { onItemMove } }}",
+    "config={{ animation: defaultAnimations, callbacks: { onItemMove } }}",
   );
 
   const mixed = page.locator('[data-demo-code-tabs="container-intro-mixed"]');

@@ -1,6 +1,7 @@
 <script lang="ts">
     import { Engine } from "@snap-engine/asset-base/svelte";
     import { Container, Item } from "@snap-engine/snapsort/svelte";
+    import { defaultAnimations } from "@snap-engine/snapsort";
     import { rejectDrop } from "@snap-engine/snapsort/callbacks";
     import type { Engine as EngineClass } from "@snap-engine/core";
     import type { ItemMoveEvent } from "@snap-engine/snapsort";
@@ -131,7 +132,7 @@
         <h3>Vertical Column</h3>
         <div class="container-wrapper">
             <Container
-                config={{ direction: "column", callbacks: { onItemMove: handleFlatMove } }}
+                config={{ animation: defaultAnimations, direction: "column", callbacks: { onItemMove: handleFlatMove } }}
                 metadata={{ list: "vertical" }}
                 items={verticalItems}
                 getItemId={(n) => `vertical-${n}`}
@@ -148,7 +149,7 @@
         <h3>Horizontal Row</h3>
         <div class="container-wrapper" style="min-height: 60px;">
             <Container
-                config={{ direction: "row", callbacks: { onItemMove: handleFlatMove } }}
+                config={{ animation: defaultAnimations, direction: "row", callbacks: { onItemMove: handleFlatMove } }}
                 metadata={{ list: "horizontal" }}
                 items={horizontalItems}
                 getItemId={(n) => `horizontal-${n}`}
@@ -165,7 +166,7 @@
         <h3>Horizontal Double Row</h3>
         <div class="container-wrapper">
             <Container
-                config={{ direction: "row", callbacks: { onItemMove: handleFlatMove } }}
+                config={{ animation: defaultAnimations, direction: "row", callbacks: { onItemMove: handleFlatMove } }}
                 metadata={{ list: "double" }}
                 items={doubleRowItems}
                 getItemId={(n) => `double-row-${n}`}
@@ -182,7 +183,7 @@
         <h3>Different Sizes</h3>
         <div class="container-wrapper">
             <Container
-                config={{ direction: "row", callbacks: { onItemMove: handleFlatMove } }}
+                config={{ animation: defaultAnimations, direction: "row", callbacks: { onItemMove: handleFlatMove } }}
                 metadata={{ list: "sizes" }}
                 items={sizedItems}
                 getItemId={(entry) => entry.label}
@@ -202,6 +203,7 @@
         <div class="areas-wrapper">
             <Container
                 config={{
+                    animation: defaultAnimations,
                     direction: "row",
                     name: "multi-root",
                     callbacks: { canDrop: rejectDrop },
@@ -213,7 +215,7 @@
                 {#snippet entry(zone)}
                     <Container
                         itemId={`multi-${zone}`}
-                        config={{ direction: "column", name: `multi-${zone}`, callbacks: { onItemMove: (event) => moveAreaItem(event, false) } }}
+                        config={{ animation: defaultAnimations, direction: "column", name: `multi-${zone}`, callbacks: { onItemMove: (event) => moveAreaItem(event, false) } }}
                         metadata={{ area: zone }}
                         locked={true}
                         items={areaItems[zone]}
@@ -235,6 +237,7 @@
         <div class="areas-wrapper-row">
             <Container
                 config={{
+                    animation: defaultAnimations,
                     direction: "column",
                     name: "multi-row-root",
                     callbacks: { canDrop: rejectDrop },
@@ -246,7 +249,7 @@
                 {#snippet entry(zone)}
                     <Container
                         itemId={`multi-row-${zone}`}
-                        config={{ direction: "row", name: `multi-row-${zone}`, callbacks: { onItemMove: (event) => moveAreaItem(event, true) } }}
+                        config={{ animation: defaultAnimations, direction: "row", name: `multi-row-${zone}`, callbacks: { onItemMove: (event) => moveAreaItem(event, true) } }}
                         metadata={{ area: zone }}
                         locked={true}
                         items={rowAreaItems[zone]}

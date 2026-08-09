@@ -778,7 +778,6 @@ export class Item extends ElementObject {
     if (!container) return null;
     const config = container.configuration;
     if (config.animation === null) return null;
-    if (config.disableFlip) return null;
     return config.animation?.reorder ?? null;
   }
 
@@ -787,7 +786,6 @@ export class Item extends ElementObject {
     if (!container) return null;
     const config = container.configuration;
     if (config.animation === null) return null;
-    if (config.disableFlip) return null;
     return config.animation?.drop ?? null;
   }
 

@@ -3,7 +3,7 @@
   import { Container, Ghost, Item } from "@snap-engine/snapsort/svelte";
   import { rejectDrop } from "@snap-engine/snapsort/callbacks";
   import type { Engine as EngineClass } from "@snap-engine/core";
-  import type { ItemMoveEvent } from "@snap-engine/snapsort";
+  import { defaultAnimations, type ItemMoveEvent } from "@snap-engine/snapsort";
 
   let engineInstance: EngineClass | null = $state(null);
   let debugMode = $state(false);
@@ -24,7 +24,7 @@
           drop: { duration: 800, timing_function: "linear" },
         },
       }
-    : {};
+    : { animation: defaultAnimations };
 
   const DEBUG_TAGS = [
     { id: "grid", label: "Grid" },
@@ -375,7 +375,7 @@
             <h2>Vertical Column</h2>
             <p class="demo-hint">Cmd/ctrl-click to multi-select, then drag any selected item.</p>
             <Container
-              config={{ callbacks: { onItemMove: handleVerticalMove } }}
+              config={{ animation: defaultAnimations, callbacks: { onItemMove: handleVerticalMove } }}
               metadata={{ frameworkList: "vertical" }}
               items={verticalItems}
               getItemId={(n) => `vertical-${n}`}
@@ -396,7 +396,7 @@
           <article class="demo-cell">
             <h2>Horizontal Row</h2>
             <Container
-              config={{ direction: "row", callbacks: { onItemMove: handleHorizontalMove } }}
+              config={{ animation: defaultAnimations, direction: "row", callbacks: { onItemMove: handleHorizontalMove } }}
               metadata={{ frameworkList: "horizontal" }}
               locked={true}
               items={horizontalRowItems}
@@ -411,7 +411,7 @@
           <article class="demo-cell wide">
             <h2>Horizontal Double Row</h2>
             <Container
-              config={{ direction: "row", callbacks: { onItemMove: handleDoubleRowMove } }}
+              config={{ animation: defaultAnimations, direction: "row", callbacks: { onItemMove: handleDoubleRowMove } }}
               metadata={{ frameworkList: "double" }}
               items={doubleRowItems}
               getItemId={(n) => `double-row-${n}`}
@@ -430,7 +430,7 @@
           <article class="demo-cell wide size-demo">
             <h2>Different Sizes</h2>
             <Container
-              config={{ direction: "row", callbacks: { onItemMove: handleSizedMove } }}
+              config={{ animation: defaultAnimations, direction: "row", callbacks: { onItemMove: handleSizedMove } }}
               metadata={{ frameworkList: "sizes" }}
               items={sizedItems}
               getItemId={(entry) => entry.label}
@@ -447,6 +447,7 @@
             <h2>Multiple Drop Areas</h2>
             <Container
               config={{
+                animation: defaultAnimations,
                 direction: "row",
                 name: "multi-root",
                 callbacks: { canDrop: rejectDrop },
@@ -458,7 +459,7 @@
               {#snippet entry(area)}
                 <Container
                   itemId={`multi-root-${area}`}
-                  config={{ direction: "column", name: `multi-${area}`, callbacks: { onItemMove: handleMultiAreaMove } }}
+                  config={{ animation: defaultAnimations, direction: "column", name: `multi-${area}`, callbacks: { onItemMove: handleMultiAreaMove } }}
                   metadata={{ area }}
                   locked={true}
                   items={multiAreaList(area)}
@@ -570,7 +571,7 @@
           <article class="demo-cell">
             <h2>Draggable Sub-Containers</h2>
             <Container
-              config={{ direction: "column", callbacks: { onItemMove: handleDragNestedMove } }}
+              config={{ animation: defaultAnimations, direction: "column", callbacks: { onItemMove: handleDragNestedMove } }}
               metadata={{ frameworkList: "drag-outer" }}
               locked={true}
               items={dragNestedEntries}
@@ -580,7 +581,7 @@
                 {#if e.kind === "group"}
                   <Container
                     itemId={e.id}
-                    config={{ direction: "column", callbacks: { onItemMove: handleDragNestedMove } }}
+                    config={{ animation: defaultAnimations, direction: "column", callbacks: { onItemMove: handleDragNestedMove } }}
                     metadata={{ frameworkList: `drag-${e.id}` }}
                     locked={false}
                     items={e.labels}
@@ -600,7 +601,7 @@
           <article class="demo-cell">
             <h2>Nested Row Groups</h2>
             <Container
-              config={{ direction: "row", callbacks: { onItemMove: handleNestedRowMove } }}
+              config={{ animation: defaultAnimations, direction: "row", callbacks: { onItemMove: handleNestedRowMove } }}
               metadata={{ frameworkList: "row-outer" }}
               locked={true}
               items={nestedRowEntries}
@@ -612,7 +613,7 @@
                 {:else}
                   <Container
                     itemId="nested-row-sub-group"
-                    config={{ direction: "row", callbacks: { onItemMove: handleNestedRowMove } }}
+                    config={{ animation: defaultAnimations, direction: "row", callbacks: { onItemMove: handleNestedRowMove } }}
                     metadata={{ frameworkList: "row-inner" }}
                     locked={false}
                     items={nestedRowChildren}
@@ -630,7 +631,7 @@
           <article class="demo-cell">
             <h2>Layers Panel</h2>
             <Container
-              config={{ direction: "column", callbacks: { onItemMove: handleLayerMove } }}
+              config={{ animation: defaultAnimations, direction: "column", callbacks: { onItemMove: handleLayerMove } }}
               metadata={{ frameworkList: "layers-outer" }}
               locked={true}
               items={layerEntries}
@@ -647,7 +648,7 @@
                 {:else}
                   <Container
                     itemId={e.id}
-                    config={{ direction: "column", callbacks: { onItemMove: handleLayerMove } }}
+                    config={{ animation: defaultAnimations, direction: "column", callbacks: { onItemMove: handleLayerMove } }}
                     metadata={{ frameworkList: `layers-${e.id}` }}
                     locked={false}
                     items={e.children}

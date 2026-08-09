@@ -1,6 +1,6 @@
 <script lang="ts">
   import { Engine } from "@snap-engine/asset-base/svelte";
-  import type { ItemMoveEvent } from "@snap-engine/snapsort";
+  import { defaultAnimations, type ItemMoveEvent } from "@snap-engine/snapsort";
   import { Container, Item } from "@snap-engine/snapsort/svelte";
 
   type Task = { key: string; label: string };
@@ -24,7 +24,7 @@
     className="property-list"
     items={tasks}
     getItemId={(task) => task.key}
-    config={{ callbacks: { onItemMove } }}
+    config={{ animation: defaultAnimations, callbacks: { onItemMove } }}
   >
     {#snippet entry(task)}
       <Item itemId={task.key} className="property-item">

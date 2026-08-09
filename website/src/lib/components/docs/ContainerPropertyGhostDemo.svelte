@@ -1,6 +1,6 @@
 <script lang="ts">
   import { Engine } from "@snap-engine/asset-base/svelte";
-  import type { ItemMoveEvent } from "@snap-engine/snapsort";
+  import { defaultAnimations, type ItemMoveEvent } from "@snap-engine/snapsort";
   import { Container, Ghost, Item } from "@snap-engine/snapsort/svelte";
 
   let notes = $state([
@@ -22,7 +22,7 @@
   <Container
     className="ghost-list"
     items={notes}
-    config={{ callbacks: { onItemMove } }}
+    config={{ animation: defaultAnimations, callbacks: { onItemMove } }}
   >
     {#snippet entry(note)}
       <Item itemId={note.id} className="ghost-item">{note.label}</Item>

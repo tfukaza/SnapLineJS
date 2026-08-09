@@ -22,13 +22,17 @@ their bindings from `@snap-engine/snapsort/svelte` or
 - `Container`
 - `Item`
 - `DragSession`
+- `defaultAnimations` - opt-in 100ms reorder, drop, and click-move animation preset
 - Event types: `ItemInsertEvent`, `ItemRemoveEvent`, `ItemMoveEvent`, `ItemSwapEvent`, `GhostCreateEvent`, `GhostInsertEvent`, `GhostRemoveEvent`, `DragStartEvent`, `DragEndEvent`, `DropTargetChangeEvent`, `CanDropEvent`, `DropPriorityEvent`, `VisualGeometryInvalidationEvent`, `DragLocation`
 - `ContainerCallbacks`, `ContainerConfig`, `SortMode`, `SortStrategy`
 
 ```ts
-import { Container, Item } from "@snap-engine/snapsort";
+import { Container, defaultAnimations, Item } from "@snap-engine/snapsort";
 
-const container = new Container(engine, parent, { mode: "insertion" });
+const container = new Container(engine, parent, {
+  mode: "insertion",
+  animation: defaultAnimations,
+});
 ```
 
 ## Drop eligibility and priority
@@ -128,6 +132,11 @@ Remove the old adapter package from your dependencies and install
 `@snap-engine/snapsort` instead. The package root remains the framework-neutral
 API. Version 0.5 does not include compatibility shims for the retired package
 names.
+
+Animations are also opt-in. Omit `ContainerConfig.animation` for immediate
+reorders and drops, or pass the exported `defaultAnimations` preset to retain
+SnapSort's standard 100ms motion. The former `disableFlip` option has been
+removed; `animation: null` and per-channel `null` values remain supported.
 
 ## DOM ownership contract
 

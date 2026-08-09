@@ -179,6 +179,7 @@
     itemContainer.wrap = config.wrap ?? "auto";
     itemContainer.stretchItems = config.stretchItems ?? false;
     itemContainer.dropPriority = config.dropPriority ?? 0;
+    itemContainer.config.animation = config.animation;
     itemContainer.config.domOwnership = "framework";
     itemContainer.config.callbacks = frameworkCallbacks(config.callbacks);
   });

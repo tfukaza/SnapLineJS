@@ -20,7 +20,10 @@ import {
   prioritizePointerContainer,
   rejectDrop,
 } from "../../assets/snapsort/src/callbacks";
-import { Container as SnapSortContainer } from "../../assets/snapsort/src/container";
+import {
+  Container as SnapSortContainer,
+  defaultAnimations,
+} from "../../assets/snapsort/src/container";
 import type {
   CanDropEvent,
   DropPriorityEvent,
@@ -37,6 +40,50 @@ import {
 } from "../helpers/layout-grid";
 
 type Rect = { x: number; y: number; width: number; height: number };
+
+test("container animations are opt-in and expose the standard preset", () => {
+  let nextId = 0;
+  const engine = {
+    global: {
+      data: {},
+      queue: {},
+      createId: () => `animation-config-test-${++nextId}`,
+      registerObject: () => {},
+    },
+    input: {
+      subscribeGlobalCursorEvent: () => {},
+      unsubscribeGlobalCursorEvent: () => {},
+    },
+  };
+
+  const immediate = new SnapSortContainer(engine, null);
+  const animated = new SnapSortContainer(engine, null, {
+    animation: defaultAnimations,
+  });
+  const partiallyDisabled = new SnapSortContainer(engine, null, {
+    animation: { reorder: null, drop: defaultAnimations.drop },
+  });
+  const disabled = new SnapSortContainer(engine, null, { animation: null });
+
+  expect(immediate.configuration.animation).toBeUndefined();
+  expect(immediate.reorderAnimationConfig(immediate)).toBeNull();
+  expect(immediate.dropAnimationConfig(immediate)).toBeNull();
+  expect(defaultAnimations).toEqual({
+    reorder: { duration: 100, timing_function: "ease-out" },
+    drop: { duration: 100, timing_function: "ease-out" },
+    clickMove: { duration: 100, timing_function: "ease-out" },
+  });
+  expect(animated.reorderAnimationConfig(animated)).toBe(
+    defaultAnimations.reorder,
+  );
+  expect(animated.dropAnimationConfig(animated)).toBe(defaultAnimations.drop);
+  expect(partiallyDisabled.reorderAnimationConfig(partiallyDisabled)).toBeNull();
+  expect(partiallyDisabled.dropAnimationConfig(partiallyDisabled)).toBe(
+    defaultAnimations.drop,
+  );
+  expect(disabled.reorderAnimationConfig(disabled)).toBeNull();
+  expect(disabled.dropAnimationConfig(disabled)).toBeNull();
+});
 
 test("framework container ownership never inherits Vanilla DOM callbacks", () => {
   let nextId = 0;

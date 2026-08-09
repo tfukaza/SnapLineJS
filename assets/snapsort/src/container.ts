@@ -20,6 +20,12 @@ export interface ContainerAnimations {
   clickMove?: AnimationConfig | null;
 }
 
+export const defaultAnimations: ContainerAnimations = {
+  reorder: { duration: 100, timing_function: "ease-out" },
+  drop: { duration: 100, timing_function: "ease-out" },
+  clickMove: { duration: 100, timing_function: "ease-out" },
+};
+
 export interface ContainerConfig {
   /**
    * @internal DOM structure is owned either by the core Vanilla defaults or
@@ -44,7 +50,6 @@ export interface ContainerConfig {
   stretchItems?: boolean;
   name?: string;
   animation?: ContainerAnimations | null;
-  disableFlip?: boolean;
   /** Base priority assigned to every drop candidate owned directly by this container. Default `0`. */
   dropPriority?: number;
   callbacks?: ContainerCallbacks;
@@ -54,11 +59,6 @@ const defaultConfig: ContainerConfig = {
   domOwnership: "core",
   mode: "euclidean",
   direction: "column",
-  animation: {
-    reorder: { duration: 100, timing_function: "ease-out" },
-    drop: { duration: 100, timing_function: "ease-out" },
-    clickMove: { duration: 100, timing_function: "ease-out" },
-  },
   dropPriority: 0,
   callbacks: defaultCallbacks,
 };

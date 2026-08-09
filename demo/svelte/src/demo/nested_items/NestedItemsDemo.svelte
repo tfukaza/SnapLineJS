@@ -1,6 +1,7 @@
 <script lang="ts">
     import { Engine } from "@snap-engine/asset-base/svelte";
     import { Container, Item } from "@snap-engine/snapsort/svelte";
+    import { defaultAnimations } from "@snap-engine/snapsort";
     import type { Engine as EngineClass } from "@snap-engine/core";
     import type { ItemMoveEvent } from "@snap-engine/snapsort";
 
@@ -246,7 +247,7 @@
         </div>
         <div class="demo-body">
             <Container
-                config={{ direction: "column", callbacks: { onItemMove: handleFlatMove } }}
+                config={{ animation: defaultAnimations, direction: "column", callbacks: { onItemMove: handleFlatMove } }}
                 metadata={{ frameworkList: "flat" }}
                 locked={true}
                 items={flatItems}
@@ -267,7 +268,7 @@
         </div>
         <div class="demo-body">
             <Container
-                config={{ direction: "column", callbacks: { onItemMove: handleNestedMove } }}
+                config={{ animation: defaultAnimations, direction: "column", callbacks: { onItemMove: handleNestedMove } }}
                 metadata={{ frameworkList: "nested-outer" }}
                 locked={true}
                 items={nestedGroupEntries}
@@ -279,7 +280,7 @@
                     {:else}
                         <Container
                             itemId="nested-sub-group"
-                            config={{ direction: "column", callbacks: { onItemMove: handleNestedMove } }}
+                            config={{ animation: defaultAnimations, direction: "column", callbacks: { onItemMove: handleNestedMove } }}
                             metadata={{ frameworkList: "nested-inner" }}
                             locked={false}
                             items={nestedGroupChildren}
@@ -303,7 +304,7 @@
         </div>
         <div class="demo-body">
             <Container
-                config={{ direction: "column", callbacks: { onItemMove: handleDragNestedMove } }}
+                config={{ animation: defaultAnimations, direction: "column", callbacks: { onItemMove: handleDragNestedMove } }}
                 metadata={{ frameworkList: "drag-outer" }}
                 locked={true}
                 items={dragNestedEntries}
@@ -313,7 +314,7 @@
                     {#if e.kind === "group"}
                         <Container
                             itemId={e.id}
-                            config={{ direction: "column", callbacks: { onItemMove: handleDragNestedMove } }}
+                            config={{ animation: defaultAnimations, direction: "column", callbacks: { onItemMove: handleDragNestedMove } }}
                             metadata={{ frameworkList: `drag-${e.id}` }}
                             locked={false}
                             items={e.labels}
@@ -339,7 +340,7 @@
         </div>
         <div class="demo-body">
             <Container
-                config={{ direction: "row", callbacks: { onItemMove: handleRowMove } }}
+                config={{ animation: defaultAnimations, direction: "row", callbacks: { onItemMove: handleRowMove } }}
                 metadata={{ frameworkList: "row" }}
                 locked={true}
                 items={rowItems}
@@ -360,7 +361,7 @@
         </div>
         <div class="demo-body">
             <Container
-                config={{ direction: "row", callbacks: { onItemMove: handleNestedRowMove } }}
+                config={{ animation: defaultAnimations, direction: "row", callbacks: { onItemMove: handleNestedRowMove } }}
                 metadata={{ frameworkList: "nested-row-outer" }}
                 locked={true}
                 items={nestedRowEntries}
@@ -372,7 +373,7 @@
                     {:else}
                         <Container
                             itemId="nested-row-sub-group"
-                            config={{ direction: "row", callbacks: { onItemMove: handleNestedRowMove } }}
+                            config={{ animation: defaultAnimations, direction: "row", callbacks: { onItemMove: handleNestedRowMove } }}
                             metadata={{ frameworkList: "nested-row-inner" }}
                             locked={false}
                             items={nestedRowChildren}
@@ -396,7 +397,7 @@
         </div>
         <div class="demo-body">
             <Container
-                config={{ direction: "row", callbacks: { onItemMove: handleWrapMove } }}
+                config={{ animation: defaultAnimations, direction: "row", callbacks: { onItemMove: handleWrapMove } }}
                 metadata={{ frameworkList: "wrap" }}
                 locked={true}
                 items={wrapRowItems}
@@ -417,7 +418,7 @@
         </div>
         <div class="layers-panel">
             <Container
-                config={{ direction: "column", callbacks: { onItemMove: handleLayerMove } }}
+                config={{ animation: defaultAnimations, direction: "column", callbacks: { onItemMove: handleLayerMove } }}
                 metadata={{ frameworkList: "layers-outer" }}
                 locked={true}
                 items={layerEntries}
@@ -434,7 +435,7 @@
                     {:else}
                         <Container
                             itemId={e.id}
-                            config={{ direction: "column", callbacks: { onItemMove: handleLayerMove } }}
+                            config={{ animation: defaultAnimations, direction: "column", callbacks: { onItemMove: handleLayerMove } }}
                             metadata={{ frameworkList: `layers-${e.id}` }}
                             locked={false}
                             items={e.children}

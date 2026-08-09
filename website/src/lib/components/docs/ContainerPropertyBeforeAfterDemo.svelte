@@ -1,6 +1,6 @@
 <script lang="ts">
   import { Engine } from "@snap-engine/asset-base/svelte";
-  import type { ItemMoveEvent } from "@snap-engine/snapsort";
+  import { defaultAnimations, type ItemMoveEvent } from "@snap-engine/snapsort";
   import { Container, Item } from "@snap-engine/snapsort/svelte";
 
   let nextId = 3;
@@ -27,7 +27,7 @@
   <Container
     className="before-after-list"
     items={tasks}
-    config={{ callbacks: { onItemMove } }}
+    config={{ animation: defaultAnimations, callbacks: { onItemMove } }}
   >
     {#snippet before()}
       <header class="fixed-content before-content">

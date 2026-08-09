@@ -4,6 +4,7 @@
     Container as SnapSortContainer,
     ItemMoveEvent,
   } from "@snap-engine/snapsort";
+  import { defaultAnimations } from "@snap-engine/snapsort";
   import { rejectDrop } from "@snap-engine/snapsort/callbacks";
   import { Container, Item } from "@snap-engine/snapsort/svelte";
 
@@ -55,7 +56,7 @@
 <Engine id="container-property-metadata">
   <Container
     className="metadata-board"
-    config={{ direction: "row", callbacks: { canDrop: rejectDrop } }}
+    config={{ animation: defaultAnimations, direction: "row", callbacks: { canDrop: rejectDrop } }}
     locked={true}
     items={columns}
     getItemId={(column) => column.id}
@@ -69,7 +70,7 @@
         locked={true}
         items={column.id === "backlog" ? backlog : done}
         metadata={{ label: column.label }}
-        config={{ callbacks: { onItemMove } }}
+        config={{ animation: defaultAnimations, callbacks: { onItemMove } }}
       >
         {#snippet before()}
           <h4>{column.label}</h4>

@@ -5,6 +5,7 @@
     Container as SnapSortContainer,
     ItemMoveEvent,
   } from "@snap-engine/snapsort";
+  import { defaultAnimations } from "@snap-engine/snapsort";
   import { Container, Item } from "@snap-engine/snapsort/svelte";
 
   type Task = { kind: "task"; id: string; label: string };
@@ -80,7 +81,7 @@
   <Container
     items={entries}
     metadata={{ dropGroup: "board-entries" }}
-    config={{ callbacks: { onItemMove: onBoardMove, canDrop: canDropWithinGroup } }}
+    config={{ animation: defaultAnimations, callbacks: { onItemMove: onBoardMove, canDrop: canDropWithinGroup } }}
   >
     {#snippet entry(boardEntry)}
       {#if boardEntry.kind === "task"}
@@ -92,7 +93,7 @@
           locked={false}
           items={boardEntry.items}
           metadata={{ dropGroup: "group-tasks" }}
-          config={{ callbacks: { onItemMove: onTaskMove, canDrop: canDropWithinGroup } }}
+          config={{ animation: defaultAnimations, callbacks: { onItemMove: onTaskMove, canDrop: canDropWithinGroup } }}
         >
           {#snippet before()}
             <strong>{boardEntry.label}</strong>

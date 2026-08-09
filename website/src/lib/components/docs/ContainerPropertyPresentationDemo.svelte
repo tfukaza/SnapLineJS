@@ -1,6 +1,6 @@
 <script lang="ts">
   import { Engine } from "@snap-engine/asset-base/svelte";
-  import type { ItemMoveEvent } from "@snap-engine/snapsort";
+  import { defaultAnimations, type ItemMoveEvent } from "@snap-engine/snapsort";
   import { Container, Item } from "@snap-engine/snapsort/svelte";
 
   let emphasized = $state(true);
@@ -31,7 +31,7 @@
       aria-label="Styled task list"
       data-example-kind="presentation"
       items={tasks}
-      config={{ callbacks: { onItemMove } }}
+      config={{ animation: defaultAnimations, callbacks: { onItemMove } }}
     >
       {#snippet entry(task)}
         <Item itemId={task.id} className="presentation-item">{task.label}</Item>

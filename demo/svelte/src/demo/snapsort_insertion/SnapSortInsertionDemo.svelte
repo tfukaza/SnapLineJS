@@ -1,6 +1,7 @@
 <script lang="ts">
   import { Engine } from "@snap-engine/asset-base/svelte";
   import { Container, Item } from "@snap-engine/snapsort/svelte";
+  import { defaultAnimations } from "@snap-engine/snapsort";
   import { rejectDrop } from "@snap-engine/snapsort/callbacks";
   import type {
     Container as SortContainer,
@@ -192,6 +193,7 @@
     <Container
       className="insertion-board"
       config={{
+        animation: defaultAnimations,
         mode: "insertion",
         direction: "row",
         name: "insertion-board-root",
@@ -211,6 +213,7 @@
           className="insertion-list"
           bind:container={column.container}
           config={{
+            animation: defaultAnimations,
             mode: "insertion",
             direction: "column",
             name: `insertion-${column.id}`,

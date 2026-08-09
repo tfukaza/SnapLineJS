@@ -1,6 +1,6 @@
 <script lang="ts">
   import { Engine } from "@snap-engine/asset-base/svelte";
-  import type { ItemMoveEvent } from "@snap-engine/snapsort";
+  import { defaultAnimations, type ItemMoveEvent } from "@snap-engine/snapsort";
   import { Container, Item } from "@snap-engine/snapsort/svelte";
 
   type Task = { id: string; label: string };
@@ -22,7 +22,7 @@
 </script>
 
 <Engine id="container-intro-sortable">
-  <Container config={{ callbacks: { onItemMove } }} items={todos}>
+  <Container config={{ animation: defaultAnimations, callbacks: { onItemMove } }} items={todos}>
     {#snippet entry(todo)}
       <Item itemId={todo.id}>{todo.label}</Item>
     {/snippet}

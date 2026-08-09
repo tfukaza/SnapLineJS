@@ -1,4 +1,4 @@
-export { Container } from "./container";
+export { Container, defaultAnimations } from "./container";
 export type {
   ContainerConfig,
   AnimationConfig,

@@ -240,10 +240,18 @@ type ContainerProps = {
 | `direction` | `"column"` | Main layout direction: `"column"` or `"row"`. |
 | `mainAxisAlign` | `"start"` | Main-axis alignment for virtual placement. Supports `"start"` and `"center"`. |
 | `name` | Generated | Human-readable container name. |
-| `animation` | Default 100ms animations | Reorder, drop, and click-move animation settings. Set to `null` to disable configured animations. |
-| `disableFlip` | `false` | Disables FLIP movement animation. |
+| `animation` | `undefined` | Optional reorder, drop, and click-move animation settings. Omit it or set it to `null` for no animation. |
 | `dropPriority` | `0` | Base preference for candidate positions owned directly by this container. Higher eligible priorities are considered first. |
 | `callbacks` | No persistent mutation default | Required framework-state/ghost callbacks plus lifecycle and validation hooks. |
+
+Animations are opt-in. Use SnapSort's standard 100ms preset when you want the
+library's conventional motion:
+
+```tsx
+import { defaultAnimations } from "@snap-engine/snapsort";
+
+<Container config={{ animation: defaultAnimations }} />
+```
 
 Mode is resolved from the root container when a drag starts, so nested containers in one drag tree should use the same mode.
 

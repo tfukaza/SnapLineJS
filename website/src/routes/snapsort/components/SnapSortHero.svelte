@@ -3,7 +3,7 @@
   import { Engine } from "@snap-engine/asset-base/svelte";
   import type { Engine as SnapEngine } from "@snap-engine/core";
   import { Container, Handle, Item } from "@snap-engine/snapsort/svelte";
-  import type { ItemMoveEvent } from "@snap-engine/snapsort";
+  import { defaultAnimations, type ItemMoveEvent } from "@snap-engine/snapsort";
   import SnapSortContextBoundary from "../SnapSortContextBoundary.svelte";
   import { moveEntries } from "./listState";
 
@@ -77,6 +77,7 @@
           <Container
             className="hero-stack"
             config={{
+              animation: defaultAnimations,
               direction: "column",
               callbacks: { onItemMove: handleHeroStackMove },
             }}
@@ -101,6 +102,7 @@
                       <SnapSortContextBoundary>
                         <Container
                           config={{
+                            animation: defaultAnimations,
                             direction: "row",
                             callbacks: { onItemMove: handleTitleMove },
                           }}

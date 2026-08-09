@@ -1,6 +1,6 @@
 <script lang="ts">
   import { Engine } from "@snap-engine/asset-base/svelte";
-  import type { ItemMoveEvent } from "@snap-engine/snapsort";
+  import { defaultAnimations, type ItemMoveEvent } from "@snap-engine/snapsort";
   import { Container, Item } from "@snap-engine/snapsort/svelte";
 
   type Direction = "column" | "row";
@@ -30,7 +30,7 @@
     <Container
       className="config-list"
       items={tasks}
-      config={{ direction, callbacks: { onItemMove } }}
+      config={{ animation: defaultAnimations, direction, callbacks: { onItemMove } }}
     >
       {#snippet entry(task)}
         <Item itemId={task.id} className="config-item">{task.label}</Item>

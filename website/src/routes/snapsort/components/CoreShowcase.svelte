@@ -7,6 +7,7 @@
     Container as ContainerType,
     ItemMoveEvent,
   } from "@snap-engine/snapsort";
+  import { defaultAnimations } from "@snap-engine/snapsort";
   import { rejectDrop } from "@snap-engine/snapsort/callbacks";
   import CustomizableShowcase from "./CustomizableShowcase.svelte";
   import { moveEntries, moveEntriesAcrossLists } from "./listState";
@@ -418,6 +419,7 @@
           <Container
             className="basic-list sortable-list"
             config={{
+              animation: defaultAnimations,
               direction: "column",
               callbacks: { onItemMove: handleSortableMove },
             }}
@@ -444,6 +446,7 @@
           <Container
             className={`sideways-list ${sidewaysSolved ? "solved" : ""}`}
             config={{
+              animation: defaultAnimations,
               direction: "row",
               mainAxisAlign: "center",
               callbacks: { onItemMove: handleSidewaysMove },
@@ -475,6 +478,7 @@
             className="basic-list bounded-demo-list"
             metadata={{ listId: "root" }}
             config={{
+              animation: defaultAnimations,
               direction: "column",
               callbacks: { onItemMove: handleNestedMove },
             }}
@@ -501,6 +505,7 @@
                   className="nested-list bounded-demo-list card shallow"
                   metadata={{ listId: "child" }}
                   config={{
+                    animation: defaultAnimations,
                     direction: "column",
                     callbacks: { onItemMove: handleNestedMove },
                   }}
@@ -547,6 +552,7 @@
             className="basic-list insertion-list bounded-demo-list"
             metadata={{ listId: "root" }}
             config={{
+              animation: defaultAnimations,
               direction: "column",
               mode: "insertion",
               callbacks: { onItemMove: handleInsertMove },
@@ -574,6 +580,7 @@
                   className="nested-list nested-insertion-list insertion-list bounded-demo-list card shallow"
                   metadata={{ listId: "child" }}
                   config={{
+                    animation: defaultAnimations,
                     direction: "column",
                     mode: "insertion",
                     callbacks: { onItemMove: handleInsertMove },
@@ -620,6 +627,7 @@
           <Container
             className="multi-row-list"
             config={{
+              animation: defaultAnimations,
               direction: "row",
               mode: "progressive",
               callbacks: { onItemMove: handleMultiRowMove },
@@ -647,6 +655,7 @@
           <Container
             className="multi-container-board"
             config={{
+              animation: defaultAnimations,
               direction: "row",
               name: "core-multi-root",
               callbacks: { canDrop: rejectDrop },
@@ -665,6 +674,7 @@
                 itemId={column.id}
                 metadata={{ columnId: column.id }}
                 config={{
+                  animation: defaultAnimations,
                   direction: "column",
                   name: column.id,
                   callbacks: { onItemMove: handleMultiContainerMove },

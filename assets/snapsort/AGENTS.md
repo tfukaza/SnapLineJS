@@ -11,6 +11,7 @@ A single `Container`/`Item` class pair (per framework) whose drag/drop behavior 
 
 **Exports:**
 - `Container` - The only container class. `new Container(engine, parent, { mode, ... })`.
+- `defaultAnimations` - Opt-in standard reorder, drop, and click-move animation preset.
 - `Item` - The only item class (including ghosts/markers). Never needs a mode.
 - `DragSession` - Owns all per-drag state (pointer, ghost, drop target); lives at `container.dragSession` on the root while a drag is active.
 - Event types: `ItemInsertEvent`, `ItemRemoveEvent`, `ItemMoveEvent`, `ItemSwapEvent`, `GhostCreateEvent`, `GhostInsertEvent`, `GhostRemoveEvent`, `DragStartEvent`, `DragEndEvent`, `DropTargetChangeEvent`, `CanDropEvent`, `DropPriorityEvent`, `VisualGeometryInvalidationEvent`, `DragLocation`.

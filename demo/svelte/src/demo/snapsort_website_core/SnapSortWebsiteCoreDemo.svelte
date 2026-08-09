@@ -1,6 +1,7 @@
 <script lang="ts">
   import { Engine } from "@snap-engine/asset-base/svelte";
   import { Container, Handle, Item } from "@snap-engine/snapsort/svelte";
+  import { defaultAnimations } from "@snap-engine/snapsort";
   import type { Container as ContainerType, ItemMoveEvent } from "@snap-engine/snapsort";
   import { rejectDrop } from "@snap-engine/snapsort/callbacks";
 
@@ -202,6 +203,7 @@
             <Container
               className={`sideways-list ${sidewaysSolved ? "solved" : ""}`}
               config={{
+                animation: defaultAnimations,
                 direction: "row",
                 mainAxisAlign: "center",
                 callbacks: {
@@ -230,7 +232,7 @@
           <div class="core-demo-surface card">
             <Container
               className="basic-list bounded-demo-list"
-              config={{ direction: "column", callbacks: { onItemMove: handleNestedMove } }}
+              config={{ animation: defaultAnimations, direction: "column", callbacks: { onItemMove: handleNestedMove } }}
               metadata={{ list: "outer" }}
               items={nestedEntries}
               getItemId={(e) => (e.kind === "item" ? e.label : "nested-group")}
@@ -253,7 +255,7 @@
                   <Container
                     itemId="nested-group"
                     className="nested-list bounded-demo-list card shallow"
-                    config={{ direction: "column", callbacks: { onItemMove: handleNestedMove } }}
+                    config={{ animation: defaultAnimations, direction: "column", callbacks: { onItemMove: handleNestedMove } }}
                     metadata={{ list: "inner" }}
                     locked={false}
                     items={nestedItems}
@@ -295,6 +297,7 @@
             <Container
               className="multi-container-board"
               config={{
+                animation: defaultAnimations,
                 direction: "row",
                 name: "core-multi-root",
                 callbacks: { canDrop: rejectDrop },
@@ -310,6 +313,7 @@
                   bind:container={column.container}
                   metadata={{ columnId: column.id }}
                   config={{
+                    animation: defaultAnimations,
                     direction: "column",
                     name: column.id,
                     callbacks: { onItemMove: handleMultiContainerMove },
