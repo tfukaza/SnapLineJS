@@ -1,4 +1,31 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
+
+async function dragBetween(page: Page, source: Locator, target: Locator) {
+  await source.scrollIntoViewIfNeeded();
+  const [sourceBox, targetBox] = await Promise.all([
+    source.boundingBox(),
+    target.boundingBox(),
+  ]);
+  if (!sourceBox || !targetBox) throw new Error("Drag target has no layout box.");
+
+  const sourcePoint = {
+    x: sourceBox.x + sourceBox.width / 2,
+    y: sourceBox.y + sourceBox.height / 2,
+  };
+  const targetPoint = {
+    x: targetBox.x + targetBox.width / 2,
+    y: targetBox.y + targetBox.height / 2,
+  };
+
+  await page.mouse.move(sourcePoint.x, sourcePoint.y);
+  await page.mouse.down();
+  await page.mouse.move(sourcePoint.x + 7, sourcePoint.y + 7);
+  await page.waitForTimeout(60);
+  await page.mouse.move(targetPoint.x, targetPoint.y, { steps: 12 });
+  await page.waitForTimeout(120);
+  await page.mouse.up();
+  await page.waitForTimeout(150);
+}
 
 test("SnapSort Svelte reference lists only its component pages", async ({
   page,
@@ -53,9 +80,7 @@ test("Svelte Container properties use live, keyboard-accessible Demo and Code ta
   await expect(
     page.getByRole("heading", { name: "Snippet Parameters", level: 2 }),
   ).toBeVisible();
-  await expect(page.locator(".doc-article")).toContainText(
-    '"flow" | "marker"',
-  );
+  await expect(page.locator(".doc-article")).toContainText('"flow" | "marker"');
   await expect(
     page.getByRole("heading", {
       name: "Move Items Between Containers",
@@ -211,6 +236,489 @@ test("Svelte Container properties use live, keyboard-accessible Demo and Code ta
   await expect(styledContainer).not.toHaveClass(/is-emphasized/);
 });
 
+test("Svelte Item reference explains props with live Item and Handle examples", async ({
+  page,
+  request,
+}) => {
+  const response = await page.goto(
+    "/docs/snapsort/reference/svelte/item?framework=svelte",
+  );
+  expect(response?.status()).toBe(200);
+
+  await expect(
+    page.getByRole("heading", { name: "Component Properties", level: 2 }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Handle", level: 2 }),
+  ).toBeVisible();
+  await expect(page.locator("[data-demo-code-tabs]")).toHaveCount(5);
+
+  const basic = page.locator('[data-demo-code-tabs="item-example-basic"]');
+  await expect(basic.locator(".item-demo-card")).toHaveCount(3);
+  await basic.getByRole("tab", { name: "Code" }).click();
+  await expect(basic.locator("pre.shiki.display")).toHaveCount(1);
+  await expect(basic.getByRole("tabpanel")).toContainText(
+    "<Item itemId={task.id}",
+  );
+
+  const metadata = page.locator(
+    '[data-demo-code-tabs="item-example-metadata"]',
+  );
+  await dragBetween(
+    page,
+    metadata.locator(".metadata-card").first(),
+    metadata.locator(".metadata-card").last(),
+  );
+  await expect(metadata.locator(".metadata-status")).toHaveText(
+    /(?:Dragging|Dropped) brief: Mina · High/,
+  );
+
+  const selection = page.locator(
+    '[data-demo-code-tabs="item-example-selection"]',
+  );
+  await expect(
+    selection.locator('.selection-card[aria-pressed="true"]'),
+  ).toHaveCount(2);
+  await selection.getByRole("button", { name: /Gamma/ }).click();
+  await expect(
+    selection.locator('.selection-card[aria-pressed="true"]'),
+  ).toHaveCount(3);
+  await expect(selection.locator(".selection-status")).toHaveText(
+    "3 items selected",
+  );
+
+  const itemObject = page.locator(
+    '[data-demo-code-tabs="item-example-item-object"]',
+  );
+  await itemObject
+    .getByRole("button", { name: "Inspect core object" })
+    .first()
+    .click();
+  await expect(itemObject.locator(".object-report")).toHaveText(
+    "ID: adopt-one · index: 0 · origin: application",
+  );
+  await itemObject.getByRole("tab", { name: "Code" }).click();
+  await expect(itemObject.getByRole("tabpanel")).toContainText(
+    "new SnapSortItem(engine, container)",
+  );
+  await expect(itemObject.getByRole("tabpanel")).toContainText(
+    "<!-- AdoptedItemRow.svelte -->",
+  );
+
+  const handle = page.locator('[data-demo-code-tabs="item-example-handle"]');
+  const initialHandleStatus =
+    "Drag with the grip; the Done buttons remain interactive.";
+  await expect(handle.locator(".handle-status")).toHaveText(
+    initialHandleStatus,
+  );
+
+  await dragBetween(
+    page,
+    handle.locator(".task-label").first(),
+    handle.locator(".task-label").last(),
+  );
+  await expect(handle.locator(".handle-status")).toHaveText(initialHandleStatus);
+
+  await dragBetween(
+    page,
+    handle.getByLabel("Drag Plan release"),
+    handle.getByLabel("Drag Ship update"),
+  );
+  await expect(handle.locator(".handle-status")).toHaveText(
+    /(?:Dragging Plan release from its handle|Moved Plan release)/,
+  );
+
+  await handle.getByRole("button", { name: /Done|Undo/ }).first().click();
+  await expect(handle.locator(".handle-status")).toHaveText(
+    /marked (?:done|not done)$/,
+  );
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/docs/snapsort/reference/svelte/item?framework=svelte");
+  await expect(page.locator(".doc-sidebar")).toBeHidden();
+  await expect(page.locator("[data-demo-code-tabs]")).toHaveCount(5);
+  expect(
+    await page.evaluate(() => document.documentElement.scrollWidth),
+  ).toBeLessThanOrEqual(390);
+
+  const markdownResponse = await request.get(
+    "/docs/snapsort/reference/svelte/item.md",
+  );
+  expect(markdownResponse.status()).toBe(200);
+  const markdown = await markdownResponse.text();
+  expect(markdown).toContain("## Component Properties");
+  expect(markdown).toContain("<Item itemId={task.id}");
+  expect(markdown).toContain("new SnapSortItem(engine, container)");
+  expect(markdown).toContain("<Handle className=\"drag-grip\"");
+  expect(markdown).toContain(
+    "This page includes interactive diagrams or demos.",
+  );
+  expect(markdown).not.toContain("<ItemExample");
+});
+
+test("SnapSort callback docs expose receiver routing and mutation boundaries", async ({
+  page,
+  request,
+}) => {
+  const lifecycleResponse = await page.goto(
+    "/docs/snapsort/guides/03_session_lifecycle?framework=react",
+  );
+  expect(lifecycleResponse?.status()).toBe(200);
+
+  await expect(
+    page.getByRole("heading", { name: "Terms", level: 2 }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Lifecycle", level: 2 }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("group", {
+      name: /root-owned DragSession initiates target resolution.*Ghosts are passive data/i,
+    }),
+  ).toBeVisible();
+
+  const lifecycleDiagram = page.locator(".lifecycle-diagram");
+  await expect(lifecycleDiagram.locator("[data-phase]")).toHaveCount(5);
+  await expect(lifecycleDiagram).toContainText("Ghost");
+  await expect(lifecycleDiagram.locator(".uml-legend")).toHaveCount(0);
+
+  const desktopLayout = await page.evaluate(() => {
+    const bounds = (selector: string) => {
+      const element = document.querySelector(selector);
+      if (!(element instanceof HTMLElement)) {
+        throw new Error(`Missing layout element: ${selector}`);
+      }
+      const rect = element.getBoundingClientRect();
+      return { left: rect.left, right: rect.right, width: rect.width };
+    };
+
+    return {
+      viewportWidth: window.innerWidth,
+      sidebar: bounds(".doc-sidebar"),
+      content: bounds(".doc-content"),
+      paragraph: bounds(".doc-article > p"),
+      diagram: bounds(".lifecycle-diagram"),
+    };
+  });
+  expect(desktopLayout.sidebar.left).toBeGreaterThanOrEqual(15);
+  expect(desktopLayout.sidebar.left).toBeLessThanOrEqual(40);
+  expect(desktopLayout.content.width).toBeGreaterThan(700);
+  expect(desktopLayout.paragraph.width).toBeLessThanOrEqual(701);
+  expect(desktopLayout.diagram.width).toBeGreaterThan(700);
+  expect(
+    Math.abs(desktopLayout.content.width - desktopLayout.diagram.width),
+  ).toBeLessThanOrEqual(1);
+  expect(
+    await lifecycleDiagram
+      .locator(".scroll-region")
+      .evaluate((element) => element.scrollWidth > element.clientWidth),
+  ).toBe(true);
+
+  const diagramGeometry = await lifecycleDiagram.evaluate((diagram) => {
+    const laneOrder = [
+      "item",
+      "ghost",
+      "root",
+      "source",
+      "target",
+      "app",
+      "dom",
+    ];
+    const center = (element: Element) => {
+      const rect = element.getBoundingClientRect();
+      return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+    };
+    const participants = [...diagram.querySelectorAll(".participant")];
+    const lifelines = [...diagram.querySelectorAll(".lifeline")].slice(0, 7);
+    const laneCenterDeltas = participants.map((participant, index) =>
+      Math.abs(center(participant).x - center(lifelines[index]).x),
+    );
+    const routeGeometry = [...diagram.querySelectorAll(".message-row")]
+      .filter((row) => row.querySelector(":scope > .message"))
+      .map((row) => {
+        const label = row.querySelector(".message-label");
+        const route = row.querySelector(".route-svg");
+        const head = row.querySelector(".route-head-svg");
+        if (!label || !route || !head) {
+          throw new Error(`Incomplete route geometry for ${row.dataset.step}`);
+        }
+        const labelRect = label.getBoundingClientRect();
+        const messageRect = row
+          .querySelector(":scope > .message")!
+          .getBoundingClientRect();
+        const routeCenter = center(route);
+        const headCenter = center(head);
+        const from = laneOrder.indexOf(row.dataset.from ?? "");
+        const to = laneOrder.indexOf(row.dataset.to ?? "");
+        const expectedLeft = center(lifelines[Math.min(from, to)]).x;
+        const expectedRight = center(lifelines[Math.max(from, to)]).x;
+        return {
+          step: row.dataset.step,
+          labelGap: routeCenter.y - labelRect.bottom,
+          headDelta: Math.abs(routeCenter.y - headCenter.y),
+          leftDelta: Math.abs(messageRect.left - expectedLeft),
+          rightDelta: Math.abs(messageRect.right - expectedRight),
+        };
+      });
+
+    return { laneCenterDeltas, routeGeometry };
+  });
+  expect(Math.max(...diagramGeometry.laneCenterDeltas)).toBeLessThan(0.1);
+  for (const route of diagramGeometry.routeGeometry) {
+    expect(
+      route.labelGap,
+      `${route.step} label overlaps its arrow`,
+    ).toBeGreaterThanOrEqual(1);
+    expect(route.headDelta, `${route.step} arrowhead is off-axis`).toBeLessThan(
+      0.1,
+    );
+    expect(route.leftDelta, `${route.step} starts off-lifeline`).toBeLessThan(
+      2,
+    );
+    expect(route.rightDelta, `${route.step} ends off-lifeline`).toBeLessThan(2);
+  }
+
+  const ghostRemoval = lifecycleDiagram.locator('[data-step="2.3a"]');
+  await expect(ghostRemoval).toHaveAttribute("data-from", "root");
+  await expect(ghostRemoval).toHaveAttribute("data-to", "source");
+  await expect(ghostRemoval).toHaveAttribute("data-kind", "sync");
+  await expect(ghostRemoval).toContainText("Remove ghost");
+  await expect(ghostRemoval).toContainText("onGhostRemove");
+
+  const ghostDomRemoval = lifecycleDiagram.locator('[data-step="2.3c"]');
+  await expect(ghostDomRemoval).toHaveAttribute("data-from", "app");
+  await expect(ghostDomRemoval).toHaveAttribute("data-to", "dom");
+  await expect(ghostDomRemoval).toContainText("Commit ghost removal");
+
+  const ghostDomRemovalReturn = lifecycleDiagram.locator('[data-step="2.3d"]');
+  await expect(ghostDomRemovalReturn).toHaveAttribute("data-from", "dom");
+  await expect(ghostDomRemovalReturn).toHaveAttribute("data-to", "app");
+  await expect(ghostDomRemovalReturn).toHaveAttribute("data-kind", "return");
+  await expect(ghostDomRemovalReturn).toContainText("DOM commit complete");
+  await expect(ghostDomRemovalReturn).toContainText("pre-paint");
+
+  const ghostRemovalFlushReturn =
+    lifecycleDiagram.locator('[data-step="2.3e"]');
+  await expect(ghostRemovalFlushReturn).toHaveAttribute("data-from", "app");
+  await expect(ghostRemovalFlushReturn).toHaveAttribute("data-to", "root");
+  await expect(ghostRemovalFlushReturn).toHaveAttribute("data-kind", "return");
+  await expect(ghostRemovalFlushReturn).toContainText("flushMutation returns");
+
+  const ghostAddition = lifecycleDiagram.locator('[data-step="2.4a"]');
+  await expect(ghostAddition).toHaveAttribute("data-from", "root");
+  await expect(ghostAddition).toHaveAttribute("data-to", "target");
+  await expect(ghostAddition).toContainText("Add ghost");
+
+  const ghostAdditionDomReturn = lifecycleDiagram.locator('[data-step="2.4e"]');
+  await expect(ghostAdditionDomReturn).toHaveAttribute("data-from", "dom");
+  await expect(ghostAdditionDomReturn).toHaveAttribute("data-to", "app");
+  await expect(ghostAdditionDomReturn).toHaveAttribute("data-kind", "return");
+  await expect(ghostAdditionDomReturn).toContainText("DOM commit complete");
+  await expect(lifecycleDiagram.locator('[data-step="2.4f"]')).toContainText(
+    "flushMutation returns",
+  );
+
+  for (const step of ["2.5", "2.5r", "4.2", "4.2r"]) {
+    const notification = lifecycleDiagram.locator(`[data-step="${step}"]`);
+    await expect(notification).toHaveAttribute("data-from", "root");
+    await expect(notification).toHaveAttribute("data-to", "root");
+  }
+
+  const phaseLabels = await lifecycleDiagram
+    .locator(".phase-heading span")
+    .all();
+  for (const label of phaseLabels) {
+    expect(
+      await label.evaluate(
+        (element) => getComputedStyle(element).textTransform,
+      ),
+    ).toBe("none");
+  }
+
+  const normalCommitStep = lifecycleDiagram.locator('[data-step="3.2a"]');
+  await expect(lifecycleDiagram.locator('[data-phase="drop"]')).toContainText(
+    "two ordered flushes",
+  );
+  await expect(lifecycleDiagram.locator('[data-step="3.1a"]')).toContainText(
+    "First transaction",
+  );
+  await expect(normalCommitStep).toContainText("Second transaction");
+  await expect(
+    normalCommitStep.getByText(/onItemMove · fallback onItemInsert/),
+  ).toBeVisible();
+  const collectionUpdateStep = lifecycleDiagram.locator('[data-step="3.2b"]');
+  await collectionUpdateStep.getByRole("img").hover();
+  await expect(collectionUpdateStep.locator(".detail")).toBeVisible();
+  await expect(collectionUpdateStep.locator(".detail")).toContainText(
+    "The source receives no onItemRemove callback.",
+  );
+
+  for (const step of ["3.1d", "3.2d", "3.3d"]) {
+    const domReturn = lifecycleDiagram.locator(`[data-step="${step}"]`);
+    await expect(domReturn).toHaveAttribute("data-from", "dom");
+    await expect(domReturn).toHaveAttribute("data-to", "app");
+    await expect(domReturn).toHaveAttribute("data-kind", "return");
+  }
+  for (const step of ["3.1e", "3.2e", "3.3e"]) {
+    const transactionReturn = lifecycleDiagram.locator(`[data-step="${step}"]`);
+    await expect(transactionReturn).toHaveAttribute("data-from", "app");
+    await expect(transactionReturn).toHaveAttribute("data-to", "root");
+    await expect(transactionReturn).toHaveAttribute("data-kind", "return");
+    await expect(transactionReturn).toContainText("flushMutation returns");
+  }
+
+  await expect(lifecycleDiagram.locator('[data-step="4.4"]')).toHaveAttribute(
+    "data-kind",
+    "return",
+  );
+  await expect(lifecycleDiagram.locator('[data-step="4.5"]')).toHaveAttribute(
+    "data-kind",
+    "async",
+  );
+  await expect(
+    lifecycleDiagram.locator('[data-phase="finish"]'),
+  ).not.toContainText(/WRITE_1|WRITE_2|READ_2/);
+  await expect(lifecycleDiagram.locator('[data-step="5.1b"]')).toContainText(
+    "onItemRemove",
+  );
+  await expect(lifecycleDiagram.locator('[data-step="5.2a"]')).toContainText(
+    "onItemRemove",
+  );
+  await expect(lifecycleDiagram).toContainText("flushMutation returns");
+
+  for (const framework of ["react", "svelte"] as const) {
+    await page.goto(
+      `/docs/snapsort/guides/03_session_lifecycle?framework=${framework}`,
+    );
+    await expect(page.locator(".lifecycle-diagram")).not.toContainText(
+      "createGhost",
+    );
+    await expect(page.locator(".lifecycle-diagram")).toContainText(
+      "flushMutation returns",
+    );
+  }
+
+  await page.goto(
+    "/docs/snapsort/guides/03_session_lifecycle?framework=vanilla",
+  );
+  const vanillaDiagram = page.locator(".lifecycle-diagram");
+  await expect(vanillaDiagram).toContainText("createGhost");
+  await expect(vanillaDiagram).toContainText("HTMLElement");
+  await expect(vanillaDiagram).not.toContainText("flushMutation");
+  await expect(vanillaDiagram.locator("[data-phase]")).toHaveCount(5);
+  for (const [callStep, returnStep, receiver] of [
+    ["1.6", "1.7", "source"],
+    ["2.3b", "2.3c", "source"],
+    ["2.4b", "2.4c", "target"],
+    ["3.1b", "3.1c", "target"],
+    ["3.2b", "3.2c", "target"],
+    ["3.3b", "3.3c", "source"],
+    ["5.1c", "5.1d", "source"],
+    ["5.2b", "5.2c", "source"],
+  ] as const) {
+    const domCall = vanillaDiagram.locator(`[data-step="${callStep}"]`);
+    await expect(domCall).toHaveAttribute("data-to", "dom");
+    await expect(domCall).toHaveAttribute("data-kind", "sync");
+
+    const domReturn = vanillaDiagram.locator(`[data-step="${returnStep}"]`);
+    await expect(domReturn).toHaveAttribute("data-from", "dom");
+    await expect(domReturn).toHaveAttribute("data-to", receiver);
+    await expect(domReturn).toHaveAttribute("data-kind", "return");
+    await expect(domReturn).toContainText(/returned|complete/);
+  }
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/docs/snapsort/guides/03_session_lifecycle?framework=react");
+  await expect(page.locator(".doc-sidebar")).toBeHidden();
+  expect(
+    await page.evaluate(() => document.documentElement.scrollWidth),
+  ).toBeLessThanOrEqual(390);
+  expect(
+    await page
+      .locator(".lifecycle-diagram .scroll-region")
+      .evaluate((element) => element.scrollWidth > element.clientWidth),
+  ).toBe(true);
+
+  await page.setViewportSize({ width: 1280, height: 720 });
+
+  const callbackNames = [
+    "onItemMove",
+    "onItemInsert",
+    "onItemRemove",
+    "onItemSwap",
+    "onDragClone",
+    "onDragStart",
+    "onDragEnd",
+    "onDropTargetChange",
+    "onDragItemEnter",
+    "onDragItemMove",
+    "onDragItemLeave",
+    "onVisualGeometryInvalidated",
+    "canDrop",
+    "getDropPriority",
+    "createGhost",
+    "onGhostInsert",
+    "onGhostRemove",
+    "flushMutation",
+    "awaitMutation",
+  ];
+
+  for (const framework of ["svelte", "react"] as const) {
+    const response = await page.goto(
+      `/docs/snapsort/reference/${framework}/container?framework=${framework}`,
+    );
+    expect(response?.status()).toBe(200);
+
+    const callbackTable = page.locator("table").filter({
+      has: page.getByRole("columnheader", { name: "Fires on" }),
+    });
+    await expect(callbackTable).toHaveCount(1);
+    await expect(callbackTable.getByRole("row")).toHaveCount(20);
+    expect(
+      await callbackTable.evaluate(
+        (element) => element.getBoundingClientRect().width,
+      ),
+    ).toBeLessThanOrEqual(701);
+    for (const callbackName of callbackNames) {
+      await expect(
+        callbackTable.getByRole("row").filter({ hasText: `${callbackName}(` }),
+      ).toHaveCount(1);
+    }
+
+    await expect(
+      callbackTable.getByRole("row").filter({ hasText: "onDragStart(" }),
+    ).toContainText("Tree root");
+    await expect(
+      callbackTable.getByRole("row").filter({ hasText: "onItemMove(" }),
+    ).toContainText("Direct destination");
+    await expect(
+      callbackTable.getByRole("row").filter({ hasText: "onItemSwap(" }),
+    ).toContainText("pre-swap direct source");
+  }
+
+  const lifecycleMarkdownResponse = await request.get(
+    "/docs/snapsort/guides/03_session_lifecycle.md",
+  );
+  expect(lifecycleMarkdownResponse.status()).toBe(200);
+  const lifecycleMarkdown = await lifecycleMarkdownResponse.text();
+  expect(lifecycleMarkdown).toContain("## Terms");
+  expect(lifecycleMarkdown).toContain("## Lifecycle");
+
+  for (const framework of ["svelte", "react"] as const) {
+    const markdownResponse = await request.get(
+      `/docs/snapsort/reference/${framework}/container.md?framework=${framework}`,
+    );
+    expect(markdownResponse.status()).toBe(200);
+    const markdown = await markdownResponse.text();
+    expect(markdown).toContain(
+      "| Callback | Fires on | Built-in modes / trigger | Notes |",
+    );
+    for (const callbackName of callbackNames) {
+      expect(markdown).toContain(`\`${callbackName}`);
+    }
+  }
+});
+
 test("framework selector shows only its matching install code block", async ({
   page,
 }) => {
@@ -345,9 +853,7 @@ test("raw Markdown switches paired reference pages and cleans interactive MDX", 
   const svelteReferenceMarkdown = await svelteReferenceResponse.text();
   expect(svelteReferenceMarkdown).toContain("## Component Properties");
   expect(svelteReferenceMarkdown).toContain("const todos: Task[] = [");
-  expect(svelteReferenceMarkdown).toContain(
-    '{#if boardEntry.kind === "task"}',
-  );
+  expect(svelteReferenceMarkdown).toContain('{#if boardEntry.kind === "task"}');
   expect(svelteReferenceMarkdown).toContain("getItemId={(task) => task.key}");
   expect(svelteReferenceMarkdown).toContain("{#snippet ghost(event)}");
   expect(svelteReferenceMarkdown).toContain(

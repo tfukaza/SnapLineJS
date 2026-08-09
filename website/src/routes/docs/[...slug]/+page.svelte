@@ -202,12 +202,15 @@
 <style lang="scss">
 
 .doc-layout {
+	--doc-page-gutter: clamp(var(--size-16), 2vw, var(--size-32));
 	display: grid;
-	grid-template-columns: minmax(210px, 260px) minmax(0, 1fr);
-	gap: clamp(var(--size-32), 5vw, var(--size-80));
-	margin: clamp(var(--size-48), 6vw, var(--size-96)) auto;
-	width: clamp(100px, 90%, 1200px);
+	grid-template-columns: minmax(210px, 250px) minmax(0, 1fr);
+	gap: clamp(var(--size-24), 3vw, var(--size-48));
+	width: 100%;
+	margin: clamp(var(--size-48), 6vw, var(--size-96)) 0;
+	padding-inline: var(--doc-page-gutter);
 	align-items: start;
+	box-sizing: border-box;
 }
 
 .doc-layout.docs-home {
@@ -290,7 +293,14 @@
 .doc-content {
 	min-width: 0;
 	width: 100%;
-	max-width: var(--doc-reading-width, 700px);
+}
+
+.doc-breadcrumb,
+.doc-header,
+.doc-pagination {
+	width: min(100%, var(--doc-reading-width, 700px));
+	margin-inline: auto;
+	box-sizing: border-box;
 }
 
 .doc-header {
@@ -407,6 +417,7 @@
 		display: block;
 		margin: 1.5rem auto;
 		width: clamp(100px, 92%, 720px);
+		padding-inline: 0;
 	}
 
 	// The project documentation links move into the global mobile menu.

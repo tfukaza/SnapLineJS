@@ -8,6 +8,7 @@ import {
 import { absoluteUrl } from "$lib/seo";
 import { containerIntroExampleSources } from "$lib/components/docs/containerIntroExampleSources";
 import { containerPropertyExampleSources } from "$lib/components/docs/containerPropertyExampleSources";
+import { itemExampleSources } from "$lib/components/docs/itemExampleSources";
 
 type MarkdownSegment = {
   kind: "text" | "code";
@@ -169,10 +170,13 @@ function cleanTextSegment(
   cleaned = cleaned.replace(/^\s*<script\b[^>]*>[\s\S]*?<\/script>\s*$/gim, "");
 
   cleaned = cleaned.replace(
-    /^\s*<(ContainerIntroExample|ContainerPropertyExample)\s+kind=(?:"([^"]+)"|'([^']+)')\s*\/>\s*$/gm,
+    /^\s*<(ContainerIntroExample|ContainerPropertyExample|ItemExample)\s+kind=(?:"([^"]+)"|'([^']+)')\s*\/>\s*$/gm,
     (
       match,
-      componentName: "ContainerIntroExample" | "ContainerPropertyExample",
+      componentName:
+        | "ContainerIntroExample"
+        | "ContainerPropertyExample"
+        | "ItemExample",
       doubleQuotedKind: string,
       singleQuotedKind: string,
     ) => {
@@ -180,7 +184,9 @@ function cleanTextSegment(
       const sources: Record<string, string> =
         componentName === "ContainerIntroExample"
           ? containerIntroExampleSources
-          : containerPropertyExampleSources;
+          : componentName === "ContainerPropertyExample"
+            ? containerPropertyExampleSources
+            : itemExampleSources;
       const source = sources[kind];
       if (!source) return match;
       removedInteractiveContent = true;

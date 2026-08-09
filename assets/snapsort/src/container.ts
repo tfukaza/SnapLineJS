@@ -35,11 +35,9 @@ export interface ContainerConfig {
   domOwnership?: "core" | "framework";
   /** Which built-in drop-target/lifecycle strategy pair to use for this tree. Default `"euclidean"`. */
   mode?: SortMode;
-  /**
-   * Advanced: a custom strategy pair, overriding `mode`. Custom drop-target
-   * resolvers own their complete resolution policy, including any eligibility
-   * and priority checks that the built-in resolvers normally apply.
-   */
+  // TODO: Finalize the custom strategy API, including its composition model,
+  // public types, exports, tests, and documentation, before supporting consumer use.
+  /** @internal Experimental override; consumer integrations should use `mode`. */
   strategy?: SortStrategy;
   /** Main layout direction. Default `"column"`. */
   direction?: "column" | "row";
@@ -52,6 +50,13 @@ export interface ContainerConfig {
   animation?: ContainerAnimations | null;
   /** Base priority assigned to every drop candidate owned directly by this container. Default `0`. */
   dropPriority?: number;
+  /**
+   * Callbacks owned by this container instance. They are not inherited from
+   * parent/root containers and do not bubble; lifecycle, mutation, policy,
+   * hover, and ghost callbacks each have an explicit receiver documented by
+   * `ContainerCallbacks`. Reuse a handler object explicitly on each container
+   * that should participate.
+   */
   callbacks?: ContainerCallbacks;
 }
 

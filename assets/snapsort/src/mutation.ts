@@ -16,13 +16,20 @@ import type {
 } from "./events";
 
 /**
- * Single dispatch point for every ContainerCallbacks entry. Item and the drag
- * lifecycle strategies call these instead of invoking `container.callbacks`
- * directly, so fallback semantics (e.g. onItemMove -> onItemInsert) live in
- * exactly one place.
+ * Shared dispatch helpers for item/ghost mutations, ghost creation, and item
+ * hover. Root lifecycle callbacks are dispatched by the drag session and
+ * lifecycle strategies, destination policy by the drop algorithm, and visual
+ * invalidation by Container. Consumer mutations use `fireMutation` here so
+ * receiver-local flush semantics and fallbacks (for example,
+ * onItemMove -> onItemInsert) stay consistent.
  */
 
 const warnedAsyncMutationCallbacks = new WeakSet<() => void | Promise<void>>();
+
+// TODO: Add a shared transaction-domain coordinator so ordered ghost and item
+// mutation groups can use one adapter flush when every receiver shares a commit
+// domain. Keep receiver-local flushing as the fallback, and consider one
+// item-like ghost relocation event with nullable source/destination locations.
 
 /** Run a consumer mutation inside its framework adapter's synchronous commit boundary. */
 export function fireMutation(
@@ -102,7 +109,8 @@ export function assertCanFireItemRemove(container: Container): void {
 
 /** @internal Validate a semantic move before core changes its tree bookkeeping. */
 export function assertCanFireItemMove(container: Container): void {
-  if (container.callbacks?.onItemMove || container.callbacks?.onItemInsert) return;
+  if (container.callbacks?.onItemMove || container.callbacks?.onItemInsert)
+    return;
   throw missingCallbackError(container, "onItemMove", "move an item");
 }
 
@@ -117,14 +125,22 @@ export function assertCanFireItemSwap(container: Container): void {
 /** @internal Validate ghost insertion before core changes ghost bookkeeping. */
 export function assertCanFireGhostInsert(container: Container): void {
   if (!container.callbacks?.onGhostInsert) {
-    throw missingCallbackError(container, "onGhostInsert", "render a drag ghost");
+    throw missingCallbackError(
+      container,
+      "onGhostInsert",
+      "render a drag ghost",
+    );
   }
 }
 
 /** @internal Validate ghost removal before core changes ghost bookkeeping. */
 export function assertCanFireGhostRemove(container: Container): void {
   if (!container.callbacks?.onGhostRemove) {
-    throw missingCallbackError(container, "onGhostRemove", "remove a drag ghost");
+    throw missingCallbackError(
+      container,
+      "onGhostRemove",
+      "remove a drag ghost",
+    );
   }
 }
 
@@ -277,7 +293,7 @@ export function fireItemSwap(
   ): HTMLElement | null =>
     index >= container.itemOrderedList.length - 1
       ? null
-      : (container.itemOrderedList[index + 1]?.element ?? null);
+      : container.itemOrderedList[index + 1]?.element ?? null;
 
   fireItemMove(
     [

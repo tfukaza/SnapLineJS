@@ -9,63 +9,31 @@ sectionOrder: 2
 ---
 
 <script>
-  import SessionLifecycleDiagram from "$lib/components/docs/SessionLifecycleDiagram.svelte";
+  import SessionLifecycleDiagram from
+  "$lib/components/docs/SessionLifecycleDiagram.svelte";
 </script>
 
-When an item is being dragged, it follows the _session lifecycle_.
+When an item is dragged, SnapSort creates one `DragSession` on the root
+container. The session follows the pointer, resolves prospective destinations,
+owns temporary ghosts, and invokes callbacks on the container responsible for
+each operation.
+
+## Terms
+
+- **Root / DragSession:** the top-level container and the session it owns. The
+  session orchestrates target resolution, ghost relocation, commits, and
+  cleanup.
+- **Source Container:** an item's direct parent when the drag begins. In the
+  diagram this lane also represents the current owner for operations such as
+  ghost or item removal.
+- **Target Container:** the prospective direct container and index selected while the
+  pointer moves.
+- **Destination Container:** the final direct container and index reported when the drag
+  ends. It may be the source again, or `null` when the lifecycle ends without a
+  resolved destination.
+- **Ghost Item:** passive placeholder data managed by the lifecycle. A ghost
+  does not ask to insert or remove itself.
+
+## Lifecycle
 
 <SessionLifecycleDiagram />
-
-### 0. Initial State
-
-Frontend frameworks are built on the concept of states.
-In other words, more often than not you will be defining containers
-and items as a data structure, and using the framework syntax to render them.
-
-### 1. Drag Start
-
-Once a drag starts, SnapSort creates a ghost and asks the
-framework to add it to the render state through `onGhostInsert`.
-The framework renders `<Ghost>` into the DOM at the requested container
-and index.
-
-Rendering `<Ghost>` binds the new DOM element to `event.ghostItem.element`.
-The adapter performs the state update inside a synchronous `flushMutation`,
-and returning from that transaction tells SnapSort that the DOM is ready.
-At this point, the application's persistent item collection has not changed.
-
-### 2. Move and Preview
-
-As the pointer moves, SnapSort updates the active drag visual and resolves a
-prospective destination. In euclidean and progressive mode, this is the dragged item;
-insertion and swap placement update their marker or pointer preview instead.
-This work belongs to SnapSort, and the framework is not asked to reorder its
-persistent item state on every pointer movement.
-
-For each resolution, destination `canDrop` callbacks reject ineligible
-containers before `getDropPriority` chooses the preferred candidate set. The
-active placement mode then chooses a position within that set.
-
-When the prospective destination changes, SnapSort asks the framework to move
-the temporary ghost to the new container and index by calling `onGhostInsert`
-again.
-
-### 3. Drop
-
-Releasing the pointer ends the move phase and requests the destination SnapSort
-resolved during the session. A valid move or copy proceeds to an item mutation.
-
-For Euclidean, progressive, and insertion placement, SnapSort calls `onItemMove`.
-The event identifies the moved item, its previous location,
-and its destination container and index. Remove the corresponding
-record from its current collection, insert it at `event.to.index`
-in the destination collection, and let the framework render that result.
-
-### 4. Render and Animate
-
-The framework adapter runs the callback inside its synchronous
-`flushMutation` transaction. The framework commits the new container
-contents before SnapSort measures final layout and initiates the
-animation. Custom adapters must therefore also provide the same synchronous
-transaction; asynchronous state updates are outside the paint-atomic
-animation contract.

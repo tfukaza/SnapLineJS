@@ -642,8 +642,9 @@ export class DragSession {
   /**
    * Hit-test the pointer against `container`'s children (or clear the hover
    * when `container` is null, e.g. no valid drop target) and fire
-   * enter/move/leave accordingly. Independent of drop-target resolution —
-   * this tracks hovering over an *item*, not the resolved slot/gap.
+   * enter/move/leave accordingly. Hover is semantically distinct from the
+   * resolved slot/gap, but its hit-test is scoped to the currently resolved
+   * target container passed here.
    */
   private updateHoveredItem(container: Container | null): void {
     const item = this.primaryItem;

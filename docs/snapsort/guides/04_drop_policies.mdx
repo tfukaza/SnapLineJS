@@ -160,8 +160,3 @@ application command. It bypasses `canDrop`, `dropPriority`, and
 `getDropPriority`, then commits through the normal mutation callbacks. Validate
 button, keyboard, or other programmatic actions in application code when they
 should follow the same domain policy as pointer drops.
-
-An advanced custom `strategy.dropTarget.resolve` also owns its complete target
-resolution. It does not automatically pass the candidate it returns through
-the built-in eligibility or priority pipeline; invoke the policies your custom
-resolver needs as part of that strategy.

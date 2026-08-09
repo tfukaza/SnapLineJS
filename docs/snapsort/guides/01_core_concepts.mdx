@@ -49,6 +49,14 @@ containers, `dropPriority` and `getDropPriority` can prefer one destination
 before the active placement mode chooses an exact position. See
 [Drop Policies](/docs/snapsort/guides/04_drop_policies) for the complete order.
 
+The root owns the active `DragSession`, but it does not receive every callback.
+Callbacks are configured per container and do not bubble or inherit. Root
+callbacks report the session lifecycle, candidate containers decide whether
+they can accept a drop, the direct destination commits a normal move, and the
+dragged item's direct source commits a swap. See
+[Session Lifecycle](/docs/snapsort/guides/03_session_lifecycle) for the complete
+routing table.
+
 > [!WARNING]
 > Root containers must never be destroyed during the lifetime of the application,
 > since they are responsible for maintaining the state of the entire drag-and-drop system.
@@ -61,8 +69,10 @@ When an item is dragged, any potential location the item can be dropped
 is temporarily filled with a _ghost_ to maintain the layout structure.
 This both preserves the layout and provides visual feedback on where the item can be dropped.
 
-## Every Move Is a Session
+## Every Drag Is a Session
 
 A `DragSession` is the temporary state SnapSort creates for one drag gesture.
 It lives on the root container while the drag is active and keeps track of
-the drag-and-drop life cycle.
+the drag-and-drop life cycle. Locations carried by an event describe the
+source, prospective target, or final destination; they do not necessarily
+identify the container whose callback is running.

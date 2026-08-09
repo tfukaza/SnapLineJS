@@ -33,43 +33,67 @@ with the closest center to the dragged item's center.
 
 <PlacementModeDemo mode="euclidean" />
 
-Euclidean placement is simple and direct, making it 
+Euclidean placement is simple and direct, making it
 suitable for most common drag and drop layouts:
+
 - Kanban boards
 - Vertical lists
 - Grid layouts
 - etc.
 
+For move and none effects, its full-size flow ghost begins in the source and
+then routes ghost callbacks through whichever container owns the current
+prospective slot. A flow copy has no source ghost; after clone handoff, its
+first ghost belongs to the first valid destination. Choose flow copy in
+`onDragStart` and do not change to or from copy later in the session. A valid
+move or copy drop commits through the direct destination.
+
 ## Insertion
 
-Insertion placement (`mode: "insertion"`) replaces the full-size 
-ghost with a thin floating marker line that shows where the 
-item will be inserted after drop. The item itself 
+Insertion placement (`mode: "insertion"`) replaces the full-size
+ghost with a thin floating marker line that shows where the
+item will be inserted after drop. The item itself
 stays in its original DOM position until drop.
+
+The marker is owned by the prospective target, while a valid move or copy
+mutation is received by the direct destination.
 
 <PlacementModeDemo mode="insertion" />
 
 Use Insertion placement for line-marker UIs:
+
 - File/folder trees and outlines
 - Nested, collapsible structures
 - Any list where a full-size ghost reflowing sibling items would be visually noisy
 
 ## Swap
 
-Swap placement (`mode: "swap"`) keeps the original item in its slot 
-during the drag and shows a pointer ghost as the visual preview. 
-The target is the item under the pointer; on drop, SnapSort swaps 
-the dragged item with that target.
+Swap placement (`mode: "swap"`) keeps the original item in its slot
+during the drag and shows a pointer ghost as the visual preview.
+The target is the item under the pointer; on drop, SnapSort swaps
+the dragged item with that target. The pointer ghost is owned by the root,
+item hit-testing is scoped to the currently resolved target container, and
+hover callbacks run on the direct owner of the item under the pointer. The
+final `onItemSwap` runs on the dragged item's direct, pre-swap source.
 
 <PlacementModeDemo mode="swap" />
 
+> [!WARNING]
+> Swap currently supports move semantics only. Setting
+> `session.dropEffect` to `"copy"` or `"none"` does not replace or suppress
+> the swap path; dropping on a valid, different item still commits
+> `onItemSwap`.
 
 ## Progressive
 
-Progressive placement (`mode: "progressive"`) is designed for ordered, 
-variable-size items. Instead of a nearest neighbor approach, it treats 
+Progressive placement (`mode: "progressive"`) is designed for ordered,
+variable-size items. Instead of a nearest neighbor approach, it treats
 the layout as a progression of placement regions and chooses the first
 region occupied by the dragged item's center.
+
+It uses the same flow-ghost routing and destination-owned move/copy commit as
+euclidean mode: move/none begins at the source, while copy creates its first
+ghost only at a valid destination.
 
 <div class="placement-mode-comparison">
   <div>

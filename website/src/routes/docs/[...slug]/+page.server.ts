@@ -9,15 +9,42 @@ import {
   containerPropertyExampleSources,
   type ContainerPropertyExampleKind,
 } from "$lib/components/docs/containerPropertyExampleSources";
+import {
+  itemExampleKinds,
+  itemExampleSources,
+  type ItemExampleKind,
+} from "$lib/components/docs/itemExampleSources";
 import { highlightDocsCode } from "$lib/server/highlight";
 
 const containerReferenceSlug = "snapsort/reference/svelte/container";
+const itemReferenceSlug = "snapsort/reference/svelte/item";
 
 export const load: PageServerLoad = async ({ params }) => {
+  if (params.slug === itemReferenceSlug) {
+    const highlightedItemEntries = await Promise.all(
+      itemExampleKinds.map(
+        async (kind) =>
+          [
+            kind,
+            await highlightDocsCode(itemExampleSources[kind], "svelte"),
+          ] as const,
+      ),
+    );
+
+    return {
+      containerIntroExampleHtml: null,
+      containerPropertyExampleHtml: null,
+      itemExampleHtml: Object.fromEntries(
+        highlightedItemEntries,
+      ) as Record<ItemExampleKind, string>,
+    };
+  }
+
   if (params.slug !== containerReferenceSlug) {
     return {
       containerIntroExampleHtml: null,
       containerPropertyExampleHtml: null,
+      itemExampleHtml: null,
     };
   }
 
@@ -56,5 +83,6 @@ export const load: PageServerLoad = async ({ params }) => {
     containerPropertyExampleHtml: Object.fromEntries(
       highlightedPropertyEntries,
     ) as Record<ContainerPropertyExampleKind, string>,
+    itemExampleHtml: null,
   };
 };

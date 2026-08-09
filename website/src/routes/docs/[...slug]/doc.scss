@@ -12,6 +12,10 @@
     box-sizing: border-box;
   }
 
+  .doc-article > .lifecycle-diagram {
+    max-width: none;
+  }
+
   h2 {
     margin: var(--size-80) 0 var(--size-16);
     font-size: clamp(1.45rem, 2.4vw, 1.95rem);
@@ -80,7 +84,7 @@
       font-family: "Geist Mono", monospace;
     } */
   /* } */
-/*
+  /*
   .display {
     margin: 0;
     max-width: 100%;
@@ -242,9 +246,12 @@
   margin: var(--size-24) 0 var(--size-48);
 }
 
-.doc-article[data-framework="svelte"] .framework-code-block[data-framework="svelte"],
-.doc-article[data-framework="react"] .framework-code-block[data-framework="react"],
-.doc-article[data-framework="vanilla"] .framework-code-block[data-framework="vanilla"] {
+.doc-article[data-framework="svelte"]
+  .framework-code-block[data-framework="svelte"],
+.doc-article[data-framework="react"]
+  .framework-code-block[data-framework="react"],
+.doc-article[data-framework="vanilla"]
+  .framework-code-block[data-framework="vanilla"] {
   display: block;
 }
 
@@ -271,7 +278,6 @@
   font-size: 0.8rem;
   font-weight: 350;
 }
-
 
 .doc-prototype-grid {
   display: grid;
@@ -382,7 +388,6 @@
     margin-top: var(--size-12);
     padding: var(--size-4) var(--size-8) var(--size-8);
   }
-
 }
 
 .snapsort-concepts-container .snapsort-concepts-item {
@@ -396,7 +401,6 @@
   margin-top: var(--size-8);
   padding: var(--size-4) var(--size-8);
   --card-radius: var(--size-8);
-
 }
 
 .snapsort-concepts-container header code,
@@ -413,8 +417,7 @@
   padding: var(--size-4) var(--size-8);
   border-radius: var(--size-8);
   background: color-mix(in srgb, var(--color-primary) 8%, transparent);
-  outline: 1px dashed
-    color-mix(in srgb, var(--color-primary) 38%, transparent);
+  outline: 1px dashed color-mix(in srgb, var(--color-primary) 38%, transparent);
   outline-offset: -2px;
 
   span {
@@ -586,8 +589,7 @@
   padding: var(--size-16);
   border: 1px solid color-mix(in srgb, var(--color-primary) 48%, transparent);
   border-radius: var(--ui-radius);
-  background:
-    linear-gradient(
+  background: linear-gradient(
       135deg,
       color-mix(in srgb, var(--color-primary) 7%, transparent),
       transparent 45%
@@ -617,7 +619,11 @@
 .doc-todo-list {
   min-width: 0;
   border-radius: calc(var(--ui-radius) - 2px);
-  background: color-mix(in srgb, var(--color-background) 82%, var(--color-background-tint));
+  background: color-mix(
+    in srgb,
+    var(--color-background) 82%,
+    var(--color-background-tint)
+  );
 }
 
 .doc-kanban-column {

@@ -71,6 +71,30 @@ These helpers are pure, use the core collision geometry, and work with Vanilla,
 Svelte, and React. Programmatic `moveItem` calls are authoritative and bypass
 drop eligibility and priority.
 
+## Callback Routing
+
+Callbacks belong to individual containers; they do not bubble or inherit from
+the root. The root receives session-wide callbacks such as `onDragStart`,
+`onDropTargetChange`, and `onDragEnd`. Candidate destinations receive
+`canDrop`/`getDropPriority`, a normal move commits through the direct
+destination's `onItemMove` (or `onItemInsert` fallback), and a swap commits
+through the dragged item's direct, pre-swap source `onItemSwap`.
+
+Ghost callbacks follow the container currently owning the ghost. Item hover is
+semantically separate from slot changes: hit-testing is scoped to the resolved
+target container, then dispatched on the direct owner of the hovered item.
+
+An ordinary move does not also fire source `onItemRemove`. That callback is
+for an item actually removed from its current owner, including
+`container.removeItem(id)` and cleanup of transient flow-copy clones. The
+imperative `moveItem` (when placement changes) and `removeItem` APIs set
+`event.session` to `null` and do not create a drag lifecycle. A same-placement
+`moveItem` request emits no mutation callback.
+
+Mutation callbacks run through `flushMutation` on the same container that
+receives the callback. `flushMutation` is an adapter integration boundary, not
+a lifecycle event; the Svelte and React bindings supply it automatically.
+
 ## Svelte
 
 Install Svelte and the shared Engine binding alongside SnapSort:

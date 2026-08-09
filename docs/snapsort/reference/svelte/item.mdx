@@ -10,113 +10,173 @@ framework: svelte
 frameworkKey: item
 ---
 
-`Item` connects rendered Svelte content to a SnapSort container. The same component works in every container mode.
-
-## Define an Item
-
-Extract item markup into a component when every entry shares the same content
-and controls. The stable application ID is passed directly to `Item`.
-
-```svelte
-<!-- TaskItem.svelte -->
-<script lang="ts">
-  import { Handle, Item } from "@snap-engine/snapsort/svelte";
-
-  type Task = { id: string; label: string };
-  let {
-    task,
-    onMove,
-  }: {
-    task: Task;
-    onMove?: (id: string) => void;
-  } = $props();
+<script>
+  import ItemExample from "$lib/components/docs/ItemExample.svelte";
 </script>
 
-<Item itemId={task.id}>
-  <article>
-    <Handle className="drag-handle">Drag</Handle>
-    <span>{task.label}</span>
-    {#if onMove}
-      <button type="button" onclick={() => onMove(task.id)}>Move</button>
-    {/if}
-  </article>
-</Item>
-```
+`Item` connects one rendered entry to a SnapSort `Container`. Every item must
+be rendered beneath an `Engine` and a `Container` so it can join that
+container's drag tree.
 
-Use that component from a container's `entry` snippet:
+## A Basic Item
 
-```svelte
-{#snippet entry(task)}
-  <TaskItem {task} onMove={moveToOtherColumn} />
-{/snippet}
-```
+A container's `entry` snippet receives one value from its `items` array. Render
+an `Item` for that value, give it the same stable ID, and put the entry's
+content inside the component. When `onItemMove` updates the array, Svelte
+reconciles the new order.
 
-## Props
+<ItemExample kind="basic" />
+
+`Item` renders a `div` with the `snapsort-item` class, writes its resolved ID to
+`data-snapsort-item-id`, and provides its core Item object to descendants such
+as `Handle`.
+
+## Component Properties
+
+The Svelte component accepts the following SnapSort-specific properties in
+addition to standard `HTMLDivElement` attributes and events:
 
 ```ts
-type ItemProps = {
+type ItemProps = Omit<HTMLAttributes<HTMLDivElement>, "children"> & {
   children: Snippet;
-  itemId?: string;
-  style?: string;
   className?: string;
+  itemId?: string;
   metadata?: ItemSnapshotMetadata;
   selected?: boolean;
-  onclick?: (event: MouseEvent) => void;
-  itemObject?: Item | null;
+  itemObject?: SnapSortItem | null;
 };
 ```
 
-| Prop | Default | Description |
-|------|---------|-------------|
-| `children` | Required | Rendered item content. |
-| `itemId` | Required* | Stable ID used by moves, removes, ghosts, and state callbacks. *May be omitted only when `itemObject` already carries an ID. |
-| `style` | `""` | Inline style string applied to the rendered element. |
-| `className` | `""` | Extra class string applied to the rendered element. |
-| `metadata` | `{}` | Extra metadata assigned to the item object and exposed in callback events. |
-| `selected` | `false` | Consumer-owned selection flag. Dragging a selected item includes all selected items in its tree. |
-| `onclick` | `undefined` | Click handler on the rendered element; commonly used to toggle `selected`. |
-| `itemObject` | `null` | Optional existing core item object. The component does not destroy it on unmount. |
+### `children`
 
-`Item` renders a `div` with the `snapsort-item` class and provides its core item object to descendants.
+`children` is the required Svelte snippet rendered inside the Item's `div`.
+SnapSort does not impose a content structure, so an item can contain text,
+cards, form controls, or other components.
 
-> [!NOTE]
-> `metadata.itemId` is not supported. Pass `itemId` as its own prop.
+```svelte
+<Item itemId={task.id}>
+  <strong>{task.title}</strong>
+  <span>{task.assignee}</span>
+</Item>
+```
 
-## Metadata
+### `itemId`
 
-`ItemSnapshotMetadata` is an open record with these built-in fields:
+`itemId` is the stable application identity used by move and remove commands,
+ghosts, keyed collection updates, and callback events. In the Svelte adapter it
+is required unless a supplied `itemObject` already carries an ID.
+
+```svelte
+<Item itemId={task.id}>{task.title}</Item>
+```
+
+Use the same value returned by the parent Container's `getItemId(entry)`.
+Do not put the ID in `metadata`: `metadata.itemId` is unsupported and throws a
+clear error.
+
+### `metadata`
+
+`metadata` is an open record for application data that SnapSort should carry
+alongside the Item. It appears as `itemMetadata` and `itemsMetadata` in drag,
+mutation, hover, eligibility, and priority callbacks, and is frozen into the
+Item's drag snapshot.
+
+The example attaches an owner and priority to each Item. Dragging a card shows
+the metadata received by the container callbacks.
+
+<ItemExample kind="metadata" />
+
+`ItemSnapshotMetadata` also recognizes these geometry fields:
 
 | Field | Description |
 |-------|-------------|
-| `insertionMarkerInsetLeft` | Optional left inset for insertion marker width. |
-| `insertionMarkerInsetRight` | Optional right inset for insertion marker width. |
+| `insertionMarkerInsetLeft` | Moves the left edge of an insertion marker inward. |
+| `insertionMarkerInsetRight` | Moves the right edge of an insertion marker inward. |
+| `hitboxInsetTop` | Shrinks a positive amount, or grows a negative amount, from the top hover edge. |
+| `hitboxInsetRight` | Shrinks or grows the right hover edge. |
+| `hitboxInsetBottom` | Shrinks or grows the bottom hover edge. |
+| `hitboxInsetLeft` | Shrinks or grows the left hover edge. |
+| `hitboxShape` | Uses a `"rect"` or `"ellipse"` hover hitbox. Default `"rect"`. |
 
-Your own metadata fields are included in item snapshots and callback events.
+All other fields are application-defined and pass through unchanged.
 
-## Selection
+### `selected` and DOM events
 
-SnapSort does not own selection state. Set `selected` from your application state; when a drag starts on a selected item, every selected item in the same drag tree joins the drag.
+`selected` is a consumer-owned boolean. SnapSort does not render selection
+controls or selected styling. When a drag starts on a selected Item, all other
+selected Items in the same drag tree join it; dragging an unselected Item moves
+only that Item.
+
+Standard events such as `onclick` and `onkeydown` pass through to the rendered
+`div`, so they can update the application's selection state. Add the matching
+keyboard behavior and ARIA state when the Item itself acts as a control.
+
+<ItemExample kind="selection" />
+
+### `itemObject`
+
+Normally the adapter creates the core Item object and destroys it when the
+component unmounts. Pass `itemObject` to adopt an object created by application
+or integration code instead.
+
+An adopted object must use the same Engine, already belong to the current core
+Container, and carry its stable `itemId` before the component renders. The
+object is treated as an initial ownership decision: do not swap it after mount.
+Because the adapter does not own it, the code that created it must also destroy
+it.
+
+<ItemExample kind="item-object" />
+
+### `class`, `className`, `style`, and HTML attributes
+
+`Item` renders a regular `div`. Svelte's native `class` and the cross-framework
+`className` alias are merged with `snapsort-item`; `style`, ARIA attributes,
+`data-*` attributes, and other div properties pass through.
 
 ```svelte
 <Item
   itemId={task.id}
-  selected={selectedIds.has(task.id)}
-  onclick={() => toggleSelected(task.id)}
+  class:urgent={task.priority === "high"}
+  className="task-card"
+  style="--task-accent: tomato;"
+  aria-label={`Task: ${task.title}`}
+  data-priority={task.priority}
 >
-  {task.label}
+  {task.title}
 </Item>
 ```
 
+SnapSort owns the final `data-snapsort-item-id` value. Use your own `data-*`
+name for additional application state.
+
 ## Handle
 
-`Handle` registers its rendered element as an input alias for the nearest item, so a drag begins from the handle instead of the entire item.
+`Handle` makes a descendant element the Item's drag input. Once it mounts, a
+drag can begin from the Handle instead of the rest of the Item, leaving nearby
+buttons, links, and inputs available for their ordinary interactions.
+
+<ItemExample kind="handle" />
+
+The component accepts standard `HTMLDivElement` attributes plus these aliases:
 
 ```ts
-type HandleProps = {
+type HandleProps = Omit<HTMLAttributes<HTMLDivElement>, "children"> & {
   children: Snippet;
-  style?: string;
   className?: string;
 };
 ```
 
-`Handle` renders a `div` with `snapsort-handle` and the supplied `className`.
+### `children`
+
+The required snippet supplies the visible grip, label, icon, or other handle
+content. `Handle` renders it inside a `div` and registers that element with the
+nearest Item through Svelte context.
+
+### Presentation and HTML attributes
+
+Native `class`, `className`, `style`, ARIA attributes, and other div properties
+are forwarded just like Item properties. The rendered element always includes
+`snapsort-handle`.
+
+Use one Handle per Item. The core object has one input-alias slot, so a later
+Handle replaces the earlier drag target rather than creating multiple handles.
