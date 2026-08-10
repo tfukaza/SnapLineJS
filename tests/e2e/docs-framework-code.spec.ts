@@ -6,7 +6,8 @@ async function dragBetween(page: Page, source: Locator, target: Locator) {
     source.boundingBox(),
     target.boundingBox(),
   ]);
-  if (!sourceBox || !targetBox) throw new Error("Drag target has no layout box.");
+  if (!sourceBox || !targetBox)
+    throw new Error("Drag target has no layout box.");
 
   const sourcePoint = {
     x: sourceBox.x + sourceBox.width / 2,
@@ -320,7 +321,9 @@ test("Svelte Item reference explains props with live Item and Handle examples", 
     handle.locator(".task-label").first(),
     handle.locator(".task-label").last(),
   );
-  await expect(handle.locator(".handle-status")).toHaveText(initialHandleStatus);
+  await expect(handle.locator(".handle-status")).toHaveText(
+    initialHandleStatus,
+  );
 
   await dragBetween(
     page,
@@ -331,7 +334,10 @@ test("Svelte Item reference explains props with live Item and Handle examples", 
     /(?:Dragging Plan release from its handle|Moved Plan release)/,
   );
 
-  await handle.getByRole("button", { name: /Done|Undo/ }).first().click();
+  await handle
+    .getByRole("button", { name: /Done|Undo/ })
+    .first()
+    .click();
   await expect(handle.locator(".handle-status")).toHaveText(
     /marked (?:done|not done)$/,
   );
@@ -354,8 +360,8 @@ test("Svelte Item reference explains props with live Item and Handle examples", 
   expect(markdown).toContain("new SnapSortItem(engine, container)");
   expect(markdown).toContain("<Item {item}");
   expect(markdown).toContain("bind:item");
-  expect(markdown).toContain("item={clone.item}");
-  expect(markdown).toContain("<Handle className=\"drag-grip\"");
+  expect(markdown).toContain("DragSession.handoff(replacements)");
+  expect(markdown).toContain('<Handle className="drag-grip"');
   expect(markdown).toContain(
     "This page includes interactive diagrams or demos.",
   );
@@ -368,7 +374,7 @@ test("Svelte Item reference explains props with live Item and Handle examples", 
   const reactMarkdown = await reactMarkdownResponse.text();
   expect(reactMarkdown).toContain("## Core Item Access");
   expect(reactMarkdown).toContain("item={existingItem}");
-  expect(reactMarkdown).toContain("item={clone.item}");
+  expect(reactMarkdown).toContain("DragSession.handoff(replacements)");
   expect(reactMarkdown).not.toContain("itemObject");
 });
 
@@ -389,7 +395,7 @@ test("SnapSort callback docs expose receiver routing and mutation boundaries", a
   ).toBeVisible();
   await expect(
     page.getByRole("group", {
-      name: /root-owned DragSession initiates target resolution.*Ghosts are passive data/i,
+      name: /root-owned DragSession initiates target resolution.*Ghosts are passive visual data/i,
     }),
   ).toBeVisible();
 
@@ -397,6 +403,72 @@ test("SnapSort callback docs expose receiver routing and mutation boundaries", a
   await expect(lifecycleDiagram.locator("[data-phase]")).toHaveCount(5);
   await expect(lifecycleDiagram).toContainText("Ghost");
   await expect(lifecycleDiagram.locator(".uml-legend")).toHaveCount(0);
+  await expect(lifecycleDiagram.locator(".message-label > code")).toHaveCount(
+    0,
+  );
+  const callbackLabel = lifecycleDiagram.locator(
+    '[data-step="1.3a"] .message',
+  );
+  const ordinaryLabel = lifecycleDiagram.locator(
+    '[data-step="1.3c"] .message',
+  );
+  await expect(callbackLabel).toHaveClass(/invokes-callback/);
+  await expect(ordinaryLabel).not.toHaveClass(/invokes-callback/);
+  await expect(callbackLabel.locator("strong")).toContainText("onGhostInsert");
+  await expect(callbackLabel.locator("strong")).not.toContainText(
+    "Add source ghost",
+  );
+  await expect(
+    callbackLabel.getByRole("link", { name: "onGhostInsert" }),
+  ).toHaveAttribute(
+    "href",
+    "/docs/snapsort/reference/react/container?framework=react#callbacks",
+  );
+  const labelStyles = await lifecycleDiagram.evaluate((diagram) => {
+    const callbackBadge = diagram.querySelector(
+      '[data-step="1.3a"] .step-number',
+    );
+    const ordinaryBadge = diagram.querySelector(
+      '[data-step="1.3c"] .step-number',
+    );
+    const title = diagram.querySelector('[data-step="1.3a"] strong');
+    const lane = diagram.querySelector(".participant");
+    const phase = diagram.querySelector(".phase-heading span");
+    const branch = diagram.querySelector(".branch-label");
+    const detail = diagram.querySelector(".detail");
+    if (
+      !callbackBadge ||
+      !ordinaryBadge ||
+      !title ||
+      !lane ||
+      !phase ||
+      !branch ||
+      !detail
+    ) {
+      throw new Error("Missing lifecycle label styles");
+    }
+    return {
+      callbackColor: getComputedStyle(callbackBadge).backgroundColor,
+      ordinaryColor: getComputedStyle(ordinaryBadge).backgroundColor,
+      titleSize: Number.parseFloat(getComputedStyle(title).fontSize),
+      laneSize: Number.parseFloat(getComputedStyle(lane).fontSize),
+      phaseSize: Number.parseFloat(getComputedStyle(phase).fontSize),
+      branchSize: Number.parseFloat(getComputedStyle(branch).fontSize),
+      detailSize: Number.parseFloat(getComputedStyle(detail).fontSize),
+      titleFamily: getComputedStyle(title).fontFamily,
+      titleWeight: getComputedStyle(title).fontWeight,
+      arrowWidth: getComputedStyle(diagram.querySelector(".uml-line")!)
+        .strokeWidth,
+    };
+  });
+  expect(labelStyles.callbackColor).not.toBe(labelStyles.ordinaryColor);
+  expect(labelStyles.laneSize).toBeGreaterThan(labelStyles.titleSize);
+  expect(labelStyles.titleSize).toBeGreaterThan(labelStyles.phaseSize);
+  expect(labelStyles.phaseSize).toBeGreaterThan(labelStyles.branchSize);
+  expect(labelStyles.detailSize).toBeGreaterThanOrEqual(13);
+  expect(labelStyles.titleFamily).toContain("Geist");
+  expect(labelStyles.titleWeight).toBe("400");
+  expect(Number.parseFloat(labelStyles.arrowWidth)).toBeGreaterThanOrEqual(2);
 
   const desktopLayout = await page.evaluate(() => {
     const bounds = (selector: string) => {
@@ -477,7 +549,14 @@ test("SnapSort callback docs expose receiver routing and mutation boundaries", a
         };
       });
 
-    return { laneCenterDeltas, routeGeometry };
+    const selfLoopGeometry = [...diagram.querySelectorAll(".self-route")].map(
+      (route) => {
+        const rect = route.getBoundingClientRect();
+        return { width: rect.width, height: rect.height };
+      },
+    );
+
+    return { laneCenterDeltas, routeGeometry, selfLoopGeometry };
   });
   expect(Math.max(...diagramGeometry.laneCenterDeltas)).toBeLessThan(0.1);
   for (const route of diagramGeometry.routeGeometry) {
@@ -493,12 +572,37 @@ test("SnapSort callback docs expose receiver routing and mutation boundaries", a
     );
     expect(route.rightDelta, `${route.step} ends off-lifeline`).toBeLessThan(2);
   }
+  for (const loop of diagramGeometry.selfLoopGeometry) {
+    expect(loop.width).toBeLessThanOrEqual(64.1);
+    expect(loop.width / loop.height).toBeCloseTo(64 / 44, 2);
+  }
+
+  await page.setViewportSize({ width: 2200, height: 900 });
+  const wideLaneGeometry = await lifecycleDiagram.evaluate((diagram) => {
+    const sequence = diagram.querySelector(".sequence");
+    if (!(sequence instanceof HTMLElement)) {
+      throw new Error("Missing lifecycle sequence");
+    }
+    const laneWidths = [...diagram.querySelectorAll(".participant")].map(
+      (participant) => participant.getBoundingClientRect().width,
+    );
+    return {
+      diagramWidth: diagram.getBoundingClientRect().width,
+      sequenceWidth: sequence.getBoundingClientRect().width,
+      widestLane: Math.max(...laneWidths),
+    };
+  });
+  expect(wideLaneGeometry.sequenceWidth).toBeLessThanOrEqual(1400.1);
+  expect(wideLaneGeometry.widestLane).toBeLessThanOrEqual(200.1);
+  expect(
+    wideLaneGeometry.diagramWidth - wideLaneGeometry.sequenceWidth,
+  ).toBeLessThanOrEqual(49);
+  await page.setViewportSize({ width: 1280, height: 720 });
 
   const ghostRemoval = lifecycleDiagram.locator('[data-step="2.3a"]');
   await expect(ghostRemoval).toHaveAttribute("data-from", "root");
   await expect(ghostRemoval).toHaveAttribute("data-to", "source");
   await expect(ghostRemoval).toHaveAttribute("data-kind", "sync");
-  await expect(ghostRemoval).toContainText("Remove ghost");
   await expect(ghostRemoval).toContainText("onGhostRemove");
 
   const ghostDomRemoval = lifecycleDiagram.locator('[data-step="2.3c"]');
@@ -511,28 +615,23 @@ test("SnapSort callback docs expose receiver routing and mutation boundaries", a
   await expect(ghostDomRemovalReturn).toHaveAttribute("data-to", "app");
   await expect(ghostDomRemovalReturn).toHaveAttribute("data-kind", "return");
   await expect(ghostDomRemovalReturn).toContainText("DOM commit complete");
-  await expect(ghostDomRemovalReturn).toContainText("pre-paint");
 
   const ghostRemovalFlushReturn =
     lifecycleDiagram.locator('[data-step="2.3e"]');
   await expect(ghostRemovalFlushReturn).toHaveAttribute("data-from", "app");
   await expect(ghostRemovalFlushReturn).toHaveAttribute("data-to", "root");
   await expect(ghostRemovalFlushReturn).toHaveAttribute("data-kind", "return");
-  await expect(ghostRemovalFlushReturn).toContainText("flushMutation returns");
 
   const ghostAddition = lifecycleDiagram.locator('[data-step="2.4a"]');
   await expect(ghostAddition).toHaveAttribute("data-from", "root");
   await expect(ghostAddition).toHaveAttribute("data-to", "target");
-  await expect(ghostAddition).toContainText("Add ghost");
+  await expect(ghostAddition).toContainText("onGhostInsert");
 
   const ghostAdditionDomReturn = lifecycleDiagram.locator('[data-step="2.4e"]');
   await expect(ghostAdditionDomReturn).toHaveAttribute("data-from", "dom");
   await expect(ghostAdditionDomReturn).toHaveAttribute("data-to", "app");
   await expect(ghostAdditionDomReturn).toHaveAttribute("data-kind", "return");
   await expect(ghostAdditionDomReturn).toContainText("DOM commit complete");
-  await expect(lifecycleDiagram.locator('[data-step="2.4f"]')).toContainText(
-    "flushMutation returns",
-  );
 
   for (const step of ["2.5", "2.5r", "4.2", "4.2r"]) {
     const notification = lifecycleDiagram.locator(`[data-step="${step}"]`);
@@ -552,18 +651,13 @@ test("SnapSort callback docs expose receiver routing and mutation boundaries", a
   }
 
   const normalCommitStep = lifecycleDiagram.locator('[data-step="3.2a"]');
-  await expect(lifecycleDiagram.locator('[data-phase="drop"]')).toContainText(
-    "two ordered flushes",
-  );
   await expect(lifecycleDiagram.locator('[data-step="3.1a"]')).toContainText(
-    "First transaction",
+    "onGhostRemove",
   );
-  await expect(normalCommitStep).toContainText("Second transaction");
-  await expect(
-    normalCommitStep.getByText(/onItemMove · fallback onItemInsert/),
-  ).toBeVisible();
+  await expect(normalCommitStep).toContainText("onItemMove");
+  await expect(normalCommitStep).toContainText("onItemInsert");
   const collectionUpdateStep = lifecycleDiagram.locator('[data-step="3.2b"]');
-  await collectionUpdateStep.getByRole("img").hover();
+  await collectionUpdateStep.locator(".message, .self-message").hover();
   await expect(collectionUpdateStep.locator(".detail")).toBeVisible();
   await expect(collectionUpdateStep.locator(".detail")).toContainText(
     "The source receives no onItemRemove callback.",
@@ -580,7 +674,6 @@ test("SnapSort callback docs expose receiver routing and mutation boundaries", a
     await expect(transactionReturn).toHaveAttribute("data-from", "app");
     await expect(transactionReturn).toHaveAttribute("data-to", "root");
     await expect(transactionReturn).toHaveAttribute("data-kind", "return");
-    await expect(transactionReturn).toContainText("flushMutation returns");
   }
 
   await expect(lifecycleDiagram.locator('[data-step="4.4"]')).toHaveAttribute(
@@ -597,10 +690,17 @@ test("SnapSort callback docs expose receiver routing and mutation boundaries", a
   await expect(lifecycleDiagram.locator('[data-step="5.1b"]')).toContainText(
     "onItemRemove",
   );
-  await expect(lifecycleDiagram.locator('[data-step="5.2a"]')).toContainText(
-    "onItemRemove",
+  await expect(lifecycleDiagram.locator('[data-step^="5.2"]')).toHaveCount(0);
+  await expect(lifecycleDiagram).not.toContainText(
+    /flow-copy|transient clone/i,
   );
-  await expect(lifecycleDiagram).toContainText("flushMutation returns");
+  await expect(lifecycleDiagram).toContainText('dragVisual = "item"');
+  await expect(lifecycleDiagram).toContainText('dragVisual = "preview"');
+  await expect(lifecycleDiagram).toContainText('dragVisual = "none"');
+  await expect(lifecycleDiagram).toContainText("Independent placement feedback");
+  await expect(
+    lifecycleDiagram.getByRole("link", { name: "flushMutation" }).first(),
+  ).toBeVisible();
 
   for (const framework of ["react", "svelte"] as const) {
     await page.goto(
@@ -609,9 +709,12 @@ test("SnapSort callback docs expose receiver routing and mutation boundaries", a
     await expect(page.locator(".lifecycle-diagram")).not.toContainText(
       "createGhost",
     );
-    await expect(page.locator(".lifecycle-diagram")).toContainText(
-      "flushMutation returns",
-    );
+    await expect(
+      page
+        .locator(".lifecycle-diagram")
+        .getByRole("link", { name: "flushMutation" })
+        .first(),
+    ).toBeVisible();
   }
 
   await page.goto(
@@ -619,18 +722,18 @@ test("SnapSort callback docs expose receiver routing and mutation boundaries", a
   );
   const vanillaDiagram = page.locator(".lifecycle-diagram");
   await expect(vanillaDiagram).toContainText("createGhost");
-  await expect(vanillaDiagram).toContainText("HTMLElement");
   await expect(vanillaDiagram).not.toContainText("flushMutation");
   await expect(vanillaDiagram.locator("[data-phase]")).toHaveCount(5);
   for (const [callStep, returnStep, receiver] of [
-    ["1.6", "1.7", "source"],
+    ["1.3e", "1.3f", "source"],
+    ["1.4e", "1.4f", "root"],
+    ["1.6e", "1.6f", "target"],
     ["2.3b", "2.3c", "source"],
     ["2.4b", "2.4c", "target"],
     ["3.1b", "3.1c", "target"],
     ["3.2b", "3.2c", "target"],
     ["3.3b", "3.3c", "source"],
     ["5.1c", "5.1d", "source"],
-    ["5.2b", "5.2c", "source"],
   ] as const) {
     const domCall = vanillaDiagram.locator(`[data-step="${callStep}"]`);
     await expect(domCall).toHaveAttribute("data-to", "dom");
@@ -662,7 +765,6 @@ test("SnapSort callback docs expose receiver routing and mutation boundaries", a
     "onItemInsert",
     "onItemRemove",
     "onItemSwap",
-    "onDragClone",
     "onDragStart",
     "onDragEnd",
     "onDropTargetChange",
@@ -691,7 +793,7 @@ test("SnapSort callback docs expose receiver routing and mutation boundaries", a
       has: page.getByRole("columnheader", { name: "Fires on" }),
     });
     await expect(callbackTable).toHaveCount(1);
-    await expect(callbackTable.getByRole("row")).toHaveCount(22);
+    await expect(callbackTable.getByRole("row")).toHaveCount(21);
     expect(
       await callbackTable.evaluate(
         (element) => element.getBoundingClientRect().width,

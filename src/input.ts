@@ -562,18 +562,14 @@ class InputControl {
         `InputControl.handoffTo: destination ${destination.object.id} does not support pointer capture.`,
       );
     }
-    try {
-      this.#captureOn(pointer, destination.element);
-      pointer.owner = destination.object;
-      pointer.currentOwner = destination.object;
-      pointer.callerObjectId = destination.object.id;
-    } catch (error) {
-      this.#finalizePointer(pointer, {
-        event: pointer.lastEvent,
-        cancelled: true,
-      });
-      throw error;
-    }
+    // `setPointerCapture` either succeeds or throws before `#captureOn`
+    // changes `captureElement`. Let a rejected transfer propagate while the
+    // original owner and capture remain intact, so callers can recover or try
+    // another destination without losing the active gesture.
+    this.#captureOn(pointer, destination.element);
+    pointer.owner = destination.object;
+    pointer.currentOwner = destination.object;
+    pointer.callerObjectId = destination.object.id;
   }
 
   #handoffPinch(

@@ -679,9 +679,8 @@ export class Item extends ElementObject {
 
   /**
    * Give this item a frozen drag snapshot copied from another item's, keyed to
-   * this item. Used by `DragSession.handoff`: a copy-drag clone reuses its
-   * original's geometry (box) so drop prediction and pointer-follow treat the
-   * clone exactly as if the original were being dragged.
+   * this item. Used by `DragSession.handoff` so a replacement preserves the
+   * active gesture's drop prediction and pointer-follow geometry.
    *
    * @param source Item whose drag snapshot geometry to adopt.
    * @internal
@@ -1570,32 +1569,23 @@ export class Item extends ElementObject {
    * `index`) and fire one semantic `onItemMove` event for the whole run
    * (falling back to `onItemInsert` when no `onItemMove` is registered).
    *
-   * @note This function assumes none of the non-cloned `items` are
-   * currently in the target container. If it is, call
+   * @note This function assumes none of the `items` are currently in the
+   * target container. If they are, call
    * `detachItemFromContainer` on each first.
    * @internal
    */
   moveItemsAt(
-    froms: (DragLocation | null)[],
+    froms: DragLocation[],
     container: Container,
     items: Item[],
     index: number,
     session: DragSession | null,
-    origins: (Item | null)[] = items.map(() => null),
   ) {
     assertCanFireItemMove(container);
-    let attachedCount = 0;
     items.forEach((member, i) => {
-      // Skip container attach for cloned items for now.
-      // Cloned items should be attached _after_ they are instantiated.
-      if (froms[i] === null) return;
-      this.attachItemToContainer(container, member, index + attachedCount);
-      attachedCount++;
+      this.attachItemToContainer(container, member, index + i);
     });
-    // Only the attached members actually shifted the list; an all-spawned
-    // batch leaves the list untouched, so the item that should follow the
-    // (about-to-be-rendered) new content is still at `index` itself.
-    const runEndIndex = index + attachedCount;
+    const runEndIndex = index + items.length;
     const itemAfterIndex =
       runEndIndex >= container.itemOrderedList.length
         ? null
@@ -1605,7 +1595,7 @@ export class Item extends ElementObject {
       containerMetadata: container.metadata,
       index,
     };
-    fireItemMove(froms, to, items, itemAfterIndex, session, "commit", origins);
+    fireItemMove(froms, to, items, itemAfterIndex, session);
   }
 
   /** @internal */

@@ -13,8 +13,8 @@ sectionOrder: 2
 </script>
 
 SnapSort offers several _modes_, selected per container with `config.mode`.
-A mode decides how the dragged item leaves the current layout, how the
-ghost is placed, and which container/index the item is placed when the user drops.
+Each mode combines a target resolver with a form of placement feedback. What
+follows the pointer is a separate per-session choice.
 
 Drop policy runs before mode-specific placement. `canDrop` removes ineligible
 containers, priority retains only the most preferred containers, and then the
@@ -24,6 +24,44 @@ the mode ranks all eligible positions globally. See
 
 > [!WARNING]
 > Root container and all nested containers must have the same `mode` configured.
+
+## Three Independent Decisions
+
+Think about a drag as three independent axes:
+
+| Concern                | Question                              | API                                                            |
+| ---------------------- | ------------------------------------- | -------------------------------------------------------------- |
+| Target resolution      | Which container and index wins?       | `config.mode`, eligibility, and priority callbacks             |
+| Placement feedback     | How is that prospective result shown? | The mode's target ghost, insertion marker, or swap hover state |
+| Pointer representation | What follows the pointer?             | `session.dragVisual`                                           |
+
+`dragVisual` is `"item" | "preview" | "none"`:
+
+- `"item"` moves the real rendered Items and creates source spacers where a
+  mode needs to keep their old layout slots stable.
+- `"preview"` leaves the Items in layout and creates one root-owned pointer
+  `Ghost` for the complete ordered drag run.
+- `"none"` leaves the Items in layout without a pointer-following visual.
+
+Choose it while the session is pending, normally in the root's `onDragStart`:
+
+```ts
+import type { DragStartEvent } from "@snap-engine/snapsort";
+
+function onDragStart(event: DragStartEvent) {
+  event.session.dragVisual = "preview";
+}
+```
+
+The value becomes fixed when activation begins. Built-in defaults preserve
+each mode's familiar behavior: euclidean/progressive use `"item"`, insertion
+uses `"none"`, and swap uses `"preview"`.
+
+`dragVisual` never decides whether data changes. That remains
+`session.dropEffect`: `"move"` commits the mode's normal mutation, while
+`"none"` keeps target resolution and `onDragEnd` reporting but suppresses the
+persistent move or swap callback. Unlike `dragVisual`, the drop effect may
+change as the prospective target changes.
 
 ## Euclidean
 
@@ -41,12 +79,10 @@ suitable for most common drag and drop layouts:
 - Grid layouts
 - etc.
 
-For move and none effects, its full-size flow ghost begins in the source and
-then routes ghost callbacks through whichever container owns the current
-prospective slot. A flow copy has no source ghost; after clone handoff, its
-first ghost belongs to the first valid destination. Choose flow copy in
-`onDragStart` and do not change to or from copy later in the session. A valid
-move or copy drop commits through the direct destination.
+Its target feedback is a full-size flow ghost that moves through whichever
+container owns the current prospective slot. With the default `"item"` visual,
+the dragged Items themselves follow the pointer. A valid move commits through
+the direct destination.
 
 ## Insertion
 
@@ -55,10 +91,16 @@ ghost with a thin floating marker line that shows where the
 item will be inserted after drop. The item itself
 stays in its original DOM position until drop.
 
-The marker is owned by the prospective target, while a valid move or copy
-mutation is received by the direct destination.
+The marker is owned by the prospective target, while a valid move mutation is
+received by the direct destination. The default `"none"` visual keeps the
+original rows still without adding another pointer-following element.
 
-<PlacementModeDemo mode="insertion" />
+<PlacementModeDemo mode="insertion" dragVisual="preview" />
+
+This demo deliberately overrides insertion's default. The card following the
+pointer is one root-owned `kind: "marker", role: "pointer"` Ghost, while the
+thin line is the destination-owned `kind: "marker", role: "target"` Ghost.
+Both are part of the same foundational ghost system.
 
 Use Insertion placement for line-marker UIs:
 
@@ -78,11 +120,8 @@ final `onItemSwap` runs on the dragged item's direct, pre-swap source.
 
 <PlacementModeDemo mode="swap" />
 
-> [!WARNING]
-> Swap currently supports move semantics only. Setting
-> `session.dropEffect` to `"copy"` or `"none"` does not replace or suppress
-> the swap path; dropping on a valid, different item still commits
-> `onItemSwap`.
+Swap uses `"preview"` by default, but its target selection and final
+`onItemSwap` commit remain the same if another drag visual is chosen.
 
 ## Progressive
 
@@ -91,9 +130,8 @@ variable-size items. Instead of a nearest neighbor approach, it treats
 the layout as a progression of placement regions and chooses the first
 region occupied by the dragged item's center.
 
-It uses the same flow-ghost routing and destination-owned move/copy commit as
-euclidean mode: move/none begins at the source, while copy creates its first
-ghost only at a valid destination.
+It uses the same flow target feedback, `"item"` visual default, and
+destination-owned move commit as euclidean mode.
 
 <div class="placement-mode-comparison">
   <div>
@@ -114,3 +152,54 @@ location the item can be dropped given the current position of the item.
 As humans we're trained to read text from top left to bottom right,
 so this feels unnatural. The progressive algorithm is specifically designed
 to take that perception into account.
+
+## Build Copying from a Move
+
+Copying does not require a special drag lifecycle. Treat it as an ordinary
+move and synchronously backfill the vacated source in `onItemMove`:
+
+```ts
+function copyByMoving(event: ItemMoveEvent) {
+  updateLists((lists) => {
+    const original = removeById(lists, event.itemId);
+    if (!original) return lists;
+
+    insertAt(lists, event.to, original);
+    insertAt(lists, event.from, {
+      ...original,
+      id: crypto.randomUUID(),
+    });
+    return lists;
+  });
+}
+```
+
+The original stable ID moves to the destination, so the thing the user
+dragged is also the thing that performs the drop animation. The fresh source
+replacement has no pre-mutation rectangle; SnapSort's FLIP pass ignores it
+instead of trying to inverse-animate it. Use application metadata to decide
+which sources should use this recipe, and set `dragVisual = "preview"` if the
+source should remain visually occupied while dragging.
+
+For lower-level interfaces that mount a replacement run as a drag begins,
+`DragSession.handoff(replacements)` transfers pointer ownership and frozen
+drag geometry to that already-mounted parallel run. Call it while the session
+is pending in `onDragStart`; lifecycle activation locks it afterward. It is
+intentionally copy-neutral: it does not create state, render components, or
+clean up either run.
+
+### Migrating from built-in copy
+
+If an earlier implementation used `session.dropEffect = "copy"` and
+`onDragClone`:
+
+1. Remove the clone callback and transient adopted-Item state.
+2. Optionally set `session.dragVisual = "preview"` in `onDragStart`.
+3. Let the destination receive a normal `onItemMove` with non-null `from`.
+4. Move that original ID to `to` and mint the replacement ID at `from` in one
+   synchronous state update.
+5. Remove clone-cancellation `onItemRemove` cleanup and any reads of the former
+   `origin*` provenance fields.
+
+Do not swap the identities: keeping the old ID at the source and minting a new
+destination ID disconnects the dragged visual from its drop-animation target.

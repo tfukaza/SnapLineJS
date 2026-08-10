@@ -129,6 +129,92 @@ test.describe("SnapSort adapter-rendered ghost entries (items mode)", () => {
     await expect(column.locator("[data-snapsort-ghost-entry]")).toHaveCount(0);
   });
 
+  test("a multi-item preview uses one pointer Ghost while flow feedback keeps its target run", async ({
+    page,
+  }) => {
+    const column = await demoBoxByHeading(page, "Vertical Column");
+    const containerElement = column.locator(".snapsort-container").first();
+    const item2 = await itemByText(column, "Item 2");
+    const item3 = await itemByText(column, "Item 3");
+    await item2.click();
+    await item3.click({ modifiers: ["Meta"] });
+
+    // Install the override after selection updates settle because Svelte's
+    // adapter refreshes its callback wrapper when reactive config reruns.
+    const coreImportPath = `/@fs${process.cwd()}/src/index.ts`;
+    await page.evaluate(
+      async ({ coreImportPath }) => {
+        const { GlobalManager } = await import(coreImportPath);
+        const cell = [...document.querySelectorAll(".demo-cell")].find(
+          (element) =>
+            element.querySelector("h2")?.textContent?.trim() ===
+            "Vertical Column",
+        );
+        const element = cell?.querySelector(".snapsort-container");
+        const containers =
+          GlobalManager.getInstance().data.dragAndDropContainers ?? [];
+        const container = containers.find(
+          (candidate: any) => candidate.element === element,
+        );
+        if (!container) throw new Error("Could not find the Vertical Column.");
+        const originalGhostInsert = container.config.callbacks.onGhostInsert;
+        (
+          globalThis as typeof globalThis & {
+            __snapsortPointerPreviewItemCounts?: number[];
+          }
+        ).__snapsortPointerPreviewItemCounts = [];
+        container.config.callbacks.onGhostInsert = (event: any) => {
+          if (event.role === "pointer") {
+            (
+              globalThis as typeof globalThis & {
+                __snapsortPointerPreviewItemCounts: number[];
+              }
+            ).__snapsortPointerPreviewItemCounts.push(event.items.length);
+          }
+          originalGhostInsert?.(event);
+        };
+        container.config.callbacks.onDragStart = (event: any) => {
+          event.session.dragVisual = "preview";
+        };
+      },
+      { coreImportPath },
+    );
+
+    const start = center(await rect(item2));
+    await page.mouse.move(start.x, start.y);
+    await page.mouse.down();
+    await page.mouse.move(start.x + 4, start.y + 4);
+    await page.waitForTimeout(80);
+    await page.mouse.move(start.x, start.y + 120, { steps: 12 });
+    await page.waitForTimeout(120);
+
+    await expect(page.locator('[data-snapsort-ghost="pointer"]')).toHaveCount(
+      1,
+    );
+    await expect(
+      containerElement.locator('[data-snapsort-ghost-entry="flow"]'),
+    ).toHaveCount(2);
+    await expect(item2).not.toHaveCSS("position", "absolute");
+    await expect(item3).not.toHaveCSS("position", "absolute");
+    expect(
+      await page.evaluate(
+        () =>
+          (
+            globalThis as typeof globalThis & {
+              __snapsortPointerPreviewItemCounts?: number[];
+            }
+          ).__snapsortPointerPreviewItemCounts ?? [],
+      ),
+    ).toContain(2);
+
+    await page.mouse.up();
+    await page.waitForTimeout(250);
+    await expect(page.locator('[data-snapsort-ghost="pointer"]')).toHaveCount(
+      0,
+    );
+    await expect(column.locator("[data-snapsort-ghost-entry]")).toHaveCount(0);
+  });
+
   test("cross-container drag never leaves a stale ghost entry in the departed area", async ({
     page,
   }) => {

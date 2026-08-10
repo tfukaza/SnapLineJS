@@ -3,111 +3,35 @@ import type { Item } from "../item";
 import { resetDropSnapshotDebugDump, type DropCandidate } from "../algorithm";
 import type { DragLocation, GhostRect, GhostRole } from "../events";
 import {
-  assertCanFireGhostInsert,
-  assertCanFireGhostRemove,
   assertCanFireItemSwap,
-  fireGhostInsert,
-  fireGhostRemove,
   fireItemSwap,
   fireMutation,
   settleMutation,
 } from "../mutation";
 import type { DragLifecycleStrategy } from "./lifecycle";
 import type { DragSession } from "./session";
+import {
+  restoreActiveItems,
+  startItemVisual,
+  stopItemVisual,
+  updateItemVisual,
+  validateItemVisual,
+} from "./item-visual";
+import {
+  pointerPreviewMemberRects,
+  removePointerPreview,
+  startPointerPreview,
+  updatePointerPreview,
+  validatePointerPreview,
+} from "./pointer-preview";
 
 /**
- * Swap mode: the original item never moves during the drag (like the
- * insertion marker, it's never detached); a `"pointer"`-role ghost follows
- * the pointer as a purely visual preview. There is no target-role ghost —
- * which item the pointer is over is reported via `onDragItemEnter`/`Move`/
- * `Leave` (see session.ts's generic hover tracking), and it's the consumer's
- * job to render any target highlight. Dropping swaps the dragged item with
- * whichever item the pointer was last over.
+ * Swap mode has no target-role ghost: the current hover target is exposed
+ * through `onDragItemEnter`/`Move`/`Leave`. Pointer representation is chosen
+ * independently through `dragVisual`: the real Item can be hoisted with a
+ * source spacer, the shared group preview can follow the pointer, or neither
+ * can be rendered. A `"move"` drop swaps the primary Item with its target.
  */
-
-async function createPointerGhost(session: DragSession): Promise<void> {
-  if (session.ghosts.has("pointer")) return;
-  const item = session.primaryItem;
-  const root = session.root;
-  if (!root.element) return;
-  assertCanFireGhostInsert(root);
-  assertCanFireGhostRemove(root);
-
-  const box = item.dragSnapshot?.box ?? null;
-  const ghostRect: GhostRect | null = box
-    ? { x: box.x, y: box.y, width: box.width, height: box.height }
-    : null;
-
-  const ghostItem = item.createGhostItem(
-    session,
-    "marker",
-    root,
-    ghostRect,
-    "pointer",
-  );
-  if (!ghostItem) return;
-  session.ghosts.set("pointer", ghostItem);
-
-  // The pointer ghost isn't part of any container's item list — like the
-  // insertion marker, it's a purely visual, absolutely-positioned element.
-  // `index: -1` signals "not applicable" (there is no list position).
-  fireGhostInsert(
-    root,
-    item,
-    ghostItem,
-    -1,
-    null,
-    ghostRect,
-    session,
-    "marker",
-    "pointer",
-  );
-  await settleMutation();
-}
-
-function writePointerGhostPosition(session: DragSession): void {
-  const ghostItem = session.ghosts.get("pointer");
-  const ghostElement = ghostItem?.element;
-  if (!ghostElement) return;
-
-  const root = session.root;
-  const rootProp = root.dragSnapshot?.box ?? root.currentDomProperty;
-  const box = session.primaryItem.dragSnapshot?.box;
-  const width = box?.width ?? 0;
-  const height = box?.height ?? 0;
-  const worldLeft = session.pointer.x - width / 2;
-  const worldTop = session.pointer.y - height / 2;
-
-  if (ghostItem.frameworkManagedGhostElement) {
-    // Move framework ghosts by updating adapter state, not by styling the
-    // node behind the framework's back. Reusing onGhostInsert as an upsert
-    // replaces the existing keyed ghost event synchronously.
-    fireGhostInsert(
-      root,
-      session.primaryItem,
-      ghostItem,
-      -1,
-      null,
-      { x: worldLeft, y: worldTop, width, height },
-      session,
-      "marker",
-      "pointer",
-    );
-    return;
-  }
-
-  const left = worldLeft - rootProp.x;
-  const top = worldTop - rootProp.y;
-
-  ghostElement.dataset.snapsortGhost = "pointer";
-  ghostElement.style.position = "absolute";
-  ghostElement.style.left = `${left}px`;
-  ghostElement.style.top = `${top}px`;
-  ghostElement.style.width = `${width}px`;
-  ghostElement.style.height = `${height}px`;
-  ghostElement.style.pointerEvents = "none";
-  ghostElement.style.zIndex = "1000";
-}
 
 async function removeGhost(
   session: DragSession,
@@ -119,16 +43,7 @@ async function removeGhost(
     session.pendingGhostTarget = null;
     return;
   }
-  const item = session.primaryItem;
-  const ghostItem = session.ghosts.get(role);
-  if (!ghostItem) return;
-
-  // Pointer ghosts are visual overlays rather than list members, so route
-  // removal through the same root container that received onGhostInsert.
-  fireGhostRemove(session.root, item, ghostItem, session, "marker", role);
-  await settleMutation();
-  ghostItem.destroy(!ghostItem.frameworkManagedGhostElement);
-  session.ghosts.delete(role);
+  if (role === "pointer") await removePointerPreview(session);
 }
 
 function drop(session: DragSession): void {
@@ -177,11 +92,12 @@ function drop(session: DragSession): void {
 
   item.schedule(
     () => {
-      const pointerGhost = session.ghosts.get("pointer")?.element ?? null;
       draggedAnimation.first =
-        pointerGhost?.getBoundingClientRect() ??
-        item.element?.getBoundingClientRect() ??
-        null;
+        session.dragVisual === "preview"
+          ? pointerPreviewMemberRects(session)[0]
+          : session.dragVisual === "item"
+            ? item.element?.getBoundingClientRect() ?? null
+            : null;
 
       dropTarget = resolveDropTarget();
       if (!dropTarget || dropTarget.item === item) return;
@@ -195,6 +111,10 @@ function drop(session: DragSession): void {
 
   item.schedule(
     async () => {
+      if (session.dragVisual === "item") {
+        await stopItemVisual(session);
+        restoreActiveItems(session);
+      }
       await removeGhost(session, "pointer");
       session.pendingGhostTarget = null;
       session.clearHoveredItem();
@@ -206,20 +126,30 @@ function drop(session: DragSession): void {
 
       const aLocation = item.getIndexAndContainer();
       const target = dropTarget ?? resolveDropTarget();
-      const bContainer = target?.container ?? null;
-      const bIndex = target?.index ?? -1;
       const targetItem = target?.item ?? null;
+      const targetLocation = targetItem?.getIndexAndContainer();
+      const bContainer = targetLocation?.container ?? null;
+      const bIndex = targetLocation?.index ?? -1;
 
       let destination: DragLocation | null = null;
       draggedAnimation.config = item.dropAnimationConfig(
         bContainer ?? aLocation.container,
       );
 
+      if (bContainer && targetItem && targetItem !== item) {
+        destination = {
+          container: bContainer,
+          containerMetadata: bContainer.metadata,
+          index: bIndex,
+        };
+      }
+
       if (
         aLocation.container &&
         bContainer &&
         targetItem &&
-        targetItem !== item
+        targetItem !== item &&
+        session.dropEffect === "move"
       ) {
         const aContainer = aLocation.container;
         const aIndex = aLocation.index;
@@ -230,12 +160,6 @@ function drop(session: DragSession): void {
           displacedAnimation.key = null;
           displacedAnimation.first = null;
         }
-
-        destination = {
-          container: bContainer,
-          containerMetadata: bContainer.metadata,
-          index: bIndex,
-        };
 
         assertCanFireItemSwap(aContainer);
 
@@ -256,6 +180,10 @@ function drop(session: DragSession): void {
       }
 
       root.clearDragSnapshotTree();
+      session.dragCoordinateParent.clear();
+      session.dragLayoutPosition.clear();
+      session.dragVisualStart.clear();
+      session.groupVisualOffsets.clear();
       resetDropSnapshotDebugDump(item);
       session.status = "ended";
       root.dragSession = null;
@@ -324,30 +252,39 @@ export class SwapLifecycle implements DragLifecycleStrategy {
   readonly ghostKind = "marker" as const;
 
   validateStart(session: DragSession): void {
-    assertCanFireItemSwap(session.sources[0].container);
-    assertCanFireGhostInsert(session.root);
-    assertCanFireGhostRemove(session.root);
+    if (session.dropEffect === "move") {
+      assertCanFireItemSwap(session.activeSources[0].container);
+    }
+    if (session.dragVisual === "preview") validatePointerPreview(session);
+    if (session.dragVisual === "item") validateItemVisual(session);
   }
 
   async dragStart(session: DragSession): Promise<void> {
-    assertCanFireItemSwap(session.sources[0].container);
-    await createPointerGhost(session);
-    writePointerGhostPosition(session);
+    if (session.dropEffect === "move") {
+      assertCanFireItemSwap(session.activeSources[0].container);
+    }
+    if (session.dragVisual === "item") {
+      await startItemVisual(session);
+    } else if (session.dragVisual === "preview") {
+      await startPointerPreview(session);
+      updatePointerPreview(session);
+    }
     await session.updateDropTarget();
   }
 
   dragMove(session: DragSession): void {
-    writePointerGhostPosition(session);
+    if (session.dragVisual === "item") {
+      updateItemVisual(session);
+    } else if (session.dragVisual === "preview") {
+      updatePointerPreview(session);
+    }
   }
 
   currentGhostLocation(
     session: DragSession,
   ): { container: Container; index: number } | null {
     const pending = session.pendingGhostTarget;
-    const pointerGhost = session.ghosts.get("pointer");
-    if (!pending || !pointerGhost || pending.ghostItem !== pointerGhost) {
-      return null;
-    }
+    if (!pending) return null;
     return { container: pending.container, index: pending.index };
   }
 
@@ -361,8 +298,7 @@ export class SwapLifecycle implements DragLifecycleStrategy {
     index: number,
     ghostRect: GhostRect | null | undefined,
   ): void {
-    const pointerGhost = session.ghosts.get("pointer");
-    if (!pointerGhost) return;
+    const pointerGhost = session.ghosts.get("pointer") ?? session.primaryItem;
     session.pendingGhostTarget = {
       ghostItem: pointerGhost,
       container,
@@ -375,6 +311,10 @@ export class SwapLifecycle implements DragLifecycleStrategy {
     session: DragSession,
     role: GhostRole = "target",
   ): Promise<void> {
+    if (role === "source") {
+      await stopItemVisual(session);
+      return;
+    }
     await removeGhost(session, role);
   }
 

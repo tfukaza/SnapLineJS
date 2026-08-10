@@ -15,32 +15,14 @@ export interface DragLocation {
 }
 
 /**
- * What committing the current drag should do to source data. Writable by
- * consumers through `session.dropEffect` from `onDragStart` and, subject to
- * the lifecycle constraints below, `onDropTargetChange`; the core never
- * infers this itself.
- *
- * - `"move"` (default): the original item is relocated.
- * - `"copy"`: commits through the same `onItemMove` path a move would — see
- *   `ItemMoveEvent`'s doc for the full contract (`from: null`, `origins`
- *   provenance). Flow mode spawns a fresh floating item at dragStart
- *   (`onDragClone`) whose permanent id carries through to commit; insertion
- *   mode never lifts anything, so the commit event carries the ORIGINAL
- *   (`items[i] === origins[i]`) and the consumer mints the duplicate's id.
- * - `"none"`: no mutation events fire; the original returns to its source slot.
- *   `onDragEnd` still reports the resolved destination (e.g. for a trash-bin
- *   drop, where the consumer removes the item themselves in `onDragEnd`).
- *
- * The built-in euclidean, progressive, and insertion lifecycles honor all
- * three effects. In euclidean/progressive mode, clone handoff happens only at
- * startup: choose `"copy"` in `onDragStart` and do not change to or from it
- * later; `onDropTargetChange` may still switch between `"move"` and `"none"`.
- * In insertion mode, the effect can also change during target updates. The
- * built-in swap lifecycle currently does not branch on `dropEffect`: setting
- * `"copy"` or `"none"` still follows the normal swap commit path. Treat swap
- * mode as `"move"`-only until that limitation is removed.
+ * What committing the current drag should do to source data. Consumers may
+ * choose `"none"` for gestures that use the resolved destination without a
+ * SnapSort mutation (for example, a trash target handled by `onDragEnd`).
  */
-export type DropEffect = "move" | "copy" | "none";
+export type DropEffect = "move" | "none";
+
+/** What follows the pointer during a drag, independent of placement feedback. */
+export type DragVisual = "item" | "preview" | "none";
 
 /** Which role a ghost plays during a drag. See `DragSession.ghosts`. */
 export type GhostRole = "target" | "source" | "pointer";
@@ -138,19 +120,6 @@ export interface ItemSwapEvent {
  * another (including within the same container). Preferred over the
  * insert/remove primitives when the consumer's state model can express a
  * move as one operation.
- *
- * Also the commit event for a `dropEffect = "copy"` drag: a spawned item
- * (see `onDragClone`) has no source location, so `from`/`froms` are `null`
- * for it — the consumer's job is to recognize an unfamiliar `itemId` and
- * *add* an entry, exactly as it would for an item arriving from a container
- * whose state it doesn't track. `origins`/`originsMetadata` carry the
- * original item a spawned entry stands in for (`null` for a genuinely moved
- * item), for consumers that want provenance (undo/history). The permanent
- * entry the consumer creates on this event MUST reuse the spawned item's
- * existing `itemId` — the dragged clone instance is destroyed once the
- * consumer's own re-render takes over rendering the permanent entry, and
- * only a stable `itemId` bridges the two instances for FLIP/key lookups
- * (see `Item.itemKey`).
  */
 export interface ItemMoveEvent {
   session: DragSession | null;
@@ -161,19 +130,10 @@ export interface ItemMoveEvent {
   items: Item[];
   itemIds: ItemId[];
   itemsMetadata: ItemMetadata[];
-  /** Null when `item` was spawned (copy), not moved from anywhere. */
-  from: DragLocation | null;
+  from: DragLocation;
   to: DragLocation;
-  /** Each item's source location, parallel to `items`; entries are null for spawned items. `from === froms[0]`. */
-  froms: (DragLocation | null)[];
-  /** The original item `item` was spawned from (copy), or null for a genuinely moved item. */
-  originItem: Item | null;
-  originItemId: ItemId | null;
-  originItemMetadata: ItemMetadata | null;
-  /** Parallel to `items`/`froms`. */
-  origins: (Item | null)[];
-  originItemIds: (ItemId | null)[];
-  originsMetadata: (ItemMetadata | null)[];
+  /** Each item's source location, parallel to `items`. `from === froms[0]`. */
+  froms: DragLocation[];
   /** Element the whole run is inserted before (all items share one insertion point). */
   beforeElement: HTMLElement | null;
   phase: MutationPhase;
@@ -187,9 +147,9 @@ export interface GhostRect {
 }
 
 /**
- * Which drag lifecycle produced a ghost: `"flow"` is a flow-layout spacer;
- * `"marker"` is an overlay used for either an insertion marker or swap's
- * pointer preview. Use `GhostRole` to distinguish target and pointer markers.
+ * Which visual form a ghost uses: `"flow"` is a layout spacer and `"marker"`
+ * is an overlay used for either an insertion target or a pointer preview. Use
+ * `GhostRole` to distinguish source, target, and pointer responsibilities.
  */
 export type GhostKind = "flow" | "marker";
 
@@ -275,41 +235,6 @@ export interface DragEndEvent {
   destination: DragLocation | null;
 }
 
-/**
- * Fired on the tree root at drag start in euclidean/progressive mode when
- * `session.dropEffect === "copy"`, BEFORE the drag is hoisted. The direct
- * source is carried by `sources`; it is not the callback receiver. The
- * consumer must materialize a clone in their own state for each `cloneItems`
- * entry and render it (passed through the adapter's `item` prop) inside a drop
- * container. The framework adapter's synchronous `flushMutation` transaction
- * ensures each clone has a DOM element before core hands the drag off to the clones
- * (`DragSession.handoff`) — the original items stay exactly where they are,
- * untouched and un-ghosted. If the consumer binds no element, the copy drag
- * is vetoed.
- *
- * From this point on, handling is identical to a move drag — hover, ghost
- * placement, and drop-target resolution never branch on copy vs move.
- * `cloneItems` is parallel to `items` (the originals). At drop, a clone with
- * a valid destination commits through the **same** `onItemMove` path a moved
- * item would (see `ItemMoveEvent` — `from`/`origins` distinguish "spawned"
- * from "moved" for consumers that care). A clone dropped with no valid
- * destination was never a real list member, so there is nothing to return —
- * `onItemRemove` fires instead so the consumer deletes what it created.
- */
-export interface DragCloneEvent {
-  session: DragSession;
-  /** The original items (never moved). `item === items[0]`. */
-  item: Item;
-  itemId: ItemId;
-  itemMetadata: ItemMetadata;
-  items: Item[];
-  itemIds: ItemId[];
-  itemsMetadata: ItemMetadata[];
-  sources: DragLocation[];
-  /** Fresh clone items, parallel to `items`; the consumer binds each one's element. */
-  cloneItems: Item[];
-}
-
 export interface DropTargetChangeEvent {
   session: DragSession;
   item: Item;
@@ -334,7 +259,7 @@ export interface CanDropEvent {
   itemsMetadata: ItemMetadata[];
   /** The primary item's source when available. */
   source: DragLocation | null;
-  /** Source locations parallel to `items`; spawned items may have no source. */
+  /** Source locations parallel to `items`; null when no drag source is available. */
   sources: readonly (DragLocation | null)[];
   container: Container;
   containerMetadata: Record<string, unknown>;
@@ -476,9 +401,8 @@ export interface ContainerCallbacks {
   onItemInsert?: (event: ItemInsertEvent) => void;
 
   /**
-   * Fires on the item's current direct owner for programmatic removal, or on
-   * the container hosting a transient euclidean/progressive copy clone during
-   * cleanup. An ordinary move does not also emit `onItemRemove` on its source.
+   * Fires on the item's current direct owner for programmatic removal. An
+   * ordinary move does not also emit `onItemRemove` on its source.
    */
   onItemRemove?: (event: ItemRemoveEvent) => void;
 
@@ -489,14 +413,6 @@ export interface ContainerCallbacks {
    * `onItemMove` calls when unregistered (see `ItemSwapEvent`).
    */
   onItemSwap?: (event: ItemSwapEvent) => void;
-
-  /**
-   * Euclidean/progressive copy only: fires on the tree root at drag start when
-   * `dropEffect === "copy"` (see `DragCloneEvent`). The consumer must bind an
-   * element to each clone, or the copy drag is vetoed. The clones then commit
-   * at drop through the normal destination-owned `onItemMove` path.
-   */
-  onDragClone?: (event: DragCloneEvent) => void;
 
   /**
    * Fires directly on the tree root in every built-in mode. Returning `false`
@@ -576,32 +492,31 @@ export interface ContainerCallbacks {
   getItemHitbox?: (event: ItemHitboxEvent) => ItemHitbox;
 
   /**
-   * Fires directly on `event.container` when a ghost is created: the initial
-   * source for euclidean/progressive move or none; the first valid destination
-   * for euclidean/progressive copy or insertion; or the root for swap's pointer
-   * ghost. Not wrapped by `flushMutation`; `event.kind` and `event.role`
-   * distinguish the ghost lifecycle.
+   * Fires directly on `event.container` when a ghost is created: a flow
+   * placement/source spacer, an insertion target marker, or a root-owned
+   * pointer preview. Not wrapped by `flushMutation`; `event.kind` and
+   * `event.role` distinguish its form and responsibility.
    */
   createGhost?: (event: GhostCreateEvent) => HTMLElement | void | null;
 
   /**
    * Fires on the direct ghost owner (`event.container`) through that owner's
-   * `flushMutation`: the prospective target in flow/insertion modes, or the
-   * root for swap's pointer ghost. May repeat to move or update a ghost.
+   * `flushMutation`: a flow source/target spacer, insertion target, or the root
+   * pointer preview. May repeat to move or update a ghost.
    */
   onGhostInsert?: (event: GhostInsertEvent) => void;
 
   /**
    * Fires on the direct owner the ghost is leaving (`event.container`) through
-   * that owner's `flushMutation`: a previous/current target in flow/insertion
-   * modes, or the root for swap's pointer ghost.
+   * that owner's `flushMutation`: a flow source/target spacer, insertion
+   * target, or the root pointer preview.
    */
   onGhostRemove?: (event: GhostRemoveEvent) => void;
 
   /**
    * Integration hook, not a session event. SnapSort reads it from the same
    * receiver as the callback being wrapped: item move/insert/remove/swap,
-   * ghost insert/remove, or root drag clone/drop-target-change/drag-end.
+   * ghost insert/remove, or root drop-target-change/drag-end.
    * Framework adapters provide it automatically to commit state and DOM
    * synchronously before SnapSort reads geometry. Drag start, ghost creation,
    * hover, policy, and visual-invalidation callbacks are not wrapped.

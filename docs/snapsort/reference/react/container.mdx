@@ -160,6 +160,11 @@ function renderColumnEntries(
 }
 ```
 
+This helper handles list-positioned target/source ghosts. A pointer preview is
+owned by the root and has `role: "pointer"` with `index: -1`; render it once
+under that root as a separate absolutely positioned `Ghost`, not inside a
+column's index conversion.
+
 ## Define a Container
 
 Render the keyed item and ghost entries owned by React.
@@ -264,14 +269,13 @@ and do not change that receiver.
 
 | Callback | Fires on | Built-in modes / trigger | Notes |
 |----------|----------|--------------------------|-------|
-| `onItemMove(event)` | Direct destination (`event.to.container`) | Euclidean/progressive move or copy commits; insertion copy or placement-changing moves; placement-changing programmatic `moveItem`; Vanilla's swap fallback | Preferred state callback. It reports one semantic move (or copy insertion) with both `from` and `to`; same-placement insertion/programmatic moves are no-ops, and the source does not also receive `onItemRemove`. |
-| `onItemInsert(event)` | Direct destination (`event.container`) | Primitive insertions; otherwise the move, copy, programmatic, and Vanilla swap-fallback paths when that destination has no `onItemMove` | Lower-level destination primitive and fallback. Configure either this callback or `onItemMove` anywhere an item can land. |
-| `onItemRemove(event)` | Current direct owner, or transient clone host (`event.container`) | Programmatic `removeItem`; cleanup of an uncommitted euclidean/progressive copy clone | This is not the source half of an ordinary move. Programmatic events have `session === null`; copy cleanup carries its session. |
-| `onItemSwap(event)` | Dragged item's pre-swap direct source (`event.a.container`) | Swap commit only | Receives both participants once. The target container does not receive a second swap callback. Current limitation: swap mode does not honor `dropEffect` values `"copy"` or `"none"`; it still follows the swap path. Required by the React adapter. |
-| `onDragClone(event)` | Tree root | Euclidean/progressive start with `session.dropEffect === "copy"` | Runs inside the root's mutation transaction. Materialize and bind every `cloneItems` entry synchronously or the copy drag is vetoed. |
-| `onDragStart(event)` | Tree root | Start of every mode | Runs directly, outside `flushMutation`. Return `false` to veto; `event.source.container` identifies the direct source. |
+| `onItemMove(event)` | Direct destination (`event.to.container`) | Euclidean/progressive/insertion commits; placement-changing programmatic `moveItem`; Vanilla's swap fallback | Preferred state callback. It reports one semantic move with non-null `from` and `to`; same-placement insertion/programmatic moves are no-ops, and the source does not also receive `onItemRemove`. |
+| `onItemInsert(event)` | Direct destination (`event.container`) | Primitive insertions; otherwise move, programmatic, and Vanilla swap-fallback paths when that destination has no `onItemMove` | Lower-level destination primitive and fallback. Configure either this callback or `onItemMove` anywhere an item can land. |
+| `onItemRemove(event)` | Current direct owner (`event.container`) | Programmatic `removeItem` | This is not the source half of an ordinary move. Programmatic events have `session === null`. |
+| `onItemSwap(event)` | Dragged item's pre-swap direct source (`event.a.container`) | Swap commit only | Receives both participants once. The target container does not receive a second swap callback. Required by the React adapter. |
+| `onDragStart(event)` | Tree root | Start of every mode | Runs directly, outside `flushMutation`. Return `false` to veto; set `event.session.dragVisual` here while the session is pending. `event.source.container` identifies the direct source. |
 | `onDragEnd(event)` | Tree root | End of every activated drag, including cancellation | Runs through the root's `flushMutation` after the final mutation or return path. It does not fire after a startup veto or pre-activation failure. Inspect `event.source` and `event.destination` for locations. |
-| `onDropTargetChange(event)` | Tree root | Every mode, when the prospective container or index changes | Runs through the root's `flushMutation`. `event.current?.container` is the prospective target, not the receiver. Flow copy must be chosen in `onDragStart` and must not be toggled here. |
+| `onDropTargetChange(event)` | Tree root | Every mode, when the prospective container or index changes | Runs through the root's `flushMutation`. `event.current?.container` is the prospective target, not the receiver. `dragVisual` is already fixed; `dropEffect` may switch between `"move"` and `"none"`. |
 | `onDragItemEnter(event)` | Direct owner of `event.overItem` (`event.container`) | Every mode, when the pointer first enters an item's hitbox | Semantically distinct from resolved slot changes, but hit-testing is scoped to items in the currently resolved target container. Runs directly. |
 | `onDragItemMove(event)` | Direct owner of `event.overItem` (`event.container`) | Every mode, on each pointer move while still inside an item's hitbox | Semantically distinct from resolved slot changes, but hit-testing is scoped to items in the currently resolved target container. Runs directly. |
 | `onDragItemLeave(event)` | Direct owner of `event.overItem` (`event.container`) | Every mode, when the pointer leaves an item's hitbox or the drag ends | Part of the same target-scoped hover stream; the final leave prevents hover UI from remaining active. Runs directly. |
@@ -280,16 +284,52 @@ and do not change that receiver.
 | `getDropPriority(event)` | Each eligible candidate destination (`event.container`) | Every mode, once per eligible container during each target resolution | Runs directly after `canDrop`. Return a finite override or `undefined` to keep `dropPriority`. Programmatic moves bypass it. |
 | `getInsertionMarkerRect(event)` | Each direct candidate destination (`event.container`) | Insertion mode, once per candidate gap during resolution | Pure synchronous geometry hook outside `flushMutation`. Return the complete finite, nonnegative world-space marker rectangle; `event.defaultRect` provides SnapSort's default. |
 | `getItemHitbox(event)` | Direct owner of `event.overItem` (`event.container`) | Hover resolution in every mode; directly drives swap targeting | Pure synchronous geometry hook outside `flushMutation`. Return a world-space rectangle or circle; `event.defaultRect` is the candidate item's frozen border box. |
-| `createGhost(event)` | Container where the ghost is first created (`event.container`) | Flow move/none: initial source; flow copy: first valid destination; insertion: first valid destination; swap: root | Creation notification only; moving an existing ghost does not fire it again. Returned DOM nodes are ignored because React owns ghost DOM. Runs directly. |
-| `onGhostInsert(event)` | Current ghost owner (`event.container`) | Flow source/destination placement; insertion target placement; swap root pointer placement and movement | Required on every possible React ghost owner. Store/upsert the event and render `Ghost`; runs through that owner's `flushMutation`. |
+| `createGhost(event)` | Container where the ghost is first created (`event.container`) | Placement feedback and drag visuals in every mode | Creation notification only; moving an existing ghost does not fire it again. Target/source ghosts belong to their placement container; a `"preview"` drag visual creates one root-owned pointer Ghost. Returned DOM nodes are ignored because React owns ghost DOM. Runs directly. |
+| `onGhostInsert(event)` | Current ghost owner (`event.container`) | Target/source placement and root pointer-preview creation/movement | Required on every possible React ghost owner. Store/upsert the event and render `Ghost`; runs through that owner's `flushMutation`. |
 | `onGhostRemove(event)` | Ghost owner it is leaving (`event.container`) | Ghost crosses containers, is replaced, or the session ends | Required on every possible React ghost owner. Remove the matching rendered ghost; runs through the departing owner's `flushMutation`. |
-| `flushMutation(mutation)` | Same container as the callback being transacted | Structural and lifecycle mutations in every mode, plus programmatic mutations | Adapter hook, not a session event. React supplies it automatically. It wraps item move/insert/remove/swap, ghost insert/remove, and root drag clone, target-change, and drag-end callbacks. |
+| `flushMutation(mutation)` | Same container as the callback being transacted | Structural and lifecycle mutations in every mode, plus programmatic mutations | Adapter hook, not a session event. React supplies it automatically. It wraps item move/insert/remove/swap, ghost insert/remove, and root target-change and drag-end callbacks. |
 | `awaitMutation()` | Same receiver, only when `flushMutation` is absent | Deprecated compatibility path after a mutation | React supplies `flushMutation`, so this fallback is not used. Promise results cannot provide a paint-atomic commit. |
 
 The table describes **dispatch**, which is separate from startup
 **configuration validation**. For framework-owned trees, SnapSort verifies
 that the source can service mutations before activating a drag even though a
 successful move is later dispatched on the destination.
+
+### Drag visuals
+
+`DragSession.dragVisual` separates pointer representation from placement mode:
+
+```tsx
+const rootCallbacks = {
+  ...ghostCallbacks,
+  onDragStart(event: DragStartEvent) {
+    event.session.dragVisual = "preview";
+  },
+};
+```
+
+The choices are `"item"`, `"preview"`, and `"none"`. A preview is one
+root-owned `kind: "marker", role: "pointer"` Ghost for the complete dragged
+run; insertion's destination marker remains a separate `role: "target"`
+Ghost. Store both events in framework state and render a `Ghost` for each. Set
+the property only while the session is pending, normally in `onDragStart`.
+
+### Advanced session handoff
+
+`event.session.handoff(replacements)` retargets a pending drag to an
+already-mounted, parallel `Item[]`. Call it during `onDragStart`, before
+lifecycle activation. It preserves pointer ownership, frozen geometry, grab
+offset, and the original source locations while replacing the session's
+participants.
+
+Every replacement must be unique, connected, and rendered directly inside a
+registered Container in the same Engine and root tree. Validation and pointer
+transfer are atomic. Handoff does not construct Items, update framework state,
+imply copying, destroy either run, or clean up application data. If a React
+state change creates the replacements, commit their DOM synchronously before
+calling `handoff`; an `onDragStart` state update by itself does not provide
+that guarantee. Calling it after activation begins throws without changing the
+session.
 
 ### Geometry callbacks
 
@@ -320,13 +360,13 @@ pointer, and frozen `defaultRect`. Return either
 - Configure `onItemSwap` on every container that can be the direct source of a
   swap.
 - Configure `onGhostInsert` and `onGhostRemove` on every possible ghost owner:
-  flow move/none sources and flow destinations; insertion sources (validated
-  at startup) and destinations (actual receivers); and the root in swap mode.
+  placement target containers, source containers that may hold an actual
+  dragged Item's slot, and the root whenever `dragVisual` can be `"preview"`.
 - A shared handler object is fine, but pass it explicitly to every
   participating `Container`; nesting alone does not share callbacks.
 
 Configure `onItemRemove` as well when a container can receive
-`removeItem(id)` or can host a transient flow-copy clone. Ordinary moves emit
+`removeItem(id)`. Ordinary moves emit
 only the destination-owned `onItemMove`/`onItemInsert` event.
 
 Update React state synchronously in `onItemMove` or `onItemSwap`. The adapter

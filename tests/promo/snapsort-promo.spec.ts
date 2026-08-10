@@ -277,7 +277,7 @@ test("03 File Explorer nesting", async ({ page }) => {
   });
 });
 
-test("04 Clone Palette copy", async ({ page }) => {
+test("04 Template Palette duplication", async ({ page }) => {
   const exhibit = page.locator("#clone-palette");
   const palette = exhibit.locator(".clone-palette");
   const canvas = exhibit.locator(".clone-canvas");

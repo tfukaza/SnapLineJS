@@ -7,16 +7,17 @@ import type { DragSession } from "./session";
  * The drag/ghost lifecycle for a sort mode. Built-ins include a flow-layout
  * spacer ghost that lives in the item list and is FLIP-animated
  * (euclidean/progressive), a floating insertion marker tracked only via
- * `DragSession.pendingGhostTarget` (insertion), and a pointer ghost with no
- * target marker (swap). Drop-target *resolution* (which algorithm picks the
- * candidate) is a separate axis — see `DropTargetStrategy` in drop-strategy.ts.
+ * `DragSession.pendingGhostTarget` (insertion), and hover-only targeting
+ * (swap). Pointer representation is shared and selected independently through
+ * `DragSession.dragVisual`. Drop-target *resolution* (which algorithm picks
+ * the candidate) is a separate axis — see `DropTargetStrategy`.
  */
 export interface DragLifecycleStrategy {
   readonly ghostKind: GhostKind;
 
   /**
    * Validate the callbacks/resources required by the initial drag state.
-   * Runs after `onDragStart` (so `dropEffect` is final) but before the
+   * Runs after `onDragStart` (so drag options are final) but before the
    * session is marked active or any dragging attributes are written.
    */
   validateStart?(session: DragSession): void;

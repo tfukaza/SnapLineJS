@@ -11,7 +11,13 @@ import {
   resetDropSnapshotDebugDump,
   type DropCandidate,
 } from "../algorithm";
-import type { DragLocation, DropEffect, GhostRect, GhostRole } from "../events";
+import type {
+  DragLocation,
+  DragVisual,
+  DropEffect,
+  GhostRect,
+  GhostRole,
+} from "../events";
 import {
   fireDragItemEnter,
   fireDragItemLeave,
@@ -63,9 +69,8 @@ export class DragSession {
   readonly pointerId: number;
   readonly #handoffTo: GestureHandoffControl["handoffTo"];
   /**
-   * The items being dragged. Stable for the whole gesture EXCEPT across a
-   * `handoff` (copy), which replaces the originals with freshly-created clone
-   * items — see `handoff`. Ordered by original document index (lowest first).
+   * The items currently receiving this drag. Stable except across `handoff`.
+   * Ordered by the original run's document order (lowest first).
    */
   items: Item[];
   sources: DragLocation[];
@@ -73,12 +78,9 @@ export class DragSession {
   pressedItem: Item;
   /** `items` as a Set, for O(1) exclusion checks in layout/algorithm code. */
   itemSet: Set<Item>;
-  /**
-   * When this drag was handed off to clones (`dropEffect = "copy"`), the
-   * original items the clones stand in for, parallel to `items`. Null for a
-   * normal (non-copy) drag. The originals are never detached or moved.
-   */
-  handoffOrigins: Item[] | null = null;
+  /** @internal Current participants' mounted locations. Public `sources` always remain the gesture origins. */
+  activeSources: DragLocation[];
+  readonly #touchedItems: Set<Item>;
   /** Direction-aware bounding size of the whole dragged group, computed once drag snapshots are captured. Degenerates to the single item's box when `items.length === 1`. */
   groupDims: GroupDimensions | null = null;
   /** Per-item constant visual offset (relative to `pressedItem`) so companions preview the collapsed run while hoisted. */
@@ -90,10 +92,33 @@ export class DragSession {
 
   /**
    * What committing this drag should do to source data. Defaults to `"move"`.
-   * Consumers set this from `onDragStart` / `onDropTargetChange` to opt into
-   * copy or no-op (e.g. trash-bin) semantics; the core never infers it.
+   * Consumers may set `"none"` for a no-op (for example, a trash target).
    */
   dropEffect: DropEffect = "move";
+
+  #dragVisual: DragVisual;
+
+  /**
+   * What follows the pointer. This may be changed while the session is
+   * pending (normally from `onDragStart`) and is fixed once activation begins.
+   */
+  get dragVisual(): DragVisual {
+    return this.#dragVisual;
+  }
+
+  set dragVisual(value: DragVisual) {
+    if (this.status !== "pending") {
+      throw new Error(
+        "DragSession.dragVisual can only be changed during onDragStart.",
+      );
+    }
+    if (value !== "item" && value !== "preview" && value !== "none") {
+      throw new Error(
+        `DragSession.dragVisual: unknown visual "${String(value)}".`,
+      );
+    }
+    this.#dragVisual = value;
+  }
 
   start: { x: number; y: number };
   pointer: { x: number; y: number };
@@ -102,7 +127,7 @@ export class DragSession {
   /**
    * Ghosts currently live for this drag, keyed by role. Most lifecycles only
    * ever populate `"target"` (the placeholder tracking the prospective drop
-   * slot); `"source"` and `"pointer"` are used by copy/swap semantics to hold
+   * slot); `"source"` and `"pointer"` hold
    * a slot open or represent the pointer-following visual without disturbing
    * the target ghost. Ghosts can be added, moved, or removed independently at
    * any point during a drag.
@@ -120,6 +145,9 @@ export class DragSession {
    * (`flowGhostRun[0]`) is what `ghostItem`/`pendingGhostTarget` track.
    */
   readonly flowGhostRun: Item[] = [];
+
+  /** @internal Source-slot spacers used when insertion/swap hoist real Items. */
+  readonly sourceGhostRun: Item[] = [];
 
   /** Convenience accessor for the `"target"` ghost — the placeholder most lifecycles track. */
   get ghostItem(): Item | null {
@@ -142,9 +170,9 @@ export class DragSession {
   hoveredItem: Item | null = null;
 
   /**
-   * @internal FLIP/positioning bookkeeping used only by the flow-ghost
-   * lifecycle, keyed per dragged item (each member can live under a
-   * different original DOM parent).
+   * @internal FLIP/positioning bookkeeping for dragged-item visuals, keyed
+   * per dragged item (each member can live under a different original DOM
+   * parent).
    */
   readonly dragCoordinateParent: Map<Item, Item> = new Map();
   /** @internal */
@@ -165,9 +193,17 @@ export class DragSession {
     this.root = root;
     this.items = items;
     this.sources = sources;
+    this.activeSources = sources.slice();
     this.pressedItem = pressedItem;
     this.itemSet = new Set(items);
+    this.#touchedItems = new Set(items);
     this.strategy = strategy;
+    this.#dragVisual =
+      strategy.mode === "insertion"
+        ? "none"
+        : strategy.mode === "swap"
+          ? "preview"
+          : "item";
     this.pointerId = prop.pointerId;
     this.#handoffTo = prop.handoffTo;
     this.start = { x: prop.start.x, y: prop.start.y };
@@ -175,45 +211,104 @@ export class DragSession {
   }
 
   /**
-   * Hand off this drag from the original items to freshly-created clone items
-   * (the `dropEffect = "copy"` model). The originals stay exactly where they
-   * are — never detached, styled, or ghosted. Each clone must already have a
-   * DOM element bound by the consumer (rendered inside a drop container), from
-   * which the core derives its coordinate parent for hoisting.
+   * Transfer this gesture to an already-mounted parallel run. Handoff changes
+   * input/session ownership only: it never creates, destroys, inserts, removes,
+   * or otherwise manages application state for either run. Public `sources`
+   * continue to describe where the gesture began. Call it synchronously from
+   * `onDragStart`, before the selected drag visual is activated.
    *
-   * After handoff, `items`/`sources`/`itemSet`/`pressedItem` describe the
-   * clones, and the input pointer is retargeted to the new pressed item so
-   * subsequent `drag`/`dragEnd` events dispatch to it.
-   *
-   * @param clones Clone items parallel to the current `items` (one per member).
+   * Validation and native input transfer complete before session fields are
+   * changed, so a rejected handoff leaves the current participants unchanged.
    */
-  handoff(clones: Item[]): void {
-    if (clones.length !== this.items.length) {
+  handoff(replacements: Item[]): void {
+    if (this.status !== "pending") {
       throw new Error(
-        "DragSession.handoff: clones must be parallel to the dragged items.",
+        "DragSession.handoff can only be called during onDragStart.",
       );
     }
-    const origins = this.items;
-    const pressedIndex = origins.indexOf(this.pressedItem);
-    const nextPressedItem = clones[pressedIndex === -1 ? 0 : pressedIndex];
+    if (replacements.length !== this.items.length) {
+      throw new Error(
+        "DragSession.handoff: replacements must be parallel to the dragged items.",
+      );
+    }
 
-    // Each clone reuses its original's frozen drag snapshot for geometry — the
-    // clone visually replaces the original at the pointer, so "as if dragging
-    // the original" is the correct drag position/size.
-    clones.forEach((clone, i) => {
-      clone.adoptDragSnapshotFrom(origins[i]);
-      const visualStart = this.dragVisualStart.get(origins[i]);
-      if (visualStart) {
-        this.dragVisualStart.set(clone, { ...visualStart });
+    const origins = this.items;
+    const unique = new Set(replacements);
+    if (unique.size !== replacements.length) {
+      throw new Error("DragSession.handoff: replacements must be unique.");
+    }
+    if (replacements.some((replacement) => this.itemSet.has(replacement))) {
+      throw new Error(
+        "DragSession.handoff: replacements must not include the current dragged items.",
+      );
+    }
+
+    const replacementSources = replacements.map((replacement) => {
+      if (
+        replacement.engine !== this.root.engine ||
+        replacement.isDeleteRequested
+      ) {
+        throw new Error(
+          "DragSession.handoff: every replacement must be live in the session engine.",
+        );
       }
+      if (replacement.isGhost) {
+        throw new Error(
+          "DragSession.handoff: pointer previews and other Ghosts cannot receive an Item handoff.",
+        );
+      }
+      if (replacement.rootContainer !== this.root) {
+        throw new Error(
+          "DragSession.handoff: every replacement must belong to the session root.",
+        );
+      }
+      const { container, index } = replacement.getIndexAndContainer();
+      if (!container || index < 0) {
+        throw new Error(
+          "DragSession.handoff: every replacement must be attached to a container.",
+        );
+      }
+      const element = replacement.element;
+      if (
+        !element?.isConnected ||
+        !container.element ||
+        element.parentElement !== container.element
+      ) {
+        throw new Error(
+          "DragSession.handoff: every replacement must have a connected element directly inside its container.",
+        );
+      }
+      return {
+        container,
+        containerMetadata: container.metadata,
+        index,
+      };
     });
 
-    // Transfer input first. A rejected destination leaves this session owned
-    // by the originals instead of exposing a half-switched copy lifecycle.
+    const pressedIndex = origins.indexOf(this.pressedItem);
+    const nextPressedItem =
+      replacements[pressedIndex === -1 ? 0 : pressedIndex];
+
+    // Native capture can reject a stale destination. Transfer before changing
+    // SnapSort bookkeeping so that failure is atomic from the session's side.
     this.#handoffTo(nextPressedItem);
-    this.handoffOrigins = origins;
-    this.items = clones;
-    this.itemSet = new Set(clones);
+
+    replacements.forEach((replacement, i) => {
+      replacement.adoptDragSnapshotFrom(origins[i]);
+      const visualStart = this.dragVisualStart.get(origins[i]);
+      if (visualStart) {
+        this.dragVisualStart.set(replacement, { ...visualStart });
+      }
+      const groupOffset = this.groupVisualOffsets.get(origins[i]);
+      if (groupOffset) {
+        this.groupVisualOffsets.set(replacement, { ...groupOffset });
+      }
+      this.#touchedItems.add(replacement);
+    });
+
+    this.items = replacements;
+    this.activeSources = replacementSources;
+    this.itemSet = unique;
     this.pressedItem = nextPressedItem;
   }
 
@@ -381,11 +476,7 @@ export class DragSession {
     this.status = "dropping";
     this.dragTransformSyncAnimation?.cancel();
     this.dragTransformSyncAnimation = null;
-    // Copy handoffs need their copy cleanup path to retire transient clones;
-    // every other lifecycle can unwind as a no-op drop.
-    if (!this.handoffOrigins) {
-      this.dropEffect = "none";
-    }
+    this.dropEffect = "none";
 
     try {
       const lifecycle = this.strategy.lifecycle;
@@ -428,8 +519,7 @@ export class DragSession {
     this.dragVisualStart.clear();
     this.groupVisualOffsets.clear();
     this.root.clearDragSnapshotTree();
-    const members = new Set([...this.items, ...(this.handoffOrigins ?? [])]);
-    for (const member of members) {
+    for (const member of this.#touchedItems) {
       if (member.element) {
         delete member.element.dataset.snapsortDragging;
       }
@@ -438,7 +528,6 @@ export class DragSession {
   }
 
   #forceEndAfterError(): void {
-    const isCopyHandoff = this.handoffOrigins !== null;
     const members = [...this.items];
 
     for (const member of members) {
@@ -464,28 +553,26 @@ export class DragSession {
       ghost.destroy(false);
     }
     this.flowGhostRun.length = 0;
+    for (const ghost of this.sourceGhostRun) {
+      ghost.destroy(false);
+    }
+    this.sourceGhostRun.length = 0;
     for (const ghost of this.ghosts.values()) {
       ghost.destroy(false);
     }
     this.ghosts.clear();
     this.pendingGhostTarget = null;
 
-    if (isCopyHandoff) {
-      for (const member of members) {
-        member.destroy(false);
-      }
-    } else {
-      members.forEach((member, i) => {
-        if (member.parent) return;
-        const source = this.sources[i];
-        if (!source) return;
-        member.attachItemToContainer(
-          source.container,
-          member,
-          Math.min(source.index, source.container.itemOrderedList.length),
-        );
-      });
-    }
+    members.forEach((member, i) => {
+      if (member.parent) return;
+      const source = this.activeSources[i];
+      if (!source) return;
+      member.attachItemToContainer(
+        source.container,
+        member,
+        Math.min(source.index, source.container.itemOrderedList.length),
+      );
+    });
 
     this.hoveredItem = null;
     this.dragCoordinateParent.clear();

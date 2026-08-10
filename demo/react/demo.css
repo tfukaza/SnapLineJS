@@ -1418,6 +1418,18 @@ main.snapsort-react-demo {
   cursor: grab;
 }
 
+.insertion-demo .insertion-pointer-ghost {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border: 1px solid #93c5fd;
+  border-radius: 5px;
+  background: #fff;
+  box-shadow: 0 10px 24px rgba(23, 32, 51, 0.16);
+}
+
 .insertion-demo .card-copy {
   min-width: 0;
   display: grid;

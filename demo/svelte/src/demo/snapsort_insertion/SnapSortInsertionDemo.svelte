@@ -1,13 +1,12 @@
 <script lang="ts">
   import { Engine } from "@snap-engine/asset-base/svelte";
-  import { Container, Item } from "@snap-engine/snapsort/svelte";
+  import { Container, Ghost, Item } from "@snap-engine/snapsort/svelte";
   import { defaultAnimations } from "@snap-engine/snapsort";
   import { rejectDrop } from "@snap-engine/snapsort/callbacks";
   import type {
     Container as SortContainer,
     DragStartEvent,
     ItemMoveEvent,
-    ItemRemoveEvent,
   } from "@snap-engine/snapsort";
 
   type DemoItem = {
@@ -53,12 +52,9 @@
 
   let nextId = $state(8);
   let columns = $state<DemoColumn[]>(structuredClone(initialColumns));
-  let pendingRemovedItem: DemoItem | null = null;
-  // Insertion-copy proof surface: rows never lift in this mode (only the
-  // marker line shows mid-drag), so there is no floating instance to spawn
-  // an id onto at dragStart -- the commit event carries the ORIGINAL
-  // (see handleMove's `event.from === null` branch) and this handler mints
-  // the duplicate's id itself.
+  // Duplicate mode stays entirely in application state: the ordinary move
+  // sends the original stable ID to the destination and backfills its source
+  // with a fresh ID in the same synchronous callback.
   let duplicateMode = $state(false);
   const itemCount = $derived(
     columns.reduce((total, column) => total + column.items.length, 0),
@@ -66,7 +62,6 @@
 
   function reset() {
     nextId = 8;
-    pendingRemovedItem = null;
     columns = structuredClone(initialColumns);
   }
 
@@ -90,20 +85,6 @@
     );
   }
 
-  function removeItemById(itemId: string): DemoItem | null {
-    let removedItem: DemoItem | null = null;
-    columns = columns.map((column) => {
-      const itemIndex = column.items.findIndex((item) => item.id === itemId);
-      if (itemIndex === -1) return column;
-
-      const nextItems = column.items.slice();
-      const [item] = nextItems.splice(itemIndex, 1);
-      removedItem = item;
-      return { ...column, items: nextItems };
-    });
-    return removedItem;
-  }
-
   function findItemById(itemId: string): DemoItem | null {
     for (const column of columns) {
       const item = column.items.find((candidate) => candidate.id === itemId);
@@ -112,50 +93,66 @@
     return null;
   }
 
-  function insertAt(targetColumnId: string, index: number, item: DemoItem) {
-    columns = columns.map((column) => {
-      if (column.id !== targetColumnId) return column;
-
-      const nextItems = column.items.slice();
-      nextItems.splice(Math.max(0, Math.min(index, nextItems.length)), 0, item);
-      return { ...column, items: nextItems };
-    });
-  }
-
   function handleDragStart(event: DragStartEvent) {
     if (duplicateMode) {
-      event.session.dropEffect = "copy";
+      event.session.dragVisual = "preview";
     }
   }
 
   function handleMove(event: ItemMoveEvent) {
     const itemId = event.itemId;
     const targetColumnId = event.to.containerMetadata.columnId;
-    if (typeof itemId !== "string" || typeof targetColumnId !== "string") {
+    const sourceColumnId = event.from.containerMetadata.columnId;
+    if (
+      typeof itemId !== "string" ||
+      typeof targetColumnId !== "string" ||
+      typeof sourceColumnId !== "string"
+    ) {
       return;
     }
 
-    if (event.from === null) {
-      // Copy commit: the original stays exactly where it is (insertion mode
-      // never lifts anything, so there's nothing to remove); mint a fresh
-      // id for the duplicate and insert it at the marker index.
-      const original = findItemById(itemId);
-      if (!original) return;
-      insertAt(targetColumnId, event.to.index, { ...original, id: `task-${nextId++}` });
-      return;
-    }
+    const original = findItemById(itemId);
+    if (!original) return;
 
-    const movedItem = pendingRemovedItem ?? removeItemById(itemId);
-    pendingRemovedItem = null;
-    if (!movedItem) return;
+    const replacement = duplicateMode
+      ? { ...original, id: `task-${nextId++}` }
+      : null;
+    const base = columns.map((column) => ({
+      ...column,
+      items: column.items.filter((item) => item.id !== itemId),
+    }));
 
-    insertAt(targetColumnId, event.to.index, movedItem);
-  }
+    columns = base.map((column) => {
+      const nextItems = column.items.slice();
 
-  function handleRemove(event: ItemRemoveEvent) {
-    const itemId = event.itemId;
-    if (typeof itemId !== "string") return;
-    pendingRemovedItem = removeItemById(itemId);
+      if (sourceColumnId === targetColumnId && column.id === sourceColumnId) {
+        const combined: DemoItem[] = [];
+        for (let index = 0; index <= nextItems.length; index += 1) {
+          if (replacement && index === event.from.index) {
+            combined.push(replacement);
+          }
+          if (index === event.to.index) combined.push(original);
+          if (index < nextItems.length) combined.push(nextItems[index]);
+        }
+        return { ...column, items: combined };
+      }
+
+      if (replacement && column.id === sourceColumnId) {
+        nextItems.splice(
+          Math.max(0, Math.min(event.from.index, nextItems.length)),
+          0,
+          replacement,
+        );
+      }
+      if (column.id === targetColumnId) {
+        nextItems.splice(
+          Math.max(0, Math.min(event.to.index, nextItems.length)),
+          0,
+          original,
+        );
+      }
+      return { ...column, items: nextItems };
+    });
   }
 </script>
 
@@ -207,6 +204,24 @@
       items={columns}
       getItemId={(column) => column.id}
     >
+      {#snippet ghost(event)}
+        <Ghost {event} className="insertion-pointer-ghost">
+          {#if event.role === "pointer"}
+            <span
+              class="material-symbols-outlined file-icon"
+              class:folder-icon={event.originalMetadata.kind === "folder"}
+              aria-hidden="true"
+            >{event.originalMetadata.kind === "folder"
+                ? "folder"
+                : "description"}</span
+            >
+            <div class="card-copy">
+              <strong>{String(event.originalMetadata.title ?? "Dragging")}</strong>
+              <span>{String(event.originalMetadata.detail ?? "")}</span>
+            </div>
+          {/if}
+        </Ghost>
+      {/snippet}
       {#snippet entry(column)}
         <Container
           itemId={column.id}
@@ -219,7 +234,6 @@
             name: `insertion-${column.id}`,
             callbacks: {
               onItemMove: handleMove,
-              onItemRemove: handleRemove,
             },
           }}
           locked={true}
@@ -235,7 +249,15 @@
           {/snippet}
 
           {#snippet entry(item)}
-            <Item itemId={item.id} className="insertion-card">
+            <Item
+              itemId={item.id}
+              className="insertion-card"
+              metadata={{
+                kind: item.kind,
+                title: item.title,
+                detail: item.detail,
+              }}
+            >
               <span
                 class="material-symbols-outlined file-icon"
                 class:folder-icon={item.kind === "folder"}
@@ -389,6 +411,18 @@
     outline-offset: -1px;
     background: #eff6ff;
     cursor: grabbing;
+  }
+
+  :global(.insertion-pointer-ghost) {
+    display: grid;
+    grid-template-columns: 24px minmax(0, 1fr);
+    align-items: center;
+    gap: 6px;
+    padding: 4px 8px;
+    border: 1px solid #93c5fd;
+    border-radius: 5px;
+    background: #ffffff;
+    box-shadow: 0 10px 24px rgba(23, 32, 51, 0.16);
   }
 
   .card-copy {

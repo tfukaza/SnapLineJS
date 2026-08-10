@@ -202,18 +202,14 @@ export function fireItemRemove(
  * no `onItemMove` is registered, which matches the pre-refactor behavior (a
  * DOM `insertBefore` inherently moves the node, so no explicit remove is
  * needed on the source).
- *
- * Also the copy-drag commit path: a spawned item's `froms` entry is `null`
- * (see `ItemMoveEvent`) and `origins` carries the item it was spawned from.
  */
 export function fireItemMove(
-  froms: (DragLocation | null)[],
+  froms: DragLocation[],
   to: DragLocation,
   items: Item[],
   beforeElement: HTMLElement | null,
   session: DragSession | null,
   phase: MutationPhase = "commit",
-  origins: (Item | null)[] = items.map(() => null),
 ): void {
   assertCanFireItemMove(to.container);
   const onMove = to.container.callbacks?.onItemMove;
@@ -226,15 +222,9 @@ export function fireItemMove(
       items,
       itemIds: itemIds(items),
       itemsMetadata: items.map((item) => item.metadata),
-      from: froms[0] ?? null,
+      from: froms[0],
       to,
       froms,
-      originItem: origins[0] ?? null,
-      originItemId: origins[0]?.resolvedItemId ?? null,
-      originItemMetadata: origins[0]?.metadata ?? null,
-      origins,
-      originItemIds: origins.map((origin) => origin?.resolvedItemId ?? null),
-      originsMetadata: origins.map((origin) => origin?.metadata ?? null),
       beforeElement,
       phase,
     };
@@ -494,9 +484,8 @@ function defaultCreateFlowGhost(event: GhostCreateEvent): HTMLElement {
 
   const origProp =
     event.original.dragSnapshot?.box ?? event.original.currentDomProperty;
-  // `ghostRect`, when present, is the whole dragged group's size (see
-  // DragSession.groupDims) — a single item's snapshot box for `items.length
-  // === 1`, so this degenerates to the original behavior in that case.
+  // `ghostRect`, when present, is the geometry chosen for this flow spacer.
+  // Fall back to the original Item's box for direct Vanilla construction.
   const width = event.ghostRect?.width ?? origProp.width;
   const height = event.ghostRect?.height ?? origProp.height;
   ghostElement.style.width = width + "px";

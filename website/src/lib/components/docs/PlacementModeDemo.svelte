@@ -3,6 +3,8 @@
   import { Engine } from "@snap-engine/asset-base/svelte";
   import type {
     DragItemHoverEvent,
+    DragStartEvent,
+    DragVisual,
     ItemMoveEvent,
     ItemSwapEvent,
     SortMode,
@@ -16,11 +18,13 @@
     comparison = false,
     compact = false,
     debug = false,
+    dragVisual,
   }: {
     mode: SortMode;
     comparison?: boolean;
     compact?: boolean;
     debug?: boolean;
+    dragVisual?: DragVisual;
   } = $props();
 
   type DemoItem = { id: string; label: string };
@@ -78,9 +82,14 @@
     hoveredItemId = null;
   }
 
+  function configureDragVisual(event: DragStartEvent) {
+    if (dragVisual) event.session.dragVisual = dragVisual;
+  }
+
   const baseCallbacks = {
     onItemMove: handleMove,
     onItemSwap: handleSwap,
+    onDragStart: configureDragVisual,
   };
   const callbacks = $derived(
     mode === "swap"
@@ -111,13 +120,18 @@
         {#snippet entry(item)}
           <Item
             itemId={item.id}
+            metadata={{ label: item.label }}
             className={`placement-demo-item is-${item.id}${mode === "swap" && hoveredItemId === item.id ? " is-targeted" : ""}`}
           >
             <span>{item.label}</span>
           </Item>
         {/snippet}
         {#snippet ghost(event)}
-          <Ghost {event} className="placement-demo-ghost" />
+          <Ghost {event} className="placement-demo-ghost">
+            {#if event.role === "pointer"}
+              <span>{String(event.originalMetadata.label ?? "Dragging")}</span>
+            {/if}
+          </Ghost>
         {/snippet}
       </Container>
     </Engine>
@@ -280,7 +294,15 @@
   }
 
   :global(.placement-demo [data-snapsort-ghost="pointer"]) {
+    display: grid;
+    place-items: center;
     border-radius: var(--size-8) !important;
+  }
+
+  :global(.placement-demo [data-snapsort-ghost="pointer"] span) {
+    font-family: "Bitcount Grid Single", monospace;
+    font-size: 0.8rem;
+    font-weight: 350;
   }
 
   @media (max-width: 720px) {

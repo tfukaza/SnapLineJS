@@ -24,7 +24,13 @@ import {
   Container as SnapSortContainer,
   defaultAnimations,
 } from "../../assets/snapsort/src/container";
+import type { DragVisual } from "../../assets/snapsort/src/index";
 import { Item as SnapSortItem } from "../../assets/snapsort/src/item";
+import { DragSession } from "../../assets/snapsort/src/drag/session";
+import {
+  builtinStrategies,
+  type SortMode,
+} from "../../assets/snapsort/src/drag/drop-strategy";
 import type {
   CanDropEvent,
   DropPriorityEvent,
@@ -41,6 +47,423 @@ import {
 } from "../helpers/layout-grid";
 
 type Rect = { x: number; y: number; width: number; height: number };
+
+test("built-in modes choose composable drag visual defaults that can be overridden before activation", () => {
+  let nextId = 0;
+  const engine = {
+    global: {
+      data: {},
+      queue: {},
+      createId: () => `drag-visual-default-${++nextId}`,
+      registerObject: () => {},
+      unregisterObject: () => {},
+    },
+    input: {
+      subscribeGlobalCursorEvent: () => {},
+      unsubscribeGlobalCursorEvent: () => {},
+    },
+  };
+  const expected = {
+    euclidean: "item",
+    progressive: "item",
+    insertion: "none",
+    swap: "preview",
+  } as const satisfies Record<SortMode, DragVisual>;
+
+  for (const mode of Object.keys(expected) as SortMode[]) {
+    const root = new SnapSortContainer(engine, null, { mode });
+    const item = new SnapSortItem(engine, root);
+    const source = {
+      container: root,
+      containerMetadata: root.metadata,
+      index: 0,
+    };
+    const session = new DragSession(
+      root,
+      [item],
+      [source],
+      builtinStrategies[mode],
+      {
+        handoffTo: () => {},
+        pointerId: 1,
+        start: { x: 10, y: 20 },
+      } as never,
+    );
+
+    expect(session.dragVisual).toBe(expected[mode]);
+    const override = expected[mode] === "preview" ? "none" : "preview";
+    session.dragVisual = override;
+    expect(session.dragVisual).toBe(override);
+    session.status = "active";
+    expect(() => {
+      session.dragVisual = expected[mode];
+    }).toThrow(/DragSession\.dragVisual/);
+    expect(session.dragVisual).toBe(override);
+
+    item.destroy(false);
+    root.destroy(false);
+  }
+});
+
+test("DragSession.handoff transfers a pending multi-item run without destroying either run", async ({
+  page,
+}) => {
+  await page.goto("/?demo=drop_snap_nested", { waitUntil: "networkidle" });
+  const coreImportPath = `/@fs${process.cwd()}/src/index.ts`;
+  const snapSortImportPath = `/@fs${process.cwd()}/assets/snapsort/src/index.ts`;
+  const dropStrategyImportPath = `/@fs${process.cwd()}/assets/snapsort/src/drag/drop-strategy.ts`;
+
+  const report = await page.evaluate(
+    async ({ coreImportPath, snapSortImportPath, dropStrategyImportPath }) => {
+      const [{ GlobalManager }, { Container, DragSession, Item }, strategy] =
+        await Promise.all([
+          import(coreImportPath),
+          import(snapSortImportPath),
+          import(dropStrategyImportPath),
+        ]);
+      const existing = (GlobalManager.getInstance().data
+        .dragAndDropContainers ?? [])[0];
+      if (!existing) throw new Error("Missing a SnapSort engine fixture.");
+      const engine = existing.engine;
+      const host = document.createElement("div");
+      document.body.append(host);
+      const root = new Container(engine, null, { mode: "euclidean" });
+      root.element = host;
+      root.itemId = "handoff-root";
+
+      const mount = (id: string) => {
+        const item = new Item(engine, null);
+        item.itemId = id;
+        const element = document.createElement("div");
+        element.dataset.testHandoffItem = id;
+        host.append(element);
+        item.element = element;
+        root.addItem(item);
+        return item;
+      };
+      const origins = [mount("origin-a"), mount("origin-b")];
+      const replacements = [mount("replacement-a"), mount("replacement-b")];
+      root.captureDragSnapshotTree();
+
+      const sources = origins.map((item: any, index: number) => ({
+        container: root,
+        containerMetadata: root.metadata,
+        index,
+      }));
+      let handedTo: any = null;
+      const session = new DragSession(
+        root,
+        origins,
+        sources,
+        strategy.builtinStrategies.euclidean,
+        {
+          handoffTo: (item: any) => {
+            handedTo = item;
+          },
+          pointerId: 41,
+          start: { x: 12, y: 24 },
+        },
+        origins[1],
+      );
+      // `onDragStart` observes the session while it is still pending, so the
+      // helper must already be usable at that public customization point.
+      session.status = "pending";
+      root.dragSession = session;
+      session.dragVisualStart.set(origins[0], { x: 10, y: 20 });
+      session.dragVisualStart.set(origins[1], { x: 30, y: 40 });
+      session.handoff(replacements);
+
+      const result = {
+        handedToPressedReplacement: handedTo === replacements[1],
+        itemsReplaced:
+          session.items[0] === replacements[0] &&
+          session.items[1] === replacements[1],
+        itemSetReplaced:
+          session.itemSet.has(replacements[0]) &&
+          session.itemSet.has(replacements[1]) &&
+          !session.itemSet.has(origins[0]),
+        pressedItemReplaced: session.pressedItem === replacements[1],
+        activeSourcesUpdated:
+          session.activeSources[0].container === root &&
+          session.activeSources[0].index === 2 &&
+          session.activeSources[1].container === root &&
+          session.activeSources[1].index === 3,
+        sourcesPreserved:
+          session.sources === sources &&
+          session.sources[0].container === root &&
+          session.sources[0].index === 0 &&
+          session.sources[1].index === 1,
+        snapshotsAdopted: replacements.every(
+          (replacement: any) =>
+            replacement.dragSnapshot?.value === replacement &&
+            replacement.dragSnapshot?.box.width ===
+              origins[replacements.indexOf(replacement)].dragSnapshot?.box
+                .width,
+        ),
+        visualStartsTransferred:
+          session.dragVisualStart.get(replacements[0])?.x === 10 &&
+          session.dragVisualStart.get(replacements[1])?.y === 40,
+        originsAlive: origins.every((item: any) => !item.isDeleteRequested),
+        replacementsAlive: replacements.every(
+          (item: any) => !item.isDeleteRequested,
+        ),
+      };
+
+      root.dragSession = null;
+      for (const item of [...origins, ...replacements]) item.destroy(false);
+      root.destroy(false);
+      host.remove();
+      return result;
+    },
+    { coreImportPath, snapSortImportPath, dropStrategyImportPath },
+  );
+
+  expect(report).toEqual({
+    activeSourcesUpdated: true,
+    handedToPressedReplacement: true,
+    itemsReplaced: true,
+    itemSetReplaced: true,
+    pressedItemReplaced: true,
+    sourcesPreserved: true,
+    snapshotsAdopted: true,
+    visualStartsTransferred: true,
+    originsAlive: true,
+    replacementsAlive: true,
+  });
+});
+
+test("DragSession.handoff rejects invalid runs and pointer-transfer failures atomically", async ({
+  page,
+}) => {
+  await page.goto("/?demo=drop_snap_nested", { waitUntil: "networkidle" });
+  const coreImportPath = `/@fs${process.cwd()}/src/index.ts`;
+  const snapSortImportPath = `/@fs${process.cwd()}/assets/snapsort/src/index.ts`;
+  const dropStrategyImportPath = `/@fs${process.cwd()}/assets/snapsort/src/drag/drop-strategy.ts`;
+
+  const report = await page.evaluate(
+    async ({ coreImportPath, snapSortImportPath, dropStrategyImportPath }) => {
+      const [{ GlobalManager }, { Container, DragSession, Item }, strategy] =
+        await Promise.all([
+          import(coreImportPath),
+          import(snapSortImportPath),
+          import(dropStrategyImportPath),
+        ]);
+      const existing = (GlobalManager.getInstance().data
+        .dragAndDropContainers ?? [])[0];
+      if (!existing) throw new Error("Missing a SnapSort engine fixture.");
+      const engine = existing.engine;
+      const hosts: HTMLElement[] = [];
+      const roots: any[] = [];
+      const makeRoot = (id: string) => {
+        const host = document.createElement("div");
+        document.body.append(host);
+        hosts.push(host);
+        const root = new Container(engine, null, { mode: "euclidean" });
+        root.itemId = id;
+        root.element = host;
+        roots.push(root);
+        return { host, root };
+      };
+      const mount = (
+        root: any,
+        host: HTMLElement,
+        id: string,
+        connected = true,
+      ) => {
+        const item = new Item(engine, null);
+        item.itemId = id;
+        const element = document.createElement("div");
+        if (connected) host.append(element);
+        item.element = element;
+        root.addItem(item);
+        return item;
+      };
+      const location = (root: any, index: number) => ({
+        container: root,
+        containerMetadata: root.metadata,
+        index,
+      });
+      const makeSession = (
+        root: any,
+        items: any[],
+        handoffTo: (item: any) => void,
+      ) => {
+        const session = new DragSession(
+          root,
+          items,
+          items.map((_: any, index: number) => location(root, index)),
+          strategy.builtinStrategies.euclidean,
+          {
+            handoffTo,
+            pointerId: 42,
+            start: { x: 0, y: 0 },
+          },
+          items[1],
+        );
+        session.status = "pending";
+        root.dragSession = session;
+        return session;
+      };
+      const captureError = (callback: () => void) => {
+        try {
+          callback();
+          return "";
+        } catch (error) {
+          return error instanceof Error ? error.message : String(error);
+        }
+      };
+
+      const primary = makeRoot("validation-root");
+      const origins = [
+        mount(primary.root, primary.host, "validation-origin-a"),
+        mount(primary.root, primary.host, "validation-origin-b"),
+      ];
+      const valid = [
+        mount(primary.root, primary.host, "validation-valid-a"),
+        mount(primary.root, primary.host, "validation-valid-b"),
+      ];
+      const disconnected = [
+        mount(primary.root, primary.host, "validation-disconnected-a", false),
+        mount(primary.root, primary.host, "validation-disconnected-b", false),
+      ];
+      const other = makeRoot("other-root");
+      const crossRoot = [
+        mount(other.root, other.host, "validation-cross-a"),
+        mount(other.root, other.host, "validation-cross-b"),
+      ];
+      primary.root.captureDragSnapshotTree();
+      other.root.captureDragSnapshotTree();
+
+      let validationTransfers = 0;
+      const session = makeSession(primary.root, origins, () => {
+        validationTransfers += 1;
+      });
+      const originalItems = session.items;
+      const originalSet = session.itemSet;
+      const originalPressed = session.pressedItem;
+      const unchanged = () =>
+        session.items === originalItems &&
+        session.itemSet === originalSet &&
+        session.pressedItem === originalPressed &&
+        session.items[0] === origins[0] &&
+        session.items[1] === origins[1];
+
+      const validationResults = [
+        captureError(() => session.handoff([valid[0]])),
+        captureError(() => session.handoff([valid[0], valid[0]])),
+        captureError(() => session.handoff([origins[0], valid[1]])),
+        captureError(() => session.handoff(crossRoot)),
+        captureError(() => session.handoff(disconnected)),
+      ];
+      session.status = "active";
+      validationResults.push(captureError(() => session.handoff(valid)));
+      session.status = "dropping";
+      validationResults.push(captureError(() => session.handoff(valid)));
+      session.status = "ended";
+      validationResults.push(captureError(() => session.handoff(valid)));
+      session.status = "active";
+      const validationAtomic = unchanged();
+
+      const pointerFailureTree = makeRoot("pointer-failure-root");
+      const pointerOrigins = [
+        mount(
+          pointerFailureTree.root,
+          pointerFailureTree.host,
+          "pointer-origin-a",
+        ),
+        mount(
+          pointerFailureTree.root,
+          pointerFailureTree.host,
+          "pointer-origin-b",
+        ),
+      ];
+      const pointerReplacements = [
+        mount(
+          pointerFailureTree.root,
+          pointerFailureTree.host,
+          "pointer-replacement-a",
+        ),
+        mount(
+          pointerFailureTree.root,
+          pointerFailureTree.host,
+          "pointer-replacement-b",
+        ),
+      ];
+      pointerFailureTree.root.captureDragSnapshotTree();
+      let pointerTransfers = 0;
+      const pointerSession = makeSession(
+        pointerFailureTree.root,
+        pointerOrigins,
+        () => {
+          pointerTransfers += 1;
+          throw new Error("intentional pointer transfer failure");
+        },
+      );
+      const pointerItems = pointerSession.items;
+      const pointerSet = pointerSession.itemSet;
+      const pointerPressed = pointerSession.pressedItem;
+      const pointerError = captureError(() =>
+        pointerSession.handoff(pointerReplacements),
+      );
+      const pointerAtomic =
+        pointerSession.items === pointerItems &&
+        pointerSession.itemSet === pointerSet &&
+        pointerSession.pressedItem === pointerPressed &&
+        pointerSession.items[0] === pointerOrigins[0] &&
+        pointerSession.items[1] === pointerOrigins[1];
+
+      const participants = [
+        ...origins,
+        ...valid,
+        ...disconnected,
+        ...crossRoot,
+        ...pointerOrigins,
+        ...pointerReplacements,
+      ];
+      const participantsAlive = participants.every(
+        (item: any) => !item.isDeleteRequested,
+      );
+      const ownershipPreserved =
+        valid.every((item: any) => item.rootContainer === primary.root) &&
+        disconnected.every(
+          (item: any) => item.rootContainer === primary.root,
+        ) &&
+        crossRoot.every((item: any) => item.rootContainer === other.root) &&
+        pointerReplacements.every(
+          (item: any) => item.rootContainer === pointerFailureTree.root,
+        );
+
+      for (const item of participants) item.destroy(false);
+      for (const root of roots) {
+        root.dragSession = null;
+        root.destroy(false);
+      }
+      for (const host of hosts) host.remove();
+
+      return {
+        ownershipPreserved,
+        participantsAlive,
+        pointerAtomic,
+        pointerError,
+        pointerTransfers,
+        validationAtomic,
+        validationErrors: validationResults,
+        validationTransfers,
+      };
+    },
+    { coreImportPath, snapSortImportPath, dropStrategyImportPath },
+  );
+
+  expect(report.validationErrors).toHaveLength(8);
+  for (const error of report.validationErrors) expect(error).not.toBe("");
+  expect(report.validationTransfers).toBe(0);
+  expect(report.validationAtomic).toBe(true);
+  expect(report.pointerError).toContain("intentional pointer transfer failure");
+  expect(report.pointerTransfers).toBe(1);
+  expect(report.pointerAtomic).toBe(true);
+  expect(report.participantsAlive).toBe(true);
+  expect(report.ownershipPreserved).toBe(true);
+});
 
 test("container animations are opt-in and expose the standard preset", () => {
   let nextId = 0;

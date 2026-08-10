@@ -51,11 +51,7 @@
   if (resolvedItem.engine !== engine) {
     throw new Error("SnapSort Item: the supplied `item` belongs to another Engine.");
   }
-  const isCopyClone =
-    !ownsItem &&
-    resolvedItem.parent === null &&
-    resolvedItem.rootContainer === container.rootContainer;
-  if (!ownsItem && resolvedItem.parent !== container && !isCopyClone) {
+  if (!ownsItem && resolvedItem.parent !== container) {
     throw new Error(
       "SnapSort Item: the supplied `item` must already belong to the surrounding Container.",
     );
@@ -96,6 +92,16 @@
 
   function bindItemElement(element: HTMLDivElement) {
     resolvedItem.element = element;
+    if (
+      !ownsItem &&
+      resolvedItem.parent === container &&
+      !container!.itemOrderedList.includes(resolvedItem)
+    ) {
+      // Adopted Items are already parented before Svelte mounts them. Sync
+      // the container's live ordering now so an onDragStart handoff can
+      // validate and activate the freshly-mounted replacement immediately.
+      container!.addItem(resolvedItem);
+    }
     return {
       destroy() {
         resolvedItem.detachElement(element);

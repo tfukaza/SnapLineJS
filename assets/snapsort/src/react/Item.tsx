@@ -70,11 +70,7 @@ export const Item = forwardRef<ItemObject, ItemProps>(function SnapSortItem(
       "SnapSort Item: the supplied `item` belongs to another Engine.",
     );
   }
-  const isCopyClone =
-    !ownsItemRef.current &&
-    item.parent === null &&
-    item.rootContainer === container.rootContainer;
-  if (!ownsItemRef.current && item.parent !== container && !isCopyClone) {
+  if (!ownsItemRef.current && item.parent !== container) {
     throw new Error(
       "SnapSort Item: the supplied `item` must already belong to the surrounding Container.",
     );
@@ -100,11 +96,21 @@ export const Item = forwardRef<ItemObject, ItemProps>(function SnapSortItem(
       itemDomRef.current = element;
       if (element) {
         item.element = element;
+        if (
+          !ownsItemRef.current &&
+          item.parent === container &&
+          !container.itemOrderedList.includes(item)
+        ) {
+          // Ref attachment runs inside React's synchronous commit. Sync the
+          // adopted Item's live ordering here so onDragStart can hand off to
+          // a freshly-mounted replacement before passive effects run.
+          container.addItem(item);
+        }
       } else if (previousElement) {
         item.detachElement(previousElement);
       }
     },
-    [item],
+    [container, item],
   );
 
   useEffect(() => {

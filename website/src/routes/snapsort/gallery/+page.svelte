@@ -14,13 +14,11 @@
   import FileExplorerExample from "../FileExplorerExample.svelte";
   import type {
     Container as SortContainer,
-    DragCloneEvent,
     DragEndEvent,
     DragItemHoverEvent,
     DragStartEvent,
     DropTargetChangeEvent,
     GhostInsertEvent,
-    Item as SortItem,
     ItemMoveEvent,
     ItemRemoveEvent,
     ItemSwapEvent,
@@ -533,7 +531,7 @@
     }
   }
 
-  // --- Clone Palette: session.dropEffect = "copy" ---
+  // --- Clone Palette: ordinary move + source backfill ---
 
   type PaletteBlockType = "button" | "image" | "divider" | "spacer";
 
@@ -541,6 +539,10 @@
     type: PaletteBlockType;
     label: string;
     icon: string;
+  };
+
+  type PaletteBlock = PaletteBlockTemplate & {
+    id: string;
   };
 
   type CanvasBlock = {
@@ -571,89 +573,72 @@
     spacer: "Spacer",
   };
 
-  type DraggingClone = {
-    id: string;
-    type: PaletteBlockType;
-    item: SortItem;
-  };
-
+  let paletteInstanceCount = 0;
+  let paletteBlocks: PaletteBlock[] = $state(
+    paletteBlockTemplates.map((template) => ({
+      ...template,
+      id: `palette-${template.type}-${paletteInstanceCount++}`,
+    })),
+  );
   let canvasBlocks: CanvasBlock[] = $state([]);
-  let cloneBlockCount = 0;
-  // The in-flight clone during a copy drag: a fresh item handed off from the
-  // palette block, rendered inside the canvas and following the pointer. The
-  // palette block itself is never touched.
-  let draggingClone: DraggingClone | null = $state(null);
-  type CanvasEntry =
-    | { kind: "clone"; id: string; type: PaletteBlockType; item: SortItem }
-    | { kind: "block"; id: string; block: CanvasBlock };
-  const canvasEntries = $derived.by((): CanvasEntry[] => [
-    ...(draggingClone
-      ? [{ kind: "clone" as const, id: draggingClone.id, type: draggingClone.type, item: draggingClone.item }]
-      : []),
-    ...canvasBlocks.map((block) => ({ kind: "block" as const, id: block.id, block })),
-  ]);
 
   function handleCloneDragStart(event: DragStartEvent) {
-    // Only dragging out of the palette should clone — reordering an
-    // already-placed canvas block should behave like a normal move.
-    if (event.source.container.name === "clone-palette") {
-      event.session.dropEffect = "copy";
+    // Metadata chooses the application recipe. The preview is presentation
+    // only; the eventual state change is still an ordinary move.
+    if (event.itemMetadata.template === true) {
+      event.session.dragVisual = "preview";
     }
   }
 
-  function handleDragClone(event: DragCloneEvent) {
+  function handleCloneMove(event: ItemMoveEvent) {
+    const blockId = String(event.itemId);
     const type = event.itemMetadata.blockType;
-    if (typeof type !== "string") return;
-    cloneBlockCount += 1;
-    // This id is permanent — it's reused as the committed block's id below,
-    // since the dragged clone instance and the eventual permanent Item are
-    // bridged only by a stable itemId (the clone is destroyed once the
-    // {#each canvasBlocks} render below takes over rendering it for real).
-    const id = `canvas-block-${cloneBlockCount}`;
-    const cloneItem = event.cloneItems[0];
-    cloneItem.itemId = id;
-    cloneItem.metadata = { blockType: type };
-    // Materialize the clone in state; the #if below renders it inside the
-    // canvas container, passing it through Item's `item` prop. Once its element
-    // exists (after the adapter's synchronous flush), core hands the drag off to it.
-    draggingClone = { id, type: type as PaletteBlockType, item: cloneItem };
-  }
-
-  function handleCanvasMove(event: ItemMoveEvent) {
-    const blockId = event.itemId;
-
-    if (event.from === null) {
-      // A copy drag committing: this itemId has never been in canvasBlocks
-      // before (it's the id assigned in handleDragClone above) — handling
-      // from here is identical to a regular cross-container move landing on
-      // a container that doesn't have this item yet, it just always happens
-      // to be new. Add it, then retire the floating clone.
-      const type = event.itemMetadata.blockType;
-      if (typeof type !== "string") return;
-      const newBlock: CanvasBlock = { id: blockId, type: type as PaletteBlockType };
-      const next = canvasBlocks.slice();
-      const index = Math.max(0, Math.min(event.to.index, next.length));
-      next.splice(index, 0, newBlock);
-      canvasBlocks = next;
-      draggingClone = null;
+    if (
+      typeof type !== "string" ||
+      event.to.containerMetadata.copyZone !== "canvas"
+    ) {
       return;
     }
 
-    // Otherwise it's a plain reorder of an already-placed canvas block.
+    if (event.itemMetadata.template === true) {
+      const original = paletteBlocks.find((block) => block.id === blockId);
+      if (!original) return;
+
+      const nextPalette = paletteBlocks.filter((block) => block.id !== blockId);
+      const sourceIndex = Math.max(
+        0,
+        Math.min(event.from.index, nextPalette.length),
+      );
+      nextPalette.splice(sourceIndex, 0, {
+        ...original,
+        id: `palette-${original.type}-${paletteInstanceCount++}`,
+      });
+
+      const nextCanvas = canvasBlocks.slice();
+      const targetIndex = Math.max(
+        0,
+        Math.min(event.to.index, nextCanvas.length),
+      );
+      nextCanvas.splice(targetIndex, 0, {
+        id: blockId,
+        type: type as PaletteBlockType,
+      });
+
+      // Both assignments run inside SnapSort's synchronous mutation
+      // transaction: the original stable ID lands on canvas and a fresh ID
+      // replaces its template slot before FLIP reads final geometry.
+      paletteBlocks = nextPalette;
+      canvasBlocks = nextCanvas;
+      return;
+    }
+
+    // Canvas entries use the same callback as a plain reorder.
     const block = canvasBlocks.find((candidate) => candidate.id === blockId);
     if (!block) return;
     const next = canvasBlocks.filter((candidate) => candidate.id !== blockId);
     const index = Math.max(0, Math.min(event.to.index, next.length));
     next.splice(index, 0, block);
     canvasBlocks = next;
-  }
-
-  function handleCanvasRemove(event: ItemRemoveEvent) {
-    // Fired only when a copy drag cancels (dropped outside any drop
-    // container): the floating clone was never a real block, so discard it.
-    if (draggingClone && event.itemId === draggingClone.id) {
-      draggingClone = null;
-    }
   }
 
   function removeCanvasBlock(id: string) {
@@ -878,8 +863,8 @@
             <h3>Clone Palette</h3>
             <p class="example-caption">
               Drag a block from the palette onto the canvas to place a copy —
-              the palette item never leaves. Built on SnapSort's <code>copy</code>
-              drop effect.
+              the palette stays stocked. Built from a normal move, source
+              backfill, and a <code>preview</code> drag visual.
             </p>
           </div>
           <div class="clone-workspace">
@@ -1279,8 +1264,8 @@
           <h3>Clone Palette</h3>
           <p class="example-caption">
             Drag a block from the palette onto the canvas to place a copy —
-            the palette item never leaves. Built on SnapSort's <code>copy</code>
-            drop effect.
+            the palette stays stocked. Built from a normal move, source
+            backfill, and a <code>preview</code> drag visual.
           </p>
           <ExhibitSource href={data.sourceLinks["clone-palette"]} label="Clone Palette" />
         </div>
@@ -1294,13 +1279,23 @@
               callbacks: {
                 canDrop: rejectDrop,
                 onDragStart: handleCloneDragStart,
-                onDragClone: handleDragClone,
               },
             }}
             locked={true}
             items={cloneZones}
             getItemId={(zone) => `clone-${zone}`}
           >
+            {#snippet ghost(event)}
+              <Ghost {event} className="clone-pointer-ghost">
+                {#if event.role === "pointer"}
+                  {@const type = event.originalMetadata.blockType as PaletteBlockType}
+                  <div class="clone-block clone-block-{type} clone-pointer-preview">
+                    <i class="material-symbols-rounded" aria-hidden="true">{blockIcon[type]}</i>
+                    <span>{blockLabel[type]}</span>
+                  </div>
+                {/if}
+              </Ghost>
+            {/snippet}
             {#snippet entry(zone)}
               {#if zone === "palette"}
                 <Container
@@ -1312,14 +1307,19 @@
                     name: "clone-palette",
                     callbacks: {
                       canDrop: rejectDrop,
+                      onItemMove: handleCloneMove,
                     },
                   }}
                   locked={true}
-                  items={paletteBlockTemplates}
-                  getItemId={(template) => `palette-${template.type}`}
+                  metadata={{ copyZone: "palette" }}
+                  items={paletteBlocks}
+                  getItemId={(template) => template.id}
                 >
                   {#snippet entry(template)}
-                    <Item itemId={`palette-${template.type}`} metadata={{ blockType: template.type }}>
+                    <Item
+                      itemId={template.id}
+                      metadata={{ blockType: template.type, template: true }}
+                    >
                       <div class="clone-block clone-block-{template.type} clone-palette-block">
                         <i class="material-symbols-rounded" aria-hidden="true">{template.icon}</i>
                         <span>{template.label}</span>
@@ -1336,52 +1336,42 @@
                     direction: "column",
                     name: "clone-canvas",
                     callbacks: {
-                      onItemMove: handleCanvasMove,
-                      onItemRemove: handleCanvasRemove,
+                      onItemMove: handleCloneMove,
                       getDropPriority: prioritizeIntersectingContainer,
                     },
                   }}
                   locked={true}
-                  items={canvasEntries}
-                  getItemId={(entry) => entry.id}
+                  metadata={{ copyZone: "canvas" }}
+                  items={canvasBlocks}
+                  getItemId={(block) => block.id}
                 >
                   {#snippet before()}
-                    {#if canvasBlocks.length === 0 && !draggingClone}
+                    {#if canvasBlocks.length === 0}
                       <p class="clone-canvas-empty">Drop blocks here</p>
                     {/if}
                   {/snippet}
-                  {#snippet entry(entry)}
-                    {#if entry.kind === "clone"}
-                      <Item
-                        itemId={entry.id}
-                        item={entry.item}
-                        metadata={{ blockType: entry.type }}
-                      >
-                        <div class="clone-block clone-block-{entry.type} clone-canvas-block clone-dragging">
-                          <i class="material-symbols-rounded" aria-hidden="true">{blockIcon[entry.type]}</i>
-                          <span>{blockLabel[entry.type]}</span>
-                        </div>
-                      </Item>
-                    {:else}
-                      <Item itemId={entry.block.id} metadata={{ blockType: entry.block.type }}>
-                        <div class="clone-block clone-block-{entry.block.type} clone-canvas-block">
-                          <i class="material-symbols-rounded" aria-hidden="true">{blockIcon[entry.block.type]}</i>
-                          <span>{blockLabel[entry.block.type]}</span>
-                          <button
-                            type="button"
-                            class="clone-block-remove"
-                            aria-label={`Remove ${blockLabel[entry.block.type]}`}
-                            onpointerdown={(event) => event.stopPropagation()}
-                            onclick={(event) => {
-                              event.stopPropagation();
-                              removeCanvasBlock(entry.block.id);
-                            }}
-                          >
-                            <i class="material-symbols-rounded" aria-hidden="true">close</i>
-                          </button>
-                        </div>
-                      </Item>
-                    {/if}
+                  {#snippet entry(block)}
+                    <Item
+                      itemId={block.id}
+                      metadata={{ blockType: block.type, template: false }}
+                    >
+                      <div class="clone-block clone-block-{block.type} clone-canvas-block">
+                        <i class="material-symbols-rounded" aria-hidden="true">{blockIcon[block.type]}</i>
+                        <span>{blockLabel[block.type]}</span>
+                        <button
+                          type="button"
+                          class="clone-block-remove"
+                          aria-label={`Remove ${blockLabel[block.type]}`}
+                          onpointerdown={(event) => event.stopPropagation()}
+                          onclick={(event) => {
+                            event.stopPropagation();
+                            removeCanvasBlock(block.id);
+                          }}
+                        >
+                          <i class="material-symbols-rounded" aria-hidden="true">close</i>
+                        </button>
+                      </div>
+                    </Item>
                   {/snippet}
                 </Container>
               {/if}
@@ -2198,6 +2188,19 @@
     color: #b3b8bc;
     font-size: 0.85rem;
     text-align: center;
+  }
+
+  .clone-workspace :global(.clone-pointer-ghost) {
+    padding: 0;
+    border: 0;
+    background: transparent;
+    box-shadow: 0 10px 28px rgba(26, 31, 34, 0.18);
+  }
+
+  .clone-pointer-preview {
+    width: 132px;
+    box-sizing: border-box;
+    pointer-events: none;
   }
 
   .clone-block {

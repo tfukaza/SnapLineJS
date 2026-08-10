@@ -218,7 +218,26 @@ function useFrameworkGhosts() {
     [ghosts],
   );
 
-  return { callbacks, renderWithGhosts };
+  const renderPointerGhosts = useCallback(
+    (listId, renderContent) =>
+      ghosts
+        .filter(
+          (entry) =>
+            entry.listId === listId && entry.event.role === "pointer",
+        )
+        .map((entry) => (
+          <Ghost
+            className="insertion-pointer-ghost"
+            event={entry.event}
+            key={`ghost-${entry.event.ghostItem.id}`}
+          >
+            {renderContent(entry.event)}
+          </Ghost>
+        )),
+    [ghosts],
+  );
+
+  return { callbacks, renderPointerGhosts, renderWithGhosts };
 }
 
 const websiteLogoSliceCount = 6;
@@ -1986,9 +2005,14 @@ function cloneInsertionColumns() {
 }
 
 export function SnapSortInsertionDemo() {
-  const { callbacks: ghostCallbacks, renderWithGhosts } = useFrameworkGhosts();
+  const {
+    callbacks: ghostCallbacks,
+    renderPointerGhosts,
+    renderWithGhosts,
+  } = useFrameworkGhosts();
   const [columns, setColumns] = useState(cloneInsertionColumns);
-  const pendingRemovedItem = useRef(null);
+  const [duplicateMode, setDuplicateMode] = useState(false);
+  const nextItemId = useRef(8);
   const itemCount = columns.reduce(
     (total, column) => total + column.items.length,
     0,
@@ -2013,44 +2037,72 @@ export function SnapSortInsertionDemo() {
       onItemMove: (event) => {
         const itemId = event.itemId;
         const targetColumnId = event.to.containerMetadata.columnId;
-        if (typeof itemId !== "string" || typeof targetColumnId !== "string") return;
+        const sourceColumnId = event.from.containerMetadata.columnId;
+        if (
+          typeof itemId !== "string" ||
+          typeof targetColumnId !== "string" ||
+          typeof sourceColumnId !== "string"
+        ) return;
+
+        const replacementId = duplicateMode
+          ? `task-${nextItemId.current++}`
+          : null;
+
         setColumns((current) => {
-          let removed = pendingRemovedItem.current;
-          let columnsWithoutItem = current;
-          if (!removed) {
-            const result = removeItemById(itemId, current);
-            removed = result.removedItem;
-            columnsWithoutItem = result.columnsWithoutItem;
-          }
-          pendingRemovedItem.current = null;
-          if (!removed) return current;
+          const { removedItem: original, columnsWithoutItem } =
+            removeItemById(itemId, current);
+          if (!original) return current;
+          const replacement = replacementId
+            ? { ...original, id: replacementId }
+            : null;
+
           return columnsWithoutItem.map((column) => {
-            if (column.id !== targetColumnId) return column;
             const nextItems = column.items.slice();
-            nextItems.splice(Math.max(0, Math.min(event.to.index, nextItems.length)), 0, removed);
+
+            if (
+              sourceColumnId === targetColumnId &&
+              column.id === sourceColumnId
+            ) {
+              const combined = [];
+              for (let index = 0; index <= nextItems.length; index += 1) {
+                if (replacement && index === event.from.index) {
+                  combined.push(replacement);
+                }
+                if (index === event.to.index) combined.push(original);
+                if (index < nextItems.length) combined.push(nextItems[index]);
+              }
+              return { ...column, items: combined };
+            }
+
+            if (replacement && column.id === sourceColumnId) {
+              nextItems.splice(
+                Math.max(0, Math.min(event.from.index, nextItems.length)),
+                0,
+                replacement,
+              );
+            }
+            if (column.id === targetColumnId) {
+              nextItems.splice(
+                Math.max(0, Math.min(event.to.index, nextItems.length)),
+                0,
+                original,
+              );
+            }
             return { ...column, items: nextItems };
           });
         });
       },
-      onItemRemove: (event) => {
-        const itemId = event.itemId;
-        if (typeof itemId !== "string") return;
-        setColumns((current) => {
-          const { removedItem, columnsWithoutItem } = removeItemById(itemId, current);
-          pendingRemovedItem.current = removedItem;
-          return columnsWithoutItem;
-        });
-      },
     }),
-    [ghostCallbacks, removeItemById],
+    [duplicateMode, ghostCallbacks, removeItemById],
   );
 
   const reset = () => {
-    pendingRemovedItem.current = null;
+    nextItemId.current = 8;
     setColumns(cloneInsertionColumns());
   };
 
   const addItem = () => {
+    const id = `task-${nextItemId.current++}`;
     setColumns((current) =>
       current.map((column, index) =>
         index === 0
@@ -2059,7 +2111,7 @@ export function SnapSortInsertionDemo() {
               items: [
                 ...column.items,
                 {
-                  id: `task-${itemCount + 1}`,
+                  id,
                   kind: "file",
                   title: `new-file-${itemCount + 1}.md`,
                   detail: "1 KB",
@@ -2079,6 +2131,15 @@ export function SnapSortInsertionDemo() {
           <p>{itemCount} files and folders - original row stays still until drop</p>
         </div>
         <div className="toolbar">
+          <label className="duplicate-toggle">
+            <input
+              checked={duplicateMode}
+              onChange={(event) => setDuplicateMode(event.target.checked)}
+              type="checkbox"
+            />
+            <span></span>
+            Duplicate on drop
+          </label>
           <button onClick={addItem} type="button">Add</button>
           <button onClick={reset} type="button">Reset</button>
         </div>
@@ -2091,10 +2152,19 @@ export function SnapSortInsertionDemo() {
             direction: "row",
             mode: "insertion",
             name: "insertion-board-root",
-            callbacks: { canDrop: rejectDrop },
+            callbacks: {
+              ...ghostCallbacks,
+              canDrop: rejectDrop,
+              onDragStart: (event) => {
+                if (duplicateMode) event.session.dragVisual = "preview";
+              },
+            },
           }}
           locked
-          metadata={{ boardId: "insertion-demo" }}
+          metadata={{
+            boardId: "insertion-demo",
+            frameworkList: "insertion-board-root",
+          }}
         >
           {columns.map((column) => (
             <Container
@@ -2122,7 +2192,16 @@ export function SnapSortInsertionDemo() {
                 column.items,
                 (item) => item.id,
                 (item) => (
-                  <Item className="insertion-card" itemId={item.id} key={item.id}>
+                  <Item
+                    className="insertion-card"
+                    itemId={item.id}
+                    key={item.id}
+                    metadata={{
+                      detail: item.detail,
+                      kind: item.kind,
+                      title: item.title,
+                    }}
+                  >
                     <span className={`file-icon ${item.kind === "folder" ? "folder-icon" : ""}`} aria-hidden="true">
                       {item.kind === "folder" ? "folder" : "description"}
                     </span>
@@ -2134,6 +2213,20 @@ export function SnapSortInsertionDemo() {
                 ),
               )}
             </Container>
+          ))}
+          {renderPointerGhosts("insertion-board-root", (event) => (
+            <>
+              <span
+                className={`file-icon ${event.originalMetadata.kind === "folder" ? "folder-icon" : ""}`}
+                aria-hidden="true"
+              >
+                {event.originalMetadata.kind === "folder" ? "folder" : "description"}
+              </span>
+              <div className="card-copy">
+                <strong>{String(event.originalMetadata.title ?? "Dragging")}</strong>
+                <span>{String(event.originalMetadata.detail ?? "")}</span>
+              </div>
+            </>
           ))}
         </Container>
       </Engine>

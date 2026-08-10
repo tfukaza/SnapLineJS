@@ -1,4 +1,4 @@
-import type { Container } from "../container";
+import type { AnimationConfig, Container } from "../container";
 import type { Item } from "../item";
 import { resetDropSnapshotDebugDump, type DropCandidate } from "../algorithm";
 import type { DragLocation, GhostRect, GhostRole } from "../events";
@@ -13,13 +13,28 @@ import {
 } from "../mutation";
 import type { DragLifecycleStrategy } from "./lifecycle";
 import type { DragSession } from "./session";
+import {
+  restoreActiveItems,
+  startItemVisual,
+  stopItemVisual,
+  updateItemVisual,
+  validateItemVisual,
+} from "./item-visual";
+import {
+  pointerPreviewMemberRects,
+  removePointerPreview,
+  startPointerPreview,
+  updatePointerPreview,
+  validatePointerPreview,
+} from "./pointer-preview";
 
 /**
  * Floating insertion marker: insertion mode. Unlike the flow ghost, the
  * marker is never attached to a container's item-ordered list — its logical
  * position lives solely in `DragSession.pendingGhostTarget`, and its DOM
- * element is absolutely positioned from the algorithm's computed rect. The
- * dragged item itself never leaves its original DOM position during the drag.
+ * element is absolutely positioned from the algorithm's computed rect.
+ * Pointer representation is independent: `dragVisual` can hoist the real
+ * Item, render the shared group preview, or show no pointer-following visual.
  */
 
 function updateInsertionGhostStyle(
@@ -176,6 +191,33 @@ function drop(session: DragSession): void {
   const item = session.primaryItem;
   const items = session.items;
   const root = session.root;
+  const dropKeys = items.map((member) => root.itemKey(member));
+  const dropRects = items.map(() => ({
+    first: null as DOMRect | null,
+    last: null as DOMRect | null,
+    element: null as HTMLElement | null,
+  }));
+  let dropAnimationConfig: AnimationConfig | null = null;
+
+  session.pressedItem.schedule(
+    () => {
+      if (session.dragVisual === "preview") {
+        pointerPreviewMemberRects(session).forEach((rect, i) => {
+          dropRects[i].first = rect;
+        });
+        return;
+      }
+      if (session.dragVisual !== "item") return;
+      items.forEach((member, i) => {
+        const first = member.element?.getBoundingClientRect() ?? null;
+        dropRects[i].first = first;
+      });
+    },
+    {
+      stage: "READ_1",
+      queueId: `drag-end-insertion-read-first-${session.pressedItem.id}`,
+    },
+  );
 
   session.pressedItem.schedule(
     async () => {
@@ -186,14 +228,9 @@ function drop(session: DragSession): void {
           : null;
       const commitTarget = session.cancelled ? null : pendingGhostTarget;
 
-      for (const member of items) {
-        if (member.element) {
-          delete member.element.dataset.snapsortDragging;
-        }
-        member.writeTransform();
-      }
-
+      if (session.dragVisual === "item") await stopItemVisual(session);
       await removeGhost(session);
+      await removePointerPreview(session);
 
       let destination: DragLocation | null = null;
       if (commitTarget?.container) {
@@ -205,6 +242,14 @@ function drop(session: DragSession): void {
         };
 
         if (session.dropEffect === "move") {
+          dropAnimationConfig = item.dropAnimationConfig(destinationContainer);
+          if (session.dragVisual === "item") {
+            restoreActiveItems(session);
+          }
+          // Preserve the ordinary sibling FLIP pipeline. It snapshots the
+          // pre-mutation tree in READ_2, commits in WRITE_2, and ignores any
+          // newly-mounted source replacement because that entry had no first
+          // rectangle. The dragged run has its own preview/item drop FLIP.
           item.moveItemsToContainer(
             destinationContainer,
             items,
@@ -212,32 +257,21 @@ function drop(session: DragSession): void {
             session,
           );
           await settleMutation();
-        } else if (session.dropEffect === "copy") {
-          // The originals never leave their source slots in insertion mode
-          // (unlike flow mode, they're never detached) — there's no floating
-          // instance to spawn either (rows stay put; only the marker line
-          // shows mid-drag), so unlike flow-mode spawn there is no id to
-          // assign at dragStart. Commits through the same onItemMove path a
-          // move would: `froms` null marks "not moved from anywhere",
-          // `origins[i] === items[i]` (the original IS its own provenance),
-          // and moveItemsAt's null-froms skip-attach rule leaves each
-          // original exactly where it is — the consumer mints the
-          // duplicate's id when it materializes the entry (see
-          // ItemMoveEvent's doc for the full contract, including how this
-          // is the one sanctioned asymmetry with flow-mode spawn).
-          item.moveItemsAt(
-            items.map(() => null),
-            destinationContainer,
-            items,
-            commitTarget.index,
-            session,
-            items,
-          );
-          await settleMutation();
         }
         // "none": no mutation events — the items already sit where they always were.
       }
 
+      if (session.dropEffect === "none" || !destination) {
+        if (session.dragVisual === "item") restoreActiveItems(session);
+        dropAnimationConfig = item.dropAnimationConfig(
+          session.activeSources[0]?.container ?? null,
+        );
+      }
+
+      session.dragCoordinateParent.clear();
+      session.dragLayoutPosition.clear();
+      session.dragVisualStart.clear();
+      session.groupVisualOffsets.clear();
       session.clearHoveredItem();
       root.clearDragSnapshotTree();
       for (const member of items) {
@@ -266,6 +300,42 @@ function drop(session: DragSession): void {
       queueId: `drag-end-insertion-${session.pressedItem.id}`,
     },
   );
+
+  root.schedule(
+    () => {
+      items.forEach((member, i) => {
+        const currentItem = root.findItemByKey(dropKeys[i]) ?? member;
+        const element = currentItem.element?.isConnected
+          ? currentItem.element
+          : null;
+        dropRects[i].element = element;
+        dropRects[i].last = element?.getBoundingClientRect() ?? null;
+      });
+    },
+    {
+      stage: "READ_3",
+      queueId: `drag-end-insertion-read-last-${session.pressedItem.id}`,
+    },
+  );
+
+  root.schedule(
+    () => {
+      items.forEach((member, i) => {
+        const { first, last, element } = dropRects[i];
+        member.playDropAnimation(
+          first,
+          last,
+          element,
+          dropAnimationConfig,
+          root,
+        );
+      });
+    },
+    {
+      stage: "WRITE_3",
+      queueId: `drag-end-insertion-play-${session.pressedItem.id}`,
+    },
+  );
 }
 
 export class InsertionMarkerLifecycle implements DragLifecycleStrategy {
@@ -273,20 +343,32 @@ export class InsertionMarkerLifecycle implements DragLifecycleStrategy {
 
   validateStart(session: DragSession): void {
     const pressedIndex = session.items.indexOf(session.pressedItem);
-    const source = session.sources[pressedIndex] ?? session.sources[0];
+    const source =
+      session.activeSources[pressedIndex] ?? session.activeSources[0];
     if (session.dropEffect !== "none") {
       assertCanFireItemMove(source.container);
     }
     assertCanFireGhostInsert(source.container);
     assertCanFireGhostRemove(source.container);
+    if (session.dragVisual === "preview") validatePointerPreview(session);
+    if (session.dragVisual === "item") validateItemVisual(session);
   }
 
   async dragStart(session: DragSession): Promise<void> {
+    if (session.dragVisual === "item") {
+      await startItemVisual(session);
+    } else if (session.dragVisual === "preview") {
+      await startPointerPreview(session);
+    }
     await session.updateDropTarget();
   }
 
-  dragMove(_session: DragSession): void {
-    // The marker never moves the dragged item's own transform.
+  dragMove(session: DragSession): void {
+    if (session.dragVisual === "item") {
+      updateItemVisual(session);
+    } else if (session.dragVisual === "preview") {
+      updatePointerPreview(session);
+    }
   }
 
   currentGhostLocation(
@@ -315,6 +397,14 @@ export class InsertionMarkerLifecycle implements DragLifecycleStrategy {
     session: DragSession,
     role: GhostRole = "target",
   ): Promise<void> {
+    if (role === "pointer") {
+      await removePointerPreview(session);
+      return;
+    }
+    if (role === "source") {
+      await stopItemVisual(session);
+      return;
+    }
     await removeGhost(session, role);
   }
 

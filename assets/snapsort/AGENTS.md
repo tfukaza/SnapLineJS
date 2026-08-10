@@ -15,8 +15,9 @@ A single `Container`/`Item` class pair (per framework) whose drag/drop behavior 
 - `Container` - The only container class. `new Container(engine, parent, { mode, ... })`.
 - `defaultAnimations` - Opt-in standard reorder, drop, and click-move animation preset.
 - `Item` - The only item class (including ghosts/markers). Never needs a mode.
-- `DragSession` - Owns all per-drag state (pointer, ghost, drop target); lives at `container.dragSession` on the root while a drag is active.
+- `DragSession` - Owns all per-drag state (pointer, drag visual, ghosts, drop target); lives at `container.dragSession` on the root while a drag is active. Its public `handoff()` method is an advanced, copy-neutral pointer/session transfer primitive.
 - Event types: `ItemInsertEvent`, `ItemRemoveEvent`, `ItemMoveEvent`, `ItemSwapEvent`, `GhostCreateEvent`, `GhostInsertEvent`, `GhostRemoveEvent`, `DragStartEvent`, `DragEndEvent`, `DropTargetChangeEvent`, `CanDropEvent`, `DropPriorityEvent`, `VisualGeometryInvalidationEvent`, `DragLocation`.
+- Drag presentation types: `DragVisual` (`"item" | "preview" | "none"`) and `DropEffect` (`"move" | "none"`).
 - `ContainerCallbacks`, `ContainerConfig`, `SortMode`, `SortStrategy`, `DropTargetStrategy`, `DragLifecycleStrategy`.
 
 ### @snap-engine/snapsort/callbacks
@@ -62,6 +63,8 @@ snapsort/
     │   ├── session.ts
     │   ├── lifecycle.ts
     │   ├── drop-strategy.ts
+    │   ├── item-visual.ts
+    │   ├── pointer-preview.ts
     │   ├── flow-ghost.ts
     │   ├── insertion-marker.ts
     │   └── swap.ts
@@ -83,12 +86,13 @@ snapsort/
 
 ## Core Architecture
 
-### Two independent axes
+### Three independent axes
 
-Sort mode is really two orthogonal choices, each resolved once per drag from the root container's config:
+Keep these three concerns separate:
 
 - **Drop-target resolution** (`DropTargetStrategy`, `drag/drop-strategy.ts`): which algorithm (`determineDropTarget` / `determineProgressiveDropTarget` / `determineInsertionDropTarget` / `determineSwapDropTarget` in `algorithm.ts`) picks the winning candidate.
-- **Drag/ghost lifecycle** (`DragLifecycleStrategy`, `drag/lifecycle.ts`): how the ghost is created/moved/removed and whether the dragged item itself is hoisted out of flow. Three implementations: `FlowGhostLifecycle` (full-size spacer, FLIP-animated; euclidean + progressive), `InsertionMarkerLifecycle` (floating absolutely-positioned line; insertion), and `SwapLifecycle` (pointer ghost + pairwise exchange; swap).
+- **Placement feedback** (`DragLifecycleStrategy`, `drag/lifecycle.ts`): how target ghosts, insertion markers, or swap hover state describe the prospective result.
+- **Pointer representation** (`DragSession.dragVisual`, `drag/item-visual.ts`, `drag/pointer-preview.ts`): whether the actual item, one root-owned pointer preview, or no visual follows the pointer. Built-in defaults are item for euclidean/progressive, none for insertion, and preview for swap. Consumers can choose another value in `onDragStart`.
 
 `ContainerConfig.mode` picks a built-in pair from `builtinStrategies`;
 `ContainerConfig.strategy` overrides with a custom pair. A custom drop-target
@@ -96,7 +100,15 @@ resolver owns its full resolution policy, including eligibility and priority.
 
 ### DragSession
 
-Created on `dragStart` and stored at `root.dragSession`; holds pointer/offset/start, the live ghost item, `pendingGhostTarget`, the resolved `SortStrategy`, and `status` (`pending → active → dropping → ended`). All per-drag state that used to live as `#private` fields on the dragged item now lives here so drag lifecycle strategies (separate classes) can read/write it without needing access to `Item`'s private fields. `items`/`sources` represent the ordered multi-item drag run; selection is consumer-owned through each item's `selected` property.
+Created on `dragStart` and stored at `root.dragSession`; holds pointer/offset/start, `dragVisual`, the role-keyed ghost set, `pendingGhostTarget`, the resolved `SortStrategy`, and `status` (`pending → active → dropping → ended`). All per-drag state that used to live as `#private` fields on the dragged item now lives here so drag lifecycle strategies (separate classes) can read/write it without needing access to `Item`'s private fields. `items`/`sources` represent the ordered multi-item drag run; selection is consumer-owned through each item's `selected` property.
+
+`handoff(replacements)` deliberately remains public. It atomically validates a
+parallel, unique, connected replacement run in the same engine/root, transfers
+pointer ownership and frozen drag geometry, and makes those Items the session
+participants. It is pending-only and must run during `onDragStart`, before
+lifecycle activation. It does not mount data, imply copy semantics, destroy
+either run, or clean application state. Framework integrations must commit the
+replacement DOM before calling it.
 
 ### Mutator (`mutation.ts`)
 
@@ -117,7 +129,7 @@ resulting item/ghost structure.
 - Callback configuration is per-container: callbacks neither inherit from the
   root/parent nor bubble. A shared handler object must be installed explicitly
   on each participating container.
-- Root-owned lifecycle/integration callbacks: `onDragStart`, `onDragClone`,
+- Root-owned lifecycle/integration callbacks: `onDragStart`,
   `onDropTargetChange`, `onDragEnd`, and `onVisualGeometryInvalidated`.
 - Direct-container callbacks: moves/inserts fire on the destination; removal
   fires on the item's current owner; swap fires once on the dragged item's
@@ -141,12 +153,17 @@ resulting item/ghost structure.
   what those visuals are.
 - `flushMutation` is an integration boundary, not a session callback. It is
   read from the same receiver as item mutations, ghost insert/remove, and root
-  clone/target-change/end callbacks. Drag start, ghost creation, hover, policy,
+  target-change/end callbacks. Drag start, ghost creation, hover, policy,
   and visual invalidation dispatch directly. `awaitMutation` is only the
   deprecated fallback when the receiver has no `flushMutation`.
 - `onItemRemove` is not the source half of a normal move. It represents
-  programmatic removal from the item's current owner or cleanup of a transient
-  flow-copy clone.
+  programmatic removal from the item's current owner.
+
+Copying is an application recipe, not a lifecycle effect. The destination's
+ordinary `onItemMove` moves the original stable ID to the destination and, in
+the same synchronous framework update, inserts a fresh-ID replacement with the
+same application data at each vacated source. Newly mounted replacements have
+no pre-mutation FLIP rectangle and must be ignored safely by animation code.
 
 ### Framework adapter ownership
 

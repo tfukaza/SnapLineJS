@@ -144,34 +144,14 @@ the code that created it remains responsible for destroying it.
 
 <ItemExample kind="item-instance" />
 
-The other reason to pass `item` is a flow-mode copy drag. `onDragClone` creates
-the core clone before Svelte renders it; store that exact instance in state and
-pass it back so SnapSort can transfer the active drag to the newly rendered
-element:
-
-```svelte
-<script lang="ts">
-  import type {
-    DragCloneEvent,
-    Item as SnapSortItem,
-  } from "@snap-engine/snapsort";
-
-  let clone = $state<{ id: string; item: SnapSortItem } | null>(null);
-
-  function onDragClone(event: DragCloneEvent) {
-    const item = event.cloneItems[0];
-    item.itemId = crypto.randomUUID();
-    clone = { id: item.resolvedItemId, item };
-  }
-</script>
-
-{#if clone}
-  <Item itemId={clone.id} item={clone.item}>Copied entry</Item>
-{/if}
-```
-
-These clone instances are intentionally parentless until the core handoff. Do
-not create a replacement Item or manually add the clone to the Container.
+An adopted Item can also participate in an advanced
+`DragSession.handoff(replacements)` integration. The application must create
+and mount the exact replacement instance before handoff, and remains
+responsible for its data and lifetime. Handoff retargets the pending gesture
+during `onDragStart`; lifecycle activation locks it afterward. It does not make
+the instance a copy or perform framework cleanup. Ordinary copy interfaces do
+not need adopted Items—use a normal `onItemMove` state update that moves the
+original record and creates a fresh replacement record at its source.
 
 ### `class`, `className`, `style`, and HTML attributes
 

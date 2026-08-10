@@ -13,7 +13,7 @@
   }
 
   .doc-article > .lifecycle-diagram {
-    max-width: none;
+    max-width: calc(1400px + 2 * var(--size-24));
   }
 
   h2 {

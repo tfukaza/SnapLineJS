@@ -22,6 +22,8 @@ their bindings from `@snap-engine/snapsort/svelte` or
 - `Container`
 - `Item`
 - `DragSession`
+- `DragVisual` - `"item"`, `"preview"`, or `"none"` pointer representation
+- `DropEffect` - `"move"` or `"none"` persistent mutation choice
 - `defaultAnimations` - opt-in 100ms reorder, drop, and click-move animation preset
 - Event types: `ItemInsertEvent`, `ItemRemoveEvent`, `ItemMoveEvent`, `ItemSwapEvent`, `GhostCreateEvent`, `GhostInsertEvent`, `GhostRemoveEvent`, `DragStartEvent`, `DragEndEvent`, `DropTargetChangeEvent`, `CanDropEvent`, `DropPriorityEvent`, `InsertionMarkerRectEvent`, `ItemHitboxEvent`, `VisualGeometryInvalidationEvent`, `DragLocation`
 - `ContainerCallbacks`, `ContainerConfig`, `SortMode`, `SortStrategy`
@@ -95,7 +97,7 @@ native root-element attributes and events through directly.
 
 An ordinary move does not also fire source `onItemRemove`. That callback is
 for an item actually removed from its current owner, including
-`container.removeItem(id)` and cleanup of transient flow-copy clones. The
+`container.removeItem(id)`. The
 imperative `moveItem` (when placement changes) and `removeItem` APIs set
 `event.session` to `null` and do not create a drag lifecycle. A same-placement
 `moveItem` request emits no mutation callback.
@@ -103,6 +105,65 @@ imperative `moveItem` (when placement changes) and `removeItem` APIs set
 Mutation callbacks run through `flushMutation` on the same container that
 receives the callback. `flushMutation` is an adapter integration boundary, not
 a lifecycle event; the Svelte and React bindings supply it automatically.
+
+## Placement and drag visuals
+
+SnapSort keeps three decisions independent:
+
+1. The mode's target resolver chooses a destination.
+2. The mode's placement feedback shows a flow spacer, insertion marker, or
+   swap target.
+3. `DragSession.dragVisual` chooses what follows the pointer.
+
+`dragVisual` accepts `"item"`, `"preview"`, or `"none"`. Euclidean and
+progressive default to `"item"`, insertion defaults to `"none"`, and swap
+defaults to `"preview"`. Override it while the session is still pending,
+normally from the root's `onDragStart` callback:
+
+```ts
+import type { DragStartEvent } from "@snap-engine/snapsort";
+
+const callbacks = {
+  onDragStart(event: DragStartEvent) {
+    event.session.dragVisual = "preview";
+  },
+};
+```
+
+A preview is one root-owned `Ghost` with `kind: "marker"` and
+`role: "pointer"`. It can coexist with insertion's destination-owned marker,
+which has `role: "target"`. The preview represents the complete ordered drag
+run and never becomes application data.
+
+## Copy from move primitives
+
+Copy is application state logic rather than a `dropEffect`. Handle the normal
+destination-owned `onItemMove` in one synchronous update:
+
+1. Move the original stable ID to `event.to`.
+2. Mint a fresh replacement ID carrying the same application data.
+3. Insert that replacement at the vacated `event.from` source/index.
+
+This keeps the original stable identity represented by the drag visual as the
+Item that animates into the destination. The source replacement is newly
+mounted, so it has no old FLIP rectangle and is not inverse-animated. Set
+`dragVisual = "preview"` when the source should remain visually occupied during
+the gesture.
+
+`DragSession.handoff(replacements)` remains available as a separate advanced
+primitive for interfaces that already mounted a parallel replacement run and
+need to retarget the pending gesture during `onDragStart`. Replacements must
+be unique, connected Items in the same engine and root. Handoff transfers
+pointer ownership, frozen geometry, and session participation; it does not
+create, render, copy, destroy, or clean up application state. It cannot be
+called after lifecycle activation begins.
+
+### Migrating from built-in copy
+
+Remove `session.dropEffect = "copy"`, `onDragClone`, transient adopted-Item
+state, clone-cancellation `onItemRemove` handling, and `ItemMoveEvent.origin*`
+reads. Choose `dragVisual = "preview"` when desired, then implement copy with
+the ordinary non-null `event.from`/`event.to` move-and-backfill recipe above.
 
 ## Svelte
 

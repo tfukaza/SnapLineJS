@@ -382,6 +382,103 @@ test("dragStart handoff transfers capture and later delivery to a DOM-backed obj
   }
 });
 
+test("failed drag handoff capture leaves the original pointer stream active", () => {
+  const harness = createInputHarness(
+    "<div id='source'></div><div id='destination'></div>",
+  );
+  const sourceElement =
+    harness.dom.window.document.querySelector<HTMLElement>("#source");
+  const destinationElement =
+    harness.dom.window.document.querySelector<HTMLElement>("#destination");
+  if (!sourceElement || !destinationElement) {
+    throw new Error("Missing handoff failure elements");
+  }
+  const capture = trackPointerCapture(
+    [sourceElement, destinationElement],
+    (element) => element === destinationElement,
+  );
+
+  try {
+    const source = new ElementObject(harness.engine);
+    const destination = new ElementObject(harness.engine);
+    harness.input.registerObjectElement(source, sourceElement);
+    harness.input.registerObjectElement(destination, destinationElement);
+
+    const received: string[] = [];
+    let sourceCapturedWhenRejected = false;
+    source.event.input.dragStart = ({ objectId, pointerId, handoffTo }) => {
+      received.push(`start:${objectId}`);
+      try {
+        handoffTo(destination);
+      } catch (error) {
+        received.push(`rejected:${(error as Error).message}`);
+        sourceCapturedWhenRejected =
+          capture.captures.get(pointerId) === sourceElement;
+      }
+    };
+    source.event.input.drag = ({ objectId }) => {
+      received.push(`drag:${objectId}`);
+    };
+    source.event.input.pointerUp = ({ objectId, event, cancelled }) => {
+      received.push(`up:${objectId}:${event.type}:${cancelled}`);
+    };
+    source.event.input.dragEnd = ({ objectId, event, cancelled }) => {
+      received.push(`end:${objectId}:${event.type}:${cancelled}`);
+    };
+    destination.event.input.drag = ({ objectId }) => {
+      received.push(`destination-drag:${objectId}`);
+    };
+    destination.event.input.pointerUp = ({ objectId, cancelled }) => {
+      received.push(`destination-up:${objectId}:${cancelled}`);
+    };
+    destination.event.input.dragEnd = ({ objectId, cancelled }) => {
+      received.push(`destination-end:${objectId}:${cancelled}`);
+    };
+
+    sourceElement.dispatchEvent(
+      pointerEvent(harness.dom.window, "pointerdown", {
+        x: 10,
+        y: 10,
+        buttons: 1,
+        pointerId: 17,
+      }),
+    );
+    sourceElement.dispatchEvent(
+      pointerEvent(harness.dom.window, "pointermove", {
+        x: 30,
+        y: 10,
+        buttons: 1,
+        pointerId: 17,
+      }),
+    );
+
+    expect(sourceCapturedWhenRejected).toBe(true);
+    expect(capture.captures.get(17)).toBe(sourceElement);
+    expect(capture.releases).toEqual([]);
+
+    harness.dom.window.document.dispatchEvent(
+      pointerEvent(harness.dom.window, "pointerup", {
+        x: 30,
+        y: 10,
+        buttons: 0,
+        pointerId: 17,
+      }),
+    );
+
+    expect(received).toEqual([
+      `start:${source.id}`,
+      "rejected:capture failed for 17",
+      `drag:${source.id}`,
+      `up:${source.id}:pointerup:false`,
+      `end:${source.id}:pointerup:false`,
+    ]);
+    expect(capture.captures.has(17)).toBe(false);
+    expect(capture.releases).toEqual([17]);
+  } finally {
+    harness.cleanup();
+  }
+});
+
 test("handoff rejects BaseObject and headless destinations synchronously", () => {
   const dom = new JSDOM(
     "<!doctype html><html><body><div id='engine'><div id='source'></div></div></body></html>",

@@ -20,7 +20,6 @@
   interface DiagramPhase {
     id: string;
     title: string;
-    note?: string;
     messages: DiagramMessage[];
   }
 
@@ -67,7 +66,6 @@
       {
         id: "start",
         title: "1 · Start",
-        note: "Source ghost path: flow move/none. Insertion and flow copy begin at a valid destination; swap uses the root.",
         messages: [
           message(
             "1.1",
@@ -75,66 +73,201 @@
             "onDragStart",
             "item",
             "root",
-            "The dragged item asks the root-owned DragSession to begin. The session invokes the root's onDragStart callback synchronously and directly; returning false vetoes activation.",
+            "The dragged item asks the root-owned DragSession to begin. The session invokes the root's onDragStart callback synchronously and directly; returning false vetoes activation, while an accepted callback may choose dragVisual before activation.",
           ),
           message(
             "1.2",
-            "Add source ghost",
+            "Choose pointer representation",
+            "session.dragVisual",
+            "root",
+            "root",
+            "dragVisual is item, preview, or none. It controls only what follows the pointer; target resolution and placement feedback remain independent. The conditional branches below may be interleaved differently by each placement mode.",
+            { rowKind: "loop" },
+          ),
+          message(
+            "1.3a",
+            "Add source spacer",
             "onGhostInsert",
             "root",
             "source",
-            "The root-owned lifecycle asks the source container to attach the passive ghost. The source is the callback receiver.",
-            { rowKind: "short" },
+            "When the item visual needs to preserve a vacated layout slot, the lifecycle asks that item's direct source to insert a role: source flow Ghost. Flow mode can instead reserve the slot with its independent target spacer.",
+            {
+              rowKind: "short",
+              branch: 'dragVisual = "item" · source spacer when required',
+            },
           ),
           message(
-            "1.3",
-            "Update ghost state",
+            "1.3b",
+            "Update source spacer state",
             "inside flushMutation",
             "source",
             "app",
-            "The source's onGhostInsert callback synchronously updates framework-owned ghost state inside the transaction.",
+            "The source callback synchronously adds the source-role spacer to framework-owned state.",
           ),
           message(
-            "1.4",
-            "Commit ghost DOM",
+            "1.3c",
+            "Commit source spacer DOM",
             "framework commit",
             "app",
             "dom",
-            "The framework synchronously commits the Ghost component to the DOM.",
+            "The framework synchronously commits the source spacer to the DOM.",
             { rowKind: "short" },
           ),
           message(
-            "1.5",
-            "Bind ghost element",
+            "1.3d",
+            "Bind source spacer",
             "ghostItem.element",
             "dom",
             "ghost",
-            "Rendering binds the new DOM element to the passive Ghost item.",
+            "Rendering binds the new DOM element to the passive source-role Ghost item.",
           ),
           message(
-            "1.6",
+            "1.3e",
             "DOM commit complete",
             "pre-paint",
             "dom",
             "app",
-            "The DOM mutation and ghost binding are complete. Layout and paint have not necessarily occurred.",
+            "The source spacer DOM and binding are complete. Layout and paint have not necessarily occurred.",
             { kind: "return" },
           ),
           message(
-            "1.7",
+            "1.3f",
             "Transaction complete",
             "flushMutation returns",
             "app",
             "root",
-            "The synchronous framework transaction returns only after the DOM commit and binding are complete, so SnapSort may continue.",
+            "The source's synchronous transaction returns after its spacer DOM and binding are ready.",
+            { kind: "return" },
+          ),
+          message(
+            "1.3g",
+            "Hoist real item",
+            "absolute drag transform",
+            "root",
+            "dom",
+            "The real dragged Item or ordered item run is positioned above layout and becomes the pointer-following visual.",
+          ),
+          message(
+            "1.4a",
+            "Add pointer preview",
+            "onGhostInsert",
+            "root",
+            "root",
+            "The root receives one role: pointer marker Ghost for the complete ordered drag run. It is visual-only and never becomes application data.",
+            { rowKind: "loop", branch: 'dragVisual = "preview"' },
+          ),
+          message(
+            "1.4b",
+            "Update preview state",
+            "inside flushMutation",
+            "root",
+            "app",
+            "The root callback synchronously adds the pointer preview to framework-owned ghost state.",
+          ),
+          message(
+            "1.4c",
+            "Commit preview DOM",
+            "framework commit",
+            "app",
+            "dom",
+            "The framework synchronously renders the root-owned pointer preview.",
+            { rowKind: "short" },
+          ),
+          message(
+            "1.4d",
+            "Bind preview element",
+            "ghostItem.element",
+            "dom",
+            "ghost",
+            "Rendering binds the preview DOM element to the pointer-role Ghost item.",
+          ),
+          message(
+            "1.4e",
+            "DOM commit complete",
+            "pre-paint",
+            "dom",
+            "app",
+            "The preview DOM and binding are ready before the root transaction returns.",
+            { kind: "return" },
+          ),
+          message(
+            "1.4f",
+            "Transaction complete",
+            "flushMutation returns",
+            "app",
+            "root",
+            "The root's synchronous preview transaction returns to the session.",
+            { kind: "return" },
+          ),
+          message(
+            "1.5",
+            "Keep pointer visual empty",
+            "no pointer DOM",
+            "root",
+            "root",
+            "No Item or pointer Ghost follows the pointer. This does not disable target resolution or placement feedback.",
+            { rowKind: "loop", branch: 'dragVisual = "none"' },
+          ),
+          message(
+            "1.6a",
+            "Add placement feedback",
+            "onGhostInsert",
+            "root",
+            "target",
+            "Independently of dragVisual, flow mode may insert role: target spacer Ghosts and insertion mode may insert a role: target marker. Swap mode uses item-hover callbacks instead of a target Ghost.",
+            {
+              branch: "Independent placement feedback · when ghost-based",
+            },
+          ),
+          message(
+            "1.6b",
+            "Update feedback state",
+            "inside flushMutation",
+            "target",
+            "app",
+            "The current placement owner synchronously adds the target-role feedback to framework state.",
+            { rowKind: "short" },
+          ),
+          message(
+            "1.6c",
+            "Commit feedback DOM",
+            "framework commit",
+            "app",
+            "dom",
+            "The framework synchronously renders the flow spacer or insertion marker.",
+            { rowKind: "short" },
+          ),
+          message(
+            "1.6d",
+            "Bind feedback element",
+            "ghostItem.element",
+            "dom",
+            "ghost",
+            "Rendering binds the placement-feedback DOM element to its target-role Ghost item.",
+          ),
+          message(
+            "1.6e",
+            "DOM commit complete",
+            "pre-paint",
+            "dom",
+            "app",
+            "The placement feedback DOM and binding are ready before the transaction returns.",
+            { kind: "return" },
+          ),
+          message(
+            "1.6f",
+            "Transaction complete",
+            "flushMutation returns",
+            "app",
+            "root",
+            "The placement owner's synchronous transaction returns to the session.",
             { kind: "return" },
           ),
         ],
       },
       {
         id: "move",
-        title: "2 · Move + preview",
-        note: "An ownership change uses two ordered receiver-local flushes: remove first, then insert. Either half may occur alone.",
+        title: "2 · Move + feedback",
         messages: [
           message(
             "2.1",
@@ -155,12 +288,15 @@
           ),
           message(
             "2.3a",
-            "Remove ghost",
+            "Remove placement ghost",
             "onGhostRemove",
             "root",
             "source",
-            "The session asks the previous ghost owner to remove the ghost. The previous owner is shown in the Source/current owner lane.",
-            { rowKind: "short", branch: "If leaving an owner · first" },
+            "When ghost-based placement feedback leaves an owner, the session asks that previous owner to remove the target-role Ghost. The previous owner is shown in the Source/current owner lane. Swap's hover feedback skips this branch.",
+            {
+              rowKind: "short",
+              branch: "If placement feedback leaves an owner · first",
+            },
           ),
           message(
             "2.3b",
@@ -199,12 +335,12 @@
           ),
           message(
             "2.4a",
-            "Add ghost",
+            "Add placement ghost",
             "onGhostInsert",
             "root",
             "target",
-            "The session asks the new target container to insert the same passive ghost at the prospective index.",
-            { branch: "If entering a new target · then" },
+            "The session asks the new target container to insert the target-role flow spacer or insertion marker at the prospective index. This placement feedback is independent of what follows the pointer.",
+            { branch: "If ghost feedback enters a new target · then" },
           ),
           message(
             "2.4b",
@@ -273,33 +409,32 @@
       {
         id: "drop",
         title: "3 · Drop",
-        note: "Current code uses two ordered flushes: remove the preview first, then commit the move or swap.",
         messages: [
           message(
             "3.1a",
-            "Remove preview ghost",
+            "Remove temporary ghost",
             "onGhostRemove",
             "root",
             "target",
-            "The session asks the current target ghost owner to remove the preview before committing the item mutation.",
-            { branch: "First transaction · remove preview" },
+            "Before committing persistent data, the session removes each active placement Ghost, pointer preview, or source spacer through that Ghost's owner. This route shows one receiver-local transaction and may repeat for other owners.",
+            { branch: "First transaction · repeat per ghost owner" },
           ),
           message(
             "3.1b",
-            "Remove preview state",
+            "Remove temporary state",
             "inside flushMutation",
             "target",
             "app",
-            "The target removes the preview ghost from framework state.",
+            "The receiving owner removes that temporary Ghost from framework state.",
             { rowKind: "short" },
           ),
           message(
             "3.1c",
-            "Commit preview removal",
+            "Commit ghost removal",
             "framework commit",
             "app",
             "dom",
-            "The framework synchronously removes the preview ghost DOM.",
+            "The framework synchronously removes that temporary Ghost DOM.",
             { rowKind: "short" },
           ),
           message(
@@ -308,7 +443,7 @@
             "pre-paint",
             "dom",
             "app",
-            "The preview DOM removal is committed before the persistent item transaction begins.",
+            "The temporary Ghost removal is committed before the persistent item transaction begins.",
             { kind: "return" },
           ),
           message(
@@ -317,7 +452,7 @@
             "flushMutation returns",
             "app",
             "root",
-            "The preview removal transaction returns before the persistent item commit begins.",
+            "The Ghost owner's removal transaction returns before the persistent item commit begins.",
             { kind: "return" },
           ),
           message(
@@ -472,7 +607,6 @@
       {
         id: "remove",
         title: "5 · Actual item removal",
-        note: "Separate paths—not the source half of an ordinary move.",
         messages: [
           message(
             "5.1a",
@@ -536,50 +670,6 @@
             "container.removeItem returns true to its caller after finding and removing the item.",
             { kind: "return" },
           ),
-          message(
-            "5.2a",
-            "Discard transient clone",
-            "onItemRemove",
-            "root",
-            "source",
-            "When a flow-copy clone must be discarded, the session invokes onItemRemove on the container currently rendering that clone.",
-            { rowKind: "short", branch: "Flow-copy cleanup · active session" },
-          ),
-          message(
-            "5.2b",
-            "Delete clone state",
-            "inside flushMutation",
-            "source",
-            "app",
-            "The current owner removes the transient clone from framework state.",
-          ),
-          message(
-            "5.2c",
-            "Commit clone removal",
-            "framework commit",
-            "app",
-            "dom",
-            "The framework synchronously removes the transient clone DOM.",
-            { rowKind: "short" },
-          ),
-          message(
-            "5.2d",
-            "DOM commit complete",
-            "pre-paint",
-            "dom",
-            "app",
-            "The transient clone DOM is removed before the framework transaction returns.",
-            { kind: "return" },
-          ),
-          message(
-            "5.2e",
-            "Transaction complete",
-            "flushMutation returns",
-            "app",
-            "root",
-            "The cleanup transaction returns to the active session after DOM removal.",
-            { kind: "return" },
-          ),
         ],
       },
     ];
@@ -590,7 +680,6 @@
       {
         id: "start",
         title: "1 · Start",
-        note: "Source ghost path: flow move/none. Insertion and flow copy begin at a valid destination; swap uses the root.",
         messages: [
           message(
             "1.1",
@@ -598,54 +687,66 @@
             "onDragStart",
             "item",
             "root",
-            "The dragged item asks the root-owned DragSession to begin. The session directly invokes the root's onDragStart callback.",
+            "The dragged item asks the root-owned DragSession to begin. The session directly invokes the root's onDragStart callback, which may choose dragVisual before activation.",
           ),
           message(
             "1.2",
-            "Create flow ghost",
+            "Choose pointer representation",
+            "session.dragVisual",
+            "root",
+            "root",
+            "dragVisual is item, preview, or none. It controls only what follows the pointer; target resolution and placement feedback remain independent. The conditional branches below may be interleaved differently by each placement mode.",
+            { rowKind: "loop" },
+          ),
+          message(
+            "1.3a",
+            "Create source spacer",
             "createGhost",
             "root",
             "source",
-            "The root-owned lifecycle invokes the source container's Vanilla createGhost callback.",
-            { rowKind: "short" },
+            "When the item visual needs to preserve a vacated layout slot, the lifecycle invokes createGhost on that item's direct source for a role: source flow Ghost. Flow mode can instead reserve the slot with its target spacer.",
+            {
+              rowKind: "short",
+              branch: 'dragVisual = "item" · source spacer when required',
+            },
           ),
           message(
-            "1.3",
-            "Return ghost element",
+            "1.3b",
+            "Return spacer element",
             "HTMLElement",
             "source",
             "root",
-            "The createGhost callback returns the new DOM element.",
+            "The source's createGhost callback returns the spacer DOM element.",
             { kind: "return", rowKind: "short" },
           ),
           message(
-            "1.4",
-            "Bind ghost element",
+            "1.3c",
+            "Bind source spacer",
             "ghostItem.element",
             "root",
             "ghost",
-            "SnapSort binds the returned HTMLElement to the passive Ghost item.",
+            "SnapSort binds the returned HTMLElement to the passive source-role Ghost item.",
             { rowKind: "short" },
           ),
           message(
-            "1.5",
-            "Add source ghost",
+            "1.3d",
+            "Add source spacer",
             "onGhostInsert",
             "root",
             "source",
-            "The lifecycle asks the source container to insert the ghost and directly invokes onGhostInsert there.",
+            "The lifecycle directly invokes onGhostInsert on the source that owns the spacer.",
             { rowKind: "short" },
           ),
           message(
-            "1.6",
-            "Add ghost DOM",
+            "1.3e",
+            "Add source spacer DOM",
             "insertBefore",
             "source",
             "dom",
-            "The default Vanilla callback inserts the ghost element directly into the DOM.",
+            "The default Vanilla callback inserts the source spacer directly into the DOM.",
           ),
           message(
-            "1.7",
+            "1.3f",
             "DOM call complete",
             "insertBefore returned",
             "dom",
@@ -653,12 +754,135 @@
             "The synchronous DOM API has returned. This does not mean layout or paint has completed.",
             { kind: "return" },
           ),
+          message(
+            "1.3g",
+            "Hoist real item",
+            "absolute drag transform",
+            "root",
+            "dom",
+            "The real dragged Item or ordered item run is positioned above layout and becomes the pointer-following visual.",
+          ),
+          message(
+            "1.4a",
+            "Create pointer preview",
+            "createGhost",
+            "root",
+            "root",
+            "The root creates one role: pointer marker Ghost for the complete ordered drag run. It is visual-only and never becomes application data.",
+            { rowKind: "loop", branch: 'dragVisual = "preview"' },
+          ),
+          message(
+            "1.4b",
+            "Return preview element",
+            "HTMLElement",
+            "root",
+            "root",
+            "The root's createGhost callback returns the preview DOM element.",
+            { kind: "return", rowKind: "loop" },
+          ),
+          message(
+            "1.4c",
+            "Bind preview element",
+            "ghostItem.element",
+            "root",
+            "ghost",
+            "SnapSort binds the returned HTMLElement to the pointer-role Ghost item.",
+            { rowKind: "short" },
+          ),
+          message(
+            "1.4d",
+            "Add pointer preview",
+            "onGhostInsert",
+            "root",
+            "root",
+            "The lifecycle directly invokes onGhostInsert on the root that owns the pointer preview.",
+            { rowKind: "loop" },
+          ),
+          message(
+            "1.4e",
+            "Add preview DOM",
+            "insertBefore",
+            "root",
+            "dom",
+            "The default Vanilla callback inserts the root-owned preview DOM.",
+          ),
+          message(
+            "1.4f",
+            "DOM call complete",
+            "insertBefore returned",
+            "dom",
+            "root",
+            "The synchronous preview DOM insertion has returned; layout and paint may still be pending.",
+            { kind: "return" },
+          ),
+          message(
+            "1.5",
+            "Keep pointer visual empty",
+            "no pointer DOM",
+            "root",
+            "root",
+            "No Item or pointer Ghost follows the pointer. This does not disable target resolution or placement feedback.",
+            { rowKind: "loop", branch: 'dragVisual = "none"' },
+          ),
+          message(
+            "1.6a",
+            "Create placement feedback",
+            "createGhost",
+            "root",
+            "target",
+            "Independently of dragVisual, flow mode may create role: target spacer Ghosts and insertion mode may create a role: target marker. Swap mode uses item-hover callbacks instead.",
+            {
+              branch: "Independent placement feedback · when ghost-based",
+            },
+          ),
+          message(
+            "1.6b",
+            "Return feedback element",
+            "HTMLElement",
+            "target",
+            "root",
+            "The current placement owner's createGhost callback returns the feedback DOM element.",
+            { kind: "return", rowKind: "short" },
+          ),
+          message(
+            "1.6c",
+            "Bind feedback element",
+            "ghostItem.element",
+            "root",
+            "ghost",
+            "SnapSort binds the returned element to the target-role Ghost item.",
+            { rowKind: "short" },
+          ),
+          message(
+            "1.6d",
+            "Add placement feedback",
+            "onGhostInsert",
+            "root",
+            "target",
+            "The lifecycle directly invokes onGhostInsert on the target that owns the placement feedback.",
+          ),
+          message(
+            "1.6e",
+            "Add feedback DOM",
+            "insertBefore",
+            "target",
+            "dom",
+            "The default Vanilla callback inserts the flow spacer or insertion marker into the target DOM.",
+          ),
+          message(
+            "1.6f",
+            "DOM call complete",
+            "insertBefore returned",
+            "dom",
+            "target",
+            "The synchronous feedback DOM insertion has returned. Layout and paint may still be pending.",
+            { kind: "return" },
+          ),
         ],
       },
       {
         id: "move",
-        title: "2 · Move + preview",
-        note: "When ownership changes, removal completes before insertion; either half may occur alone.",
+        title: "2 · Move + feedback",
         messages: [
           message(
             "2.1",
@@ -679,12 +903,15 @@
           ),
           message(
             "2.3a",
-            "Remove ghost",
+            "Remove placement ghost",
             "onGhostRemove",
             "root",
             "source",
-            "The session directly invokes onGhostRemove on the previous ghost owner.",
-            { rowKind: "short", branch: "If leaving an owner · first" },
+            "When ghost-based placement feedback leaves an owner, the session directly invokes onGhostRemove on that previous owner. Swap's hover feedback skips this branch.",
+            {
+              rowKind: "short",
+              branch: "If placement feedback leaves an owner · first",
+            },
           ),
           message(
             "2.3b",
@@ -705,12 +932,12 @@
           ),
           message(
             "2.4a",
-            "Add ghost",
+            "Add placement ghost",
             "onGhostInsert",
             "root",
             "target",
-            "The session directly invokes onGhostInsert on the new target.",
-            { branch: "If entering a new target · then" },
+            "The session directly invokes onGhostInsert on the new target for a target-role flow spacer or insertion marker. This feedback is independent of what follows the pointer.",
+            { branch: "If ghost feedback enters a new target · then" },
           ),
           message(
             "2.4b",
@@ -743,24 +970,23 @@
       {
         id: "drop",
         title: "3 · Drop",
-        note: "First remove the preview; then choose the normal commit or swap branch.",
         messages: [
           message(
             "3.1a",
-            "Remove preview ghost",
+            "Remove temporary ghost",
             "onGhostRemove",
             "root",
             "target",
-            "The session directly invokes onGhostRemove on the current preview owner.",
-            { branch: "First · remove preview" },
+            "Before committing persistent data, the session removes each active placement Ghost, pointer preview, or source spacer through that Ghost's owner. This route shows one removal and may repeat for other owners.",
+            { branch: "First · repeat per ghost owner" },
           ),
           message(
             "3.1b",
-            "Remove preview DOM",
+            "Remove temporary DOM",
             "element.remove()",
             "target",
             "dom",
-            "The default Vanilla callback removes the preview ghost DOM.",
+            "The default Vanilla callback removes that temporary Ghost DOM.",
           ),
           message(
             "3.1c",
@@ -877,7 +1103,6 @@
       {
         id: "remove",
         title: "5 · Actual item removal",
-        note: "Separate paths—not the source half of an ordinary move.",
         messages: [
           message(
             "5.1a",
@@ -923,32 +1148,6 @@
             "container.removeItem returns true after finding and removing the item.",
             { kind: "return" },
           ),
-          message(
-            "5.2a",
-            "Discard transient clone",
-            "onItemRemove",
-            "root",
-            "source",
-            "Flow-copy cleanup invokes onItemRemove on the container currently rendering the transient clone.",
-            { rowKind: "short", branch: "Flow-copy cleanup · active session" },
-          ),
-          message(
-            "5.2b",
-            "Remove clone DOM",
-            "element.remove()",
-            "source",
-            "dom",
-            "The default Vanilla callback removes the transient clone DOM.",
-          ),
-          message(
-            "5.2c",
-            "DOM call complete",
-            "remove() returned",
-            "dom",
-            "source",
-            "The synchronous DOM removal call has returned. Layout and paint may still be pending.",
-            { kind: "return" },
-          ),
         ],
       },
     ];
@@ -984,7 +1183,24 @@
         : route.kind === "async"
           ? "Asynchronous operation"
           : "Return";
-    return `${route.step}, ${route.title}. ${kind} from ${route.from} to ${route.to}. ${route.detail}`;
+    const title = callbackNames(route).join(" / ") || route.title;
+    return `${route.step}, ${title}. ${kind} from ${route.from} to ${route.to}. ${route.detail}`;
+  }
+
+  function callbackNames(route: DiagramMessage): string[] {
+    if (route.kind !== "sync") return [];
+
+    const matches = route.code?.match(
+      /\b(?:on[A-Z][A-Za-z0-9]*|canDrop|getDropPriority|createGhost|flushMutation|awaitMutation)\*?/g,
+    );
+    return [...new Set(matches ?? [])];
+  }
+
+  function callbackHref(): string {
+    if (isVanilla) {
+      return "/docs/snapsort/reference#vanilla-container-and-collection-helpers";
+    }
+    return `/docs/snapsort/reference/${$selectedFramework}/container?framework=${$selectedFramework}#callbacks`;
   }
 </script>
 
@@ -998,7 +1214,7 @@
     <div
       class="sequence"
       role="group"
-      aria-label="SnapSort lifecycle routing. The root-owned DragSession initiates target resolution, ghost relocation, commits, and cleanup. Callbacks execute on the receiver shown by each arrow. Ghosts are passive data."
+      aria-label="SnapSort lifecycle routing. The root-owned DragSession initiates target resolution, independent pointer representation and placement feedback, commits, and cleanup. Callbacks execute on the receiver shown by each arrow. Ghosts are passive visual data."
     >
       <div class="participants" aria-hidden="true">
         <div class="participant card shallow">Dragged item</div>
@@ -1027,10 +1243,10 @@
           <section class="phase" data-phase={phase.id} aria-label={phase.title}>
             <div class="phase-heading">
               <span>{phase.title}</span>
-              {#if phase.note}<small>{phase.note}</small>{/if}
             </div>
 
             {#each phase.messages as route}
+              {@const callbacks = callbackNames(route)}
               <div
                 class:has-branch={route.branch}
                 class:is-short={route.rowKind === "short"}
@@ -1049,19 +1265,31 @@
                   <div
                     class="self-message"
                     class:is-return={route.kind === "return"}
+                    class:invokes-callback={callbacks.length > 0}
                     style={selfStyle(route)}
-                    role="img"
+                    role="group"
                     use:focusable
                     aria-label={routeDescription(route)}
                   >
                     <div class="message-label">
-                      <strong><span class="step-number">{route.step}</span>{route.title}</strong>
-                      {#if route.code}<code>{route.code}</code>{/if}
+                      <strong>
+                        <span class="step-number">{route.step}</span>
+                        {#if callbacks.length > 0}
+                          <span class="callback-title">
+                            {#each callbacks as callback, index}
+                              {#if index > 0}<span aria-hidden="true">/</span>{/if}
+                              <a href={callbackHref()}>{callback}</a>
+                            {/each}
+                          </span>
+                        {:else}
+                          {route.title}
+                        {/if}
+                      </strong>
                       <span class="detail">{route.detail}</span>
                     </div>
-                    <svg class="self-route" viewBox="0 0 120 44" preserveAspectRatio="none" aria-hidden="true">
+                    <svg class="self-route" viewBox="0 0 64 44" preserveAspectRatio="xMinYMin meet" aria-hidden="true">
                       <path
-                        d="M 0 5 H 92 Q 108 5 108 15 V 20 Q 108 30 92 30 H 0"
+                        d="M 0 6 H 44 A 10 10 0 0 1 54 16 V 24 A 10 10 0 0 1 44 34 H 0"
                         class:return-line={route.kind === "return"}
                         class="uml-line"
                       ></path>
@@ -1081,14 +1309,26 @@
                   <div
                     class="message"
                     class:is-reverse={reverse}
+                    class:invokes-callback={callbacks.length > 0}
                     style={routeStyle(route)}
-                    role="img"
+                    role="group"
                     use:focusable
                     aria-label={routeDescription(route)}
                   >
                     <div class="message-label">
-                      <strong><span class="step-number">{route.step}</span>{route.title}</strong>
-                      {#if route.code}<code>{route.code}</code>{/if}
+                      <strong>
+                        <span class="step-number">{route.step}</span>
+                        {#if callbacks.length > 0}
+                          <span class="callback-title">
+                            {#each callbacks as callback, index}
+                              {#if index > 0}<span aria-hidden="true">/</span>{/if}
+                              <a href={callbackHref()}>{callback}</a>
+                            {/each}
+                          </span>
+                        {:else}
+                          {route.title}
+                        {/if}
+                      </strong>
                       <span class="detail">{route.detail}</span>
                     </div>
                     <svg class="route-svg" viewBox="0 0 100 20" preserveAspectRatio="none" aria-hidden="true">
@@ -1149,7 +1389,12 @@
 <style>
   .lifecycle-diagram {
     --diagram-ink: var(--color-background-dark);
-    width: 100%;
+    --diagram-type-lane: 1rem;
+    --diagram-type-message: 0.9375rem;
+    --diagram-type-phase: 0.8125rem;
+    --diagram-type-context: 0.75rem;
+    --diagram-type-detail: 0.8125rem;
+    width: min(100%, calc(1400px + 2 * var(--size-24)));
     margin: var(--size-24) auto var(--size-32);
     border-radius: var(--ui-radius);
     background: var(--color-background-tint);
@@ -1164,7 +1409,6 @@
     border-radius: inherit;
     box-sizing: border-box;
     overscroll-behavior-inline: contain;
-    scrollbar-gutter: stable;
     scrollbar-color: var(--diagram-ink)
       color-mix(in srgb, var(--color-background-dark) 10%, transparent);
     touch-action: pan-x pan-y;
@@ -1178,7 +1422,7 @@
   }
 
   .sequence {
-    width: max(70rem, 100%);
+    width: min(1400px, max(70rem, 100%));
     min-width: 70rem;
     margin: 0 auto;
   }
@@ -1200,9 +1444,9 @@
     padding: var(--size-8);
     color: var(--diagram-ink);
     font-family: "Bitcount Grid Single", monospace;
-    font-size: 0.82rem;
+    font-size: var(--diagram-type-lane);
     font-weight: 400;
-    line-height: 1.12;
+    line-height: 1.15;
     text-align: center;
     box-sizing: border-box;
   }
@@ -1259,21 +1503,13 @@
       var(--color-background-dark) 9%,
       var(--color-background-tint)
     );
-    font-size: 0.66rem;
-    font-weight: 650;
-    letter-spacing: 0.035em;
-    line-height: 1.2;
+    line-height: 1.25;
   }
 
-  .phase-heading small {
-    max-width: 38rem;
-    color: color-mix(
-      in srgb,
-      var(--color-background-dark) 72%,
-      transparent
-    );
-    font-size: 0.62rem;
-    line-height: 1.3;
+  .phase-heading span {
+    font-size: var(--diagram-type-phase);
+    font-weight: 600;
+    letter-spacing: 0.025em;
   }
 
   .message-row {
@@ -1315,7 +1551,10 @@
       var(--color-background-dark) 75%,
       transparent
     );
-    font-size: 0.62rem;
+    font-family: "Geist", sans-serif;
+    font-size: var(--diagram-type-context);
+    font-weight: 500;
+    letter-spacing: 0;
   }
 
   .message {
@@ -1371,15 +1610,14 @@
     top: calc(100% - 0.45rem);
   }
 
-  .message-row:not(.is-short) .message-label strong,
-  .message-row:not(.is-short) .message-label code {
+  .message-row:not(.is-short) .message-label strong {
     white-space: nowrap;
   }
 
   .uml-line {
     fill: none;
     stroke: currentColor;
-    stroke-width: 1.5;
+    stroke-width: 2;
     vector-effect: non-scaling-stroke;
   }
 
@@ -1391,7 +1629,7 @@
   .filled-head {
     fill: currentColor;
     stroke: currentColor;
-    stroke-width: 1;
+    stroke-width: 1.25;
     vector-effect: non-scaling-stroke;
   }
 
@@ -1399,7 +1637,7 @@
     fill: var(--color-background-tint);
     stroke: currentColor;
     stroke-linejoin: round;
-    stroke-width: 1.5;
+    stroke-width: 2;
     vector-effect: non-scaling-stroke;
   }
 
@@ -1408,7 +1646,7 @@
     stroke: currentColor;
     stroke-linecap: round;
     stroke-linejoin: round;
-    stroke-width: 1.5;
+    stroke-width: 2;
     vector-effect: non-scaling-stroke;
   }
 
@@ -1436,22 +1674,32 @@
     align-items: center;
     gap: 0.2rem;
     color: var(--diagram-ink);
-    font-family: "Bitcount Grid Single", monospace;
-    font-size: 0.78rem;
-    font-weight: 500;
+    font-family: "Geist", sans-serif;
+    font-size: var(--diagram-type-message);
+    font-weight: 400;
     line-height: 1.2;
   }
 
-  .message-label code {
-    color: color-mix(
+  .callback-title {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.28rem;
+  }
+
+  .callback-title a {
+    color: inherit;
+    text-decoration-color: color-mix(
       in srgb,
-      var(--color-background-dark) 82%,
+      var(--diagram-ink) 35%,
       transparent
     );
-    font-family: "Geist Mono", monospace;
-    font-size: 0.64rem;
-    line-height: 1.25;
-    white-space: normal;
+    text-decoration-thickness: 1px;
+    text-underline-offset: 0.16em;
+  }
+
+  .callback-title a:hover,
+  .callback-title a:focus-visible {
+    text-decoration-color: currentColor;
   }
 
   .step-number {
@@ -1459,16 +1707,20 @@
     flex: 0 0 auto;
     align-items: center;
     justify-content: center;
-    min-width: 1.85rem;
-    height: 1.25rem;
-    padding: 0 0.28rem;
+    min-width: 2.25rem;
+    height: 1.5rem;
+    padding: 0 0.38rem;
     border-radius: 999px;
-    background: var(--color-primary);
+    background: var(--diagram-ink);
     color: var(--color-background);
     font-family: "Geist Mono", monospace;
-    font-size: 0.62rem;
+    font-size: 0.72rem;
     line-height: 1;
     box-sizing: border-box;
+  }
+
+  .invokes-callback .step-number {
+    background: var(--color-primary);
   }
 
   .detail {
@@ -1485,8 +1737,9 @@
     box-shadow: 0 10px 30px
       color-mix(in srgb, var(--color-background-dark) 16%, transparent);
     color: var(--diagram-ink);
-    font-family: "Geist Mono", monospace;
-    font-size: 0.68rem;
+    font-family: "Geist", sans-serif;
+    font-size: var(--diagram-type-detail);
+    font-weight: 400;
     line-height: 1.45;
     text-align: left;
     transform: translateX(-50%);
@@ -1494,15 +1747,19 @@
 
   .message:hover,
   .message:focus-visible,
+  .message:focus-within,
   .self-message:hover,
-  .self-message:focus-visible {
+  .self-message:focus-visible,
+  .self-message:focus-within {
     z-index: 20;
   }
 
   .message:hover .detail,
   .message:focus-visible .detail,
+  .message:focus-within .detail,
   .self-message:hover .detail,
-  .self-message:focus-visible .detail {
+  .self-message:focus-visible .detail,
+  .self-message:focus-within .detail {
     display: block;
   }
 
@@ -1535,10 +1792,9 @@
   .self-route {
     position: absolute;
     top: 1.8rem;
-    right: 0;
     left: 0;
-    width: 100%;
-    height: 2.5rem;
+    width: 4rem;
+    height: 2.75rem;
     color: var(--diagram-ink);
     overflow: visible;
   }
@@ -1557,7 +1813,7 @@
   }
 
   .self-head-svg {
-    top: 3.15rem;
+    top: 3.55rem;
     left: -0.1rem;
   }
 

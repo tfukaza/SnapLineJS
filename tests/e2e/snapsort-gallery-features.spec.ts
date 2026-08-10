@@ -23,6 +23,36 @@ function centerDistance(
   return Math.hypot(aCenter.x - bCenter.x, aCenter.y - bCenter.y);
 }
 
+async function overrideDragVisual(
+  page: Page,
+  selector: string,
+  dragVisual: "item" | "preview" | "none",
+) {
+  const coreImportPath = `/@fs${process.cwd()}/src/index.ts`;
+  await page.evaluate(
+    async ({ coreImportPath, selector, dragVisual }) => {
+      const { GlobalManager } = await import(coreImportPath);
+      const element = document.querySelector(selector);
+      const containers =
+        GlobalManager.getInstance().data.dragAndDropContainers ?? [];
+      const container = containers.find(
+        (candidate: any) => candidate.element === element,
+      );
+      if (!container) {
+        throw new Error(`Could not find SnapSort container ${selector}.`);
+      }
+      const original = container.config.callbacks.onDragStart;
+      container.config.callbacks.onDragStart = (event: any) => {
+        const result = original?.(event);
+        if (result === false) return false;
+        event.session.dragVisual = dragVisual;
+        return result;
+      };
+    },
+    { coreImportPath, selector, dragVisual },
+  );
+}
+
 /**
  * Drag `source` onto `target`, using a real pointer-move sequence (not a
  * single jump) so SnapSort's drag-threshold and per-move drop-target
@@ -76,8 +106,8 @@ test.describe("SnapSort gallery — new drag primitives", () => {
     await gotoGallery(page);
   });
 
-  test.describe("Clone Palette (copy effect)", () => {
-    test("dragging a palette block onto the canvas clones it, leaving the palette intact", async ({
+  test.describe("Template Palette (move and backfill)", () => {
+    test("dragging a template moves its stable id to the canvas and backfills the palette", async ({
       page,
     }) => {
       const exhibit = page.locator("#clone-palette");
@@ -88,22 +118,36 @@ test.describe("SnapSort gallery — new drag primitives", () => {
       const buttonTemplate = palette
         .locator(".snapsort-item")
         .filter({ hasText: "Button" });
+      const originalButtonId = await buttonTemplate.getAttribute(
+        "data-snapsort-item-id",
+      );
+      expect(originalButtonId).toBeTruthy();
 
       await expect(palette.locator(".snapsort-item")).toHaveCount(4);
       await expect(canvas.locator(".clone-canvas-block")).toHaveCount(0);
 
       await dragOnto(page, buttonTemplate, canvas);
 
-      // The palette template is never consumed — copy leaves the source alone.
+      // The palette still exposes the same template, but it is a freshly
+      // minted replacement. The original stable id is what moved.
       await expect(palette.locator(".snapsort-item")).toHaveCount(4);
-      await expect(
-        palette.locator(".snapsort-item").filter({ hasText: "Button" }),
-      ).toHaveCount(1);
-      // The canvas gained one cloned block.
+      const replacementButton = palette
+        .locator(".snapsort-item")
+        .filter({ hasText: "Button" });
+      await expect(replacementButton).toHaveCount(1);
+      await expect(replacementButton).not.toHaveAttribute(
+        "data-snapsort-item-id",
+        originalButtonId!,
+      );
+
+      // The canvas gained the original item under its original stable id.
       await expect(canvas.locator(".clone-canvas-block")).toHaveCount(1);
       await expect(canvas.locator(".clone-canvas-block")).toContainText(
         "Button",
       );
+      await expect(
+        canvas.locator(`[data-snapsort-item-id="${originalButtonId}"]`),
+      ).toHaveCount(1);
 
       // Dragging a second, different block clones onto the canvas too.
       const imageTemplate = palette
@@ -113,8 +157,8 @@ test.describe("SnapSort gallery — new drag primitives", () => {
       await expect(canvas.locator(".clone-canvas-block")).toHaveCount(2);
       await expect(palette.locator(".snapsort-item")).toHaveCount(4);
 
-      // Reordering an already-placed canvas block is a plain move, not
-      // another clone (only dragging out of the palette should copy).
+      // Reordering an already-placed canvas block is a plain move, with no
+      // source backfill because it did not originate in the palette.
       const canvasItems = canvas.locator(".snapsort-item");
       await dragOnto(page, canvasItems.nth(1), canvasItems.nth(0));
       await expect(canvas.locator(".clone-canvas-block")).toHaveCount(2);
@@ -122,13 +166,13 @@ test.describe("SnapSort gallery — new drag primitives", () => {
         "Image",
       );
 
-      // Click-to-remove takes a cloned block back out of the canvas.
+      // Click-to-remove takes a placed block back out of the canvas.
       const firstBlock = canvas.locator(".clone-canvas-block").first();
       await firstBlock.locator(".clone-block-remove").click();
       await expect(canvas.locator(".clone-canvas-block")).toHaveCount(1);
     });
 
-    test("handoff copy never ghosts the palette and discards a clone dropped outside a drop zone", async ({
+    test("preview drag leaves templates in layout and cleans up when dropped outside a drop zone", async ({
       page,
     }) => {
       const exhibit = page.locator("#clone-palette");
@@ -140,9 +184,9 @@ test.describe("SnapSort gallery — new drag primitives", () => {
         .locator(".snapsort-item")
         .filter({ hasText: "Divider" });
 
-      // Drag a palette block toward the canvas, sampling the palette DOM
-      // mid-drag: the handoff model must never place a ghost or hoisted item
-      // in the policy-rejected palette — the original template just sits there.
+      // Drag a palette block toward the canvas. `dragVisual = "preview"`
+      // leaves the real template in layout and represents the gesture with a
+      // pointer-role Ghost.
       const src = await rect(dividerTemplate);
       const dst = await rect(canvas);
       const start = { x: src.x + src.width / 2, y: src.y + src.height / 2 };
@@ -151,7 +195,8 @@ test.describe("SnapSort gallery — new drag primitives", () => {
       await page.mouse.down();
       await page.mouse.move(start.x + 6, start.y + 6);
       await page.waitForTimeout(60);
-      let maxPaletteGhosts = 0;
+      let maxPaletteTargetGhosts = 0;
+      let sawPointerPreview = false;
       for (let step = 1; step <= 16; step++) {
         const t = step / 16;
         await page.mouse.move(
@@ -159,20 +204,29 @@ test.describe("SnapSort gallery — new drag primitives", () => {
           start.y + (end.y - start.y) * t,
         );
         await page.waitForTimeout(20);
-        maxPaletteGhosts = Math.max(
-          maxPaletteGhosts,
-          await palette.evaluate((el) => el.querySelectorAll("#spacer").length),
+        maxPaletteTargetGhosts = Math.max(
+          maxPaletteTargetGhosts,
+          await palette.evaluate(
+            (el) =>
+              el.querySelectorAll('[data-snapsort-ghost-entry="flow"]').length,
+          ),
         );
+        sawPointerPreview ||=
+          (await page.locator('[data-snapsort-ghost="pointer"]').count()) === 1;
       }
       await page.mouse.up();
       await page.waitForTimeout(250);
 
-      expect(maxPaletteGhosts).toBe(0);
+      expect(maxPaletteTargetGhosts).toBe(0);
+      expect(sawPointerPreview).toBe(true);
+      await expect(page.locator('[data-snapsort-ghost="pointer"]')).toHaveCount(
+        0,
+      );
       await expect(palette.locator(".snapsort-item")).toHaveCount(4);
       await expect(canvas.locator(".clone-canvas-block")).toHaveCount(1);
 
       // Now drag another block but release back over the palette (a rejected
-      // zone): the copy is cancelled and the clone discarded — canvas unchanged.
+      // zone): no mutation commits and the preview is discarded.
       const spacerTemplate = palette
         .locator(".snapsort-item")
         .filter({ hasText: "Spacer" });
@@ -192,8 +246,9 @@ test.describe("SnapSort gallery — new drag primitives", () => {
 
       await expect(canvas.locator(".clone-canvas-block")).toHaveCount(1);
       await expect(palette.locator(".snapsort-item")).toHaveCount(4);
-      // No leftover floating clone stuck in the canvas.
-      await expect(canvas.locator(".clone-dragging")).toHaveCount(0);
+      await expect(page.locator('[data-snapsort-ghost="pointer"]')).toHaveCount(
+        0,
+      );
     });
   });
 
@@ -402,6 +457,94 @@ test.describe("SnapSort gallery — new drag primitives", () => {
           nodes.map((node) => getComputedStyle(node).opacity),
         );
       expect(tileOpacities).toEqual(Array(9).fill("1"));
+    });
+
+    test("item visual hoists the real tile, keeps a source spacer, and still swaps", async ({
+      page,
+    }) => {
+      const exhibit = page.locator("#swap-grid");
+      await exhibit.scrollIntoViewIfNeeded();
+      await overrideDragVisual(page, "#swap-grid .swap-grid", "item");
+
+      const grid = exhibit.locator(".swap-grid");
+      const tileA1 = grid.locator(".snapsort-item").filter({ hasText: "A1" });
+      const tileB2 = grid.locator(".snapsort-item").filter({ hasText: "B2" });
+      const start = await rect(tileA1);
+      const target = await rect(tileB2);
+
+      await dragOnto(page, tileA1, tileB2, {
+        beforeDrop: async () => {
+          await expect(tileA1).toHaveCSS("position", "absolute");
+          await expect(
+            grid.locator('[data-snapsort-ghost-entry="flow"]'),
+          ).toHaveCount(1);
+          await expect(
+            page.locator('[data-snapsort-ghost="pointer"]'),
+          ).toHaveCount(0);
+          const live = await rect(tileA1);
+          expect(centerDistance(live, start)).toBeGreaterThan(40);
+          expect(centerDistance(live, target)).toBeLessThan(12);
+        },
+      });
+
+      await expect(grid.locator("[data-snapsort-ghost-entry]")).toHaveCount(0);
+      const order = await grid
+        .locator(".swap-tile")
+        .evaluateAll((nodes) =>
+          nodes.map((node) => node.textContent?.trim() ?? ""),
+        );
+      expect(order).toEqual([
+        "B2",
+        "A2",
+        "A3",
+        "B1",
+        "A1",
+        "B3",
+        "C1",
+        "C2",
+        "C3",
+      ]);
+    });
+
+    test("none visual renders no pointer representation while hover targeting still swaps", async ({
+      page,
+    }) => {
+      const exhibit = page.locator("#swap-grid");
+      await exhibit.scrollIntoViewIfNeeded();
+      await overrideDragVisual(page, "#swap-grid .swap-grid", "none");
+
+      const grid = exhibit.locator(".swap-grid");
+      const tileA1 = grid.locator(".snapsort-item").filter({ hasText: "A1" });
+      const tileB2 = grid.locator(".snapsort-item").filter({ hasText: "B2" });
+      await dragOnto(page, tileA1, tileB2, {
+        beforeDrop: async () => {
+          await expect(tileA1).not.toHaveCSS("position", "absolute");
+          await expect(page.locator("[data-snapsort-ghost-entry]")).toHaveCount(
+            0,
+          );
+          await expect(tileB2.locator(".swap-tile")).toHaveClass(
+            /swap-tile-hovered/,
+          );
+        },
+      });
+
+      const order = await grid
+        .locator(".swap-tile")
+        .evaluateAll((nodes) =>
+          nodes.map((node) => node.textContent?.trim() ?? ""),
+        );
+      expect(order).toEqual([
+        "B2",
+        "A2",
+        "A3",
+        "B1",
+        "A1",
+        "B3",
+        "C1",
+        "C2",
+        "C3",
+      ]);
+      await expect(page.locator("[data-snapsort-ghost-entry]")).toHaveCount(0);
     });
 
     test("dropping outside the grid animates the dragged tile back home", async ({
