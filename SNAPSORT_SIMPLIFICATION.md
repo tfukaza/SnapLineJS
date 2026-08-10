@@ -59,20 +59,23 @@ own decision entry.
 
 ### Public API decision register
 
-| Proposal                                                                | Status       | Decision and constraints                                                                                                                                                                   |
-| ----------------------------------------------------------------------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Preserve `onItemMove`, `onItemInsert`, `onItemRemove`, and `onItemSwap` | **Approved** | These are explicit developer-owned data primitives. Do not unify or rename them in this roadmap.                                                                                           |
-| Preserve read-only application metadata and native framework attributes | **Approved** | Metadata remains application data, not a hidden configuration channel. React and Svelte continue native event/attribute passthrough.                                                       |
-| Remove `MutationPhase` and item-event `phase` fields                    | **Approved** | Runtime only emits `"commit"`; do not publish a speculative preview state.                                                                                                                 |
-| Remove `callbacks.awaitMutation`                                        | **Approved** | Synchronous integration commits are the only supported mutation boundary.                                                                                                                  |
-| Remove React `useSnapSortAwaitMutation` and its package subpath         | **Approved** | Replace its adapter-internal use with a clearly named private helper.                                                                                                                      |
-| Remove `container.configuration`                                        | **Approved** | Retain `container.config` as the single live configuration property.                                                                                                                       |
-| Internalize custom strategy configuration and types                     | **Approved** | Remove `ContainerConfig.strategy`, `SortStrategy`, `DropTargetStrategy`, and `DragLifecycleStrategy` from the supported surface until a composition model is intentionally designed.       |
-| Publish a read-only `DragSession` handle                                | **Approved** | Keep the observations and controls listed in Phase 7. Hide construction, lifecycle operations, strategies, targeting state, animation maps, and ghost registries.                          |
-| Keep Item delegates while splitting the class                           | **Approved** | Internal implementation may move, but existing methods remain during Phase 5. Any later removal needs a new per-method review.                                                             |
-| Move integration machinery out of `ContainerCallbacks`                  | **Blocked**  | A public advanced integration contract is approved in principle. Its exact discriminated shape, ownership scope, transaction model, and renderer responsibilities are decided in Phase 10. |
-| Use presentation-based ghost roles and nullable `from`/`to` movement    | **Blocked**  | The direction is approved. Exact vocabulary, callback receiver, React rendering primitive, and integration routing are decided in Phase 10.                                                |
-| Add or restore `groupID`                                                | **Rejected** | The API was removed. Eligibility remains expressible through explicit metadata and `canDrop`; do not add a second policy mechanism during cleanup.                                         |
+| Proposal                                                                | Status       | Decision and constraints                                                                                                                                                                                                                                                                                                                                    |
+| ----------------------------------------------------------------------- | ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Preserve `onItemMove`, `onItemInsert`, `onItemRemove`, and `onItemSwap` | **Approved** | These are explicit developer-owned data primitives. Do not unify or rename them in this roadmap.                                                                                                                                                                                                                                                            |
+| Preserve read-only application metadata and native framework attributes | **Approved** | Metadata remains application data, not a hidden configuration channel. React and Svelte continue native event/attribute passthrough.                                                                                                                                                                                                                        |
+| Remove `MutationPhase` and item-event `phase` fields                    | **Approved** | Runtime only emits `"commit"`; do not publish a speculative preview state.                                                                                                                                                                                                                                                                                  |
+| Remove `callbacks.awaitMutation`                                        | **Approved** | Synchronous integration commits are the only supported mutation boundary.                                                                                                                                                                                                                                                                                   |
+| Remove React `useSnapSortAwaitMutation` and its package subpath         | **Approved** | Replace its adapter-internal use with a clearly named private helper.                                                                                                                                                                                                                                                                                       |
+| Remove `container.configuration`                                        | **Approved** | Retain `container.config` as the single live configuration property.                                                                                                                                                                                                                                                                                        |
+| Internalize custom strategy configuration and types                     | **Approved** | Remove `ContainerConfig.strategy`, `SortStrategy`, `DropTargetStrategy`, and `DragLifecycleStrategy` from the supported surface until a composition model is intentionally designed.                                                                                                                                                                        |
+| Publish a read-only `DragSession` handle                                | **Approved** | Keep the observations and controls listed in Phase 7. Hide construction, lifecycle operations, strategies, targeting state, animation maps, and ghost registries.                                                                                                                                                                                           |
+| Keep Item delegates while splitting the class                           | **Approved** | Internal implementation may move, but existing methods remain during Phase 5. Any later removal needs a new per-method review.                                                                                                                                                                                                                              |
+| Rename `ContainerAnimations.clickMove` to `move`                        | **Approved** | `move` is animation configuration, not an event callback, and applies to non-session/programmatic item movement regardless of what triggered it. The current `clickMove` key is unwired; remove it without an alias in the 0.5 cleanup and make `move`, rather than `reorder`, control this path.                                                           |
+| Give every transient ghost a fresh item identity                        | **Approved** | Allocate a new `itemId` for each ghost that is distinct from every application Item and other live ghost in the tree/session. Never copy the source `itemId`; retain `originalItemId` as provenance, use the universal resolved identity as the runtime key, and remove the conditional/prefixed `itemKey` path in Phase 11.                                |
+| Rename mounted-Item registration around attachment semantics            | **Proposed** | Prefer `attachItem(item)` for registering an already-rendered object and an internal `placeItemAt(container, item, index)` primitive for indexed tree bookkeeping. Decide whether 0.5 removes `addItem` directly or retains a compatibility alias before implementation; do not literally exchange two ambiguous names.                                     |
+| Move integration machinery out of `ContainerCallbacks`                  | **Blocked**  | A public advanced integration contract is approved in principle. Its exact discriminated shape, ownership scope, transaction model, and renderer responsibilities are decided in Phase 10.                                                                                                                                                                  |
+| Add `onGhostMove` as the semantic ghost-relocation primitive            | **Approved** | Match the item model: insertion means an absent ghost becomes present, movement means one existing ghost changes location, and removal means it ceases to be present. A relocation emits one `onGhostMove` with concrete `from` and `to` locations, never `onGhostRemove` plus `onGhostInsert`; receiver and integration routing are finalized in Phase 10. |
+| Add or restore `groupID`                                                | **Rejected** | The API was removed. Eligibility remains expressible through explicit metadata and `canDrop`; do not add a second policy mechanism during cleanup.                                                                                                                                                                                                          |
 
 ## Preserved behavioral invariants
 
@@ -113,6 +116,10 @@ Unless a reviewed phase says otherwise:
    `onDragEnd` payloads, making ordering fixes easy to apply inconsistently.
 5. Optional root callbacks can still enter a framework flush when no callback
    exists. React may execute two `flushSync` calls for an empty operation.
+6. SnapSort has direct visual-rectangle reads spread across `Item` and the drag
+   lifecycles. Most already run in READ stages, but insertion-marker relocation
+   performs its before/after reads from WRITE_1 and therefore forces layout in
+   the middle of a mutation path.
 
 ### Internal structure and duplication
 
@@ -160,9 +167,11 @@ Unless a reviewed phase says otherwise:
 2. `createGhost` has three incompatible meanings: a Vanilla element factory, a
    React notification whose return value is ignored, and an unsupported
    consumer callback in Svelte.
-3. Cross-container ghost relocation currently removes from the old owner and
-   inserts into the new owner in ordered, receiver-local commits. Multi-item
-   flow relocation can produce `2n` framework flushes.
+3. Cross-container ghost relocation currently emits removal from the old owner
+   and insertion into the new owner in ordered, receiver-local commits. That
+   conflates relocation with lifetime boundaries; multi-item flow relocation
+   can produce `2n` callbacks and framework flushes because no ghost equivalent
+   of `onItemMove` exists.
 4. Pointer preview movement uses a structural ghost-insert callback and
    synchronous framework flush on repeated pointer updates even when no
    structure changes.
@@ -173,15 +182,16 @@ Unless a reviewed phase says otherwise:
 
 ## Inline TODO disposition
 
-| Existing TODO                                                        | Owning phase | Resolution                                                                                                                                                    |
-| -------------------------------------------------------------------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `algorithm.ts`: check for an existing source-location helper         | Phase 3      | Use `Item.getIndexAndContainer()` through one shared location builder.                                                                                        |
-| `mutation.ts`: introduce a shared transaction-domain coordinator     | Phases 10–11 | Keep the design here; remove the duplicate code TODO only when the approved integration contract replaces it.                                                 |
-| `container.ts`: finalize the custom strategy API                     | Phase 6      | Internalize the unfinished surface instead of publishing an unreviewed composition model.                                                                     |
-| `item.ts`: parent/list divergence “should not happen”                | Phase 2      | Restore the invariant at the mutation boundary and cover it with state tests.                                                                                 |
-| `item.ts`: direct rectangle reads should use `readDom`               | Phase 5      | Move measurement behind the extracted FLIP read abstraction while preserving transformed-rectangle semantics during interrupted animations.                   |
-| Root TODO: force every layout algorithm through the collision engine | Out of scope | Do not apply literally to SnapSort hover geometry. Direct geometry is simpler here; clarify the project-wide collision task separately if its intent changes. |
-| Root TODO: clone and multi-item spawn                                | Out of scope | Valid future features, but blocked by the feature freeze and unrelated to simplification.                                                                     |
+| Existing TODO                                                        | Owning phase | Resolution                                                                                                                                                       |
+| -------------------------------------------------------------------- | ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `algorithm.ts`: check for an existing source-location helper         | Phase 3      | Use `Item.getIndexAndContainer()` through one shared location builder.                                                                                           |
+| `mutation.ts`: introduce a shared transaction-domain coordinator     | Phases 10–11 | Keep the design here; remove the duplicate code TODO only when the approved integration contract replaces it.                                                    |
+| `container.ts`: finalize the custom strategy API                     | Phase 6      | Internalize the unfinished surface instead of publishing an unreviewed composition model.                                                                        |
+| `container.ts`: rename the dead `clickMove` animation key            | Phase 6      | Replace it with the approved `move` key and make that key control non-session/programmatic movement. Do not use an event-style `onMove` name or retain an alias. |
+| `item.ts`: parent/list divergence “should not happen”                | Phase 2      | Restore the invariant at the mutation boundary and cover it with state tests.                                                                                    |
+| `item.ts`: direct rectangle reads should use `readDom`               | Phase 5      | Move eligible SnapSort visual measurement behind one typed `readDom`-backed abstraction while preserving stage, transform, and coordinate-space semantics.       |
+| Root TODO: force every layout algorithm through the collision engine | Out of scope | Do not apply literally to SnapSort hover geometry. Direct geometry is simpler here; clarify the project-wide collision task separately if its intent changes.    |
+| Root TODO: clone and multi-item spawn                                | Out of scope | Valid future features, but blocked by the feature freeze and unrelated to simplification.                                                                        |
 
 ## Phased implementation
 
@@ -241,6 +251,8 @@ placement results.
 - Counts before, during, and after a drag.
 - Same-container reorder, cross-container move, removal, and cancellation.
 - Transient ghosts never appear in the public application-item count.
+- Empty nested framework containers are registered in both engine children
+  and logical order before any descendant Item mounts.
 
 **Verification:**
 
@@ -255,8 +267,9 @@ npm run validate:packages
 
 ### Phase 3 — Safe dispatch and dead-code cleanup
 
-**Reading order:** `mutation.ts` → `events.ts` → algorithm debug helpers →
-lifecycle callback call sites.
+**Reading order:** `container.ts` visual-invalidation scheduling →
+`mutation.ts` → `events.ts` → algorithm debug helpers → lifecycle callback
+call sites.
 
 **Changes:**
 
@@ -267,9 +280,14 @@ lifecycle callback call sites.
 - Implement hover and capability dispatch through typed shared primitives while
   retaining named wrappers.
 - Reuse the existing active-item restoration helper.
+- Correct the stale `invalidateVisualGeometry` scheduling comment: stage queues
+  are swapped before draining, so same-stage work is retained for the next
+  frame. Keep coalesced `READ_1` delivery as the geometry-read-safe integration
+  boundary.
 
 **Preserve:** callback receiver, order, payload, error propagation, and current
-commit boundary for every non-empty callback.
+commit boundary for every non-empty callback, plus the visual-invalidation
+callback's stage and coalescing behavior.
 
 **Required tests:** Add a runtime callback ledger for activation, veto,
 same-owner movement, cross-owner movement, normal drop, outside cancellation,
@@ -300,13 +318,21 @@ npm run validate:packages
 - Collapse duplicate `updateDropTarget` branches while retaining
   `afterSyncDropTarget` on unchanged targets.
 - Extract small shared drag-visual validation/start/update/stop helpers.
+- Keep swap reconciliation and session finalization exception-safe: a thrown
+  `onItemSwap` callback or framework flush must still allow cleanup to run,
+  retain the original error identity, and reach the existing scheduler error
+  reporter exactly once rather than gaining a second call-site warning.
 
 **Preserve:** each lifecycle's READ/WRITE stage, animation snapshot timing,
-hover-leave order, `onDragEnd` timing, and fail-safe cleanup behavior.
+hover-leave order, `onDragEnd` timing, fail-safe cleanup behavior, the original
+consumer-error identity, and the existing single reporting path.
 
 **Required tests:** successful and exceptional completion must clear all
 session/visual/hover/ghost state and allow an immediate second drag. Include
-disconnected elements, mutation callback errors, and handoff failures.
+disconnected elements, mutation callback errors, and handoff failures. Include
+an `onItemSwap` error sentinel and assert that the same error is reported once
+while tree reconciliation/finalization still run and an immediate second drag
+succeeds.
 
 **Verification:**
 
@@ -320,26 +346,55 @@ npm run check:adapters
 
 ### Phase 5 — Split Item responsibilities
 
-**Reading order:** Item snapshot/FLIP region → session creation in `dragStart` →
-tree mutation methods → adapter Item construction.
+**Reading order:** Item constructor/public accessors → simple private helpers →
+snapshot/FLIP region → selection and session creation in `dragStart` → tree
+reconciliation and mutation methods → adapter Item construction.
 
 **Changes:**
 
+- Reorganize `Item` without changing its supported surface: keep the
+  constructor and simple public getters/setters together near the top, group
+  straightforward private helpers by responsibility, and leave a helper beside
+  a complex routine only when they are closely coupled.
 - Extract FLIP state, measurement, inverse-write, and animation orchestration to
   an internal module.
-- Extract selected-run collection, anchor/source resolution, and session
-  creation to `drag/`.
-- Extract attach/detach/index/before-element mechanics to an internal tree
-  mutation module.
+- Add or consume one typed, immutable visual-rectangle snapshot with an
+  explicit coordinate space, backed by SnapEngine's `ElementObject.readDom()`.
+  Clone the mutable `readDom()` result immediately; do not mechanically combine
+  screen-space origins with world-space dimensions when a Camera is active.
+- Route every read-stage `getBoundingClientRect()` in SnapSort's animation,
+  drop, and preview paths through that helper, caching repeated Item/parent
+  measurements within a stage where useful.
+- Reschedule insertion-marker before/after measurement into real READ stages
+  before removing its two WRITE_1 rectangle reads. Never pass a fabricated
+  stage argument to bypass `readDom()`'s guard, and preserve mutation callback,
+  framework flush, target-change, and animation order.
+- Extract `collectSelectedDragGroup`, `findGroupAnchor`, source resolution, and
+  session construction into a focused internal module under `drag/`.
+- Extract logical-child normalization, committed-DOM ordering, root
+  reconciliation, and attach/detach/index/before-element mechanics into
+  internal tree-state/tree-mutation modules. Remove the temporary symbol-keyed
+  friend hook and use paired internal names that expose the call direction,
+  such as `reconcileRootTreeState` and `reconcileSubtreeState`.
 - Share direction-aware calculations and reorder/drop config lookup.
 - Keep current Item methods as compatibility delegates.
 
 **Preserve:** direct transformed rectangle semantics, scheduler queue IDs and
 stages, selection ordering, framework ownership, and all public Item methods.
+Keep engine children, sortable logical order, and committed DOM order distinct;
+preserve elementless ghost slots and framework-created replacement objects.
+
+**Required tests:** Compare first/last FLIP, insertion marker, pointer preview,
+and drop rectangles before and after the helper migration, including an
+interrupted transform, framework replacement, and a non-unit Camera transform.
+Assert that a captured first rectangle is not mutated by the last read, that
+every production geometry read runs only in its intended READ stage, and that
+SnapSort production source has no direct `getBoundingClientRect()` call sites.
 
 **Verification:**
 
 ```bash
+npx playwright test tests/ut/snapsort-state.spec.ts --project=chromium
 npm run test:layout
 npm run test:snapsort
 npm run check:adapters
@@ -362,10 +417,24 @@ integration helper → API reference and package validation.
 - Remove `container.configuration` and migrate internal/tests/docs to `config`.
 - Remove `ContainerConfig.strategy` and public strategy/lifecycle types; keep
   built-in strategy selection internal through `mode`.
+- Replace `ContainerAnimations.clickMove` with `move`, wire it to
+  destination-owned non-session `moveItem()` animation, and migrate the preset,
+  demos, docs, and tests. Keep `reorder` scoped to drag/reflow displacement and
+  `drop` scoped to final drag settling.
 - Add compile-time export-contract assertions for every removal.
+
+**Pending decision:** If the mounted-Item registration rename is approved,
+implement `addItem` → `attachItem` in this API phase and internalize/rename the
+indexed bookkeeping delegate to `placeItemAt`. Decide whether 0.5 removes the
+old name directly or publishes a temporary deprecated alias before changing
+the supported surface.
 
 **Preserve:** the four item mutation callbacks, built-in modes, synchronous
 framework commits, metadata, and native framework prop passthrough.
+
+**Required test:** A programmatic `moveItem()` uses the destination's `move`
+configuration and does not consult `reorder`; `clickMove` is absent from the
+0.5 type/export contract.
 
 **Verification:**
 
@@ -494,17 +563,38 @@ npm run test:snapsort
 relocate them atomically, and keep framework rendering explicit without
 introducing brittle child inspection or a second collection API?
 
-**Compare:**
+**Fixed mutation semantics:** Mirror the item mutation model without conflating
+an object's lifetime with its location:
+
+- `onGhostInsert`: the ghost was absent and is now present at one location.
+- `onGhostMove`: the same existing ghost moved from one concrete location to
+  another, including same-owner reindexing and cross-owner relocation.
+- `onGhostRemove`: the ghost was present and is now absent.
+
+A relocation invokes `onGhostMove` exactly once; it must not be represented as
+`onGhostRemove` followed by `onGhostInsert`. `from` and `to` are therefore both
+non-null on a move event. This is directly analogous to `onItemMove` being the
+primary item-relocation primitive while item insertion and removal retain their
+own boundary semantics.
+
+**Compare renderer plumbing:**
 
 1. A destination/current-owner `onGhostMove({ from, to })`, analogous to
    `onItemMove`, with explicit renderer plumbing per direct owner.
-2. A root-scoped adapter registry with one representation transaction and
-   per-container subscriptions.
+2. A root-scoped adapter registry that applies the same semantic event through
+   one representation transaction with per-container subscriptions.
+
+**Fixed identity decision:** Every ghost receives its own newly allocated
+`itemId`; it never copies the source Item's `itemId`. `originalItemId` remains
+the explicit provenance field. Phase 10 decides which internal integration
+layer owns the allocator and how it verifies uniqueness across the active
+tree/session, not whether ghosts have independent identity.
 
 **Required decisions:**
 
-- Exact presentation vocabulary and discriminated location types; never encode
-  removal through a magic index.
+- Exact presentation vocabulary and discriminated insert, move, and remove
+  event/location types; never encode absence through a nullable location or
+  magic index on a move event.
 - Callback/integration receiver and whether a move invokes exactly once.
 - Whether one integration object is inherited by the whole SnapSort tree or
   whether mixed transaction domains are supported.
@@ -516,6 +606,11 @@ introducing brittle child inspection or a second collection API?
 - Multi-root isolation, portals, teardown, callback errors, and missing
   renderer behavior.
 - Pointer preview mounting versus per-frame geometry updates.
+- Location of the single ghost-identity allocator and its collision check
+  against application Items and every other live ghost.
+- How the generated identity is protected from reassignment through the public
+  `Item.itemId` setter; a uniqueness guarantee cannot depend on consumers
+  voluntarily leaving a transient ghost's ID unchanged.
 
 **Research facts to preserve:** React may rerender an updated subtree but
 commits only necessary DOM changes; context updates all consumers of the
@@ -524,7 +619,9 @@ both integrations commits pending DOM updates synchronously, not browser paint.
 
 **Exit criteria:** Write a decision-complete contract in this roadmap, mark
 each affected API proposal Approved or Rejected, specify the migration, and get
-explicit sign-off before Phase 11.
+explicit sign-off before Phase 11. Record the ghost-ID allocator and collision
+contract, including whether an Item ID namespace is reserved and how an invalid
+or colliding application ID fails.
 
 **Commit:** `docs(snapsort): decide ghost integration architecture`
 
@@ -536,19 +633,38 @@ explicit sign-off before Phase 11.
 
 - Separate renderer integration machinery from semantic application callbacks.
 - Keep Vanilla element creation separate from framework DOM ownership.
-- Use one semantic ghost relocation with explicit nullable `from` and `to`.
+- Preserve `onGhostInsert` and `onGhostRemove` for presence-boundary changes,
+  and use one `onGhostMove` with concrete `from` and `to` locations for every
+  relocation.
 - Represent spacer, marker, and pointer-preview responsibilities explicitly.
 - Keep ordered mutation intents; batching does not make them parallel.
 - Move pointer-only geometry updates off structural framework commits.
+- Allocate a fresh, stable `itemId` for every ghost instance and retain the
+  source identity only in `originalItemId`.
+- Use the same resolved-identity path for real Items and ghosts; remove the
+  `isGhost` key branch, synthetic key prefix, and now-redundant `itemKey`
+  helper.
 
 **Provisional implementation scope, finalized by Phase 10:**
 
-- Replace `createGhost`/`onGhostInsert`/`onGhostRemove` with the approved
-  integration and relocation surface.
+- Move overloaded `createGhost` renderer construction into the approved
+  integration surface. Retain semantic `onGhostInsert`/`onGhostRemove` and add
+  `onGhostMove` as the primary relocation callback.
+- Route absent-to-present placement through `onGhostInsert`, location changes
+  through exactly one `onGhostMove`, and present-to-absent teardown through
+  `onGhostRemove`. Never synthesize one relocation as a remove/insert pair.
+- Allocate ghost identity once at creation through the approved integration
+  layer; preserve it across relocation and expose it consistently as
+  `ghostItemId`.
+- Use `ghostItemId` directly as the framework renderer key; remove adapter and
+  documentation examples that synthesize keys from `ghostItem.id` or prepend a
+  second manual `ghost:` prefix.
 - Migrate complete multi-item ghost runs, insertion markers, flow spacers, and
   swap pointer previews.
-- Batch remove/add or preview-removal/item-commit work into one synchronous
-  transaction where the approved ownership domain permits it.
+- Apply both sides of a cross-owner `onGhostMove` inside one synchronous
+  representation transaction where the approved ownership domain permits it.
+  Preview removal plus item commit remain two ordered semantic operations, but
+  may share one framework transaction when their commit domain permits it.
 - Preserve a documented safe fallback or reject incompatible mixed domains,
   according to the Phase 10 decision.
 - Keep exactly one bound ghost element throughout each committed relocation.
@@ -557,14 +673,24 @@ explicit sign-off before Phase 11.
 
 **Required tests:**
 
-- `null → location`, same-owner relocation, cross-owner relocation, and
-  `location → null`.
+- Initial placement emits one `onGhostInsert`; same-owner and cross-owner
+  relocation each emit one `onGhostMove` and no remove/insert callbacks; final
+  teardown emits one `onGhostRemove`.
 - Multi-item runs and exact callback/transaction count.
 - React and Svelte parity for nested/sibling containers and independent roots.
 - No intermediate duplicate/stale ghost after success, cancellation, or error.
 - Pointer motion mounts structurally once and avoids repeated structural
   framework commits.
 - A failed transaction fully cleans up and the next drag succeeds.
+- A ghost ID differs from its source ID, remains stable across relocation, and
+  never collides with an application Item or another simultaneous source,
+  target, marker, pointer, or multi-item-run ghost.
+- The collision policy is deterministic even when an application ID resembles
+  an engine-generated object counter, and snapshot/animation lookup still
+  rebinds framework-replaced real Items by stable resolved identity.
+- Create, insert, relocate, and remove events expose the same ghost ID, and the
+  approved protection either rejects reassignment or prevents it from changing
+  that event identity.
 
 **Verification:**
 

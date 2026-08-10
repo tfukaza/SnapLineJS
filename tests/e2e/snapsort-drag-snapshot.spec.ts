@@ -3058,7 +3058,7 @@ async function nestedContainerSelfInsertProbe(
           selfBefore: event.beforeElement === event.item.element,
           beforeText: normalizeText(event.beforeElement),
         });
-        originalInsert(event);
+        originalInsert?.(event);
       };
 
       outer.insertItemAt(outer, child, childIndex);
@@ -4777,10 +4777,6 @@ test.describe("Snapsort drag-start snapshot layout", () => {
   test("does not self-reference beforeElement when reinserting an existing nested container", async ({
     page,
   }, testInfo) => {
-    test.fail(
-      true,
-      "Known repro: #attachItemToContainer can duplicate an existing item, making beforeElement equal the item itself.",
-    );
     await page.goto("/?demo=drop_snap_nested&disableNestedFlip=1", {
       waitUntil: "networkidle",
     });

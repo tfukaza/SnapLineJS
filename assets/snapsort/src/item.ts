@@ -36,6 +36,7 @@ import {
 } from "./mutation";
 import { resolveSortStrategy } from "./drag/drop-strategy";
 import { DragSession } from "./drag/session";
+import { reconcileTreeState } from "./tree-state";
 
 // The minimum distance threshold for triggering FLIP animations
 const MIN_FLIP_DISTANCE = 0.5;
@@ -110,7 +111,6 @@ export class Item extends ElementObject {
   #dragSnapshot: ItemSnapshot<Item> | null = null;
   #itemOrderedList: Item[] = [];
   #isGhost: boolean = false;
-  #depth: number = 0;
   #visualAnimationOffset: TransformOffset = { x: 0, y: 0 };
 
   frameworkManagedGhostElement: boolean = false;
@@ -192,9 +192,11 @@ export class Item extends ElementObject {
     ) {
       throw new Error("Item is already a child of this container");
     }
-    item.rootContainer = this.rootContainer;
-    this.appendChild(item);
-    this.#itemOrderedList.push(item);
+    this.attachItemToContainer(
+      this as unknown as Container,
+      item,
+      this.#itemOrderedList.length,
+    );
     this.takeRootSnapshot();
   }
 
@@ -274,13 +276,6 @@ export class Item extends ElementObject {
     const root = this.#rootContainer as unknown as Item;
     const item = root.findItemByKey(id);
     if (!item) return false;
-    if (item.parent !== this && this.element?.contains(item.element)) {
-      // TODO: This should not happen in the first place
-      throw new Error(
-        "Faulty state: Item is not logically a child of this container, but the DOM contains it",
-      );
-    }
-
     this.moveItemToContainer(container, item, index, null);
     return true;
   }
@@ -377,6 +372,9 @@ export class Item extends ElementObject {
 
   set rootContainer(value: Container | null) {
     this.#rootContainer = value;
+    for (const child of this.children) {
+      if (child instanceof Item) child.rootContainer = value;
+    }
   }
 
   get isGhost(): boolean {
@@ -384,7 +382,13 @@ export class Item extends ElementObject {
   }
 
   get depth(): number {
-    return this.#depth;
+    let depth = 0;
+    let ancestor = this.parent;
+    while (ancestor instanceof Item) {
+      depth += 1;
+      ancestor = ancestor.parent;
+    }
+    return depth;
   }
 
   /**
@@ -488,16 +492,35 @@ export class Item extends ElementObject {
    *
    * @returns Child objects ordered by their current element order in the DOM.
    */
-  #childrenInDomOrder(): BaseObject[] {
-    return this.children.slice().sort((a, b) => {
-      const aEl = (a as ElementObject).element;
-      const bEl = (b as ElementObject).element;
-      if (!aEl || !bEl) return 0;
-      const cmp = aEl.compareDocumentPosition(bEl);
+  #childrenInDomOrder(): Item[] {
+    const children = this.children.filter(
+      (child): child is Item => child instanceof Item,
+    );
+    const childSet = new Set(children);
+    const seen = new Set<Item>();
+    const logicalOrder = [
+      ...this.#itemOrderedList.filter((child) => {
+        if (!childSet.has(child) || seen.has(child)) return false;
+        seen.add(child);
+        return true;
+      }),
+      ...children.filter((child) => {
+        if (seen.has(child)) return false;
+        seen.add(child);
+        return true;
+      }),
+    ];
+    const hasDomPosition = (item: Item) => item.element?.isConnected === true;
+    const domOrdered = logicalOrder.filter(hasDomPosition).sort((a, b) => {
+      const cmp = a.element!.compareDocumentPosition(b.element!);
       if (cmp & Node.DOCUMENT_POSITION_FOLLOWING) return -1;
       if (cmp & Node.DOCUMENT_POSITION_PRECEDING) return 1;
       return 0;
     });
+    let domIndex = 0;
+    return logicalOrder.map((item) =>
+      hasDomPosition(item) ? domOrdered[domIndex++] : item,
+    );
   }
 
   static #containerColors = new Map<string, string>();
@@ -557,25 +580,25 @@ export class Item extends ElementObject {
     if (!root) {
       throw new Error("Root container not found");
     }
-    root.#updateState();
+    root[reconcileTreeState]();
     root.queueReadTree("READ_1", `snapsort-read-root-${this.id}`);
   }
 
   /**
-   * Refresh root/depth metadata and live child ordering for this subtree.
-   *
-   * @param depth Nesting depth of this item within the root tree.
-   * @returns Nothing.
+   * Reconcile logical children with the DOM order after a synchronous
+   * structural mutation has committed.
+   * @internal
    */
-  #updateState(depth: number = 0) {
-    this.#depth = depth;
-    // Get the list of children in DOM order
-    this.#itemOrderedList = this.#childrenInDomOrder() as Item[];
-    // Update all its children as well.
-    for (const child of this.children) {
-      if (child instanceof Item) {
-        child.#updateState(depth + 1);
-      }
+  [reconcileTreeState](): void {
+    const root = this.rootContainer;
+    root.#updateState(root);
+  }
+
+  #updateState(root: Container) {
+    this.#rootContainer = root;
+    this.#itemOrderedList = this.#childrenInDomOrder();
+    for (const child of this.#itemOrderedList) {
+      child.#updateState(root);
     }
   }
 
@@ -832,7 +855,7 @@ export class Item extends ElementObject {
    * @returns Nothing.
    */
   #captureFlipLast(snapshot: FlipAnimationState[], root: Item) {
-    root.#updateState();
+    root[reconcileTreeState]();
     const currentItems = new Map(
       root
         .#collectFlipItems(root, null)
@@ -876,11 +899,7 @@ export class Item extends ElementObject {
     const easing = animationConfig.timing_function ?? "ease-out";
     const entriesByItem = new Map(snapshot.map((entry) => [entry.item, entry]));
 
-    // Sort the animations we have to play by their depth.
-    // This is needed because if a container and any of its child
-    // are both being animated, then the start and end positions
-    // for child elements must first be calibrated based on
-    // its parents' positions.
+    // Account for offsets if the container is being animated.
     const orderedSnapshot = snapshot.slice().sort((a, b) => {
       if (this.#isFlipAncestor(a, b, entriesByItem)) return -1;
       if (this.#isFlipAncestor(b, a, entriesByItem)) return 1;
@@ -1299,11 +1318,7 @@ export class Item extends ElementObject {
     const session = this.rootContainer.dragSession;
     if (!session || session.status !== "active") return;
     const parentItem = session.dragCoordinateParent.get(this) ?? null;
-    // There are some scenarios where the parent container
-    // is moving. To account for this, we need to check the
-    // latest positions of the dragged item and its ancestors,
-    // and apply necessary correction so the item remains
-    // at the intended position.
+
     this.schedule(
       async () => {
         if (
@@ -1314,11 +1329,7 @@ export class Item extends ElementObject {
         }
         if (!this.element?.isConnected) return;
         if (!parentItem?.element?.isConnected) return;
-        // Read the container's current visual position (FLIP transforms
-        // included), then remove the animation offsets applied this frame.
-        // What remains is the container's current layout position, which
-        // stays correct even after WRITE-stage DOM mutations move the
-        // container.
+        // Account for offsets if the container is being animated.
         const visual = parentItem.readDom();
         const ancestorOffset = this.#ancestorVisualOffset(parentItem);
         session.dragLayoutPosition.set(this, {
@@ -1358,13 +1369,7 @@ export class Item extends ElementObject {
       return;
     }
 
-    // The container's FLIP transform carries the dragged item's DOM along
-    // with it, so add the offsets applied this frame back onto the layout
-    // position to get where the container is actually painted. This runs
-    // after the FLIP WRITE_3 task, so freshly started animations have
-    // already written their initial offsets. `groupOffset` is this item's
-    // constant offset from the pressed item so a multi-item drag previews
-    // as one collapsed run rather than every member stacking on the pointer.
+    // Account for offsets if the container is being animated.
     const ancestorOffset = this.#ancestorVisualOffset(parentItem);
     const groupOffset = session.groupVisualOffsets.get(this) ?? {
       x: 0,
@@ -1480,7 +1485,19 @@ export class Item extends ElementObject {
    * @internal
    */
   attachItemToContainer(container: Container, item: Item, index: number) {
-    (container as unknown as Item).appendChild(item);
+    const destination = container as unknown as Item;
+    const currentParent =
+      item.parent instanceof Item ? (item.parent as Item) : null;
+    destination.appendChild(item);
+    if (currentParent) {
+      currentParent.#itemOrderedList = currentParent.#itemOrderedList.filter(
+        (entry) => entry !== item,
+      );
+    }
+    destination.#itemOrderedList = destination.#itemOrderedList.filter(
+      (entry) => entry !== item,
+    );
+    item.rootContainer = container.rootContainer;
     if (index >= container.itemOrderedList.length) {
       container.itemOrderedList.push(item);
     } else {
@@ -1498,7 +1515,11 @@ export class Item extends ElementObject {
       index >= container.itemOrderedList.length - 1
         ? null
         : container.itemOrderedList[index + 1].element;
-    fireItemInsert(container, [item], index, itemAfterIndex, session);
+    try {
+      fireItemInsert(container, [item], index, itemAfterIndex, session);
+    } finally {
+      container[reconcileTreeState]();
+    }
   }
 
   #insertGhostElement(
@@ -1515,17 +1536,21 @@ export class Item extends ElementObject {
       index >= container.itemOrderedList.length - 1
         ? null
         : container.itemOrderedList[index + 1].element;
-    fireGhostInsert(
-      container,
-      original,
-      ghostItem,
-      index,
-      itemAfterIndex,
-      ghostRect,
-      session,
-      kind,
-      role,
-    );
+    try {
+      fireGhostInsert(
+        container,
+        original,
+        ghostItem,
+        index,
+        itemAfterIndex,
+        ghostRect,
+        session,
+        kind,
+        role,
+      );
+    } finally {
+      container[reconcileTreeState]();
+    }
   }
 
   /**
@@ -1595,7 +1620,11 @@ export class Item extends ElementObject {
       containerMetadata: container.metadata,
       index,
     };
-    fireItemMove(froms, to, items, itemAfterIndex, session);
+    try {
+      fireItemMove(froms, to, items, itemAfterIndex, session);
+    } finally {
+      container[reconcileTreeState]();
+    }
   }
 
   /** @internal */
@@ -1651,7 +1680,11 @@ export class Item extends ElementObject {
   ) {
     assertCanFireItemRemove(container);
     this.detachItemFromContainer(container, item);
-    fireItemRemove(container, [item], session);
+    try {
+      fireItemRemove(container, [item], session);
+    } finally {
+      container[reconcileTreeState]();
+    }
   }
 
   /** @internal */
@@ -1665,7 +1698,11 @@ export class Item extends ElementObject {
   ) {
     assertCanFireGhostRemove(container);
     this.detachItemFromContainer(container, ghostItem);
-    fireGhostRemove(container, original, ghostItem, session, kind, role);
+    try {
+      fireGhostRemove(container, original, ghostItem, session, kind, role);
+    } finally {
+      container[reconcileTreeState]();
+    }
   }
 
   /**

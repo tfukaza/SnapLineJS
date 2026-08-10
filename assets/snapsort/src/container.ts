@@ -17,6 +17,7 @@ export interface AnimationConfig {
 export interface ContainerAnimations {
   reorder?: AnimationConfig | null;
   drop?: AnimationConfig | null;
+  // Rename to just `move`?
   clickMove?: AnimationConfig | null;
 }
 
@@ -32,6 +33,7 @@ export interface ContainerConfig {
    * by a framework adapter. Framework adapters set this unconditionally so
    * omitted callbacks can never fall through to direct DOM mutation.
    */
+  // TODO: Can always be "framework" after we make the vanilla adapter
   domOwnership?: "core" | "framework";
   /** Which built-in drop-target/lifecycle strategy pair to use for this tree. Default `"euclidean"`. */
   mode?: SortMode;
@@ -70,8 +72,6 @@ const defaultConfig: ContainerConfig = {
 
 export class Container extends Item {
   #config: ContainerConfig;
-  #depth: number = 0;
-  #itemList: Item[] = [];
   #visualInvalidationItems = new Set<Item>();
   #visualInvalidationReasons = new Set<VisualGeometryInvalidationReason>();
 
@@ -227,15 +227,11 @@ export class Container extends Item {
   }
 
   get itemList() {
-    return this.#itemList;
+    return this.itemOrderedList.filter((item) => !item.isGhost);
   }
 
   get numberOfItems() {
-    return this.#itemList.length;
-  }
-
-  get depth() {
-    return this.#depth;
+    return this.itemList.length;
   }
 
   get config() {

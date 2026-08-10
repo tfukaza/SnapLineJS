@@ -10,6 +10,7 @@ import {
 } from "../mutation";
 import type { DragLifecycleStrategy } from "./lifecycle";
 import type { DragSession } from "./session";
+import { reconcileTreeState } from "../tree-state";
 import {
   restoreActiveItems,
   startItemVisual,
@@ -171,11 +172,15 @@ function drop(session: DragSession): void {
         aContainer.itemOrderedList[aIndex] = targetItem;
         bContainer.itemOrderedList[bIndex] = item;
 
-        fireItemSwap(
-          { item, container: aContainer, index: aIndex },
-          { item: targetItem, container: bContainer, index: bIndex },
-          session,
-        );
+        try {
+          fireItemSwap(
+            { item, container: aContainer, index: aIndex },
+            { item: targetItem, container: bContainer, index: bIndex },
+            session,
+          );
+        } finally {
+          root[reconcileTreeState]();
+        }
         await settleMutation();
       }
 
