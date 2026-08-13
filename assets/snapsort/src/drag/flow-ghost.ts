@@ -1,14 +1,15 @@
 import type { AnimationConfig } from "../container";
 import type { Container } from "../container";
 import type { Item } from "../item";
-import { resetDropSnapshotDebugDump, type DropCandidate } from "../algorithm";
+import type { DropCandidate } from "../algorithm";
+import { buildDragEndEvent, buildDragLocation } from "../event-builders";
 import type { DragLocation, GhostRect, GhostRole } from "../events";
 import { virtualEntrySizeFor } from "../layout";
 import {
   assertCanFireGhostInsert,
   assertCanFireGhostRemove,
   assertCanFireItemMove,
-  fireMutation,
+  fireOptionalMutation,
   settleMutation,
 } from "../mutation";
 import type { DragLifecycleStrategy } from "./lifecycle";
@@ -20,6 +21,7 @@ import {
   updatePointerPreview,
   validatePointerPreview,
 } from "./pointer-preview";
+import { restoreActiveItems } from "./item-visual";
 
 /**
  * Flow-layout spacer ghosts: euclidean and progressive modes. Each ghost is a
@@ -250,37 +252,6 @@ async function removeGhost(
   run.length = 0;
 }
 
-function restoreToActiveSources(session: DragSession): void {
-  const byContainer = new Map<Container, number[]>();
-  session.items.forEach((_, i) => {
-    const source = session.activeSources[i];
-    if (!source) return;
-    const indices = byContainer.get(source.container) ?? [];
-    indices.push(i);
-    byContainer.set(source.container, indices);
-  });
-  for (const [container, indices] of byContainer) {
-    indices
-      .slice()
-      .sort(
-        (a, b) =>
-          session.activeSources[a].index - session.activeSources[b].index,
-      )
-      .forEach((i) => {
-        const member = session.items[i];
-        if (member.parent) return;
-        member.attachItemToContainer(
-          container,
-          member,
-          Math.min(
-            session.activeSources[i].index,
-            container.itemOrderedList.length,
-          ),
-        );
-      });
-  }
-}
-
 function drop(session: DragSession): void {
   const items = session.items;
   const root = session.root;
@@ -385,15 +356,11 @@ function drop(session: DragSession): void {
       await removePointerPreview(session);
 
       const destination: DragLocation | null = ghostPos?.container
-        ? {
-            container: ghostPos.container,
-            containerMetadata: ghostPos.container.metadata,
-            index: ghostPos.index,
-          }
+        ? buildDragLocation(ghostPos.container, ghostPos.index)
         : null;
 
       if (session.dropEffect === "none" || !destination) {
-        restoreToActiveSources(session);
+        restoreActiveItems(session);
         dropAnimationConfig = item.dropAnimationConfig(
           session.activeSources[0]?.container ?? null,
         );
@@ -415,24 +382,13 @@ function drop(session: DragSession): void {
       session.groupVisualOffsets.clear();
       session.clearHoveredItem();
       root.clearDragSnapshotTree();
-      for (const member of items) resetDropSnapshotDebugDump(member);
       session.status = "ended";
       root.dragSession = null;
-      fireMutation(root, () => {
-        root.callbacks?.onDragEnd?.({
-          session,
-          item,
-          itemId: item.resolvedItemId,
-          itemMetadata: item.metadata,
-          items,
-          itemIds: items.map((member) => member.resolvedItemId),
-          itemsMetadata: items.map((member) => member.metadata),
-          element: item.element,
-          source: session.sources[0],
-          sources: session.sources,
-          destination,
-        });
-      });
+      fireOptionalMutation(
+        root,
+        root.callbacks?.onDragEnd,
+        buildDragEndEvent(session, destination),
+      );
     },
     { stage: "WRITE_1", queueId: `drag-end-${session.pressedItem.id}` },
   );

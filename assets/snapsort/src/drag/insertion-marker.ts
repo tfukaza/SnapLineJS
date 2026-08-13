@@ -1,6 +1,7 @@
 import type { AnimationConfig, Container } from "../container";
 import type { Item } from "../item";
-import { resetDropSnapshotDebugDump, type DropCandidate } from "../algorithm";
+import type { DropCandidate } from "../algorithm";
+import { buildDragEndEvent, buildDragLocation } from "../event-builders";
 import type { DragLocation, GhostRect, GhostRole } from "../events";
 import {
   assertCanFireGhostInsert,
@@ -8,7 +9,7 @@ import {
   assertCanFireItemMove,
   fireGhostInsert,
   fireGhostRemove,
-  fireMutation,
+  fireOptionalMutation,
   settleMutation,
 } from "../mutation";
 import type { DragLifecycleStrategy } from "./lifecycle";
@@ -235,11 +236,10 @@ function drop(session: DragSession): void {
       let destination: DragLocation | null = null;
       if (commitTarget?.container) {
         const destinationContainer = commitTarget.container;
-        destination = {
-          container: destinationContainer,
-          containerMetadata: destinationContainer.metadata,
-          index: commitTarget.index,
-        };
+        destination = buildDragLocation(
+          destinationContainer,
+          commitTarget.index,
+        );
 
         if (session.dropEffect === "move") {
           dropAnimationConfig = item.dropAnimationConfig(destinationContainer);
@@ -274,26 +274,13 @@ function drop(session: DragSession): void {
       session.groupVisualOffsets.clear();
       session.clearHoveredItem();
       root.clearDragSnapshotTree();
-      for (const member of items) {
-        resetDropSnapshotDebugDump(member);
-      }
       session.status = "ended";
       root.dragSession = null;
-      fireMutation(root, () => {
-        root.callbacks?.onDragEnd?.({
-          session,
-          item,
-          itemId: item.resolvedItemId,
-          itemMetadata: item.metadata,
-          items,
-          itemIds: items.map((member) => member.resolvedItemId),
-          itemsMetadata: items.map((member) => member.metadata),
-          element: item.element,
-          source: session.sources[0],
-          sources: session.sources,
-          destination,
-        });
-      });
+      fireOptionalMutation(
+        root,
+        root.callbacks?.onDragEnd,
+        buildDragEndEvent(session, destination),
+      );
     },
     {
       stage: "WRITE_1",

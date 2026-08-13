@@ -196,11 +196,10 @@ export class Container extends Item {
       if (!item.isGhost) this.#visualInvalidationItems.add(item);
     }
     this.#visualInvalidationReasons.add(reason);
-    // Always publish in the next read phase. Most invalidations originate in
-    // WRITE_3; enqueueing another WRITE_3 task from inside that stage can
-    // replace a task whose slot was already visited and lose the final visual
-    // position. READ_1 also gives integrations a safe point to enqueue their
-    // own geometry reads for the same frame.
+    // Always publish at the geometry-read-safe READ_1 integration boundary.
+    // Stage queues are swapped before draining, so work scheduled into the
+    // active stage is retained for the next frame. The stable queueId keeps
+    // repeated invalidations coalesced until that READ_1 delivery.
     this.schedule(
       () => {
         if (

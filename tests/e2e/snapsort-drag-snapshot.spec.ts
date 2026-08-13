@@ -611,7 +611,12 @@ test("visual geometry invalidations coalesce at the root container", async () =>
   const root = new SnapSortContainer(engine, null, {
     domOwnership: "framework",
     callbacks: {
-      onVisualGeometryInvalidated: (event) => events.push(event),
+      onVisualGeometryInvalidated: (event) => {
+        events.push(event);
+        if (events.length === 1) {
+          root.invalidateVisualGeometry([second], "settle");
+        }
+      },
     },
   });
   const child = new SnapSortContainer(engine, root, {
@@ -632,6 +637,14 @@ test("visual geometry invalidations coalesce at the root container", async () =>
   expect(events).toHaveLength(1);
   expect(events[0]!.items).toEqual([first, second]);
   expect(events[0]!.reasons).toEqual(["drag", "animation"]);
+  expect(queue.READ_1.get(root.id)?.size).toBe(1);
+
+  const nextTask = [...queue.READ_1.get(root.id)!.values()][0]!;
+  for (const callback of nextTask.callback ?? []) await callback();
+
+  expect(events).toHaveLength(2);
+  expect(events[1]!.items).toEqual([second]);
+  expect(events[1]!.reasons).toEqual(["settle"]);
 });
 type Box = Rect & {
   scaleX: number;
@@ -993,6 +1006,13 @@ function mockSnapSortItem(
     addDebugLine: () => {},
     addDebugText: () => {},
     clearDebugMarker: () => {},
+  };
+  item.getIndexAndContainer = () => {
+    const container = item.parent;
+    return {
+      container,
+      index: container ? container.itemOrderedList.indexOf(item) : -1,
+    };
   };
   Object.defineProperties(item, {
     dragPositionX: {

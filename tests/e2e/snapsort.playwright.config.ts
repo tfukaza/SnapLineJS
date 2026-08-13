@@ -15,6 +15,7 @@ const testMatch = [
   "snapsort-fail-safe.spec.ts",
   "snapsort-insertion-copy.spec.ts",
   "snapsort-item-api.spec.ts",
+  "snapsort-callback-ledger.spec.ts",
 ];
 
 export default defineConfig({

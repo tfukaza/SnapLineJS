@@ -14,6 +14,7 @@ import type {
   ItemSwapEvent,
   MutationPhase,
 } from "./events";
+import { buildGhostEvent, buildItemRunEvent } from "./event-builders";
 
 /**
  * Shared dispatch helpers for item/ghost mutations, ghost creation, and item
@@ -32,11 +33,8 @@ const warnedAsyncMutationCallbacks = new WeakSet<() => void | Promise<void>>();
 // item-like ghost relocation event with nullable source/destination locations.
 
 /** Run a consumer mutation inside its framework adapter's synchronous commit boundary. */
-export function fireMutation(
-  container: Container | null,
-  mutation: () => void,
-): void {
-  const flushMutation = container?.callbacks?.flushMutation;
+export function fireMutation(container: Container, mutation: () => void): void {
+  const flushMutation = container.callbacks?.flushMutation;
   if (flushMutation) {
     flushMutation(mutation);
     return;
@@ -46,7 +44,7 @@ export function fireMutation(
 
   // Compatibility only: async results are intentionally not awaited because
   // that would let the browser paint between DOM commit and FLIP inversion.
-  const awaitMutation = container?.callbacks?.awaitMutation;
+  const awaitMutation = container.callbacks?.awaitMutation;
   if (!awaitMutation) return;
   const result = awaitMutation();
   if (
@@ -61,21 +59,19 @@ export function fireMutation(
   }
 }
 
+/** Run an optional callback only when its receiver actually implements it. */
+export function fireOptionalMutation<Event>(
+  container: Container,
+  callback: ((event: Event) => void) | undefined,
+  event: Event,
+): void {
+  if (!callback) return;
+  fireMutation(container, () => callback(event));
+}
+
 /** Yield to framework commit/effect microtasks without crossing a paint. */
 export async function settleMutation(): Promise<void> {
   await Promise.resolve();
-}
-
-function itemIds(items: Item[]): string[] {
-  return items.map((item) => item.resolvedItemId);
-}
-
-function ghostItems(session: DragSession): Item[] {
-  return session.items;
-}
-
-function ghostItemIds(session: DragSession): string[] {
-  return session.items.map((item) => item.resolvedItemId);
 }
 
 function missingCallbackError(
@@ -93,18 +89,30 @@ function missingCallbackError(
   );
 }
 
+type RequiredMutationCallback =
+  | "onItemInsert"
+  | "onItemRemove"
+  | "onGhostInsert"
+  | "onGhostRemove";
+
+function assertHasCallback(
+  container: Container,
+  callback: RequiredMutationCallback,
+  operation: string,
+): void {
+  if (!container.callbacks?.[callback]) {
+    throw missingCallbackError(container, callback, operation);
+  }
+}
+
 /** @internal Validate a persistent insertion before core changes its tree bookkeeping. */
 export function assertCanFireItemInsert(container: Container): void {
-  if (!container.callbacks?.onItemInsert) {
-    throw missingCallbackError(container, "onItemInsert", "insert an item");
-  }
+  assertHasCallback(container, "onItemInsert", "insert an item");
 }
 
 /** @internal Validate a persistent removal before core changes its tree bookkeeping. */
 export function assertCanFireItemRemove(container: Container): void {
-  if (!container.callbacks?.onItemRemove) {
-    throw missingCallbackError(container, "onItemRemove", "remove an item");
-  }
+  assertHasCallback(container, "onItemRemove", "remove an item");
 }
 
 /** @internal Validate a semantic move before core changes its tree bookkeeping. */
@@ -124,24 +132,12 @@ export function assertCanFireItemSwap(container: Container): void {
 
 /** @internal Validate ghost insertion before core changes ghost bookkeeping. */
 export function assertCanFireGhostInsert(container: Container): void {
-  if (!container.callbacks?.onGhostInsert) {
-    throw missingCallbackError(
-      container,
-      "onGhostInsert",
-      "render a drag ghost",
-    );
-  }
+  assertHasCallback(container, "onGhostInsert", "render a drag ghost");
 }
 
 /** @internal Validate ghost removal before core changes ghost bookkeeping. */
 export function assertCanFireGhostRemove(container: Container): void {
-  if (!container.callbacks?.onGhostRemove) {
-    throw missingCallbackError(
-      container,
-      "onGhostRemove",
-      "remove a drag ghost",
-    );
-  }
+  assertHasCallback(container, "onGhostRemove", "remove a drag ghost");
 }
 
 export function fireItemInsert(
@@ -157,12 +153,7 @@ export function fireItemInsert(
   if (!onInsert) return;
   const event: ItemInsertEvent = {
     session,
-    item: items[0],
-    itemId: items[0].resolvedItemId,
-    itemMetadata: items[0].metadata,
-    items,
-    itemIds: itemIds(items),
-    itemsMetadata: items.map((item) => item.metadata),
+    ...buildItemRunEvent(items),
     container,
     containerMetadata: container.metadata,
     index,
@@ -183,12 +174,7 @@ export function fireItemRemove(
   if (!onRemove) return;
   const event: ItemRemoveEvent = {
     session,
-    item: items[0],
-    itemId: items[0].resolvedItemId,
-    itemMetadata: items[0].metadata,
-    items,
-    itemIds: itemIds(items),
-    itemsMetadata: items.map((item) => item.metadata),
+    ...buildItemRunEvent(items),
     container,
     containerMetadata: container.metadata,
     phase,
@@ -216,12 +202,7 @@ export function fireItemMove(
   if (onMove) {
     const event: ItemMoveEvent = {
       session,
-      item: items[0],
-      itemId: items[0].resolvedItemId,
-      itemMetadata: items[0].metadata,
-      items,
-      itemIds: itemIds(items),
-      itemsMetadata: items.map((item) => item.metadata),
+      ...buildItemRunEvent(items),
       from: froms[0],
       to,
       froms,
@@ -343,15 +324,27 @@ function buildDragItemHoverEvent(
   };
 }
 
+type HoverCallback = "onDragItemEnter" | "onDragItemMove" | "onDragItemLeave";
+
+function fireDragItemHover(
+  callback: HoverCallback,
+  container: Container,
+  item: Item,
+  overItem: Item,
+  session: DragSession,
+): void {
+  container.callbacks?.[callback]?.(
+    buildDragItemHoverEvent(session, item, overItem, container),
+  );
+}
+
 export function fireDragItemEnter(
   container: Container,
   item: Item,
   overItem: Item,
   session: DragSession,
 ): void {
-  container.callbacks?.onDragItemEnter?.(
-    buildDragItemHoverEvent(session, item, overItem, container),
-  );
+  fireDragItemHover("onDragItemEnter", container, item, overItem, session);
 }
 
 export function fireDragItemMove(
@@ -360,9 +353,7 @@ export function fireDragItemMove(
   overItem: Item,
   session: DragSession,
 ): void {
-  container.callbacks?.onDragItemMove?.(
-    buildDragItemHoverEvent(session, item, overItem, container),
-  );
+  fireDragItemHover("onDragItemMove", container, item, overItem, session);
 }
 
 export function fireDragItemLeave(
@@ -371,9 +362,7 @@ export function fireDragItemLeave(
   overItem: Item,
   session: DragSession,
 ): void {
-  container.callbacks?.onDragItemLeave?.(
-    buildDragItemHoverEvent(session, item, overItem, container),
-  );
+  fireDragItemHover("onDragItemLeave", container, item, overItem, session);
 }
 
 export function fireGhostInsert(
@@ -391,22 +380,17 @@ export function fireGhostInsert(
   const onInsert = container.callbacks?.onGhostInsert;
   if (!onInsert) return;
   const event: GhostInsertEvent = {
-    session,
-    kind,
-    role,
-    original,
-    originalItemId: original.resolvedItemId,
-    originalMetadata: original.metadata,
-    items: ghostItems(session),
-    itemIds: ghostItemIds(session),
-    ghostItem,
-    ghostItemId: ghostItem.resolvedItemId,
-    ghostMetadata: ghostItem.metadata,
-    container,
-    containerMetadata: container.metadata,
+    ...buildGhostEvent(
+      session,
+      kind,
+      role,
+      original,
+      ghostItem,
+      container,
+      ghostRect,
+    ),
     index,
     beforeElement,
-    ghostRect,
   };
   fireMutation(container, () => onInsert(event));
 }
@@ -423,23 +407,17 @@ export function fireGhostRemove(
   const onRemove = container.callbacks?.onGhostRemove;
   if (!onRemove) return;
   const event: GhostRemoveEvent = {
-    session,
-    kind,
-    role,
-    original,
-    originalItemId: original.resolvedItemId,
-    originalMetadata: original.metadata,
-    items: ghostItems(session),
-    itemIds: ghostItemIds(session),
-    ghostItem,
-    ghostItemId: ghostItem.resolvedItemId,
-    ghostMetadata: ghostItem.metadata,
-    container,
-    containerMetadata: container.metadata,
-    ghostRect:
+    ...buildGhostEvent(
+      session,
+      kind,
+      role,
+      original,
+      ghostItem,
+      container,
       session.pendingGhostTarget?.ghostItem === ghostItem
         ? session.pendingGhostTarget.ghostRect
         : undefined,
+    ),
   };
   fireMutation(container, () => onRemove(event));
 }

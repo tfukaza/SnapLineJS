@@ -1,7 +1,6 @@
 import { BaseObject, ElementObject, cloneDomProperty } from "@snap-engine/core";
 import type { AnimationConfig, Container } from "./container";
 import type { dragStartProp, dragProp, dragEndProp } from "@snap-engine/core";
-import { resetDropSnapshotDebugDump } from "./algorithm";
 import { AnimationObject } from "@snap-engine/core/animation";
 import type {
   ItemId,
@@ -20,6 +19,11 @@ import type {
   GhostRole,
   VisualGeometryInvalidationReason,
 } from "./events";
+import {
+  buildDragLocation,
+  buildGhostEvent,
+  buildItemLocation,
+} from "./event-builders";
 import {
   assertCanFireGhostInsert,
   assertCanFireGhostRemove,
@@ -149,22 +153,15 @@ export class Item extends ElementObject {
     const ghostItem = new Item(this.engine, null, true);
     ghostItem.itemId = this.itemId;
     ghostItem.metadata = { ...this.metadata };
-    const createEvent: GhostCreateEvent = {
+    const createEvent: GhostCreateEvent = buildGhostEvent(
       session,
       kind,
       role,
-      container,
-      containerMetadata: container.metadata,
-      original: this,
-      originalItemId: this.resolvedItemId,
-      originalMetadata: this.metadata,
-      items: session.items,
-      itemIds: session.items.map((item) => item.resolvedItemId),
+      this,
       ghostItem,
-      ghostItemId: ghostItem.resolvedItemId,
-      ghostMetadata: ghostItem.metadata,
+      container,
       ghostRect,
-    };
+    );
 
     // If the items are NOT managed by a framework,
     // the callback should return an HTMLElement.
@@ -1460,12 +1457,9 @@ export class Item extends ElementObject {
       assertCanFireItemMove(container);
 
       const froms: DragLocation[] = liveItems.map((member) => {
-        const fromContainer = member.container;
-        return {
-          container: fromContainer,
-          containerMetadata: fromContainer.metadata,
-          index: fromContainer.itemOrderedList.indexOf(member),
-        };
+        const location = buildItemLocation(member);
+        if (!location) throw new Error("Item has no parent container");
+        return location;
       });
       for (const member of liveItems) {
         this.detachItemFromContainer(member.container, member);
@@ -1615,11 +1609,7 @@ export class Item extends ElementObject {
       runEndIndex >= container.itemOrderedList.length
         ? null
         : container.itemOrderedList[runEndIndex].element;
-    const to: DragLocation = {
-      container,
-      containerMetadata: container.metadata,
-      index,
-    };
+    const to = buildDragLocation(container, index);
     try {
       fireItemMove(froms, to, items, itemAfterIndex, session);
     } finally {
@@ -1717,8 +1707,6 @@ export class Item extends ElementObject {
     // Take a snapshot of the current state.
     // Any DOM read for this is queued into READ_1 stage.
     this.takeRootSnapshot();
-    resetDropSnapshotDebugDump(this);
-
     // Record the initial container and index of the item
     const { index: currentIndex, container: currentContainer } =
       this.getIndexAndContainer();
@@ -1735,17 +1723,13 @@ export class Item extends ElementObject {
     );
     const sources: DragLocation[] = group.map((member) => {
       if (member === this) {
-        return {
-          container: currentContainer,
-          containerMetadata: currentContainer.metadata,
-          index: currentIndex,
-        };
+        return buildDragLocation(currentContainer, currentIndex);
       }
       const { index, container } = member.getIndexAndContainer();
       if (!container) {
         throw new Error("Item has no parent container");
       }
-      return { container, containerMetadata: container.metadata, index };
+      return buildDragLocation(container, index);
     });
     const session = new DragSession(
       root,

@@ -6,11 +6,12 @@ import type {
 } from "@snap-engine/core";
 import type { Container } from "../container";
 import type { Item } from "../item";
+import { findHoveredItem, type DropCandidate } from "../algorithm";
 import {
-  findHoveredItem,
-  resetDropSnapshotDebugDump,
-  type DropCandidate,
-} from "../algorithm";
+  buildDragLocation,
+  buildDragStartEvent,
+  buildDropTargetChangeEvent,
+} from "../event-builders";
 import type {
   DragLocation,
   DragVisual,
@@ -22,7 +23,7 @@ import {
   fireDragItemEnter,
   fireDragItemLeave,
   fireDragItemMove,
-  fireMutation,
+  fireOptionalMutation,
 } from "../mutation";
 import type { SortStrategy } from "./drop-strategy";
 
@@ -67,6 +68,7 @@ export class DragSession {
   readonly root: Container;
   /** Pointer id driving this drag (from `dragStartProp`). */
   readonly pointerId: number;
+  // TODO: Feels hacky?
   readonly #handoffTo: GestureHandoffControl["handoffTo"];
   /**
    * The items currently receiving this drag. Stable except across `handoff`.
@@ -75,6 +77,7 @@ export class DragSession {
   items: Item[];
   sources: DragLocation[];
   /** The item the pointer actually grabbed — may differ from `items[0]` (the run head) for disjoint selections. Anchors pointer-follow geometry. Replaced on `handoff`. */
+  // TODO: Can be unified with items?
   pressedItem: Item;
   /** `items` as a Set, for O(1) exclusion checks in layout/algorithm code. */
   itemSet: Set<Item>;
@@ -278,11 +281,7 @@ export class DragSession {
           "DragSession.handoff: every replacement must have a connected element directly inside its container.",
         );
       }
-      return {
-        container,
-        containerMetadata: container.metadata,
-        index,
-      };
+      return buildDragLocation(container, index);
     });
 
     const pressedIndex = origins.indexOf(this.pressedItem);
@@ -322,6 +321,7 @@ export class DragSession {
    * snapshot box. Called once drag snapshots are captured (READ_1 of
    * `begin`). Degenerates to the pressed item's own box for a single item.
    */
+  // TODO: Need to factor in gaps between items
   private computeGroupDims(): GroupDimensions {
     let maxW = 0;
     let maxH = 0;
@@ -382,22 +382,10 @@ export class DragSession {
     item.schedule(
       async () => {
         if (this.#isEnded()) return;
-        const primary = this.primaryItem;
         let vetoed = false;
         try {
           vetoed =
-            root.callbacks?.onDragStart?.({
-              session: this,
-              item: primary,
-              itemId: primary.resolvedItemId,
-              itemMetadata: primary.metadata,
-              items: this.items,
-              itemIds: this.items.map((i) => i.resolvedItemId),
-              itemsMetadata: this.items.map((i) => i.metadata),
-              element: primary.element,
-              source: this.sources[0],
-              sources: this.sources,
-            }) === false;
+            root.callbacks?.onDragStart?.(buildDragStartEvent(this)) === false;
           if (!vetoed) {
             this.strategy.lifecycle.validateStart?.(this);
           }
@@ -480,6 +468,7 @@ export class DragSession {
 
     try {
       const lifecycle = this.strategy.lifecycle;
+      // TODO: Have consistent lifecycle API so this if statement is not needed
       if (lifecycle.cancel) {
         lifecycle.cancel(this);
       } else {
@@ -523,7 +512,6 @@ export class DragSession {
       if (member.element) {
         delete member.element.dataset.snapsortDragging;
       }
-      resetDropSnapshotDebugDump(member);
     }
   }
 
@@ -683,30 +671,19 @@ export class DragSession {
     previous: { container: Container; index: number } | null,
     current: { container: Container; index: number } | null,
   ): void {
-    const item = this.primaryItem;
     const toLocation = (
       loc: { container: Container; index: number } | null,
     ): DragLocation | null =>
-      loc
-        ? {
-            container: loc.container,
-            containerMetadata: loc.container.metadata,
-            index: loc.index,
-          }
-        : null;
-    fireMutation(this.root, () => {
-      this.root.callbacks?.onDropTargetChange?.({
-        session: this,
-        item,
-        itemId: item.resolvedItemId,
-        itemMetadata: item.metadata,
-        items: this.items,
-        itemIds: this.items.map((i) => i.resolvedItemId),
-        itemsMetadata: this.items.map((i) => i.metadata),
-        previous: toLocation(previous),
-        current: toLocation(current),
-      });
-    });
+      loc ? buildDragLocation(loc.container, loc.index) : null;
+    fireOptionalMutation(
+      this.root,
+      this.root.callbacks?.onDropTargetChange,
+      buildDropTargetChangeEvent(
+        this,
+        toLocation(previous),
+        toLocation(current),
+      ),
+    );
   }
 
   /**

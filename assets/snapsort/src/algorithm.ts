@@ -28,13 +28,13 @@ import type { ItemSnapshot } from "./snapshot";
 import type { DragSession } from "./drag/session";
 import type {
   CanDropEvent,
-  DragLocation,
   DropPriorityEvent,
   GhostRect,
   InsertionMarkerRectEvent,
   ItemHitbox,
   ItemHitboxEvent,
 } from "./events";
+import { buildItemLocation, buildItemRunEvent } from "./event-builders";
 
 const TAG_COLLISIONS = "drop-collisions";
 const TAG_CANDIDATES = "drop-candidates";
@@ -82,10 +82,6 @@ export interface DropCandidate {
   placementDistance: number;
   placementContainsDragCenter: boolean;
   ghostRect?: InsertionGhostRect;
-}
-
-export function resetDropSnapshotDebugDump(_item: ItemBase) {
-  return;
 }
 
 function getDirection(node: ItemBase): "column" | "row" {
@@ -1116,17 +1112,12 @@ function configuredInsertionMarkerRect(
   if (!callback) return frozenRect(defaultRect);
 
   const groupItems = session?.items ?? [item];
-  const sources = session?.sources ?? groupItems.map(sourceLocationFor);
+  const sources = session?.sources ?? groupItems.map(buildItemLocation);
   const itemBox = requireDragSnapshotBox(item);
   const containerBox = requireDragSnapshotBox(container);
   const result = callback({
     session,
-    item,
-    itemId: item.resolvedItemId,
-    itemMetadata: item.metadata,
-    items: groupItems,
-    itemIds: groupItems.map((member) => member.resolvedItemId),
-    itemsMetadata: groupItems.map((member) => member.metadata),
+    ...buildItemRunEvent(groupItems),
     source: sources[0] ?? null,
     sources,
     container,
@@ -1271,19 +1262,6 @@ function chooseInsertionCandidate(
   return best;
 }
 
-// TODO: Check if similar function already exists.
-function sourceLocationFor(item: ItemBase): DragLocation | null {
-  const container = "parent" in item ? (item as any).parent : null;
-  if (!container || !isContainerObject(container)) return null;
-  const index = container.itemOrderedList.indexOf(item);
-  if (index === -1) return null;
-  return {
-    container: container as DragLocation["container"],
-    containerMetadata: (container as any).metadata,
-    index,
-  };
-}
-
 function configuredDropPriority(container: ItemBase): number {
   const value =
     "dropPriority" in container
@@ -1303,7 +1281,7 @@ function dropPolicyEvent(
   session: DragSession | null,
 ): Omit<DropPriorityEvent, "staticPriority"> & Pick<CanDropEvent, "index"> {
   const groupItems = session?.items ?? [item];
-  const sources = session?.sources ?? groupItems.map(sourceLocationFor);
+  const sources = session?.sources ?? groupItems.map(buildItemLocation);
   const itemBox = requireDragSnapshotBox(item);
   const containerBox = requireDragSnapshotBox(candidate.container);
   const pointer = session?.pointer ??
@@ -1314,12 +1292,7 @@ function dropPolicyEvent(
 
   return {
     session,
-    item: item as DropPriorityEvent["item"],
-    itemId: item.resolvedItemId,
-    itemMetadata: item.metadata,
-    items: groupItems as DropPriorityEvent["items"],
-    itemIds: groupItems.map((member) => member.resolvedItemId),
-    itemsMetadata: groupItems.map((member) => member.metadata),
+    ...buildItemRunEvent(groupItems),
     source: sources[0] ?? null,
     sources,
     container: candidate.container as DropPriorityEvent["container"],

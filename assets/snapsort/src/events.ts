@@ -190,16 +190,6 @@ export interface GhostRemoveEvent extends GhostEventBase {}
 
 export type GhostEvent = GhostCreateEvent | GhostInsertEvent | GhostRemoveEvent;
 
-/** @internal Passed between a lifecycle strategy and the Mutator; not part of the public callback surface. */
-export interface GhostUpdateEvent {
-  session: DragSession;
-  kind: GhostKind;
-  original: Item;
-  container: Container | null;
-  index: number;
-  ghostRect?: GhostRect | null;
-}
-
 export interface DragStartEvent {
   session: DragSession;
   item: Item;

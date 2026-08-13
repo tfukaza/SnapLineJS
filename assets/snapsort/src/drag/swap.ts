@@ -1,11 +1,12 @@
 import type { AnimationConfig, Container } from "../container";
 import type { Item } from "../item";
-import { resetDropSnapshotDebugDump, type DropCandidate } from "../algorithm";
+import type { DropCandidate } from "../algorithm";
+import { buildDragEndEvent, buildDragLocation } from "../event-builders";
 import type { DragLocation, GhostRect, GhostRole } from "../events";
 import {
   assertCanFireItemSwap,
   fireItemSwap,
-  fireMutation,
+  fireOptionalMutation,
   settleMutation,
 } from "../mutation";
 import type { DragLifecycleStrategy } from "./lifecycle";
@@ -138,11 +139,7 @@ function drop(session: DragSession): void {
       );
 
       if (bContainer && targetItem && targetItem !== item) {
-        destination = {
-          container: bContainer,
-          containerMetadata: bContainer.metadata,
-          index: bIndex,
-        };
+        destination = buildDragLocation(bContainer, bIndex);
       }
 
       if (
@@ -189,24 +186,13 @@ function drop(session: DragSession): void {
       session.dragLayoutPosition.clear();
       session.dragVisualStart.clear();
       session.groupVisualOffsets.clear();
-      resetDropSnapshotDebugDump(item);
       session.status = "ended";
       root.dragSession = null;
-      fireMutation(root, () => {
-        root.callbacks?.onDragEnd?.({
-          session,
-          item,
-          itemId: item.resolvedItemId,
-          itemMetadata: item.metadata,
-          items: session.items,
-          itemIds: session.items.map((member) => member.resolvedItemId),
-          itemsMetadata: session.items.map((member) => member.metadata),
-          element: item.element,
-          source: session.sources[0],
-          sources: session.sources,
-          destination,
-        });
-      });
+      fireOptionalMutation(
+        root,
+        root.callbacks?.onDragEnd,
+        buildDragEndEvent(session, destination),
+      );
     },
     { stage: "WRITE_1", queueId: `drag-end-swap-${item.id}` },
   );
