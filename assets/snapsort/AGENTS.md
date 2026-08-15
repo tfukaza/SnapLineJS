@@ -15,7 +15,7 @@ A single `Container`/`Item` class pair (per framework) whose drag/drop behavior 
 - `Container` - The only container class. `new Container(engine, parent, { mode, ... })`.
 - `defaultAnimations` - Opt-in standard reorder, drop, and programmatic-move animation preset.
 - `Item` - The only item class (including ghosts/markers). Never needs a mode.
-- `DragSession` - Owns all per-drag state (pointer, drag visual, ghosts, drop target); lives at `container.dragSession` on the root while a drag is active. Its public `handoff()` method is an advanced, copy-neutral pointer/session transfer primitive.
+- `DragSession` - Type-only public handle for one gesture. Callback events and `root.dragSession` expose the same stable handle; lifecycle/controller state remains internal.
 - Event types: `ItemInsertEvent`, `ItemRemoveEvent`, `ItemMoveEvent`, `ItemSwapEvent`, `GhostCreateEvent`, `GhostInsertEvent`, `GhostRemoveEvent`, `DragStartEvent`, `DragEndEvent`, `DropTargetChangeEvent`, `CanDropEvent`, `DropPriorityEvent`, `VisualGeometryInvalidationEvent`, `DragLocation`.
 - Drag presentation types: `DragVisual` (`"item" | "preview" | "none"`) and `DropEffect` (`"move" | "none"`).
 - `ContainerCallbacks`, `ContainerConfig`, and `SortMode`.
@@ -61,6 +61,7 @@ snapsort/
     ├── snapshot.ts         # ItemSnapshot / ItemMetadata types
     ├── drag/
     │   ├── session.ts
+    │   ├── session-store.ts
     │   ├── lifecycle.ts
     │   ├── drop-strategy.ts
     │   ├── item-visual.ts
@@ -100,7 +101,20 @@ public configuration surface is the built-in `SortMode` union.
 
 ### DragSession
 
-Created on `dragStart` and stored at `root.dragSession`; holds pointer/offset/start, `dragVisual`, the role-keyed ghost set, `pendingGhostTarget`, the resolved `SortStrategy`, and `status` (`pending → active → dropping → ended`). All per-drag state that used to live as `#private` fields on the dragged item now lives here so drag lifecycle strategies (separate classes) can read/write it without needing access to `Item`'s private fields. `items`/`sources` represent the ordered multi-item drag run; selection is consumer-owned through each item's `selected` property.
+`DragSessionController` is created on `dragStart` and kept in the internal
+root-keyed session store. Lifecycle strategies receive that controller, which
+owns pointer/offset/start state, ghosts, targets, the resolved strategy, and
+animation bookkeeping. Public callbacks and `root.dragSession` receive only
+its stable `DragSession` handle. Nested containers report `null`.
+
+The handle exposes read-only `root`, `pointerId`, `items`, `sources`,
+`pressedItem`, `primaryItem`, `start`, `pointer`, and `status`, plus the
+phase-checked `dragVisual`, `dropEffect`, and `handoff(replacements)` controls.
+Its arrays, locations, and coordinate objects are immutable. `DragSession` is
+a type-only root export and cannot be constructed by consumers. Internal code
+that needs lifecycle state must resolve the controller through
+`drag/session-store.ts`; never widen the public handle to expose controller
+fields.
 
 `handoff(replacements)` deliberately remains public. It atomically validates a
 parallel, unique, connected replacement run in the same engine/root, transfers

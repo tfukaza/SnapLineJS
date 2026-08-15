@@ -425,4 +425,5 @@ authoritative application command and bypasses `canDrop` and priority policy.
 
 The ref exposes `moveItem`, `removeItem`, `numberOfItems`, `dropPriority`,
 `direction`, `mainAxisAlign`, `mode`, `config`, `callbacks`, and `dragSession`
-from the core container.
+from the core container. `dragSession` is the stable read-only public handle on
+the root ref while a gesture is active; nested container refs return `null`.

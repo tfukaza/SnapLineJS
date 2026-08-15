@@ -1,5 +1,5 @@
 import type { Container } from "./container";
-import type { DragSession } from "./drag/session";
+import type { DragSessionController as DragSession } from "./drag/session";
 import type {
   DragEndEvent,
   DragLocation,
@@ -22,13 +22,13 @@ interface ItemRunEventFields {
   itemsMetadata: ItemMetadata[];
 }
 
-export function buildItemRunEvent(items: Item[]): ItemRunEventFields {
+export function buildItemRunEvent(items: readonly Item[]): ItemRunEventFields {
   const item = items[0];
   return {
     item,
     itemId: item.resolvedItemId,
     itemMetadata: item.metadata,
-    items,
+    items: [...items],
     itemIds: items.map((member) => member.resolvedItemId),
     itemsMetadata: items.map((member) => member.metadata),
   };
@@ -56,7 +56,7 @@ export function buildGhostEvent(
   ghostRect?: GhostRect | null,
 ): GhostEventBase {
   return {
-    session,
+    session: session.handle,
     kind,
     role,
     container,
@@ -64,7 +64,7 @@ export function buildGhostEvent(
     original,
     originalItemId: original.resolvedItemId,
     originalMetadata: original.metadata,
-    items: session.items,
+    items: [...session.items],
     itemIds: session.items.map((item) => item.resolvedItemId),
     ghostItem,
     ghostItemId: ghostItem.resolvedItemId,
@@ -75,11 +75,11 @@ export function buildGhostEvent(
 
 export function buildDragStartEvent(session: DragSession): DragStartEvent {
   return {
-    session,
+    session: session.handle,
     ...buildItemRunEvent(session.items),
     element: session.primaryItem.element,
     source: session.sources[0],
-    sources: session.sources,
+    sources: [...session.sources],
   };
 }
 
@@ -88,11 +88,11 @@ export function buildDragEndEvent(
   destination: DragLocation | null,
 ): DragEndEvent {
   return {
-    session,
+    session: session.handle,
     ...buildItemRunEvent(session.items),
     element: session.primaryItem.element,
     source: session.sources[0],
-    sources: session.sources,
+    sources: [...session.sources],
     destination,
   };
 }
@@ -103,7 +103,7 @@ export function buildDropTargetChangeEvent(
   current: DragLocation | null,
 ): DropTargetChangeEvent {
   return {
-    session,
+    session: session.handle,
     ...buildItemRunEvent(session.items),
     previous,
     current,

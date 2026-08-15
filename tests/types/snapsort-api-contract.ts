@@ -5,6 +5,7 @@ import {
   type ContainerAnimations,
   type ContainerCallbacks,
   type ContainerConfig,
+  type DragSession,
   type ItemInsertEvent,
   type ItemMoveEvent,
   type ItemRemoveEvent,
@@ -22,12 +23,48 @@ declare const insertEvent: ItemInsertEvent;
 declare const moveEvent: ItemMoveEvent;
 declare const removeEvent: ItemRemoveEvent;
 declare const swapEvent: ItemSwapEvent;
+declare const session: DragSession;
 
 container.attachItem(item);
 const publicConfig: ContainerConfig = container.config;
 const mode: SortMode = publicConfig.mode ?? "euclidean";
 const moveAnimation = animations.move ?? defaultAnimations.move;
 void [callbacks.flushMutation, mode, moveAnimation, reactBinding.Container];
+
+const observedRoot: Container = session.root;
+const observedItems: readonly Item[] = session.items;
+const observedStatus = session.status;
+session.dragVisual = "preview";
+session.dropEffect = "none";
+session.handoff(observedItems);
+void [observedRoot, observedStatus];
+
+// @ts-expect-error the active session handle is installed by SnapSort.
+container.dragSession = session;
+// @ts-expect-error participant arrays are read-only.
+session.items.push(item);
+// @ts-expect-error source arrays are read-only.
+session.sources.pop();
+// @ts-expect-error source locations are read-only.
+session.sources[0].index = 2;
+// @ts-expect-error session coordinates are read-only.
+session.pointer.x = 10;
+// @ts-expect-error session coordinates are read-only.
+session.start.y = 10;
+// @ts-expect-error status is lifecycle-owned.
+session.status = "active";
+// @ts-expect-error participants are lifecycle-owned.
+session.pressedItem = item;
+// @ts-expect-error strategies are internal.
+session.strategy;
+// @ts-expect-error lifecycle cancellation is internal.
+session.cancel();
+// @ts-expect-error targeting state is internal.
+session.dropTarget;
+// @ts-expect-error ghost registries are internal.
+session.ghosts;
+// @ts-expect-error animation bookkeeping is internal.
+session.dragVisualStart;
 
 // @ts-expect-error addItem was replaced by attachItem.
 container.addItem(item);
@@ -60,6 +97,10 @@ import type { DragLifecycleStrategy } from "@snap-engine/snapsort";
 import { useSnapSortAwaitMutation } from "@snap-engine/snapsort/react";
 // @ts-expect-error the deprecated React helper has no package subpath.
 import { useSnapSortAwaitMutation as deepHelper } from "@snap-engine/snapsort/react/useSnapSortAwaitMutation";
+import { DragSession as DragSessionValue } from "@snap-engine/snapsort";
+
+// @ts-expect-error DragSession is a type-only public handle, not a constructor.
+new DragSessionValue();
 
 void [
   null as MutationPhase,

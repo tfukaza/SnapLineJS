@@ -13,16 +13,17 @@ sectionOrder: 2
   "$lib/components/docs/SessionLifecycleDiagram.svelte";
 </script>
 
-When an item is dragged, SnapSort creates one `DragSession` on the root
-container. The session follows the pointer, resolves prospective destinations,
-owns temporary ghosts, and invokes callbacks on the container responsible for
-each operation.
+When an item is dragged, SnapSort creates one internal session controller for
+the root container. It exposes a stable, read-only `DragSession` handle through
+callbacks and `root.dragSession`, follows the pointer, resolves prospective
+destinations, owns temporary ghosts, and invokes callbacks on the container
+responsible for each operation.
 
 ## Terms
 
-- **Root / DragSession:** the top-level container and the session it owns. The
-  session orchestrates target resolution, ghost relocation, commits, and
-  cleanup.
+- **Root / DragSession:** the top-level container and its public session handle.
+  SnapSort's internal controller orchestrates target resolution, ghost
+  relocation, commits, and cleanup.
 - **Source Container:** an item's direct parent when the drag begins. In the
   diagram this lane also represents the current owner for operations such as
   ghost or item removal.

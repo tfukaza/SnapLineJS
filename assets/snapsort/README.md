@@ -21,7 +21,7 @@ their bindings from `@snap-engine/snapsort/svelte` or
 
 - `Container`
 - `Item`
-- `DragSession`
+- `DragSession` - read-only public handle type for the active gesture
 - `DragVisual` - `"item"`, `"preview"`, or `"none"` pointer representation
 - `DropEffect` - `"move"` or `"none"` persistent mutation choice
 - `defaultAnimations` - opt-in 100ms reorder, drop, and programmatic-move animation preset
@@ -129,6 +129,16 @@ const callbacks = {
   },
 };
 ```
+
+`DragSession` is exported as a type, not a constructor. The same stable handle
+is exposed through callback events and `root.dragSession`; nested containers
+return `null`. Its read-only observations are `root`, `pointerId`, `items`,
+`sources`, `pressedItem`, `primaryItem`, `start`, `pointer`, and `status`.
+`items`, `sources`, their locations, and the coordinate objects are immutable.
+Consumers may only set `dragVisual` while pending, set `dropEffect` while
+pending or active, or call `handoff(replacements)` while pending. Lifecycle
+methods, placement strategies, target state, ghosts, and animation bookkeeping
+remain internal.
 
 A preview is one root-owned `Ghost` with `kind: "marker"` and
 `role: "pointer"`. It can coexist with insertion's destination-owned marker,

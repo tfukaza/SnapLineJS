@@ -39,6 +39,5 @@ export type {
 export type { LayoutMainAxisAlign } from "./layout";
 export { Item } from "./item";
 export type { ItemId, ItemMetadata, ItemSnapshot } from "./snapshot";
-export { DragSession } from "./drag/session";
-export type { DragSessionStatus } from "./drag/session";
+export type { DragSession, DragSessionStatus } from "./drag/session";
 export type { SortMode } from "./drag/drop-strategy";

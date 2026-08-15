@@ -4,7 +4,8 @@ import { buildDragLocation } from "../event-builders";
 import type { DragLocation } from "../events";
 import type { Item } from "../item";
 import { resolveSortStrategy } from "./drop-strategy";
-import { DragSession } from "./session";
+import { DragSessionController } from "./session";
+import { installDragSession } from "./session-store";
 
 /** @internal Gather the consumer-selected drag run in logical document order. */
 export function collectSelectedDragGroup(root: Item, pressed: Item): Item[] {
@@ -43,14 +44,17 @@ function sourceFor(item: Item): DragLocation {
 }
 
 /** @internal Build, install, and begin a DragSession for an Item gesture. */
-export function beginItemDrag(item: Item, prop: dragStartProp): DragSession {
+export function beginItemDrag(
+  item: Item,
+  prop: dragStartProp,
+): DragSessionController {
   item.takeRootSnapshot();
   const root = item.rootContainer;
   const group = collectSelectedDragGroup(root as unknown as Item, item);
   const pressedItem = findGroupAnchor(group, item);
   const strategy = resolveSortStrategy(root.config.mode);
   const sources = group.map(sourceFor);
-  const session = new DragSession(
+  const session = new DragSessionController(
     root as Container,
     group,
     sources,
@@ -58,7 +62,7 @@ export function beginItemDrag(item: Item, prop: dragStartProp): DragSession {
     prop,
     pressedItem,
   );
-  root.dragSession = session;
+  installDragSession(root, session);
   session.begin(prop);
   return session;
 }

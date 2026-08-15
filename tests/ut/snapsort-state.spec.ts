@@ -5,7 +5,8 @@ import { join } from "node:path";
 import { determineSwapDropTarget } from "../../assets/snapsort/src/algorithm";
 import { Container } from "../../assets/snapsort/src/container";
 import { builtinStrategies } from "../../assets/snapsort/src/drag/drop-strategy";
-import { DragSession } from "../../assets/snapsort/src/drag/session";
+import { DragSessionController as DragSession } from "../../assets/snapsort/src/drag/session";
+import { installDragSession } from "../../assets/snapsort/src/drag/session-store";
 import type { DropPriorityEvent } from "../../assets/snapsort/src/events";
 import { Item } from "../../assets/snapsort/src/item";
 import { readVisualRect } from "../../assets/snapsort/src/internal/visual-rect";
@@ -572,7 +573,7 @@ test("move, reorder, removal, and cancellation keep state live", async () => {
     }
 
     const session = makeSession(root, last);
-    root.dragSession = session;
+    installDragSession(root, session);
     session.status = "active";
     session.strategy.lifecycle.validateStart(session);
     await session.strategy.lifecycle.dragStart(session);
@@ -685,7 +686,7 @@ test("swap lifecycle reconciles same-container Vanilla fallback order", async ()
     const third = mountItem(harness, root, "third");
     const session = makeSession(root, first, 3, "swap");
 
-    root.dragSession = session;
+    installDragSession(root, session);
     session.status = "dropping";
     session.strategy.lifecycle.moveGhost(session, root, 1, null);
     session.strategy.lifecycle.drop(session);
@@ -764,7 +765,7 @@ test("swap lifecycle reconciles framework-owned replacement Items", async () => 
     const second = mountItem(harness, destination, "second");
     const session = makeSession(root, first, 4, "swap");
 
-    root.dragSession = session;
+    installDragSession(root, session);
     session.status = "dropping";
     session.strategy.lifecycle.moveGhost(session, destination, 0, null);
     session.strategy.lifecycle.drop(session);

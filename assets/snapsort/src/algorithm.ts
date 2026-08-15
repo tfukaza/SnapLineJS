@@ -25,7 +25,7 @@ import {
   type VirtualInsertion,
 } from "./layout";
 import type { ItemSnapshot } from "./snapshot";
-import type { DragSession } from "./drag/session";
+import type { DragSessionController as DragSession } from "./drag/session";
 import type {
   CanDropEvent,
   DropPriorityEvent,
@@ -240,7 +240,7 @@ function resolveItemHitbox(
   if (!callback) return { shape: "rect", rect: defaultRect };
 
   const hitbox = callback({
-    session,
+    session: session.handle,
     item: draggedItem,
     itemId: draggedItem.resolvedItemId,
     itemMetadata: draggedItem.metadata,
@@ -1116,7 +1116,7 @@ function configuredInsertionMarkerRect(
   const itemBox = requireDragSnapshotBox(item);
   const containerBox = requireDragSnapshotBox(container);
   const result = callback({
-    session,
+    session: session?.handle ?? null,
     ...buildItemRunEvent(groupItems),
     source: sources[0] ?? null,
     sources,
@@ -1291,7 +1291,7 @@ function dropPolicyEvent(
     };
 
   return {
-    session,
+    session: session?.handle ?? null,
     ...buildItemRunEvent(groupItems),
     source: sources[0] ?? null,
     sources,

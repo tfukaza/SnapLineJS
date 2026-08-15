@@ -2,6 +2,7 @@ import { AnimationObject } from "@snap-engine/core/animation";
 import type { AnimationConfig, Container } from "../container";
 import { Item } from "../item";
 import { settleMutation } from "../mutation";
+import { getDragSessionController } from "../drag/session-store";
 import { reconcileRootTreeState } from "./tree-state";
 import {
   readVisualRect,
@@ -317,7 +318,7 @@ function playFlipAnimations(
   snapshot: FlipAnimationState[],
   animationConfig: AnimationConfig,
   animationOwner: Item,
-  draggedItems: Item | Item[] | null,
+  draggedItems: Item | readonly Item[] | null,
 ): void {
   const duration = animationConfig.duration ?? 160;
   const easing = animationConfig.timing_function ?? "ease-out";
@@ -356,7 +357,9 @@ function playFlipAnimations(
   const draggedItemList = Array.isArray(draggedItems)
     ? draggedItems
     : [draggedItems];
-  const session = draggedItemList[0]?.rootContainer.dragSession;
+  const session = draggedItemList[0]
+    ? getDragSessionController(draggedItemList[0].rootContainer)
+    : null;
   if (!session) return;
   session.dragTransformSyncAnimation?.cancel();
   const resyncDraggedItems = () => {
@@ -403,7 +406,7 @@ export function playDropAnimation(
 function withConfiguredAnimation(
   item: Item,
   container: Container | null,
-  excludedItem: Item | Item[] | null,
+  excludedItem: Item | readonly Item[] | null,
   kind: "reorder" | "move",
   mutate: () => void,
 ): void {
@@ -450,7 +453,7 @@ function withConfiguredAnimation(
 export function withReorderAnimation(
   item: Item,
   container: Container | null,
-  excludedItem: Item | Item[] | null,
+  excludedItem: Item | readonly Item[] | null,
   mutate: () => void,
 ): void {
   withConfiguredAnimation(item, container, excludedItem, "reorder", mutate);

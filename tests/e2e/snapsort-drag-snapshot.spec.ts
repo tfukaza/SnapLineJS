@@ -26,7 +26,11 @@ import {
 } from "../../assets/snapsort/src/container";
 import type { DragVisual } from "../../assets/snapsort/src/index";
 import { Item as SnapSortItem } from "../../assets/snapsort/src/item";
-import { DragSession } from "../../assets/snapsort/src/drag/session";
+import { DragSessionController as DragSession } from "../../assets/snapsort/src/drag/session";
+import {
+  clearDragSession,
+  installDragSession,
+} from "../../assets/snapsort/src/drag/session-store";
 import {
   builtinStrategies,
   type SortMode,
@@ -89,17 +93,55 @@ test("built-in modes choose composable drag visual defaults that can be overridd
         start: { x: 10, y: 20 },
       } as never,
     );
+    installDragSession(root, session);
+    const handle = root.dragSession!;
+    const nested = new SnapSortContainer(engine, root, { mode });
 
-    expect(session.dragVisual).toBe(expected[mode]);
+    expect(handle).toBe(session.handle);
+    expect(nested.dragSession).toBeNull();
+    expect(Object.isFrozen(handle)).toBe(true);
+    expect(Object.isFrozen(handle.items)).toBe(true);
+    expect(Object.isFrozen(handle.sources)).toBe(true);
+    expect(Object.isFrozen(handle.sources[0])).toBe(true);
+    expect(Object.isFrozen(handle.start)).toBe(true);
+    expect(Object.isFrozen(handle.pointer)).toBe(true);
+    expect("strategy" in handle).toBe(false);
+    expect("ghosts" in handle).toBe(false);
+    expect("cancel" in handle).toBe(false);
+    expect(() => (handle.items as any[]).push(item)).toThrow();
+    expect(() => ((handle.sources[0] as any).index = 2)).toThrow();
+    expect(() => ((handle.pointer as any).x = 30)).toThrow();
+
+    expect(handle.dragVisual).toBe(expected[mode]);
+    expect(() => {
+      (handle as any).dragVisual = "clone";
+    }).toThrow(/DragSession\.dragVisual/);
     const override = expected[mode] === "preview" ? "none" : "preview";
-    session.dragVisual = override;
-    expect(session.dragVisual).toBe(override);
+    handle.dragVisual = override;
+    expect(handle.dragVisual).toBe(override);
+    handle.dropEffect = "none";
+    expect(handle.dropEffect).toBe("none");
     session.status = "active";
     expect(() => {
-      session.dragVisual = expected[mode];
+      handle.dragVisual = expected[mode];
     }).toThrow(/DragSession\.dragVisual/);
-    expect(session.dragVisual).toBe(override);
+    handle.dropEffect = "move";
+    expect(() => {
+      (handle as any).dropEffect = "copy";
+    }).toThrow(/DragSession\.dropEffect/);
+    session.status = "dropping";
+    expect(() => {
+      handle.dropEffect = "none";
+    }).toThrow(/DragSession\.dropEffect/);
+    session.status = "ended";
+    expect(() => {
+      handle.dropEffect = "none";
+    }).toThrow(/DragSession\.dropEffect/);
+    expect(handle.dragVisual).toBe(override);
 
+    clearDragSession(root, session);
+    expect(root.dragSession).toBeNull();
+    nested.destroy(false);
     item.destroy(false);
     root.destroy(false);
   }
@@ -112,15 +154,32 @@ test("DragSession.handoff transfers a pending multi-item run without destroying 
   const coreImportPath = `/@fs${process.cwd()}/src/index.ts`;
   const snapSortImportPath = `/@fs${process.cwd()}/assets/snapsort/src/index.ts`;
   const dropStrategyImportPath = `/@fs${process.cwd()}/assets/snapsort/src/drag/drop-strategy.ts`;
+  const sessionImportPath = `/@fs${process.cwd()}/assets/snapsort/src/drag/session.ts`;
+  const sessionStoreImportPath = `/@fs${process.cwd()}/assets/snapsort/src/drag/session-store.ts`;
 
   const report = await page.evaluate(
-    async ({ coreImportPath, snapSortImportPath, dropStrategyImportPath }) => {
-      const [{ GlobalManager }, { Container, DragSession, Item }, strategy] =
-        await Promise.all([
-          import(coreImportPath),
-          import(snapSortImportPath),
-          import(dropStrategyImportPath),
-        ]);
+    async ({
+      coreImportPath,
+      snapSortImportPath,
+      dropStrategyImportPath,
+      sessionImportPath,
+      sessionStoreImportPath,
+    }) => {
+      const [
+        { GlobalManager },
+        { Container, Item },
+        strategy,
+        sessionModule,
+        sessionStore,
+      ] = await Promise.all([
+        import(coreImportPath),
+        import(snapSortImportPath),
+        import(dropStrategyImportPath),
+        import(sessionImportPath),
+        import(sessionStoreImportPath),
+      ]);
+      const DragSession = sessionModule.DragSessionController;
+      const { clearDragSession, installDragSession } = sessionStore;
       const existing = (GlobalManager.getInstance().data
         .dragAndDropContainers ?? [])[0];
       if (!existing) throw new Error("Missing a SnapSort engine fixture.");
@@ -168,16 +227,19 @@ test("DragSession.handoff transfers a pending multi-item run without destroying 
       // `onDragStart` observes the session while it is still pending, so the
       // helper must already be usable at that public customization point.
       session.status = "pending";
-      root.dragSession = session;
+      installDragSession(root, session);
+      const handle = root.dragSession!;
       session.dragVisualStart.set(origins[0], { x: 10, y: 20 });
       session.dragVisualStart.set(origins[1], { x: 30, y: 40 });
-      session.handoff(replacements);
+      handle.handoff(replacements);
 
       const result = {
+        stablePublicHandle:
+          root.dragSession === handle && handle === session.handle,
         handedToPressedReplacement: handedTo === replacements[1],
         itemsReplaced:
-          session.items[0] === replacements[0] &&
-          session.items[1] === replacements[1],
+          handle.items[0] === replacements[0] &&
+          handle.items[1] === replacements[1],
         itemSetReplaced:
           session.itemSet.has(replacements[0]) &&
           session.itemSet.has(replacements[1]) &&
@@ -189,7 +251,6 @@ test("DragSession.handoff transfers a pending multi-item run without destroying 
           session.activeSources[1].container === root &&
           session.activeSources[1].index === 3,
         sourcesPreserved:
-          session.sources === sources &&
           session.sources[0].container === root &&
           session.sources[0].index === 0 &&
           session.sources[1].index === 1,
@@ -209,13 +270,19 @@ test("DragSession.handoff transfers a pending multi-item run without destroying 
         ),
       };
 
-      root.dragSession = null;
+      clearDragSession(root, session);
       for (const item of [...origins, ...replacements]) item.destroy(false);
       root.destroy(false);
       host.remove();
       return result;
     },
-    { coreImportPath, snapSortImportPath, dropStrategyImportPath },
+    {
+      coreImportPath,
+      snapSortImportPath,
+      dropStrategyImportPath,
+      sessionImportPath,
+      sessionStoreImportPath,
+    },
   );
 
   expect(report).toEqual({
@@ -224,6 +291,7 @@ test("DragSession.handoff transfers a pending multi-item run without destroying 
     itemsReplaced: true,
     itemSetReplaced: true,
     pressedItemReplaced: true,
+    stablePublicHandle: true,
     sourcesPreserved: true,
     snapshotsAdopted: true,
     visualStartsTransferred: true,
@@ -239,15 +307,33 @@ test("DragSession.handoff rejects invalid runs and pointer-transfer failures ato
   const coreImportPath = `/@fs${process.cwd()}/src/index.ts`;
   const snapSortImportPath = `/@fs${process.cwd()}/assets/snapsort/src/index.ts`;
   const dropStrategyImportPath = `/@fs${process.cwd()}/assets/snapsort/src/drag/drop-strategy.ts`;
+  const sessionImportPath = `/@fs${process.cwd()}/assets/snapsort/src/drag/session.ts`;
+  const sessionStoreImportPath = `/@fs${process.cwd()}/assets/snapsort/src/drag/session-store.ts`;
 
   const report = await page.evaluate(
-    async ({ coreImportPath, snapSortImportPath, dropStrategyImportPath }) => {
-      const [{ GlobalManager }, { Container, DragSession, Item }, strategy] =
-        await Promise.all([
-          import(coreImportPath),
-          import(snapSortImportPath),
-          import(dropStrategyImportPath),
-        ]);
+    async ({
+      coreImportPath,
+      snapSortImportPath,
+      dropStrategyImportPath,
+      sessionImportPath,
+      sessionStoreImportPath,
+    }) => {
+      const [
+        { GlobalManager },
+        { Container, Item },
+        strategy,
+        sessionModule,
+        sessionStore,
+      ] = await Promise.all([
+        import(coreImportPath),
+        import(snapSortImportPath),
+        import(dropStrategyImportPath),
+        import(sessionImportPath),
+        import(sessionStoreImportPath),
+      ]);
+      const DragSession = sessionModule.DragSessionController;
+      const { clearDragSession, getDragSessionController, installDragSession } =
+        sessionStore;
       const existing = (GlobalManager.getInstance().data
         .dragAndDropContainers ?? [])[0];
       if (!existing) throw new Error("Missing a SnapSort engine fixture.");
@@ -301,7 +387,7 @@ test("DragSession.handoff rejects invalid runs and pointer-transfer failures ato
           items[1],
         );
         session.status = "pending";
-        root.dragSession = session;
+        installDragSession(root, session);
         return session;
       };
       const captureError = (callback: () => void) => {
@@ -435,7 +521,8 @@ test("DragSession.handoff rejects invalid runs and pointer-transfer failures ato
 
       for (const item of participants) item.destroy(false);
       for (const root of roots) {
-        root.dragSession = null;
+        const controller = getDragSessionController(root);
+        if (controller) clearDragSession(root, controller);
         root.destroy(false);
       }
       for (const host of hosts) host.remove();
@@ -451,7 +538,13 @@ test("DragSession.handoff rejects invalid runs and pointer-transfer failures ato
         validationTransfers,
       };
     },
-    { coreImportPath, snapSortImportPath, dropStrategyImportPath },
+    {
+      coreImportPath,
+      snapSortImportPath,
+      dropStrategyImportPath,
+      sessionImportPath,
+      sessionStoreImportPath,
+    },
   );
 
   expect(report.validationErrors).toHaveLength(8);

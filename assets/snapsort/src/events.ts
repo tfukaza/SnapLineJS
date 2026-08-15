@@ -9,9 +9,9 @@ import type { CollisionRect } from "@snap-engine/core/collision";
  * for the currently prospective drop target during a drag.
  */
 export interface DragLocation {
-  container: Container;
-  containerMetadata: Record<string, unknown>;
-  index: number;
+  readonly container: Container;
+  readonly containerMetadata: Record<string, unknown>;
+  readonly index: number;
 }
 
 /**
@@ -24,7 +24,7 @@ export type DropEffect = "move" | "none";
 /** What follows the pointer during a drag, independent of placement feedback. */
 export type DragVisual = "item" | "preview" | "none";
 
-/** Which role a ghost plays during a drag. See `DragSession.ghosts`. */
+/** Which visual job a temporary ghost performs during a drag. */
 export type GhostRole = "target" | "source" | "pointer";
 
 export type VisualGeometryInvalidationReason =

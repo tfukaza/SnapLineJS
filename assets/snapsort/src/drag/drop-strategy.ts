@@ -8,7 +8,7 @@ import {
   type DropCandidate,
 } from "../algorithm";
 import type { DragLifecycleStrategy } from "./lifecycle";
-import type { DragSession } from "./session";
+import type { DragSessionController as DragSession } from "./session";
 import { FlowGhostLifecycle } from "./flow-ghost";
 import { InsertionMarkerLifecycle } from "./insertion-marker";
 import { SwapLifecycle } from "./swap";

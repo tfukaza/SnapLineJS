@@ -8,6 +8,7 @@ import type { LayoutMainAxisAlign } from "./layout";
 import type { LayoutWrap } from "./snapshot";
 import type { SortMode } from "./drag/drop-strategy";
 import type { DragSession } from "./drag/session";
+import { getDragSession } from "./drag/session-store";
 
 export interface AnimationConfig {
   timing_function?: string;
@@ -70,8 +71,10 @@ export class Container extends Item {
   #visualInvalidationItems = new Set<Item>();
   #visualInvalidationReasons = new Set<VisualGeometryInvalidationReason>();
 
-  /** The in-progress drag session for this tree, or null when nothing is being dragged. Only meaningful on the root container. */
-  dragSession: DragSession | null = null;
+  /** The read-only public handle for this tree's in-progress drag, or null. Only meaningful on the root container. */
+  get dragSession(): DragSession | null {
+    return this.rootContainer === this ? getDragSession(this) : null;
+  }
 
   constructor(engine: any, parent: Container | null, config?: ContainerConfig) {
     super(engine, parent);

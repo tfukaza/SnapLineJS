@@ -9,7 +9,7 @@ import {
   settleMutation,
 } from "../mutation";
 import type { DragLifecycleStrategy } from "./lifecycle";
-import type { DragSession } from "./session";
+import type { DragSessionController as DragSession } from "./session";
 import { reconcileRootTreeState } from "../internal/tree-state";
 import { readVisualRect } from "../internal/visual-rect";
 import {

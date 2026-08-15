@@ -38,7 +38,8 @@ import {
   fireItemRemove,
   settleMutation,
 } from "./mutation";
-import { DragSession } from "./drag/session";
+import type { DragSessionController as DragSession } from "./drag/session";
+import { getDragSessionController } from "./drag/session-store";
 import { beginItemDrag } from "./drag/group";
 import {
   detachItem,
@@ -375,7 +376,7 @@ export class Item extends ElementObject {
    * Returns the current drag pointer position in world coordinates.
    */
   get dragPointerPosition(): { x: number; y: number } | null {
-    const session = this.rootContainer.dragSession;
+    const session = getDragSessionController(this.rootContainer);
     if (!session || !this.#dragSnapshot) return null;
     return { x: session.pointer.x, y: session.pointer.y };
   }
@@ -385,7 +386,7 @@ export class Item extends ElementObject {
    * @note This does not account for containers being animated.
    */
   get dragPositionX(): number {
-    const session = this.rootContainer.dragSession;
+    const session = getDragSessionController(this.rootContainer);
     if (!session || !this.#dragSnapshot) return this.worldTransform.x;
     const visualStart = session.dragVisualStart.get(this);
     return (
@@ -400,7 +401,7 @@ export class Item extends ElementObject {
    * @note This does not account for containers being animated.
    */
   get dragPositionY(): number {
-    const session = this.rootContainer.dragSession;
+    const session = getDragSessionController(this.rootContainer);
     if (!session || !this.#dragSnapshot) return this.worldTransform.y;
     const visualStart = session.dragVisualStart.get(this);
     return (
@@ -773,7 +774,7 @@ export class Item extends ElementObject {
     snapshot: FlipAnimationState[],
     animationConfig: AnimationConfig,
     animationOwner: Item,
-    draggedItems: Item | Item[] | null = null,
+    draggedItems: Item | readonly Item[] | null = null,
   ) {
     const duration = animationConfig.duration ?? 160;
     const easing = animationConfig.timing_function ?? "ease-out";
@@ -832,7 +833,7 @@ export class Item extends ElementObject {
     // While the FLIP animations above move the dragged items' coordinate
     // parents, re-sync every dragged item's transform each frame so the
     // whole group stays correctly positioned relative to the pointer.
-    const session = draggedItemList[0].rootContainer.dragSession;
+    const session = getDragSessionController(draggedItemList[0].rootContainer);
     if (!session) return;
 
     session.dragTransformSyncAnimation?.cancel();
@@ -1125,7 +1126,7 @@ export class Item extends ElementObject {
    */
   withReorderAnimation(
     container: Container | null,
-    excludedItem: Item | Item[] | null,
+    excludedItem: Item | readonly Item[] | null,
     mutate: () => void,
   ) {
     if (useInternalAnimationModule) {
@@ -1190,7 +1191,7 @@ export class Item extends ElementObject {
    * @internal
    */
   refreshDraggedItemPosition() {
-    const session = this.rootContainer.dragSession;
+    const session = getDragSessionController(this.rootContainer);
     const parentItem = session?.dragCoordinateParent.get(this) ?? null;
     if (!this.element || !parentItem?.element) return;
 
@@ -1211,14 +1212,14 @@ export class Item extends ElementObject {
    * @internal
    */
   scheduleWriteDrag() {
-    const session = this.rootContainer.dragSession;
+    const session = getDragSessionController(this.rootContainer);
     if (!session || session.status !== "active") return;
     const parentItem = session.dragCoordinateParent.get(this) ?? null;
 
     this.schedule(
       async () => {
         if (
-          this.rootContainer.dragSession !== session ||
+          getDragSessionController(this.rootContainer) !== session ||
           session.status !== "active"
         ) {
           return;
@@ -1248,7 +1249,7 @@ export class Item extends ElementObject {
    * @internal
    */
   writeDraggedTransform(expectedSession: DragSession | null = null) {
-    const session = this.rootContainer.dragSession;
+    const session = getDragSessionController(this.rootContainer);
     if (
       !session ||
       session.status !== "active" ||
@@ -1317,7 +1318,7 @@ export class Item extends ElementObject {
    */
   moveItemsToContainer(
     container: Container,
-    items: Item[],
+    items: readonly Item[],
     index: number,
     session: DragSession | null,
   ) {
@@ -1325,7 +1326,7 @@ export class Item extends ElementObject {
     // one that currently sits before `index` will vanish from in front of
     // the target slot once detached, shifting it left by one. Must be
     // computed from *live* (pre-detach) indices.
-    const adjustedIndexFor = (liveItems: Item[]): number => {
+    const adjustedIndexFor = (liveItems: readonly Item[]): number => {
       const removedBefore = liveItems.filter(
         (member) =>
           member.parent === container &&
@@ -1334,7 +1335,7 @@ export class Item extends ElementObject {
       return index - removedBefore;
     };
     const isAlreadyInPlace = (
-      liveItems: Item[],
+      liveItems: readonly Item[],
       adjustedIndex: number,
     ): boolean =>
       liveItems.length > 0 &&
@@ -1466,9 +1467,9 @@ export class Item extends ElementObject {
    * @internal
    */
   moveItemsAt(
-    froms: DragLocation[],
+    froms: readonly DragLocation[],
     container: Container,
-    items: Item[],
+    items: readonly Item[],
     index: number,
     session: DragSession | null,
   ) {
@@ -1577,14 +1578,14 @@ export class Item extends ElementObject {
    */
   drag(prop: dragProp) {
     if (prop.objectId !== this.id) return;
-    const session = this.rootContainer.dragSession;
+    const session = getDragSessionController(this.rootContainer);
     if (!session || session.status !== "active") return;
     session.pointerMove(prop);
   }
 
   dragEnd(prop: dragEndProp) {
     if (prop.objectId !== this.id) return;
-    const session = this.rootContainer.dragSession;
+    const session = getDragSessionController(this.rootContainer);
     if (!session) {
       // Defensive cleanup in case a veto or stale session left visual state
       // behind (e.g. onDragStart returned false after the dataset flag was

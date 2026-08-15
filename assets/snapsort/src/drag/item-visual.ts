@@ -7,7 +7,7 @@ import {
   assertCanFireGhostRemove,
   settleMutation,
 } from "../mutation";
-import type { DragSession } from "./session";
+import type { DragSessionController as DragSession } from "./session";
 import {
   removePointerPreview,
   startPointerPreview,

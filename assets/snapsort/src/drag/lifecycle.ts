@@ -1,7 +1,7 @@
 import type { Container } from "../container";
 import type { DropCandidate } from "../algorithm";
 import type { GhostKind, GhostRect, GhostRole } from "../events";
-import type { DragSession } from "./session";
+import type { DragSessionController as DragSession } from "./session";
 
 /**
  * The drag/ghost lifecycle for a sort mode. Built-ins include a flow-layout

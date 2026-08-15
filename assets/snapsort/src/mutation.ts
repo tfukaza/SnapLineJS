@@ -1,6 +1,6 @@
 import type { Container } from "./container";
 import type { Item } from "./item";
-import type { DragSession } from "./drag/session";
+import type { DragSessionController as DragSession } from "./drag/session";
 import type {
   ContainerCallbacks,
   DragItemHoverEvent,
@@ -123,7 +123,7 @@ export function assertCanFireGhostRemove(container: Container): void {
 
 export function fireItemInsert(
   container: Container,
-  items: Item[],
+  items: readonly Item[],
   index: number,
   beforeElement: HTMLElement | null,
   session: DragSession | null,
@@ -132,7 +132,7 @@ export function fireItemInsert(
   const onInsert = container.callbacks?.onItemInsert;
   if (!onInsert) return;
   const event: ItemInsertEvent = {
-    session,
+    session: session?.handle ?? null,
     ...buildItemRunEvent(items),
     container,
     containerMetadata: container.metadata,
@@ -144,14 +144,14 @@ export function fireItemInsert(
 
 export function fireItemRemove(
   container: Container,
-  items: Item[],
+  items: readonly Item[],
   session: DragSession | null,
 ): void {
   assertCanFireItemRemove(container);
   const onRemove = container.callbacks?.onItemRemove;
   if (!onRemove) return;
   const event: ItemRemoveEvent = {
-    session,
+    session: session?.handle ?? null,
     ...buildItemRunEvent(items),
     container,
     containerMetadata: container.metadata,
@@ -167,9 +167,9 @@ export function fireItemRemove(
  * needed on the source).
  */
 export function fireItemMove(
-  froms: DragLocation[],
+  froms: readonly DragLocation[],
   to: DragLocation,
-  items: Item[],
+  items: readonly Item[],
   beforeElement: HTMLElement | null,
   session: DragSession | null,
 ): void {
@@ -177,11 +177,11 @@ export function fireItemMove(
   const onMove = to.container.callbacks?.onItemMove;
   if (onMove) {
     const event: ItemMoveEvent = {
-      session,
+      session: session?.handle ?? null,
       ...buildItemRunEvent(items),
       from: froms[0],
       to,
-      froms,
+      froms: [...froms],
       beforeElement,
     };
     fireMutation(to.container, () => onMove(event));
@@ -205,7 +205,7 @@ export function fireItemSwap(
   const onSwap = a.container.callbacks?.onItemSwap;
   if (onSwap) {
     const event: ItemSwapEvent = {
-      session,
+      session: session?.handle ?? null,
       a: {
         item: a.item,
         itemId: a.item.resolvedItemId,
@@ -282,7 +282,7 @@ function buildDragItemHoverEvent(
   container: Container,
 ): DragItemHoverEvent {
   return {
-    session,
+    session: session.handle,
     item,
     itemId: item.resolvedItemId,
     itemMetadata: item.metadata,

@@ -30,8 +30,24 @@ import {
 } from "../mutation";
 import type { SortStrategy } from "./drop-strategy";
 import { resetItemVisual } from "./item-visual";
+import { clearDragSession } from "./session-store";
 
 export type DragSessionStatus = "pending" | "active" | "dropping" | "ended";
+
+export interface DragSession {
+  readonly root: Container;
+  readonly pointerId: number;
+  readonly items: readonly Item[];
+  readonly sources: readonly DragLocation[];
+  readonly pressedItem: Item;
+  readonly primaryItem: Item;
+  readonly start: Readonly<{ x: number; y: number }>;
+  readonly pointer: Readonly<{ x: number; y: number }>;
+  readonly status: DragSessionStatus;
+  dragVisual: DragVisual;
+  dropEffect: DropEffect;
+  handoff(replacements: readonly Item[]): void;
+}
 
 /** @internal Ghost placement the lifecycle strategy is currently targeting. */
 export interface GhostTarget {
@@ -60,15 +76,72 @@ function reportDragSessionError(error: unknown): void {
   console.error(reportedError);
 }
 
+function freezePoint(point: { x: number; y: number }) {
+  return Object.freeze({ x: point.x, y: point.y });
+}
+
+function freezeLocation(location: DragLocation): DragLocation {
+  return Object.freeze({ ...location });
+}
+
+class PublicDragSession implements DragSession {
+  readonly #controller: DragSessionController;
+
+  constructor(controller: DragSessionController) {
+    this.#controller = controller;
+    Object.freeze(this);
+  }
+
+  get root() {
+    return this.#controller.root;
+  }
+  get pointerId() {
+    return this.#controller.pointerId;
+  }
+  get items() {
+    return this.#controller.items;
+  }
+  get sources() {
+    return this.#controller.sources;
+  }
+  get pressedItem() {
+    return this.#controller.pressedItem;
+  }
+  get primaryItem() {
+    return this.#controller.primaryItem;
+  }
+  get start() {
+    return this.#controller.start;
+  }
+  get pointer() {
+    return this.#controller.pointer;
+  }
+  get status() {
+    return this.#controller.status;
+  }
+  get dragVisual() {
+    return this.#controller.dragVisual;
+  }
+  set dragVisual(value: DragVisual) {
+    this.#controller.dragVisual = value;
+  }
+  get dropEffect() {
+    return this.#controller.dropEffect;
+  }
+  set dropEffect(value: DropEffect) {
+    this.#controller.dropEffect = value;
+  }
+  handoff(replacements: readonly Item[]): void {
+    this.#controller.handoff(replacements);
+  }
+}
+
 /**
- * Owns all state for one drag gesture. A single DragSession lives on the
- * root container for the duration of a drag (`root.dragSession`).
- *
- * `items`/`sources` describe the full dragged run (ordered by original
- * document index, lowest first); `items.length === 1` is the single-item
- * case and behaves exactly as before multi-item support was added.
+ * @internal Runtime controller for one drag gesture. Its `handle` is the only
+ * session object exposed through public callbacks and `root.dragSession`.
  */
-export class DragSession {
+export class DragSessionController {
+  readonly handle: DragSession;
   readonly root: Container;
   /** Pointer id driving this drag (from `dragStartProp`). */
   readonly pointerId: number;
@@ -78,15 +151,15 @@ export class DragSession {
    * The items currently receiving this drag. Stable except across `handoff`.
    * Ordered by the original run's document order (lowest first).
    */
-  items!: Item[];
-  sources: DragLocation[];
+  items!: readonly Item[];
+  sources: readonly DragLocation[];
   /** The item the pointer actually grabbed — may differ from `items[0]` (the run head) for disjoint selections. Anchors pointer-follow geometry. Replaced on `handoff`. */
   // TODO: Can be unified with items?
   pressedItem!: Item;
   /** `items` as a Set, for O(1) exclusion checks in layout/algorithm code. */
   itemSet!: Set<Item>;
   /** @internal Current participants' mounted locations. Public `sources` always remain the gesture origins. */
-  activeSources!: DragLocation[];
+  activeSources!: readonly DragLocation[];
   readonly #touchedItems = new Set<Item>();
   /** Direction-aware bounding size of the whole dragged group, computed once drag snapshots are captured. Degenerates to the single item's box when `items.length === 1`. */
   groupDims: GroupDimensions | null = null;
@@ -101,7 +174,25 @@ export class DragSession {
    * What committing this drag should do to source data. Defaults to `"move"`.
    * Consumers may set `"none"` for a no-op (for example, a trash target).
    */
-  dropEffect: DropEffect = "move";
+  #dropEffect: DropEffect = "move";
+
+  get dropEffect(): DropEffect {
+    return this.#dropEffect;
+  }
+
+  set dropEffect(value: DropEffect) {
+    if (this.status !== "pending" && this.status !== "active") {
+      throw new Error(
+        "DragSession.dropEffect can only be changed before dropping begins.",
+      );
+    }
+    if (value !== "move" && value !== "none") {
+      throw new Error(
+        `DragSession.dropEffect: unknown effect "${String(value)}".`,
+      );
+    }
+    this.#dropEffect = value;
+  }
 
   #dragVisual: DragVisual;
 
@@ -127,8 +218,8 @@ export class DragSession {
     this.#dragVisual = value;
   }
 
-  start: { x: number; y: number };
-  pointer: { x: number; y: number };
+  start: Readonly<{ x: number; y: number }>;
+  pointer: Readonly<{ x: number; y: number }>;
   offset: { x: number; y: number } = { x: 0, y: 0 };
 
   /**
@@ -197,8 +288,9 @@ export class DragSession {
     prop: dragStartProp,
     pressedItem: Item = items[0],
   ) {
+    this.handle = new PublicDragSession(this);
     this.root = root;
-    this.sources = sources;
+    this.sources = Object.freeze(sources.map(freezeLocation));
     this.#setParticipants(items, sources.slice(), pressedItem);
     this.strategy = strategy;
     this.#dragVisual =
@@ -209,13 +301,13 @@ export class DragSession {
           : "item";
     this.pointerId = prop.pointerId;
     this.#handoffTo = prop.handoffTo;
-    this.start = { x: prop.start.x, y: prop.start.y };
-    this.pointer = { x: prop.start.x, y: prop.start.y };
+    this.start = freezePoint(prop.start);
+    this.pointer = freezePoint(prop.start);
   }
 
   #setParticipants(
-    items: Item[],
-    activeSources: DragLocation[],
+    items: readonly Item[],
+    activeSources: readonly DragLocation[],
     pressedItem: Item,
   ): void {
     if (items.length === 0 || items.length !== activeSources.length) {
@@ -230,8 +322,8 @@ export class DragSession {
     if (!itemSet.has(pressedItem)) {
       throw new Error("DragSession: pressedItem must be a participant.");
     }
-    this.items = items;
-    this.activeSources = activeSources;
+    this.items = Object.freeze([...items]);
+    this.activeSources = Object.freeze(activeSources.map(freezeLocation));
     this.pressedItem = pressedItem;
     this.itemSet = itemSet;
     for (const item of items) this.#touchedItems.add(item);
@@ -247,7 +339,7 @@ export class DragSession {
    * Validation and native input transfer complete before session fields are
    * changed, so a rejected handoff leaves the current participants unchanged.
    */
-  handoff(replacements: Item[]): void {
+  handoff(replacements: readonly Item[]): void {
     if (this.status !== "pending") {
       throw new Error(
         "DragSession.handoff can only be called during onDragStart.",
@@ -379,8 +471,8 @@ export class DragSession {
     item.schedule(
       () => {
         if (this.#isEnded()) return;
-        this.pointer = { x: prop.start.x, y: prop.start.y };
-        this.start = { x: prop.start.x, y: prop.start.y };
+        this.pointer = freezePoint(prop.start);
+        this.start = freezePoint(prop.start);
         for (const member of this.items) {
           const visual = member.readDom({ unapplyTransform: false });
           this.dragVisualStart.set(member, { x: visual.x, y: visual.y });
@@ -444,7 +536,7 @@ export class DragSession {
     item.schedule(
       () => {
         if (this.status !== "active") return;
-        this.pointer = { x: prop.position.x, y: prop.position.y };
+        this.pointer = freezePoint(prop.position);
         const ghostItem = this.ghostItem;
         if (ghostItem) stageVisualRectBeforeMutation(ghostItem);
       },
@@ -454,7 +546,7 @@ export class DragSession {
       async () => {
         if (this.status !== "active") return;
         try {
-          this.pointer = { x: prop.position.x, y: prop.position.y };
+          this.pointer = freezePoint(prop.position);
           await this.updateDropTarget();
           await this.strategy.lifecycle.dragMove(this);
         } catch (error) {
@@ -494,7 +586,7 @@ export class DragSession {
     this.status = "dropping";
     this.dragTransformSyncAnimation?.cancel();
     this.dragTransformSyncAnimation = null;
-    this.dropEffect = "none";
+    this.#dropEffect = "none";
 
     try {
       const lifecycle = this.strategy.lifecycle;
@@ -532,9 +624,7 @@ export class DragSession {
     this.dragTransformSyncAnimation?.cancel();
     this.dragTransformSyncAnimation = null;
     this.status = "ended";
-    if (this.root.dragSession === this) {
-      this.root.dragSession = null;
-    }
+    clearDragSession(this.root, this);
     this.dragCoordinateParent.clear();
     this.dragLayoutPosition.clear();
     this.dragVisualStart.clear();

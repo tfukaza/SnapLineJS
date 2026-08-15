@@ -413,4 +413,4 @@ used core properties and methods.
 | `container.mode` | Gets or sets the drag/drop mode. |
 | `container.config` | Live `ContainerConfig` object. |
 | `container.callbacks` | Configured callback object. |
-| `container.dragSession` | Active `DragSession`, or `null`. |
+| `container.dragSession` | Stable read-only `DragSession` handle on the root container while active; nested containers return `null`. |

@@ -3,7 +3,11 @@ import { JSDOM } from "jsdom";
 import { Container } from "../../assets/snapsort/src/container";
 import type { DragLifecycleStrategy } from "../../assets/snapsort/src/drag/lifecycle";
 import { builtinStrategies } from "../../assets/snapsort/src/drag/drop-strategy";
-import { DragSession } from "../../assets/snapsort/src/drag/session";
+import { DragSessionController as DragSession } from "../../assets/snapsort/src/drag/session";
+import {
+  clearDragSession,
+  installDragSession,
+} from "../../assets/snapsort/src/drag/session-store";
 import type { ContainerCallbacks } from "../../assets/snapsort/src/events";
 import { Item } from "../../assets/snapsort/src/item";
 import {
@@ -264,6 +268,7 @@ test("activation and veto callbacks remain direct and preserve order", async () 
   const harness = createHarness();
   try {
     const activationLedger: string[] = [];
+    let observedHandle: unknown = null;
     const lifecycle: DragLifecycleStrategy = {
       ghostKind: "flow",
       validateStart: () => activationLedger.push("validate"),
@@ -283,7 +288,10 @@ test("activation and veto callbacks remain direct and preserve order", async () 
     };
     const root = mountRoot(harness, {
       flushMutation: () => activationLedger.push("unexpected-flush"),
-      onDragStart: () => activationLedger.push("start"),
+      onDragStart: (event) => {
+        activationLedger.push("start");
+        observedHandle = event.session;
+      },
     });
     const item = mountItem(harness, root, "item");
     const session = new DragSession(
@@ -294,13 +302,15 @@ test("activation and veto callbacks remain direct and preserve order", async () 
       { handoffTo() {}, pointerId: 1, start: { x: 20, y: 20 } } as never,
       item,
     );
-    root.dragSession = session;
+    installDragSession(root, session);
     session.begin({ start: { x: 20, y: 20 } } as never);
     await drainFrames(harness.global);
     expect(activationLedger).toEqual(["start", "validate", "activate"]);
+    expect(observedHandle).toBe(session.handle);
+    expect(root.dragSession).toBe(session.handle);
 
     session.status = "ended";
-    root.dragSession = null;
+    clearDragSession(root, session);
     activationLedger.length = 0;
     root.config.callbacks!.onDragStart = () => {
       activationLedger.push("veto");
@@ -314,7 +324,7 @@ test("activation and veto callbacks remain direct and preserve order", async () 
       { handoffTo() {}, pointerId: 2, start: { x: 20, y: 20 } } as never,
       item,
     );
-    root.dragSession = vetoed;
+    installDragSession(root, vetoed);
     vetoed.begin({ start: { x: 20, y: 20 } } as never);
     await drainFrames(harness.global);
     expect(activationLedger).toEqual(["veto"]);
@@ -375,11 +385,18 @@ test("normal drop and outside cancellation preserve callback ledgers", async () 
   const harness = createHarness();
   try {
     const ledger: string[] = [];
+    let endedHandle: unknown = null;
+    let expectedEndHandle: unknown = null;
     const rootCallbacks = callbackLedger("root", ledger);
-    rootCallbacks.onDragEnd = (event) =>
+    rootCallbacks.onDragEnd = (event) => {
+      endedHandle = event.session;
+      expect(event.session.status).toBe("ended");
+      expect(event.session).toBe(expectedEndHandle);
+      expect(root.dragSession).toBeNull();
       ledger.push(
         `end:root:${event.destination?.container.itemId ?? "outside"}:${event.destination?.index ?? -1}`,
       );
+    };
     const root = mountRoot(harness, rootCallbacks);
     const source = mountContainer(
       harness,
@@ -395,6 +412,7 @@ test("normal drop and outside cancellation preserve callback ledgers", async () 
     );
     const item = mountItem(harness, source, "item");
     const session = makeSession(root, item);
+    expectedEndHandle = session.handle;
     session.dragVisual = "none";
     const ghost = item.createGhostItem(
       session,
@@ -413,7 +431,7 @@ test("normal drop and outside cancellation preserve callback ledgers", async () 
       ghostRect: null,
     };
     session.status = "dropping";
-    root.dragSession = session;
+    installDragSession(root, session);
     session.strategy.lifecycle.drop(session);
     await drainFrames(harness.global);
 
@@ -429,6 +447,7 @@ test("normal drop and outside cancellation preserve callback ledgers", async () 
       "flush:root:end",
     ]);
     expect(session.status).toBe("ended");
+    expect(endedHandle).toBe(session.handle);
     expect(root.dragSession).toBeNull();
     expect(session.flowGhostRun).toHaveLength(0);
     expect(session.sourceGhostRun).toHaveLength(0);
@@ -444,9 +463,10 @@ test("normal drop and outside cancellation preserve callback ledgers", async () 
     ledger.length = 0;
     const cancelItem = mountItem(harness, source, "cancel-item");
     const cancelled = makeSession(root, cancelItem);
+    expectedEndHandle = cancelled.handle;
     cancelled.dragVisual = "none";
     cancelled.status = "active";
-    root.dragSession = cancelled;
+    installDragSession(root, cancelled);
     cancelled.cancel();
     await drainFrames(harness.global);
     expect(ledger).toEqual([
@@ -478,7 +498,7 @@ test("throwing swap callbacks reconcile and finalize before reporting the same e
     const session = makeSession(root, first, "swap");
     session.dragVisual = "none";
     session.status = "dropping";
-    root.dragSession = session;
+    installDragSession(root, session);
     session.strategy.lifecycle.moveGhost(session, root, 1, null);
     session.strategy.lifecycle.drop(session);
 
@@ -496,7 +516,7 @@ test("throwing swap callbacks reconcile and finalize before reporting the same e
     const nextSession = makeSession(root, first, "swap");
     nextSession.dragVisual = "none";
     nextSession.status = "active";
-    root.dragSession = nextSession;
+    installDragSession(root, nextSession);
     nextSession.cancel();
     await drainFrames(harness.global, 6, reportedErrors);
     expect(nextSession.status).toBe("ended");
@@ -546,7 +566,7 @@ test("error finalization skips DOM writes for disconnected participants", async 
       item,
     );
     session.status = "active";
-    root.dragSession = session;
+    installDragSession(root, session);
     item.element!.remove();
 
     session.cancel();
@@ -572,7 +592,7 @@ test("failed handoff stays atomic and does not block the next session", async ()
     const originalItems = session.items;
     const originalSources = session.activeSources;
     session.status = "pending";
-    root.dragSession = session;
+    installDragSession(root, session);
 
     expect(() => session.handoff([first])).toThrow(
       "replacements must not include the current dragged items",
@@ -580,7 +600,7 @@ test("failed handoff stays atomic and does not block the next session", async ()
     expect(session.items).toBe(originalItems);
     expect(session.activeSources).toBe(originalSources);
     expect(session.pressedItem).toBe(first);
-    expect(root.dragSession).toBe(session);
+    expect(root.dragSession).toBe(session.handle);
 
     session.cancel();
     expect(session.status).toBe("ended");
@@ -589,7 +609,7 @@ test("failed handoff stays atomic and does not block the next session", async ()
     const nextSession = makeSession(root, first);
     nextSession.dragVisual = "none";
     nextSession.status = "active";
-    root.dragSession = nextSession;
+    installDragSession(root, nextSession);
     nextSession.cancel();
     await drainFrames(harness.global);
     expect(nextSession.status).toBe("ended");
@@ -621,7 +641,7 @@ test("swap, hover, and absent optional callbacks keep their boundaries", async (
     const session = makeSession(root, first, "swap");
     session.dragVisual = "none";
     session.status = "dropping";
-    root.dragSession = session;
+    installDragSession(root, session);
     session.hoveredItem = second;
     session.strategy.lifecycle.moveGhost(session, root, 1, null);
     session.strategy.lifecycle.drop(session);
@@ -641,7 +661,7 @@ test("swap, hover, and absent optional callbacks keep their boundaries", async (
     const noEndCallback = makeSession(root, first, "swap");
     noEndCallback.dragVisual = "none";
     noEndCallback.status = "active";
-    root.dragSession = noEndCallback;
+    installDragSession(root, noEndCallback);
     noEndCallback.cancel();
     await drainFrames(harness.global);
     expect(ledger).toEqual([]);

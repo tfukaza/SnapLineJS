@@ -85,6 +85,16 @@ the drag-and-drop life cycle. Locations carried by an event describe the
 source, prospective target, or final destination; they do not necessarily
 identify the container whose callback is running.
 
+The exported `DragSession` is a type-only, read-only handle. Every callback
+for a gesture and `root.dragSession` observe the same handle; nested containers
+return `null`. You can read `root`, `pointerId`, `items`, `sources`,
+`pressedItem`, `primaryItem`, `start`, `pointer`, and `status`. The item/source
+arrays, locations, and coordinates cannot be mutated. SnapSort keeps lifecycle
+operations, target state, strategies, ghosts, and animation bookkeeping
+internal.
+
 During `onDragStart`, set `session.dragVisual` to choose whether the actual
 `"item"`, a passive `"preview"`, or `"none"` follows the pointer. This is
 independent from the mode's target resolver and placement feedback.
+You may also set `dropEffect` to `"move"` or `"none"` while the session is
+pending or active. `handoff(replacements)` is pending-only.
