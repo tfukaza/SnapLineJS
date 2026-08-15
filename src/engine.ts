@@ -12,6 +12,7 @@ import type { FrameStats } from "./object";
 
 export interface EngineConfig {}
 
+// TODO: Belongs in camera module
 export interface EdgePanController {
   startEdgePan(
     pointerId: number,
