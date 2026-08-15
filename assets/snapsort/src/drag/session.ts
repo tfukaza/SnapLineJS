@@ -8,6 +8,7 @@ import type { Container } from "../container";
 import type { Item } from "../item";
 import { findHoveredItem, type DropCandidate } from "../algorithm";
 import {
+  buildDragEndEvent,
   buildDragLocation,
   buildDragStartEvent,
   buildDropTargetChangeEvent,
@@ -26,6 +27,7 @@ import {
   fireOptionalMutation,
 } from "../mutation";
 import type { SortStrategy } from "./drop-strategy";
+import { resetItemVisual } from "./item-visual";
 
 export type DragSessionStatus = "pending" | "active" | "dropping" | "ended";
 
@@ -74,16 +76,16 @@ export class DragSession {
    * The items currently receiving this drag. Stable except across `handoff`.
    * Ordered by the original run's document order (lowest first).
    */
-  items: Item[];
+  items!: Item[];
   sources: DragLocation[];
   /** The item the pointer actually grabbed — may differ from `items[0]` (the run head) for disjoint selections. Anchors pointer-follow geometry. Replaced on `handoff`. */
   // TODO: Can be unified with items?
-  pressedItem: Item;
+  pressedItem!: Item;
   /** `items` as a Set, for O(1) exclusion checks in layout/algorithm code. */
-  itemSet: Set<Item>;
+  itemSet!: Set<Item>;
   /** @internal Current participants' mounted locations. Public `sources` always remain the gesture origins. */
-  activeSources: DragLocation[];
-  readonly #touchedItems: Set<Item>;
+  activeSources!: DragLocation[];
+  readonly #touchedItems = new Set<Item>();
   /** Direction-aware bounding size of the whole dragged group, computed once drag snapshots are captured. Degenerates to the single item's box when `items.length === 1`. */
   groupDims: GroupDimensions | null = null;
   /** Per-item constant visual offset (relative to `pressedItem`) so companions preview the collapsed run while hoisted. */
@@ -194,12 +196,8 @@ export class DragSession {
     pressedItem: Item = items[0],
   ) {
     this.root = root;
-    this.items = items;
     this.sources = sources;
-    this.activeSources = sources.slice();
-    this.pressedItem = pressedItem;
-    this.itemSet = new Set(items);
-    this.#touchedItems = new Set(items);
+    this.#setParticipants(items, sources.slice(), pressedItem);
     this.strategy = strategy;
     this.#dragVisual =
       strategy.mode === "insertion"
@@ -211,6 +209,30 @@ export class DragSession {
     this.#handoffTo = prop.handoffTo;
     this.start = { x: prop.start.x, y: prop.start.y };
     this.pointer = { x: prop.start.x, y: prop.start.y };
+  }
+
+  #setParticipants(
+    items: Item[],
+    activeSources: DragLocation[],
+    pressedItem: Item,
+  ): void {
+    if (items.length === 0 || items.length !== activeSources.length) {
+      throw new Error(
+        "DragSession: items and active sources must be non-empty parallel runs.",
+      );
+    }
+    const itemSet = new Set(items);
+    if (itemSet.size !== items.length) {
+      throw new Error("DragSession: participants must be unique.");
+    }
+    if (!itemSet.has(pressedItem)) {
+      throw new Error("DragSession: pressedItem must be a participant.");
+    }
+    this.items = items;
+    this.activeSources = activeSources;
+    this.pressedItem = pressedItem;
+    this.itemSet = itemSet;
+    for (const item of items) this.#touchedItems.add(item);
   }
 
   /**
@@ -305,10 +327,7 @@ export class DragSession {
       this.#touchedItems.add(replacement);
     });
 
-    this.items = replacements;
-    this.activeSources = replacementSources;
-    this.itemSet = unique;
-    this.pressedItem = nextPressedItem;
+    this.#setParticipants(replacements, replacementSources, nextPressedItem);
   }
 
   /** The run head — lowest original index, first element of `items`. Used as the singular `item` in backwards-compatible event fields. */
@@ -499,6 +518,8 @@ export class DragSession {
   }
 
   #clearSessionState(): void {
+    this.dragTransformSyncAnimation?.cancel();
+    this.dragTransformSyncAnimation = null;
     this.status = "ended";
     if (this.root.dragSession === this) {
       this.root.dragSession = null;
@@ -507,49 +528,51 @@ export class DragSession {
     this.dragLayoutPosition.clear();
     this.dragVisualStart.clear();
     this.groupVisualOffsets.clear();
+    this.groupDims = null;
+    this.pendingGhostTarget = null;
+    this.dropTarget = null;
+    this.hoveredItem = null;
+    this.flowGhostRun.length = 0;
+    this.sourceGhostRun.length = 0;
+    this.ghosts.clear();
     this.root.clearDragSnapshotTree();
+    this.clearDraggingFlags();
+  }
+
+  /** @internal Clear participant drag markers without writing through unmounted DOM. */
+  clearDraggingFlags(): void {
     for (const member of this.#touchedItems) {
-      if (member.element) {
+      if (member.element?.isConnected)
         delete member.element.dataset.snapsortDragging;
-      }
     }
+  }
+
+  /** @internal Complete a successful or cancelled lifecycle after mode-specific commits. */
+  complete(destination: DragLocation | null): void {
+    try {
+      this.clearHoveredItem();
+    } catch (error) {
+      this.#clearSessionState();
+      throw error;
+    }
+    this.#clearSessionState();
+    fireOptionalMutation(
+      this.root,
+      this.root.callbacks?.onDragEnd,
+      buildDragEndEvent(this, destination),
+    );
   }
 
   #forceEndAfterError(): void {
     const members = [...this.items];
+    resetItemVisual(this);
 
-    for (const member of members) {
-      if (member.element) {
-        delete member.element.dataset.snapsortDragging;
-      }
-      member.style = {
-        cursor: "grab",
-        position: "relative",
-        zIndex: "",
-        top: "",
-        left: "",
-        width: "",
-        height: "",
-      };
-      member.transformMode = "none";
-      member.transformOrigin = null;
-      member.writeDom();
-      member.writeTransform();
-    }
-
-    for (const ghost of this.flowGhostRun) {
-      ghost.destroy(false);
-    }
-    this.flowGhostRun.length = 0;
-    for (const ghost of this.sourceGhostRun) {
-      ghost.destroy(false);
-    }
-    this.sourceGhostRun.length = 0;
-    for (const ghost of this.ghosts.values()) {
-      ghost.destroy(false);
-    }
-    this.ghosts.clear();
-    this.pendingGhostTarget = null;
+    const ghosts = new Set([
+      ...this.flowGhostRun,
+      ...this.sourceGhostRun,
+      ...this.ghosts.values(),
+    ]);
+    for (const ghost of ghosts) ghost.destroy(false);
 
     members.forEach((member, i) => {
       if (member.parent) return;
@@ -562,11 +585,6 @@ export class DragSession {
       );
     });
 
-    this.hoveredItem = null;
-    this.dragCoordinateParent.clear();
-    this.dragLayoutPosition.clear();
-    this.dragVisualStart.clear();
-    this.groupVisualOffsets.clear();
     this.#clearSessionState();
   }
 
@@ -617,41 +635,30 @@ export class DragSession {
 
     this.updateHoveredItem(targetContainer);
 
-    if (targetContainer && ghostSource) {
-      const changed =
-        targetContainer !== ghostSource.container ||
-        targetIndex !== ghostSource.index;
-      if (changed) {
-        await lifecycle.moveGhost(
-          this,
-          targetContainer,
-          targetIndex,
-          target.ghostRect,
-        );
-        this.#invalidateVisualGeometry(
-          [ghostSource.container, targetContainer],
-          "ghost",
-        );
-        this.fireDropTargetChange(ghostSource, {
-          container: targetContainer,
-          index: targetIndex,
-        });
-      }
-      lifecycle.afterSyncDropTarget(this);
-    } else if (targetContainer) {
+    if (!targetContainer) return;
+    const changed =
+      !ghostSource ||
+      targetContainer !== ghostSource.container ||
+      targetIndex !== ghostSource.index;
+    if (changed) {
       await lifecycle.moveGhost(
         this,
         targetContainer,
         targetIndex,
         target.ghostRect,
       );
-      this.#invalidateVisualGeometry([targetContainer], "ghost");
-      this.fireDropTargetChange(null, {
+      this.#invalidateVisualGeometry(
+        ghostSource
+          ? [ghostSource.container, targetContainer]
+          : [targetContainer],
+        "ghost",
+      );
+      this.fireDropTargetChange(ghostSource, {
         container: targetContainer,
         index: targetIndex,
       });
-      lifecycle.afterSyncDropTarget(this);
     }
+    lifecycle.afterSyncDropTarget(this);
   }
 
   #invalidateVisualGeometry(

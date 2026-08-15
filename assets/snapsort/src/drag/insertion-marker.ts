@@ -1,7 +1,7 @@
 import type { AnimationConfig, Container } from "../container";
 import type { Item } from "../item";
 import type { DropCandidate } from "../algorithm";
-import { buildDragEndEvent, buildDragLocation } from "../event-builders";
+import { buildDragLocation } from "../event-builders";
 import type { DragLocation, GhostRect, GhostRole } from "../events";
 import {
   assertCanFireGhostInsert,
@@ -9,24 +9,21 @@ import {
   assertCanFireItemMove,
   fireGhostInsert,
   fireGhostRemove,
-  fireOptionalMutation,
   settleMutation,
 } from "../mutation";
 import type { DragLifecycleStrategy } from "./lifecycle";
 import type { DragSession } from "./session";
 import {
   restoreActiveItems,
-  startItemVisual,
+  startDragVisual,
+  stopDragVisual,
   stopItemVisual,
-  updateItemVisual,
-  validateItemVisual,
+  updateDragVisual,
+  validateDragVisual,
 } from "./item-visual";
 import {
   pointerPreviewMemberRects,
   removePointerPreview,
-  startPointerPreview,
-  updatePointerPreview,
-  validatePointerPreview,
 } from "./pointer-preview";
 
 /**
@@ -229,9 +226,9 @@ function drop(session: DragSession): void {
           : null;
       const commitTarget = session.cancelled ? null : pendingGhostTarget;
 
-      if (session.dragVisual === "item") await stopItemVisual(session);
+      if (session.dragVisual === "item") await stopDragVisual(session);
       await removeGhost(session);
-      await removePointerPreview(session);
+      if (session.dragVisual === "preview") await stopDragVisual(session);
 
       let destination: DragLocation | null = null;
       if (commitTarget?.container) {
@@ -268,19 +265,7 @@ function drop(session: DragSession): void {
         );
       }
 
-      session.dragCoordinateParent.clear();
-      session.dragLayoutPosition.clear();
-      session.dragVisualStart.clear();
-      session.groupVisualOffsets.clear();
-      session.clearHoveredItem();
-      root.clearDragSnapshotTree();
-      session.status = "ended";
-      root.dragSession = null;
-      fireOptionalMutation(
-        root,
-        root.callbacks?.onDragEnd,
-        buildDragEndEvent(session, destination),
-      );
+      session.complete(destination);
     },
     {
       stage: "WRITE_1",
@@ -337,25 +322,16 @@ export class InsertionMarkerLifecycle implements DragLifecycleStrategy {
     }
     assertCanFireGhostInsert(source.container);
     assertCanFireGhostRemove(source.container);
-    if (session.dragVisual === "preview") validatePointerPreview(session);
-    if (session.dragVisual === "item") validateItemVisual(session);
+    validateDragVisual(session);
   }
 
   async dragStart(session: DragSession): Promise<void> {
-    if (session.dragVisual === "item") {
-      await startItemVisual(session);
-    } else if (session.dragVisual === "preview") {
-      await startPointerPreview(session);
-    }
+    await startDragVisual(session);
     await session.updateDropTarget();
   }
 
   dragMove(session: DragSession): void {
-    if (session.dragVisual === "item") {
-      updateItemVisual(session);
-    } else if (session.dragVisual === "preview") {
-      updatePointerPreview(session);
-    }
+    updateDragVisual(session);
   }
 
   currentGhostLocation(

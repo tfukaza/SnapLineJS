@@ -7,6 +7,12 @@ import {
   settleMutation,
 } from "../mutation";
 import type { DragSession } from "./session";
+import {
+  removePointerPreview,
+  startPointerPreview,
+  updatePointerPreview,
+  validatePointerPreview,
+} from "./pointer-preview";
 
 function sourceRect(item: Item): GhostRect | null {
   const box = item.dragSnapshot?.box;
@@ -114,8 +120,8 @@ export function updateItemVisual(session: DragSession): void {
   for (const member of session.items) member.writeDraggedTransform();
 }
 
-/** @internal Remove source spacers and reset hoisted Item styling. */
-export async function stopItemVisual(session: DragSession): Promise<void> {
+/** @internal Reset real-item drag styling without writing through unmounted DOM. */
+export function resetItemVisual(session: DragSession): void {
   for (const member of session.items) {
     member.style = {
       cursor: "grab",
@@ -128,12 +134,17 @@ export async function stopItemVisual(session: DragSession): Promise<void> {
     };
     member.transformMode = "none";
     member.transformOrigin = null;
-    if (member.element) {
-      delete member.element.dataset.snapsortDragging;
-      member.writeDom();
-      member.writeTransform();
-    }
+    const element = member.element;
+    if (!element?.isConnected) continue;
+    delete element.dataset.snapsortDragging;
+    member.writeDom();
+    member.writeTransform();
   }
+}
+
+/** @internal Remove source spacers and reset hoisted Item styling. */
+export async function stopItemVisual(session: DragSession): Promise<void> {
+  resetItemVisual(session);
 
   for (let i = 0; i < session.sourceGhostRun.length; i++) {
     const ghost = session.sourceGhostRun[i];
@@ -155,6 +166,42 @@ export async function stopItemVisual(session: DragSession): Promise<void> {
   }
   session.sourceGhostRun.length = 0;
   session.ghosts.delete("source");
+}
+
+/** @internal Validate integration requirements for the selected pointer visual. */
+export function validateDragVisual(session: DragSession): void {
+  if (session.dragVisual === "item") {
+    validateItemVisual(session);
+  } else if (session.dragVisual === "preview") {
+    validatePointerPreview(session);
+  }
+}
+
+/** @internal Start the selected pointer visual. */
+export async function startDragVisual(session: DragSession): Promise<void> {
+  if (session.dragVisual === "item") {
+    await startItemVisual(session);
+  } else if (session.dragVisual === "preview") {
+    await startPointerPreview(session);
+  }
+}
+
+/** @internal Update the selected pointer visual. */
+export function updateDragVisual(session: DragSession): void {
+  if (session.dragVisual === "item") {
+    updateItemVisual(session);
+  } else if (session.dragVisual === "preview") {
+    updatePointerPreview(session);
+  }
+}
+
+/** @internal Stop the selected pointer visual. */
+export async function stopDragVisual(session: DragSession): Promise<void> {
+  if (session.dragVisual === "item") {
+    await stopItemVisual(session);
+  } else if (session.dragVisual === "preview") {
+    await removePointerPreview(session);
+  }
 }
 
 /** @internal Reattach a detached run to its pre-handoff participant locations. */

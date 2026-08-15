@@ -194,7 +194,11 @@ function makeSession(
   );
 }
 
-async function drainFrames(global: any, maximumFrames = 6): Promise<void> {
+async function drainFrames(
+  global: any,
+  maximumFrames = 6,
+  reportedErrors?: unknown[],
+): Promise<void> {
   const stages = [
     "READ_1",
     "WRITE_1",
@@ -211,7 +215,14 @@ async function drainFrames(global: any, maximumFrames = 6): Promise<void> {
       global.queue[stage] = new Map();
       for (const ownerTasks of batch.values()) {
         for (const task of ownerTasks.values()) {
-          for (const callback of task.callback ?? []) await callback();
+          for (const callback of task.callback ?? []) {
+            try {
+              await callback();
+            } catch (error) {
+              if (!reportedErrors) throw error;
+              reportedErrors.push(error);
+            }
+          }
         }
       }
     }
@@ -417,6 +428,18 @@ test("normal drop and outside cancellation preserve callback ledgers", async () 
       "end:root:destination:0",
       "flush:root:end",
     ]);
+    expect(session.status).toBe("ended");
+    expect(root.dragSession).toBeNull();
+    expect(session.flowGhostRun).toHaveLength(0);
+    expect(session.sourceGhostRun).toHaveLength(0);
+    expect(session.ghosts.size).toBe(0);
+    expect(session.pendingGhostTarget).toBeNull();
+    expect(session.dropTarget).toBeNull();
+    expect(session.hoveredItem).toBeNull();
+    expect(session.dragCoordinateParent.size).toBe(0);
+    expect(session.dragLayoutPosition.size).toBe(0);
+    expect(session.dragVisualStart.size).toBe(0);
+    expect(session.groupVisualOffsets.size).toBe(0);
 
     ledger.length = 0;
     const cancelItem = mountItem(harness, source, "cancel-item");
@@ -436,12 +459,153 @@ test("normal drop and outside cancellation preserve callback ledgers", async () 
   }
 });
 
+test("throwing swap callbacks reconcile and finalize before reporting the same error once", async () => {
+  const harness = createHarness();
+  try {
+    const sentinel = new Error("swap sentinel");
+    const reportedErrors: unknown[] = [];
+    let dragEndCount = 0;
+    const rootCallbacks = callbackLedger("root", []);
+    rootCallbacks.onItemSwap = () => {
+      throw sentinel;
+    };
+    rootCallbacks.onDragEnd = () => {
+      dragEndCount += 1;
+    };
+    const root = mountRoot(harness, rootCallbacks, "swap");
+    const first = mountItem(harness, root, "first");
+    const second = mountItem(harness, root, "second", 50);
+    const session = makeSession(root, first, "swap");
+    session.dragVisual = "none";
+    session.status = "dropping";
+    root.dragSession = session;
+    session.strategy.lifecycle.moveGhost(session, root, 1, null);
+    session.strategy.lifecycle.drop(session);
+
+    await drainFrames(harness.global, 6, reportedErrors);
+
+    expect(reportedErrors).toEqual([sentinel]);
+    expect(dragEndCount).toBe(1);
+    expect(root.itemOrderedList).toEqual([first, second]);
+    expect(root.dragSession).toBeNull();
+    expect(session.status).toBe("ended");
+    expect(session.pendingGhostTarget).toBeNull();
+    expect(session.hoveredItem).toBeNull();
+    expect(session.ghosts.size).toBe(0);
+
+    const nextSession = makeSession(root, first, "swap");
+    nextSession.dragVisual = "none";
+    nextSession.status = "active";
+    root.dragSession = nextSession;
+    nextSession.cancel();
+    await drainFrames(harness.global, 6, reportedErrors);
+    expect(nextSession.status).toBe("ended");
+    expect(root.dragSession).toBeNull();
+    expect(reportedErrors).toEqual([sentinel]);
+  } finally {
+    harness.cleanup();
+  }
+});
+
+test("error finalization skips DOM writes for disconnected participants", async () => {
+  const harness = createHarness();
+  try {
+    const sentinel = new Error("drop sentinel");
+    const reportedErrors: unknown[] = [];
+    const root = mountRoot(harness);
+    const item = mountItem(harness, root, "item");
+    const lifecycle: DragLifecycleStrategy = {
+      ghostKind: "flow",
+      dragStart() {},
+      dragMove() {},
+      currentGhostLocation: () => null,
+      translateTargetIndex: (_session, target) => target.index,
+      moveGhost() {},
+      removeGhost() {},
+      afterSyncDropTarget() {},
+      drop(session) {
+        session.scheduleDropFinalizer();
+        item.schedule(
+          () => {
+            throw sentinel;
+          },
+          { stage: "WRITE_1" },
+        );
+      },
+    };
+    const session = new DragSession(
+      root,
+      [item],
+      [location(item)],
+      {
+        dropTarget: { resolve: () => null },
+        lifecycle,
+        defaultDragVisual: "item",
+      },
+      { handoffTo() {}, pointerId: 1, start: { x: 20, y: 20 } } as never,
+      item,
+    );
+    session.status = "active";
+    root.dragSession = session;
+    item.element!.remove();
+
+    session.cancel();
+    await drainFrames(harness.global, 6, reportedErrors);
+
+    expect(reportedErrors).toEqual([sentinel]);
+    expect(session.status).toBe("ended");
+    expect(root.dragSession).toBeNull();
+    expect(item.style.position).toBe("relative");
+    expect(item.transformMode).toBe("none");
+  } finally {
+    harness.cleanup();
+  }
+});
+
+test("failed handoff stays atomic and does not block the next session", async () => {
+  const harness = createHarness();
+  try {
+    const root = mountRoot(harness);
+    const first = mountItem(harness, root, "first");
+    mountItem(harness, root, "second", 50);
+    const session = makeSession(root, first);
+    const originalItems = session.items;
+    const originalSources = session.activeSources;
+    session.status = "pending";
+    root.dragSession = session;
+
+    expect(() => session.handoff([first])).toThrow(
+      "replacements must not include the current dragged items",
+    );
+    expect(session.items).toBe(originalItems);
+    expect(session.activeSources).toBe(originalSources);
+    expect(session.pressedItem).toBe(first);
+    expect(root.dragSession).toBe(session);
+
+    session.cancel();
+    expect(session.status).toBe("ended");
+    expect(root.dragSession).toBeNull();
+
+    const nextSession = makeSession(root, first);
+    nextSession.dragVisual = "none";
+    nextSession.status = "active";
+    root.dragSession = nextSession;
+    nextSession.cancel();
+    await drainFrames(harness.global);
+    expect(nextSession.status).toBe("ended");
+    expect(root.dragSession).toBeNull();
+  } finally {
+    harness.cleanup();
+  }
+});
+
 test("swap, hover, and absent optional callbacks keep their boundaries", async () => {
   const harness = createHarness();
   try {
     const ledger: string[] = [];
     const rootCallbacks = callbackLedger("root", ledger);
     rootCallbacks.onDragEnd = () => ledger.push("end:root");
+    rootCallbacks.onDragItemLeave = () => ledger.push("hover:leave");
     rootCallbacks.onItemSwap = (event) => {
       ledger.push(
         `swap:root:${event.a.itemId}:${event.a.index}<->${event.b.itemId}:${event.b.index}`,
@@ -458,10 +622,12 @@ test("swap, hover, and absent optional callbacks keep their boundaries", async (
     session.dragVisual = "none";
     session.status = "dropping";
     root.dragSession = session;
+    session.hoveredItem = second;
     session.strategy.lifecycle.moveGhost(session, root, 1, null);
     session.strategy.lifecycle.drop(session);
     await drainFrames(harness.global);
     expect(ledger).toEqual([
+      "hover:leave",
       "flush:root:start",
       "swap:root:first:0<->second:1",
       "flush:root:end",

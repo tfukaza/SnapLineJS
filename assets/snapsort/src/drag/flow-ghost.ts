@@ -2,14 +2,13 @@ import type { AnimationConfig } from "../container";
 import type { Container } from "../container";
 import type { Item } from "../item";
 import type { DropCandidate } from "../algorithm";
-import { buildDragEndEvent, buildDragLocation } from "../event-builders";
+import { buildDragLocation } from "../event-builders";
 import type { DragLocation, GhostRect, GhostRole } from "../events";
 import { virtualEntrySizeFor } from "../layout";
 import {
   assertCanFireGhostInsert,
   assertCanFireGhostRemove,
   assertCanFireItemMove,
-  fireOptionalMutation,
   settleMutation,
 } from "../mutation";
 import type { DragLifecycleStrategy } from "./lifecycle";
@@ -21,7 +20,7 @@ import {
   updatePointerPreview,
   validatePointerPreview,
 } from "./pointer-preview";
-import { restoreActiveItems } from "./item-visual";
+import { resetItemVisual, restoreActiveItems } from "./item-visual";
 
 /**
  * Flow-layout spacer ghosts: euclidean and progressive modes. Each ghost is a
@@ -332,24 +331,7 @@ function drop(session: DragSession): void {
       }
 
       if (session.dragVisual === "item") {
-        for (const member of items) {
-          member.style = {
-            cursor: "grab",
-            position: "relative",
-            zIndex: "",
-            top: "",
-            left: "",
-            width: "",
-            height: "",
-          };
-          member.transformMode = "none";
-          member.transformOrigin = null;
-          if (member.element) {
-            delete member.element.dataset.snapsortDragging;
-            member.writeDom();
-            member.writeTransform();
-          }
-        }
+        resetItemVisual(session);
       }
 
       await removeGhost(session, "target");
@@ -376,19 +358,7 @@ function drop(session: DragSession): void {
         await settleMutation();
       }
 
-      session.dragCoordinateParent.clear();
-      session.dragLayoutPosition.clear();
-      session.dragVisualStart.clear();
-      session.groupVisualOffsets.clear();
-      session.clearHoveredItem();
-      root.clearDragSnapshotTree();
-      session.status = "ended";
-      root.dragSession = null;
-      fireOptionalMutation(
-        root,
-        root.callbacks?.onDragEnd,
-        buildDragEndEvent(session, destination),
-      );
+      session.complete(destination);
     },
     { stage: "WRITE_1", queueId: `drag-end-${session.pressedItem.id}` },
   );

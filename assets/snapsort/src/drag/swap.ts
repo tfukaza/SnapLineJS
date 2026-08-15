@@ -1,12 +1,11 @@
 import type { AnimationConfig, Container } from "../container";
 import type { Item } from "../item";
 import type { DropCandidate } from "../algorithm";
-import { buildDragEndEvent, buildDragLocation } from "../event-builders";
+import { buildDragLocation } from "../event-builders";
 import type { DragLocation, GhostRect, GhostRole } from "../events";
 import {
   assertCanFireItemSwap,
   fireItemSwap,
-  fireOptionalMutation,
   settleMutation,
 } from "../mutation";
 import type { DragLifecycleStrategy } from "./lifecycle";
@@ -14,17 +13,15 @@ import type { DragSession } from "./session";
 import { reconcileTreeState } from "../tree-state";
 import {
   restoreActiveItems,
-  startItemVisual,
+  startDragVisual,
+  stopDragVisual,
   stopItemVisual,
-  updateItemVisual,
-  validateItemVisual,
+  updateDragVisual,
+  validateDragVisual,
 } from "./item-visual";
 import {
   pointerPreviewMemberRects,
   removePointerPreview,
-  startPointerPreview,
-  updatePointerPreview,
-  validatePointerPreview,
 } from "./pointer-preview";
 
 /**
@@ -114,17 +111,13 @@ function drop(session: DragSession): void {
   item.schedule(
     async () => {
       if (session.dragVisual === "item") {
-        await stopItemVisual(session);
+        await stopDragVisual(session);
         restoreActiveItems(session);
       }
-      await removeGhost(session, "pointer");
+      if (session.dragVisual === "preview") await stopDragVisual(session);
       session.pendingGhostTarget = null;
       session.clearHoveredItem();
-      for (const member of session.items) {
-        if (member.element) {
-          delete member.element.dataset.snapsortDragging;
-        }
-      }
+      session.clearDraggingFlags();
 
       const aLocation = item.getIndexAndContainer();
       const target = dropTarget ?? resolveDropTarget();
@@ -134,6 +127,8 @@ function drop(session: DragSession): void {
       const bIndex = targetLocation?.index ?? -1;
 
       let destination: DragLocation | null = null;
+      let mutationError: unknown;
+      let mutationFailed = false;
       draggedAnimation.config = item.dropAnimationConfig(
         bContainer ?? aLocation.container,
       );
@@ -175,24 +170,21 @@ function drop(session: DragSession): void {
             { item: targetItem, container: bContainer, index: bIndex },
             session,
           );
+        } catch (error) {
+          mutationError = error;
+          mutationFailed = true;
         } finally {
           root[reconcileTreeState]();
         }
         await settleMutation();
       }
 
-      root.clearDragSnapshotTree();
-      session.dragCoordinateParent.clear();
-      session.dragLayoutPosition.clear();
-      session.dragVisualStart.clear();
-      session.groupVisualOffsets.clear();
-      session.status = "ended";
-      root.dragSession = null;
-      fireOptionalMutation(
-        root,
-        root.callbacks?.onDragEnd,
-        buildDragEndEvent(session, destination),
-      );
+      try {
+        session.complete(destination);
+      } catch (error) {
+        if (!mutationFailed) throw error;
+      }
+      if (mutationFailed) throw mutationError;
     },
     { stage: "WRITE_1", queueId: `drag-end-swap-${item.id}` },
   );
@@ -246,29 +238,20 @@ export class SwapLifecycle implements DragLifecycleStrategy {
     if (session.dropEffect === "move") {
       assertCanFireItemSwap(session.activeSources[0].container);
     }
-    if (session.dragVisual === "preview") validatePointerPreview(session);
-    if (session.dragVisual === "item") validateItemVisual(session);
+    validateDragVisual(session);
   }
 
   async dragStart(session: DragSession): Promise<void> {
     if (session.dropEffect === "move") {
       assertCanFireItemSwap(session.activeSources[0].container);
     }
-    if (session.dragVisual === "item") {
-      await startItemVisual(session);
-    } else if (session.dragVisual === "preview") {
-      await startPointerPreview(session);
-      updatePointerPreview(session);
-    }
+    await startDragVisual(session);
+    if (session.dragVisual === "preview") updateDragVisual(session);
     await session.updateDropTarget();
   }
 
   dragMove(session: DragSession): void {
-    if (session.dragVisual === "item") {
-      updateItemVisual(session);
-    } else if (session.dragVisual === "preview") {
-      updatePointerPreview(session);
-    }
+    updateDragVisual(session);
   }
 
   currentGhostLocation(
