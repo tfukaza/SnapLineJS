@@ -1,5 +1,5 @@
 import type { Container } from "../container";
-import type { DropCandidate } from "../algorithm";
+import type { ResolvedDropTarget } from "../algorithm";
 import type { GhostKind, GhostRect, GhostRole } from "../events";
 import type { DragSessionController as DragSession } from "./session";
 
@@ -37,7 +37,10 @@ export interface DragLifecycleStrategy {
 
   /** Translate a resolved drop candidate into an
    * index meaningful for this lifecycle's ghost representation. */
-  translateTargetIndex(session: DragSession, target: DropCandidate): number;
+  translateTargetIndex(
+    session: DragSession,
+    target: ResolvedDropTarget,
+  ): number;
 
   /** Move (or create) the ghost/marker to the given container/index. */
   moveGhost(

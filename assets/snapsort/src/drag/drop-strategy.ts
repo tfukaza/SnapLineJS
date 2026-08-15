@@ -5,7 +5,7 @@ import {
   determineInsertionDropTarget,
   determineProgressiveDropTarget,
   determineSwapDropTarget,
-  type DropCandidate,
+  type ResolvedDropTarget,
 } from "../algorithm";
 import type { DragLifecycleStrategy } from "./lifecycle";
 import type { DragSessionController as DragSession } from "./session";
@@ -25,7 +25,7 @@ export interface DropTargetStrategy {
     item: Item,
     root: Container,
     session: DragSession | null,
-  ): DropCandidate | null;
+  ): ResolvedDropTarget | null;
 }
 
 /** The full pair of behaviors that make up a sort mode: how to resolve drop targets, and how to manage the drag/ghost lifecycle. */

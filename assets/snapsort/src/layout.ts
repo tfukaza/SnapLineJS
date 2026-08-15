@@ -1,8 +1,5 @@
 import type { DomProperty } from "@snap-engine/core";
-import type {
-  ItemSnapshot,
-  LayoutDirection,
-} from "./snapshot";
+import type { ItemSnapshot, LayoutDirection } from "./snapshot";
 
 export type { LayoutDirection, LayoutMainAxisAlign } from "./snapshot";
 type AxisName = "x" | "y";
@@ -75,7 +72,6 @@ export interface VirtualDimensions {
 
 export interface FlowPositionResult<T> {
   itemPositions: Map<ItemSnapshot<T>, { x: number; y: number }>;
-  virtualPositions: Map<VirtualInsertion<T>, { x: number; y: number }>;
   virtualRects: Map<
     VirtualInsertion<T>,
     { x: number; y: number; width: number; height: number }
@@ -84,7 +80,12 @@ export interface FlowPositionResult<T> {
 
 type FlowEntry<T> =
   | { kind: "item"; item: ItemSnapshot<T>; width: number; height: number }
-  | { kind: "virtual"; insertion: VirtualInsertion<T>; width: number; height: number };
+  | {
+      kind: "virtual";
+      insertion: VirtualInsertion<T>;
+      width: number;
+      height: number;
+    };
 
 interface FlowLine<T> {
   entries: FlowEntry<T>[];
@@ -92,12 +93,11 @@ interface FlowLine<T> {
   crossSize: number;
 }
 
-function trailingMainMargin<T>(
-  entry: FlowEntry<T>,
-  axes: FlowAxes,
-): number {
+function trailingMainMargin<T>(entry: FlowEntry<T>, axes: FlowAxes): number {
   const margin =
-    entry.kind === "item" ? entry.item.box.margin : entry.insertion.entry.margin;
+    entry.kind === "item"
+      ? entry.item.box.margin
+      : entry.insertion.entry.margin;
   return axes.main === "x" ? margin.right : margin.bottom;
 }
 
@@ -453,7 +453,6 @@ function slotLayoutPositions<T>(
 
   const origin = { x: startX, y: startY };
   const itemPositions = new Map<ItemSnapshot<T>, { x: number; y: number }>();
-  const virtualPositions = new Map<VirtualInsertion<T>, { x: number; y: number }>();
   const virtualRects = new Map<
     VirtualInsertion<T>,
     { x: number; y: number; width: number; height: number }
@@ -470,7 +469,6 @@ function slotLayoutPositions<T>(
         : { x: origin.x + cross, y: origin.y + main };
 
     if (entry.kind === "virtual") {
-      virtualPositions.set(entry.insertion, position);
       virtualRects.set(entry.insertion, {
         ...position,
         // The slot's measured main-axis size (the track); for content-sized
@@ -494,7 +492,7 @@ function slotLayoutPositions<T>(
     }
   }
 
-  return { itemPositions, virtualPositions, virtualRects };
+  return { itemPositions, virtualRects };
 }
 
 function assembleEntries<T>(
@@ -507,9 +505,7 @@ function assembleEntries<T>(
 ): FlowEntry<T>[] {
   const entries: FlowEntry<T>[] = items.map((item) => {
     const dimensions =
-      item.children.length > 0
-        ? virtualDimensions(item, options)
-        : item.box;
+      item.children.length > 0 ? virtualDimensions(item, options) : item.box;
     return {
       kind: "item",
       item,
@@ -521,12 +517,16 @@ function assembleEntries<T>(
   const insertions = options.insertions ?? [];
   for (const insertion of insertions) {
     if (insertion.container === container) {
-      entries.splice(Math.max(0, Math.min(insertion.index, entries.length)), 0, {
-        kind: "virtual",
-        insertion,
-        width: insertion.entry.width,
-        height: insertion.entry.height,
-      });
+      entries.splice(
+        Math.max(0, Math.min(insertion.index, entries.length)),
+        0,
+        {
+          kind: "virtual",
+          insertion,
+          width: insertion.entry.width,
+          height: insertion.entry.height,
+        },
+      );
     }
   }
   return entries;
@@ -552,7 +552,6 @@ export function flowLayoutPositions<T>(
   const entries = assembleEntries(container, items, options);
 
   const itemPositions = new Map<ItemSnapshot<T>, { x: number; y: number }>();
-  const virtualPositions = new Map<VirtualInsertion<T>, { x: number; y: number }>();
   const virtualRects = new Map<
     VirtualInsertion<T>,
     { x: number; y: number; width: number; height: number }
@@ -623,7 +622,6 @@ export function flowLayoutPositions<T>(
       const position = pointFromAxes(axes, cursorMain, cursorCross);
 
       if (entry.kind === "virtual") {
-        virtualPositions.set(entry.insertion, position);
         virtualRects.set(entry.insertion, {
           ...position,
           width: entry.width,
@@ -639,7 +637,7 @@ export function flowLayoutPositions<T>(
     cursorCross += line.crossSize + metrics.crossGap;
   }
 
-  return { itemPositions, virtualPositions, virtualRects };
+  return { itemPositions, virtualRects };
 }
 
 export function virtualDimensions<T>(
@@ -652,20 +650,13 @@ export function virtualDimensions<T>(
   const axes = flowAxesForDirection(container.direction);
   const filter = options.filter ?? {};
   const items = layoutItems(container, filter);
-  const flowPositions = flowLayoutPositions(
-    container,
-    0,
-    0,
-    options,
-  );
+  const flowPositions = flowLayoutPositions(container, 0, 0, options);
   let maxX = 0;
   let maxY = 0;
 
   for (const child of items) {
     const dimensions =
-      child.children.length > 0
-        ? virtualDimensions(child, options)
-        : child.box;
+      child.children.length > 0 ? virtualDimensions(child, options) : child.box;
     const rel = childRelativeOffset(container.box, child.box);
     const measured = { x: rel.x, y: rel.y };
     const simulated = flowPositions.itemPositions.get(child) ?? measured;

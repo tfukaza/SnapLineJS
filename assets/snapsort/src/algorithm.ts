@@ -1,11 +1,9 @@
 import type { DomProperty } from "@snap-engine/core";
 import {
-  CollisionEngine,
-  CircleCollider,
+  type CollisionCircle,
   distanceToRect,
+  pointIntersectsCircle,
   pointIntersectsRect,
-  PointCollider,
-  RectCollider,
   rectsIntersect,
 } from "@snap-engine/core/collision";
 import type { Item as ItemBase } from "./item";
@@ -31,7 +29,6 @@ import type {
   DropPriorityEvent,
   GhostRect,
   InsertionMarkerRectEvent,
-  ItemHitbox,
   ItemHitboxEvent,
 } from "./events";
 import { buildItemLocation, buildItemRunEvent } from "./event-builders";
@@ -43,6 +40,9 @@ const TOP_CANDIDATE_DEBUG_LIMIT = 3;
 
 type Rect = { x: number; y: number; width: number; height: number };
 type InsertionGhostRect = Rect;
+type ResolvedItemHitbox =
+  | { shape: "rect"; rect: Rect }
+  | { shape: "circle"; circle: CollisionCircle };
 
 export interface VirtualGhost {
   container: ItemBase;
@@ -56,12 +56,21 @@ export interface VirtualDimensions {
   height: number;
 }
 
-export interface DropCandidate {
+export interface ResolvedDropTarget {
   container: ItemBase;
   index: number;
+  ghostRect?: InsertionGhostRect;
+}
+
+interface CandidateGeometry {
+  target: ResolvedDropTarget;
   ghostCenterX: number;
   ghostCenterY: number;
   distance: number;
+  placementRect: Rect;
+}
+
+interface FlowCandidate extends CandidateGeometry {
   /**
    * Sum of euclidean distances between each dragged member's own current
    * drag position and its projected slot center within this candidate's
@@ -71,17 +80,16 @@ export interface DropCandidate {
    * one item is being dragged.
    */
   groupDistance: number;
-  priority: number;
-  lineIndex: number;
-  dragLineIndex: number;
   lineDistance: number;
-  treeDepth: number;
-  prevPosition: { x: number; y: number } | null;
-  nextPosition: { x: number; y: number } | null;
-  placementRect: Rect;
   placementDistance: number;
   placementContainsDragCenter: boolean;
-  ghostRect?: InsertionGhostRect;
+}
+
+type InsertionCandidate = CandidateGeometry;
+
+interface SwapCandidate {
+  target: ResolvedDropTarget;
+  area: number;
 }
 
 function getDirection(node: ItemBase): "column" | "row" {
@@ -190,8 +198,6 @@ function isContainerObject(item: ItemBase): item is Container {
   );
 }
 
-const itemHoverCollisionEngine = new CollisionEngine();
-
 function frozenRect(rect: Rect): Rect {
   return Object.freeze({
     x: rect.x,
@@ -199,6 +205,76 @@ function frozenRect(rect: Rect): Rect {
     width: rect.width,
     height: rect.height,
   });
+}
+
+interface ContainerResolutionBase {
+  readonly container: ItemBase;
+  readonly containerMetadata: Record<string, unknown>;
+  readonly containerRect: Rect;
+  readonly containerContentRect: Rect;
+  readonly depth: number;
+}
+
+interface ResolutionContext {
+  readonly session: DragSession | null;
+  readonly item: ItemBase;
+  readonly itemId: ItemBase["resolvedItemId"];
+  readonly itemMetadata: ItemBase["metadata"];
+  readonly items: readonly ItemBase[];
+  readonly itemIds: readonly ItemBase["resolvedItemId"][];
+  readonly itemsMetadata: readonly ItemBase["metadata"][];
+  readonly source: ReturnType<typeof buildItemLocation>;
+  readonly sources: readonly ReturnType<typeof buildItemLocation>[];
+  readonly pointer: Readonly<{ x: number; y: number }>;
+  readonly dragRect: Rect;
+  readonly containers: Map<ItemBase, ContainerResolutionBase>;
+}
+
+function createResolutionContext(
+  item: ItemBase,
+  session: DragSession | null,
+  pointer: { x: number; y: number },
+): ResolutionContext {
+  const items = session?.items ?? [item];
+  const run = buildItemRunEvent(items);
+  const sources = session?.sources ?? items.map(buildItemLocation);
+  const box = requireDragSnapshotBox(item);
+  return Object.freeze({
+    session,
+    item,
+    itemId: run.itemId,
+    itemMetadata: run.itemMetadata,
+    items: Object.freeze([...run.items]),
+    itemIds: Object.freeze([...run.itemIds]),
+    itemsMetadata: Object.freeze([...run.itemsMetadata]),
+    source: sources[0] ?? null,
+    sources: Object.freeze([...sources]),
+    pointer: Object.freeze({ x: pointer.x, y: pointer.y }),
+    dragRect: frozenRect({
+      x: item.dragPositionX,
+      y: item.dragPositionY,
+      width: box.width,
+      height: box.height,
+    }),
+    containers: new Map(),
+  });
+}
+
+function containerResolutionBase(
+  context: ResolutionContext,
+  container: ItemBase,
+): ContainerResolutionBase {
+  const cached = context.containers.get(container);
+  if (cached) return cached;
+  const base = Object.freeze({
+    container,
+    containerMetadata: (container as any).metadata,
+    containerRect: frozenRect(requireDragSnapshotBox(container)),
+    containerContentRect: frozenRect(containerContentRect(container)),
+    depth: container.depth,
+  });
+  context.containers.set(container, base);
+  return base;
 }
 
 function assertRect(
@@ -227,7 +303,7 @@ function resolveItemHitbox(
   item: ItemBase,
   container: ItemBase,
   session: DragSession,
-): ItemHitbox {
+): ResolvedItemHitbox {
   const box = item.dragSnapshot?.box;
   if (!box) {
     throw new Error(`SnapSort Item ${item.id}: missing drag snapshot box.`);
@@ -266,32 +342,16 @@ function resolveItemHitbox(
   ) {
     return {
       shape: "circle",
-      center: Object.freeze({ x: hitbox.center.x, y: hitbox.center.y }),
-      radius: hitbox.radius,
+      circle: Object.freeze({
+        x: hitbox.center.x,
+        y: hitbox.center.y,
+        radius: hitbox.radius,
+      }),
     };
   }
   throw new TypeError(
     `SnapSort Container ${container.id}: getItemHitbox must return a finite rectangle or circle with nonnegative dimensions.`,
   );
-}
-
-function hitboxColliderForItem(
-  draggedItem: ItemBase,
-  item: ItemBase,
-  container: ItemBase,
-  session: DragSession,
-): { collider: RectCollider | CircleCollider; area: number } {
-  const hitbox = resolveItemHitbox(draggedItem, item, container, session);
-  if (hitbox.shape === "circle") {
-    const collider = new CircleCollider(item.engine, item, 0, 0, hitbox.radius);
-    collider.worldTransform = hitbox.center;
-    return { collider, area: Math.PI * hitbox.radius ** 2 };
-  }
-
-  const { x, y, width, height } = hitbox.rect;
-  const collider = new RectCollider(item.engine, item, 0, 0, width, height);
-  collider.worldTransform = { x, y };
-  return { collider, area: width * height };
 }
 
 /**
@@ -309,42 +369,22 @@ export function findHoveredItem(
 ): ItemBase | null {
   if (!container.dragSnapshot) return null;
 
-  const pointerCollider = new PointCollider(
-    draggedItem.engine,
-    draggedItem,
-    0,
-    0,
-  );
-  pointerCollider.worldTransform = {
-    x: session.pointer.x,
-    y: session.pointer.y,
-  };
-
+  const pointer = session.pointer;
   let best: { item: ItemBase; area: number } | null = null;
-  try {
-    for (const child of dragSnapshotItems(container)) {
-      if (session.itemSet.has(child) || child.isGhost) continue;
-      const { collider, area } = hitboxColliderForItem(
-        draggedItem,
-        child,
-        container,
-        session,
-      );
-      try {
-        if (
-          !itemHoverCollisionEngine.isIntersecting(pointerCollider, collider)
-        ) {
-          continue;
-        }
-        if (!best || area < best.area) {
-          best = { item: child, area };
-        }
-      } finally {
-        collider.destroy();
-      }
+  for (const child of dragSnapshotItems(container)) {
+    if (session.itemSet.has(child) || child.isGhost) continue;
+    const hitbox = resolveItemHitbox(draggedItem, child, container, session);
+    const area =
+      hitbox.shape === "circle"
+        ? Math.PI * hitbox.circle.radius ** 2
+        : hitbox.rect.width * hitbox.rect.height;
+    const intersects =
+      hitbox.shape === "circle"
+        ? pointIntersectsCircle(pointer, hitbox.circle)
+        : pointIntersectsRect(pointer, hitbox.rect);
+    if (intersects && (!best || area < best.area)) {
+      best = { item: child, area };
     }
-  } finally {
-    pointerCollider.destroy();
   }
   return best?.item ?? null;
 }
@@ -461,14 +501,14 @@ function expandedChildHitRect(
   };
 }
 
-function chooseByContentBox(
-  a: DropCandidate,
-  b: DropCandidate,
+function chooseByContentBox<T extends CandidateGeometry>(
+  a: T,
+  b: T,
   dragCenterX: number,
   dragCenterY: number,
-): DropCandidate {
-  const aRect = containerContentRect(a.container);
-  const bRect = containerContentRect(b.container);
+): T {
+  const aRect = containerContentRect(a.target.container);
+  const bRect = containerContentRect(b.target.container);
   const point = { x: dragCenterX, y: dragCenterY };
   const aContains = pointIntersectsRect(point, aRect);
   const bContains = pointIntersectsRect(point, bRect);
@@ -505,7 +545,8 @@ export function virtualLayoutRecursive(
   dragCenterX: number,
   dragCenterY: number,
   session: DragSession | null = null,
-): { candidates: DropCandidate[]; endX: number; endY: number } {
+  debugEnabled = false,
+): { candidates: FlowCandidate[]; endX: number; endY: number } {
   const snapshot = createLayoutSnapshot(container);
   const draggedBox = requireDragSnapshotBox(draggedItem);
   const activeInsertions = activeGhostInsertionsFromPendingTarget(
@@ -534,8 +575,8 @@ export function virtualLayoutRecursive(
     dragCenterY,
     dragRect,
     activeInsertions,
-    0,
     session,
+    debugEnabled,
   );
 }
 
@@ -551,9 +592,9 @@ function virtualLayoutRecursiveFromSnapshot(
   dragCenterY: number,
   dragRect: Rect,
   baseInsertions: VirtualInsertion<ItemBase>[] = [],
-  treeDepth = 0,
   session: DragSession | null = null,
-): { candidates: DropCandidate[]; endX: number; endY: number } {
+  debugEnabled = false,
+): { candidates: FlowCandidate[]; endX: number; endY: number } {
   const container = containerSnapshot.value;
   const axes = flowAxesForDirection(containerSnapshot.direction);
   const isColumn = axes.direction === "column";
@@ -568,7 +609,7 @@ function virtualLayoutRecursiveFromSnapshot(
     filter,
     insertions: descendantBaseInsertions,
   }).itemPositions;
-  const candidates: DropCandidate[] = [];
+  const candidates: FlowCandidate[] = [];
   const lineCrossStart =
     (axes.cross === "x" ? startX : startY) + metrics.crossStart;
   const fallbackLineCrossSize =
@@ -582,18 +623,20 @@ function virtualLayoutRecursiveFromSnapshot(
     Math.max(0, Math.floor((cross - lineCrossStart) / lineCrossStep + 0.001));
   const dragLineIndex = lineIndexForCross(dragCross);
 
-  container.addDebugRect(
-    startX,
-    startY,
-    contentSize.width,
-    contentSize.height,
-    "rgba(20, 184, 166, 0.25)",
-    true,
-    `drop-snapshot-content-${container.id}`,
-    false,
-    1,
-    TAG_LAYOUT,
-  );
+  if (debugEnabled) {
+    container.addDebugRect(
+      startX,
+      startY,
+      contentSize.width,
+      contentSize.height,
+      "rgba(20, 184, 166, 0.25)",
+      true,
+      `drop-snapshot-content-${container.id}`,
+      false,
+      1,
+      TAG_LAYOUT,
+    );
+  }
 
   // When dragging a group, the virtual box reserved in the layout simulation
   // (and thus the candidate's placement rect) should be the whole group's
@@ -626,7 +669,7 @@ function virtualLayoutRecursiveFromSnapshot(
   const makeCandidate = (
     index: number,
     fallbackPosition: { x: number; y: number },
-  ): DropCandidate => {
+  ): FlowCandidate => {
     const insertion: VirtualInsertion<ItemBase> = {
       container: containerSnapshot,
       index,
@@ -649,26 +692,15 @@ function virtualLayoutRecursiveFromSnapshot(
     const ghostCenterX = rect.x + rect.width / 2;
     const ghostCenterY = rect.y + rect.height / 2;
     const lineIndex = lineIndexForCross(rect[axes.cross]);
-    const nextPosition = isColumn
-      ? { x: rect.x, y: rect.y + rect.height }
-      : { x: rect.x + rect.width, y: rect.y };
-
     return {
-      container,
-      index,
+      target: { container, index },
       ghostCenterX,
       ghostCenterY,
       distance: euclidean(ghostCenterX, ghostCenterY, dragCenterX, dragCenterY),
       groupDistance: session
         ? groupCandidateDistance(session, rect, isColumn)
         : euclidean(ghostCenterX, ghostCenterY, dragCenterX, dragCenterY),
-      priority: 0,
-      lineIndex,
-      dragLineIndex,
       lineDistance: Math.abs(lineIndex - dragLineIndex),
-      treeDepth,
-      prevPosition: null,
-      nextPosition,
       placementRect,
       placementDistance: distanceToRect(
         { x: dragCenterX, y: dragCenterY },
@@ -681,8 +713,18 @@ function virtualLayoutRecursiveFromSnapshot(
     };
   };
 
+  const generatedIndices = new Set<number>();
+  const addCandidate = (
+    index: number,
+    fallbackPosition: { x: number; y: number },
+  ) => {
+    if (generatedIndices.has(index)) return;
+    generatedIndices.add(index);
+    candidates.push(makeCandidate(index, fallbackPosition));
+  };
+
   if (itemSnapshots.length === 0 && isContainerObject(container)) {
-    candidates.push(makeCandidate(0, { x: startX, y: startY }));
+    addCandidate(0, { x: startX, y: startY });
   }
 
   for (let index = 0; index < itemSnapshots.length; index++) {
@@ -697,7 +739,7 @@ function virtualLayoutRecursiveFromSnapshot(
       flowPositions.get(itemSnapshot) ?? measuredPosition;
 
     if (!itemSnapshot.locked || isContainer) {
-      candidates.push(makeCandidate(index, simulatedPosition));
+      addCandidate(index, simulatedPosition);
     }
 
     if (isContainer) {
@@ -736,8 +778,8 @@ function virtualLayoutRecursiveFromSnapshot(
           dragCenterY,
           dragRect,
           baseInsertions,
-          treeDepth + 1,
           session,
+          debugEnabled,
         );
         candidates.push(...childResult.candidates);
       }
@@ -746,12 +788,7 @@ function virtualLayoutRecursiveFromSnapshot(
     if (!itemSnapshot.locked || isContainer) {
       const fallbackMain = simulatedPosition[axes.main] + prop[axes.mainSize];
       const fallbackCross = simulatedPosition[axes.cross];
-      candidates.push(
-        makeCandidate(
-          index + 1,
-          pointFromAxes(axes, fallbackMain, fallbackCross),
-        ),
-      );
+      addCandidate(index + 1, pointFromAxes(axes, fallbackMain, fallbackCross));
     }
   }
 
@@ -766,12 +803,11 @@ function collectDropCandidates(
   item: ItemBase,
   root: ItemBase,
   session: DragSession | null = null,
+  debugEnabled = false,
 ): {
-  candidates: DropCandidate[];
+  candidates: FlowCandidate[];
   dragCenterX: number;
   dragCenterY: number;
-  dragGhostW: number;
-  dragGhostH: number;
 } {
   const rootProp = requireDragSnapshotBox(root);
   const dragProp = requireDragSnapshotBox(item);
@@ -791,14 +827,13 @@ function collectDropCandidates(
     dragCenterX,
     dragCenterY,
     session,
+    debugEnabled,
   );
 
   return {
     candidates: virtualCandidates,
     dragCenterX,
     dragCenterY,
-    dragGhostW,
-    dragGhostH,
   };
 }
 
@@ -808,9 +843,9 @@ function collectDropCandidates(
  * choosing by `distance`.
  */
 function chooseEuclideanCandidate(
-  candidates: DropCandidate[],
-): DropCandidate | null {
-  let best: DropCandidate | null = null;
+  candidates: FlowCandidate[],
+): FlowCandidate | null {
+  let best: FlowCandidate | null = null;
   for (const candidate of candidates) {
     if (!best || candidate.groupDistance < best.groupDistance) {
       best = candidate;
@@ -820,11 +855,11 @@ function chooseEuclideanCandidate(
 }
 
 function chooseProgressiveCandidate(
-  candidates: DropCandidate[],
+  candidates: FlowCandidate[],
   dragCenterX: number,
   dragCenterY: number,
-): DropCandidate | null {
-  let best: DropCandidate | null = null;
+): FlowCandidate | null {
+  let best: FlowCandidate | null = null;
   for (const candidate of candidates) {
     if (!best) {
       best = candidate;
@@ -852,7 +887,7 @@ function chooseProgressiveCandidate(
 
     if (
       Math.abs(candidate.distance - best.distance) <= 1 &&
-      candidate.container.id !== best.container.id
+      candidate.target.container.id !== best.target.container.id
     ) {
       best = chooseByContentBox(best, candidate, dragCenterX, dragCenterY);
     } else if (candidate.distance < best.distance) {
@@ -865,8 +900,8 @@ function chooseProgressiveCandidate(
 function drawCandidateDebug(
   root: ItemBase,
   item: ItemBase,
-  candidates: DropCandidate[],
-  best: DropCandidate | null,
+  candidates: CandidateGeometry[],
+  best: CandidateGeometry | null,
   options: {
     topCandidates?: boolean;
     distanceOrigin?: { x: number; y: number };
@@ -905,7 +940,7 @@ function drawCandidateDebug(
     root.addDebugText(
       candidate.ghostCenterX + 8,
       candidate.ghostCenterY + 4,
-      `${isBest ? ">> " : ""}[${candidate.container.id}:${candidate.index}] d=${Math.round(candidate.distance)}`,
+      `${isBest ? ">> " : ""}[${candidate.target.container.id}:${candidate.target.index}] d=${Math.round(candidate.distance)}`,
       color,
       true,
       `drop-candidate-label-${i}`,
@@ -949,7 +984,7 @@ function drawCandidateDebug(
       const candidate = topCandidates[i];
       const color = rankColors[i] ?? "rgba(250, 204, 21, 0.9)";
       const placementRect = candidate.placementRect;
-      const label = `#${i + 1} ${candidate.container.id}:${candidate.index} d=${Math.round(candidate.distance)}`;
+      const label = `#${i + 1} ${candidate.target.container.id}:${candidate.target.index} d=${Math.round(candidate.distance)}`;
 
       root.addDebugRect(
         placementRect.x,
@@ -1014,7 +1049,7 @@ function drawCandidateDebug(
     item.addDebugText(
       item.dragPositionX,
       item.dragPositionY - 20,
-      `DROP: container=${best.container.id} idx=${best.index} dist=${Math.round(best.distance)}`,
+      `DROP: container=${best.target.container.id} idx=${best.target.index} dist=${Math.round(best.distance)}`,
       "rgba(250, 204, 21, 0.9)",
       true,
       `drop-result`,
@@ -1103,35 +1138,30 @@ function insertionMarkerRect(
 function configuredInsertionMarkerRect(
   container: Container,
   index: number,
-  item: ItemBase,
-  session: DragSession | null,
+  context: ResolutionContext,
   defaultRect: GhostRect,
-  pointer: { x: number; y: number },
 ): GhostRect {
   const callback = container.callbacks?.getInsertionMarkerRect;
   if (!callback) return frozenRect(defaultRect);
 
-  const groupItems = session?.items ?? [item];
-  const sources = session?.sources ?? groupItems.map(buildItemLocation);
-  const itemBox = requireDragSnapshotBox(item);
-  const containerBox = requireDragSnapshotBox(container);
+  const base = containerResolutionBase(context, container);
   const result = callback({
-    session: session?.handle ?? null,
-    ...buildItemRunEvent(groupItems),
-    source: sources[0] ?? null,
-    sources,
+    session: context.session?.handle ?? null,
+    item: context.item,
+    itemId: context.itemId,
+    itemMetadata: context.itemMetadata,
+    items: [...context.items],
+    itemIds: [...context.itemIds],
+    itemsMetadata: [...context.itemsMetadata],
+    source: context.source,
+    sources: [...context.sources],
     container,
-    containerMetadata: container.metadata,
+    containerMetadata: base.containerMetadata,
     index,
-    pointer: { x: pointer.x, y: pointer.y },
-    dragRect: frozenRect({
-      x: item.dragPositionX,
-      y: item.dragPositionY,
-      width: itemBox.width,
-      height: itemBox.height,
-    }),
-    containerRect: frozenRect(containerBox),
-    containerContentRect: frozenRect(containerContentRect(container)),
+    pointer: context.pointer,
+    dragRect: context.dragRect,
+    containerRect: base.containerRect,
+    containerContentRect: base.containerContentRect,
     defaultRect: frozenRect(defaultRect),
   } satisfies InsertionMarkerRectEvent);
   assertRect(result, "getInsertionMarkerRect", container);
@@ -1141,21 +1171,20 @@ function configuredInsertionMarkerRect(
 function collectInsertionCandidates(
   item: ItemBase,
   root: ItemBase,
-  session: DragSession | null = null,
+  context: ResolutionContext,
 ): {
-  candidates: DropCandidate[];
+  candidates: InsertionCandidate[];
   pointerX: number;
   pointerY: number;
 } {
-  const pointer =
-    "dragPointerPosition" in item ? item.dragPointerPosition : null;
-  const dragProp = requireDragSnapshotBox(item);
-  const pointerX = pointer?.x ?? item.dragPositionX + dragProp.width / 2;
-  const pointerY = pointer?.y ?? item.dragPositionY + dragProp.height / 2;
-  const excludeSet = session ? session.itemSet : new Set([item]);
-  const candidates: DropCandidate[] = [];
+  const pointerX = context.pointer.x;
+  const pointerY = context.pointer.y;
+  const excludeSet = context.session
+    ? context.session.itemSet
+    : new Set([item]);
+  const candidates: InsertionCandidate[] = [];
 
-  const visit = (container: ItemBase, treeDepth = 0) => {
+  const visit = (container: ItemBase) => {
     if (excludeSet.has(container)) return;
 
     const snapshotOrderedList = dragSnapshotItems(container);
@@ -1165,11 +1194,14 @@ function collectInsertionCandidates(
     const snapshotChildren = snapshotOrderedList.filter(
       (child) => !child.isGhost,
     );
+    const snapshotIndices = new Map(
+      snapshotOrderedList.map((child, index) => [child, index]),
+    );
     const indexForGap = (index: number) => {
       const nextItem = children[index] ?? null;
       if (!nextItem) return snapshotOrderedList.length;
 
-      const snapshotIndex = snapshotOrderedList.indexOf(nextItem);
+      const snapshotIndex = snapshotIndices.get(nextItem) ?? -1;
       return snapshotIndex === -1 ? index : snapshotIndex;
     };
 
@@ -1185,47 +1217,28 @@ function collectInsertionCandidates(
         const ghostRect = configuredInsertionMarkerRect(
           container,
           insertionIndex,
-          item,
-          session,
+          context,
           defaultRect,
-          { x: pointerX, y: pointerY },
         );
         const ghostCenterX = ghostRect.x + ghostRect.width / 2;
         const ghostCenterY = ghostRect.y + ghostRect.height / 2;
+        const distance = distanceToRect(
+          { x: pointerX, y: pointerY },
+          ghostRect,
+        );
         candidates.push({
-          container,
-          index: insertionIndex,
+          target: { container, index: insertionIndex, ghostRect },
           ghostCenterX,
           ghostCenterY,
-          distance: distanceToRect({ x: pointerX, y: pointerY }, ghostRect),
-          groupDistance: distanceToRect(
-            { x: pointerX, y: pointerY },
-            ghostRect,
-          ),
-          priority: 0,
-          lineIndex: index,
-          dragLineIndex: index,
-          lineDistance: 0,
-          treeDepth,
-          prevPosition: null,
-          nextPosition: null,
+          distance,
           placementRect: ghostRect,
-          placementDistance: distanceToRect(
-            { x: pointerX, y: pointerY },
-            ghostRect,
-          ),
-          placementContainsDragCenter: pointIntersectsRect(
-            { x: pointerX, y: pointerY },
-            ghostRect,
-          ),
-          ghostRect,
         });
       }
     }
 
     for (const child of children) {
       if (isContainerObject(child)) {
-        visit(child, treeDepth + 1);
+        visit(child);
       }
     }
   };
@@ -1236,11 +1249,11 @@ function collectInsertionCandidates(
 }
 
 function chooseInsertionCandidate(
-  candidates: DropCandidate[],
+  candidates: InsertionCandidate[],
   pointerX: number,
   pointerY: number,
-): DropCandidate | null {
-  let best: DropCandidate | null = null;
+): InsertionCandidate | null {
+  let best: InsertionCandidate | null = null;
   for (const candidate of candidates) {
     if (!best) {
       best = candidate;
@@ -1249,7 +1262,7 @@ function chooseInsertionCandidate(
 
     if (
       Math.abs(candidate.distance - best.distance) <= 1 &&
-      candidate.container.id !== best.container.id
+      candidate.target.container.id !== best.target.container.id
     ) {
       best = chooseByContentBox(best, candidate, pointerX, pointerY);
       continue;
@@ -1276,43 +1289,29 @@ function configuredDropPriority(container: ItemBase): number {
 }
 
 function dropPolicyEvent(
-  candidate: DropCandidate,
-  item: ItemBase,
-  session: DragSession | null,
+  candidate: { target: ResolvedDropTarget },
+  context: ResolutionContext,
 ): Omit<DropPriorityEvent, "staticPriority"> & Pick<CanDropEvent, "index"> {
-  const groupItems = session?.items ?? [item];
-  const sources = session?.sources ?? groupItems.map(buildItemLocation);
-  const itemBox = requireDragSnapshotBox(item);
-  const containerBox = requireDragSnapshotBox(candidate.container);
-  const pointer = session?.pointer ??
-    ("dragPointerPosition" in item ? item.dragPointerPosition : null) ?? {
-      x: item.dragPositionX + itemBox.width / 2,
-      y: item.dragPositionY + itemBox.height / 2,
-    };
+  const base = containerResolutionBase(context, candidate.target.container);
 
   return {
-    session: session?.handle ?? null,
-    ...buildItemRunEvent(groupItems),
-    source: sources[0] ?? null,
-    sources,
-    container: candidate.container as DropPriorityEvent["container"],
-    containerMetadata: (candidate.container as any).metadata,
-    index: candidate.index,
-    pointer: { x: pointer.x, y: pointer.y },
-    dragRect: {
-      x: item.dragPositionX,
-      y: item.dragPositionY,
-      width: itemBox.width,
-      height: itemBox.height,
-    },
-    containerRect: {
-      x: containerBox.x,
-      y: containerBox.y,
-      width: containerBox.width,
-      height: containerBox.height,
-    },
-    containerContentRect: containerContentRect(candidate.container),
-    depth: candidate.container.depth,
+    session: context.session?.handle ?? null,
+    item: context.item,
+    itemId: context.itemId,
+    itemMetadata: context.itemMetadata,
+    items: [...context.items],
+    itemIds: [...context.itemIds],
+    itemsMetadata: [...context.itemsMetadata],
+    source: context.source,
+    sources: [...context.sources],
+    container: base.container as DropPriorityEvent["container"],
+    containerMetadata: base.containerMetadata,
+    index: candidate.target.index,
+    pointer: context.pointer,
+    dragRect: context.dragRect,
+    containerRect: base.containerRect,
+    containerContentRect: base.containerContentRect,
+    depth: base.depth,
   };
 }
 
@@ -1321,23 +1320,22 @@ function dropPolicyEvent(
  * is resolved before priority; only candidates tied at the highest effective
  * priority continue to the active placement mode's slot-ranking algorithm.
  */
-function applyDropPolicy(
-  candidates: DropCandidate[],
-  item: ItemBase,
-  session: DragSession | null,
-): DropCandidate[] {
+function applyDropPolicy<T extends { target: ResolvedDropTarget }>(
+  candidates: T[],
+  getContext: () => ResolutionContext,
+): T[] {
   if (candidates.length === 0) return candidates;
-  const byContainer = new Map<ItemBase, DropCandidate[]>();
+  const byContainer = new Map<ItemBase, T[]>();
   for (const candidate of candidates) {
-    const group = byContainer.get(candidate.container);
+    const group = byContainer.get(candidate.target.container);
     if (group) {
       group.push(candidate);
     } else {
-      byContainer.set(candidate.container, [candidate]);
+      byContainer.set(candidate.target.container, [candidate]);
     }
   }
 
-  const eligible: DropCandidate[] = [];
+  const eligible: Array<{ candidate: T; priority: number }> = [];
   for (const [container, directCandidates] of byContainer) {
     const callbacks =
       "callbacks" in container ? (container as any).callbacks : undefined;
@@ -1346,7 +1344,7 @@ function applyDropPolicy(
           Pick<CanDropEvent, "index">)
       | undefined;
     const getEvent = () =>
-      (event ??= dropPolicyEvent(directCandidates[0], item, session));
+      (event ??= dropPolicyEvent(directCandidates[0], getContext()));
     if (callbacks?.canDrop?.(getEvent() as CanDropEvent) === false) continue;
 
     const staticPriority = configuredDropPriority(container);
@@ -1363,70 +1361,123 @@ function applyDropPolicy(
     }
     const priority = override ?? staticPriority;
     for (const candidate of directCandidates) {
-      candidate.priority = priority;
-      eligible.push(candidate);
+      eligible.push({ candidate, priority });
     }
   }
 
-  if (eligible.length === 0) return eligible;
-  const highestPriority = Math.max(
-    ...eligible.map((candidate) => candidate.priority),
-  );
-  return eligible.filter((candidate) => candidate.priority === highestPriority);
+  if (eligible.length === 0) return [];
+  const highestPriority = Math.max(...eligible.map((entry) => entry.priority));
+  return eligible
+    .filter((entry) => entry.priority === highestPriority)
+    .map((entry) => entry.candidate);
+}
+
+// TODO: Not all resolution uses center point
+function resolutionPointer(
+  item: ItemBase,
+  session: DragSession | null,
+): { x: number; y: number } {
+  const itemPointer =
+    "dragPointerPosition" in item ? item.dragPointerPosition : null;
+  if (session?.pointer) return session.pointer;
+  if (itemPointer) return itemPointer;
+  const box = requireDragSnapshotBox(item);
+  return {
+    x: item.dragPositionX + box.width / 2,
+    y: item.dragPositionY + box.height / 2,
+  };
+}
+
+function isDropDebugEnabled(item: ItemBase): boolean {
+  return item.engine?.debugRenderer != null;
 }
 
 export function determineDropTarget(
   item: ItemBase,
   root: ItemBase,
   session: DragSession | null = null,
-): DropCandidate | null {
+): ResolvedDropTarget | null {
+  const debugEnabled = isDropDebugEnabled(root);
   const { candidates, dragCenterX, dragCenterY } = collectDropCandidates(
     item,
     root,
     session,
+    debugEnabled,
   );
-  const allowed = applyDropPolicy(candidates, item, session);
+  let context: ResolutionContext | null = null;
+  const allowed = applyDropPolicy(
+    candidates,
+    () =>
+      (context ??= createResolutionContext(
+        item,
+        session,
+        resolutionPointer(item, session),
+      )),
+  );
   const best = chooseEuclideanCandidate(allowed);
-  drawCandidateDebug(root, item, allowed, best, {
-    topCandidates: true,
-    distanceOrigin: { x: dragCenterX, y: dragCenterY },
-  });
-  debugDropTargetTree(root, item);
-  return best;
+  if (debugEnabled) {
+    drawCandidateDebug(root, item, allowed, best, {
+      topCandidates: true,
+      distanceOrigin: { x: dragCenterX, y: dragCenterY },
+    });
+    debugDropTargetTree(root, item);
+  }
+  return best?.target ?? null;
 }
 
 export function determineProgressiveDropTarget(
   item: ItemBase,
   root: ItemBase,
   session: DragSession | null = null,
-): DropCandidate | null {
+): ResolvedDropTarget | null {
+  const debugEnabled = isDropDebugEnabled(root);
   const { candidates, dragCenterX, dragCenterY } = collectDropCandidates(
     item,
     root,
     session,
+    debugEnabled,
   );
-  const allowed = applyDropPolicy(candidates, item, session);
+  let context: ResolutionContext | null = null;
+  const allowed = applyDropPolicy(
+    candidates,
+    () =>
+      (context ??= createResolutionContext(
+        item,
+        session,
+        resolutionPointer(item, session),
+      )),
+  );
   const best = chooseProgressiveCandidate(allowed, dragCenterX, dragCenterY);
-  drawCandidateDebug(root, item, allowed, best);
-  debugDropTargetTree(root, item);
-  return best;
+  if (debugEnabled) {
+    drawCandidateDebug(root, item, allowed, best);
+    debugDropTargetTree(root, item);
+  }
+  return best?.target ?? null;
 }
 
 export function determineInsertionDropTarget(
   item: ItemBase,
   root: ItemBase,
   session: DragSession | null = null,
-): DropCandidate | null {
+): ResolvedDropTarget | null {
+  const debugEnabled = isDropDebugEnabled(root);
+  const context = createResolutionContext(
+    item,
+    session,
+    resolutionPointer(item, session),
+  );
   const { candidates, pointerX, pointerY } = collectInsertionCandidates(
     item,
     root,
-    session,
+    context,
   );
-  const allowed = applyDropPolicy(candidates, item, session);
+  const allowed = applyDropPolicy(candidates, () => context);
   const best = chooseInsertionCandidate(allowed, pointerX, pointerY);
-  drawCandidateDebug(root, item, allowed, best);
-  debugDropTargetTree(root, item);
-  return best;
+  if (debugEnabled) {
+    drawCandidateDebug(root, item, allowed, best);
+    debugDropTargetTree(root, item);
+  }
+  return best?.target ?? null;
 }
 
 /**
@@ -1440,11 +1491,11 @@ export function determineSwapDropTarget(
   item: ItemBase,
   root: ItemBase,
   session: DragSession | null = null,
-): DropCandidate | null {
+): ResolvedDropTarget | null {
   if (!session) return null;
-  const candidates: DropCandidate[] = [];
+  const candidates: SwapCandidate[] = [];
 
-  const visit = (container: ItemBase, treeDepth = 0) => {
+  const visit = (container: ItemBase) => {
     if (container === item) return;
 
     if (isInsertionContainer(container)) {
@@ -1452,56 +1503,31 @@ export function determineSwapDropTarget(
       const index = hovered ? container.itemOrderedList.indexOf(hovered) : -1;
       if (hovered && index !== -1) {
         const box = requireDragSnapshotBox(hovered);
-        const centerX = box.x + box.width / 2;
-        const centerY = box.y + box.height / 2;
-        const distance = euclidean(
-          centerX,
-          centerY,
-          session.pointer.x,
-          session.pointer.y,
-        );
         candidates.push({
-          container,
-          index,
-          ghostCenterX: centerX,
-          ghostCenterY: centerY,
-          distance,
-          groupDistance: distance,
-          priority: 0,
-          lineIndex: 0,
-          dragLineIndex: 0,
-          lineDistance: 0,
-          treeDepth,
-          prevPosition: null,
-          nextPosition: null,
-          placementRect: box,
-          placementDistance: distanceToRect(session.pointer, box),
-          placementContainsDragCenter: pointIntersectsRect(
-            session.pointer,
-            box,
-          ),
+          target: { container, index },
+          area: box.width * box.height,
         });
       }
     }
 
     for (const child of dragSnapshotItems(container)) {
       if (isContainerObject(child)) {
-        visit(child, treeDepth + 1);
+        visit(child);
       }
     }
   };
 
   visit(root);
-  const allowed = applyDropPolicy(candidates, item, session);
-  let best: DropCandidate | null = null;
+  let context: ResolutionContext | null = null;
+  const allowed = applyDropPolicy(
+    candidates,
+    () => (context ??= createResolutionContext(item, session, session.pointer)),
+  );
+  let best: SwapCandidate | null = null;
   for (const candidate of allowed) {
-    const area = candidate.placementRect.width * candidate.placementRect.height;
-    const bestArea = best
-      ? best.placementRect.width * best.placementRect.height
-      : Infinity;
-    if (area < bestArea) best = candidate;
+    if (!best || candidate.area < best.area) best = candidate;
   }
-  return best;
+  return best?.target ?? null;
 }
 
 export function debugDropTargetTree(node: ItemBase, draggedItem: ItemBase) {

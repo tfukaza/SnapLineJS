@@ -1725,12 +1725,11 @@ function virtualInsertionPosition<T>(
       margin: dragged.box.margin,
     },
   };
-  return (
-    flowLayoutPositions(container, startX, startY, {
-      filter: { excludeSnapshots: new Set([dragged]) },
-      insertions: [insertion],
-    }).virtualPositions.get(insertion) ?? null
-  );
+  const rect = flowLayoutPositions(container, startX, startY, {
+    filter: { excludeSnapshots: new Set([dragged]) },
+    insertions: [insertion],
+  }).virtualRects.get(insertion);
+  return rect ? { x: rect.x, y: rect.y } : null;
 }
 
 test("progressive placement selects the ghost slot under the dragged center", () => {
@@ -3863,7 +3862,7 @@ test.describe("Snapsort drag-start snapshot layout", () => {
             });
           }
         }
-        const ghost = result.virtualPositions.get(insertion);
+        const ghost = result.virtualRects.get(insertion);
         expect(
           ghost,
           `ghost position for ${grid.name}[${truth.spacerIndex}]`,
@@ -4083,7 +4082,7 @@ test.describe("Snapsort drag-start snapshot layout", () => {
             record("away-and-back", `k=${k} item-${child.value}`, delta);
           }
         }
-        const ghost = roundTrip.virtualPositions.get(insertion)!;
+        const ghost = roundTrip.virtualRects.get(insertion)!;
         const ghostDelta = distance(ghost, target.box);
         if (ghostDelta > TOLERANCE) {
           record("away-and-back", `k=${k} ghost`, ghostDelta);
@@ -4675,7 +4674,7 @@ test.describe("Snapsort drag-start snapshot layout", () => {
           mismatches++;
         }
       }
-      const ghost = result.virtualPositions.get(insertion);
+      const ghost = result.virtualRects.get(insertion);
       if (
         !ghost ||
         !truth.ghost ||

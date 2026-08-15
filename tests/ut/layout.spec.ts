@@ -382,7 +382,7 @@ test.describe("slot layout model", () => {
     // which advance DOWN column 1 before moving to column 2.
     expect(byValue.get("item-1")).toEqual({ x: 0, y: 0 }); // slot 0
     expect(byValue.get("item-2")).toEqual({ x: 0, y: 44 }); // slot 1
-    expect(result.virtualPositions.get(insertion)).toEqual({ x: 0, y: 88 }); // slot 2
+    expect(result.virtualRects.get(insertion)).toMatchObject({ x: 0, y: 88 }); // slot 2
     expect(byValue.get("item-3")).toEqual({ x: 84, y: 0 }); // slot 3: column 2
   });
 

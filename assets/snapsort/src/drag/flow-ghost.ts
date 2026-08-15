@@ -1,7 +1,7 @@
 import type { AnimationConfig } from "../container";
 import type { Container } from "../container";
 import type { Item } from "../item";
-import type { DropCandidate } from "../algorithm";
+import type { ResolvedDropTarget } from "../algorithm";
 import { buildDragLocation } from "../event-builders";
 import type { DragLocation, GhostRect, GhostRole } from "../events";
 import { virtualEntrySizeFor } from "../layout";
@@ -463,7 +463,10 @@ export class FlowGhostLifecycle implements DragLifecycleStrategy {
     return currentGhostLocation(session);
   }
 
-  translateTargetIndex(session: DragSession, target: DropCandidate): number {
+  translateTargetIndex(
+    session: DragSession,
+    target: ResolvedDropTarget,
+  ): number {
     return liveIndexFromSnapshotIndex(
       session,
       target.container as unknown as Container,

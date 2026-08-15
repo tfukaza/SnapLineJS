@@ -8,7 +8,7 @@ import type { Container } from "../container";
 import type { Item } from "../item";
 import { stageVisualRectBeforeMutation } from "../internal/visual-rect";
 import { placeItemAt } from "../internal/tree-mutation";
-import { findHoveredItem, type DropCandidate } from "../algorithm";
+import { findHoveredItem, type ResolvedDropTarget } from "../algorithm";
 import {
   buildDragEndEvent,
   buildDragLocation,
@@ -263,7 +263,7 @@ export class DragSessionController {
   /** The ghost placement most recently requested by the lifecycle strategy. */
   pendingGhostTarget: GhostTarget | null = null;
   /** Last drop candidate resolved by the drop-target strategy (raw, snapshot-space index). */
-  dropTarget: DropCandidate | null = null;
+  dropTarget: ResolvedDropTarget | null = null;
   /** The item whose hitbox the pointer is currently over, if any — drives `onDragItemEnter`/`Move`/`Leave`. */
   hoveredItem: Item | null = null;
 

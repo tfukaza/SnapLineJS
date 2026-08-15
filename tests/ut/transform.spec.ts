@@ -2,10 +2,13 @@ import { expect, test } from "@playwright/test";
 import { BaseObject, CoreObject, ElementObject } from "../../src/object";
 import {
   CircleCollider,
+  circlesIntersect,
   CollisionEngine,
   distanceToRect,
+  pointIntersectsCircle,
   pointIntersectsRect,
   PointCollider,
+  rectIntersectsCircle,
   RectCollider,
   rectsIntersect,
 } from "../../src/collision";
@@ -17,6 +20,33 @@ test.describe("allocation-free collision geometry", () => {
     expect(pointIntersectsRect({ x: 10, y: 20 }, rect)).toBe(true);
     expect(pointIntersectsRect({ x: 40, y: 60 }, rect)).toBe(true);
     expect(pointIntersectsRect({ x: 40.01, y: 60 }, rect)).toBe(false);
+  });
+
+  test("point containment includes circle edges", () => {
+    const circle = { x: 20, y: 30, radius: 10 };
+    expect(pointIntersectsCircle({ x: 20, y: 30 }, circle)).toBe(true);
+    expect(pointIntersectsCircle({ x: 30, y: 30 }, circle)).toBe(true);
+    expect(pointIntersectsCircle({ x: 30.01, y: 30 }, circle)).toBe(false);
+    expect(
+      pointIntersectsCircle({ x: 20, y: 30 }, { ...circle, radius: -1 }),
+    ).toBe(false);
+  });
+
+  test("circle collision includes tangency", () => {
+    const circle = { x: 0, y: 0, radius: 5 };
+    expect(circlesIntersect(circle, { x: 10, y: 0, radius: 5 })).toBe(true);
+    expect(circlesIntersect(circle, { x: 10.01, y: 0, radius: 5 })).toBe(false);
+  });
+
+  test("rectangle and circle collision includes side and corner tangency", () => {
+    expect(rectIntersectsCircle(rect, { x: 45, y: 30, radius: 5 })).toBe(true);
+    expect(rectIntersectsCircle(rect, { x: 45.01, y: 30, radius: 5 })).toBe(
+      false,
+    );
+    expect(rectIntersectsCircle(rect, { x: 43, y: 64, radius: 5 })).toBe(true);
+    expect(rectIntersectsCircle(rect, { x: 43, y: 64, radius: 4.99 })).toBe(
+      false,
+    );
   });
 
   test("rectangle collision requires positive overlap", () => {
@@ -290,6 +320,7 @@ test.describe("Collider transforms", () => {
     expect(collisionEngine.isIntersecting(rect, circle)).toBe(true);
     expect(collisionEngine.isIntersecting(rect, point)).toBe(true);
     expect(collisionEngine.isIntersecting(circle, point)).toBe(false);
+    expect(collisionEngine.isIntersecting(circle, circle)).toBe(false);
   });
 
   test("queryPoint returns every live hit in registration order", () => {

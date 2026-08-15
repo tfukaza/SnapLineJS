@@ -19,6 +19,11 @@ interface CollisionRect extends CollisionPoint {
   height: number;
 }
 
+/** A normalized world-space circle with a non-negative radius. */
+interface CollisionCircle extends CollisionPoint {
+  radius: number;
+}
+
 function pointIntersectsBounds(
   x: number,
   y: number,
@@ -48,6 +53,50 @@ function rectBoundsIntersect(
   );
 }
 
+function pointIntersectsCircleValues(
+  pointX: number,
+  pointY: number,
+  circleX: number,
+  circleY: number,
+  radius: number,
+): boolean {
+  if (radius < 0) return false;
+  const deltaX = pointX - circleX;
+  const deltaY = pointY - circleY;
+  return deltaX * deltaX + deltaY * deltaY <= radius * radius;
+}
+
+function circlesIntersectValues(
+  aX: number,
+  aY: number,
+  aRadius: number,
+  bX: number,
+  bY: number,
+  bRadius: number,
+): boolean {
+  return pointIntersectsCircleValues(aX, aY, bX, bY, aRadius + bRadius);
+}
+
+function rectBoundsIntersectCircle(
+  left: number,
+  top: number,
+  right: number,
+  bottom: number,
+  circleX: number,
+  circleY: number,
+  radius: number,
+): boolean {
+  const nearestX = Math.max(left, Math.min(circleX, right));
+  const nearestY = Math.max(top, Math.min(circleY, bottom));
+  return pointIntersectsCircleValues(
+    nearestX,
+    nearestY,
+    circleX,
+    circleY,
+    radius,
+  );
+}
+
 /** Point/rectangle collision with edge-inclusive containment. */
 function pointIntersectsRect(
   point: CollisionPoint,
@@ -60,6 +109,41 @@ function pointIntersectsRect(
     rect.y,
     rect.x + rect.width,
     rect.y + rect.height,
+  );
+}
+
+/** Point/circle collision with edge-inclusive containment. */
+function pointIntersectsCircle(
+  point: CollisionPoint,
+  circle: CollisionCircle,
+): boolean {
+  return pointIntersectsCircleValues(
+    point.x,
+    point.y,
+    circle.x,
+    circle.y,
+    circle.radius,
+  );
+}
+
+/** Circle collision with edge-inclusive tangency. */
+function circlesIntersect(a: CollisionCircle, b: CollisionCircle): boolean {
+  return circlesIntersectValues(a.x, a.y, a.radius, b.x, b.y, b.radius);
+}
+
+/** Rectangle/circle collision with edge-inclusive tangency. */
+function rectIntersectsCircle(
+  rect: CollisionRect,
+  circle: CollisionCircle,
+): boolean {
+  return rectBoundsIntersectCircle(
+    rect.x,
+    rect.y,
+    rect.x + rect.width,
+    rect.y + rect.height,
+    circle.x,
+    circle.y,
+    circle.radius,
   );
 }
 
@@ -377,9 +461,13 @@ class Collider extends CoreObject {
   containsWorldPoint(x: number, y: number): boolean {
     const bounds = this.getWorldBoundsSnapshot();
     if (this.type === "circle") {
-      const dx = x - bounds.x;
-      const dy = y - bounds.y;
-      return Math.sqrt(dx * dx + dy * dy) <= bounds.radius;
+      return pointIntersectsCircleValues(
+        x,
+        y,
+        bounds.x,
+        bounds.y,
+        bounds.radius,
+      );
     }
     return pointIntersectsBounds(
       x,
@@ -697,24 +785,15 @@ class CollisionEngine {
   #isRectCircleIntersecting(rect: RectCollider, circle: CircleCollider) {
     const rectBounds = rect.getWorldBoundsSnapshot();
     const circleBounds = circle.getWorldBoundsSnapshot();
-    let rectX = circleBounds.x;
-    let rectY = circleBounds.y;
-    if (circleBounds.x < rectBounds.left) {
-      rectX = rectBounds.left;
-    } else if (circleBounds.x > rectBounds.right) {
-      rectX = rectBounds.right;
-    }
-
-    if (circleBounds.y < rectBounds.top) {
-      rectY = rectBounds.top;
-    } else if (circleBounds.y > rectBounds.bottom) {
-      rectY = rectBounds.bottom;
-    }
-
-    const distanceX = circleBounds.x - rectX;
-    const distanceY = circleBounds.y - rectY;
-    const distance = Math.sqrt(distanceX * distanceX + distanceY * distanceY);
-    return distance <= circleBounds.radius;
+    return rectBoundsIntersectCircle(
+      rectBounds.left,
+      rectBounds.top,
+      rectBounds.right,
+      rectBounds.bottom,
+      circleBounds.x,
+      circleBounds.y,
+      circleBounds.radius,
+    );
   }
 
   #isRectPointIntersecting(rect: RectCollider, point: PointCollider) {
@@ -733,10 +812,7 @@ class CollisionEngine {
   #isCirclePointIntersecting(circle: CircleCollider, point: PointCollider) {
     const circleBounds = circle.getWorldBoundsSnapshot();
     const pointBounds = point.getWorldBoundsSnapshot();
-    const distanceX = circleBounds.x - pointBounds.x;
-    const distanceY = circleBounds.y - pointBounds.y;
-    const distance = Math.sqrt(distanceX * distanceX + distanceY * distanceY);
-    return distance <= circleBounds.radius;
+    return pointIntersectsCircle(pointBounds, circleBounds);
   }
 
   #isCircleIntersecting(circleA: CircleCollider, circleB: CircleCollider) {
@@ -745,10 +821,7 @@ class CollisionEngine {
     }
     const boundsA = circleA.getWorldBoundsSnapshot();
     const boundsB = circleB.getWorldBoundsSnapshot();
-    const distanceX = boundsA.x - boundsB.x;
-    const distanceY = boundsA.y - boundsB.y;
-    const distance = Math.sqrt(distanceX * distanceX + distanceY * distanceY);
-    return distance <= boundsA.radius + boundsB.radius;
+    return circlesIntersect(boundsA, boundsB);
   }
 
   #isPointPointIntersecting(pointA: PointCollider, pointB: PointCollider) {
@@ -764,7 +837,11 @@ class CollisionEngine {
 export {
   type CollisionPoint,
   type CollisionRect,
+  type CollisionCircle,
   pointIntersectsRect,
+  pointIntersectsCircle,
+  circlesIntersect,
+  rectIntersectsCircle,
   rectsIntersect,
   distanceToRect,
   CollisionEngine,

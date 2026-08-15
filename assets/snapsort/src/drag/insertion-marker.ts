@@ -1,6 +1,6 @@
 import type { AnimationConfig, Container } from "../container";
 import type { Item } from "../item";
-import type { DropCandidate } from "../algorithm";
+import type { ResolvedDropTarget } from "../algorithm";
 import { buildDragLocation } from "../event-builders";
 import type { DragLocation, GhostRect, GhostRole } from "../events";
 import {
@@ -361,7 +361,10 @@ export class InsertionMarkerLifecycle implements DragLifecycleStrategy {
     return { container: pending.container, index: pending.index };
   }
 
-  translateTargetIndex(_session: DragSession, target: DropCandidate): number {
+  translateTargetIndex(
+    _session: DragSession,
+    target: ResolvedDropTarget,
+  ): number {
     return target.index;
   }
 
