@@ -152,7 +152,7 @@ function mountContainer(
   });
   container.itemId = id;
   bindElement(harness, container, root.element!, id);
-  root.addItem(container);
+  root.attachItem(container);
   return container;
 }
 
@@ -165,7 +165,7 @@ function mountItem(
   const item = new Item(harness.engine, null);
   item.itemId = id;
   bindElement(harness, item, container.element!, id, x);
-  container.addItem(item);
+  container.attachItem(item);
   return item;
 }
 
@@ -404,7 +404,7 @@ test("normal drop and outside cancellation preserve callback ledgers", async () 
       "target",
     )!;
     bindElement(harness, ghost, destination.element!, "target-ghost");
-    destination.attachItemToContainer(destination, ghost, 0);
+    destination.attachItem(ghost);
     session.flowGhostRun.push(ghost);
     session.pendingGhostTarget = {
       ghostItem: ghost,

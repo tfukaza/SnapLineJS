@@ -780,7 +780,6 @@ test("SnapSort callback docs expose receiver routing and mutation boundaries", a
     "onGhostInsert",
     "onGhostRemove",
     "flushMutation",
-    "awaitMutation",
   ];
 
   for (const framework of ["svelte", "react"] as const) {
@@ -793,7 +792,7 @@ test("SnapSort callback docs expose receiver routing and mutation boundaries", a
       has: page.getByRole("columnheader", { name: "Fires on" }),
     });
     await expect(callbackTable).toHaveCount(1);
-    await expect(callbackTable.getByRole("row")).toHaveCount(21);
+    await expect(callbackTable.getByRole("row")).toHaveCount(20);
     expect(
       await callbackTable.evaluate(
         (element) => element.getBoundingClientRect().width,

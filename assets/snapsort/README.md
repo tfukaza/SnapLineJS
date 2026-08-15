@@ -24,9 +24,9 @@ their bindings from `@snap-engine/snapsort/svelte` or
 - `DragSession`
 - `DragVisual` - `"item"`, `"preview"`, or `"none"` pointer representation
 - `DropEffect` - `"move"` or `"none"` persistent mutation choice
-- `defaultAnimations` - opt-in 100ms reorder, drop, and click-move animation preset
+- `defaultAnimations` - opt-in 100ms reorder, drop, and programmatic-move animation preset
 - Event types: `ItemInsertEvent`, `ItemRemoveEvent`, `ItemMoveEvent`, `ItemSwapEvent`, `GhostCreateEvent`, `GhostInsertEvent`, `GhostRemoveEvent`, `DragStartEvent`, `DragEndEvent`, `DropTargetChangeEvent`, `CanDropEvent`, `DropPriorityEvent`, `InsertionMarkerRectEvent`, `ItemHitboxEvent`, `VisualGeometryInvalidationEvent`, `DragLocation`
-- `ContainerCallbacks`, `ContainerConfig`, `SortMode`, `SortStrategy`
+- `ContainerCallbacks`, `ContainerConfig`, `SortMode`
 
 ```ts
 import { Container, defaultAnimations, Item } from "@snap-engine/snapsort";
@@ -205,8 +205,7 @@ import type { ItemMoveEvent } from "@snap-engine/snapsort";
 ```
 
 The React entry also exports `SnapSortEngine`, `useSnapSortEngine`, framework
-contexts, component prop types, and the deprecated
-`useSnapSortAwaitMutation` compatibility helper. Deep imports such as
+contexts, and component prop types. Deep imports such as
 `@snap-engine/snapsort/react/Container` remain supported.
 
 Svelte, React, React DOM, and Asset Base are optional peers. Consumers of
@@ -217,10 +216,13 @@ the package root do not need to install either framework.
 SnapSort 0.5 replaces the separate framework packages with subpath bindings in
 the main package:
 
-| Before | SnapSort 0.5 |
-| --- | --- |
+| Before                         | SnapSort 0.5                   |
+| ------------------------------ | ------------------------------ |
 | `@snap-engine/snapsort-svelte` | `@snap-engine/snapsort/svelte` |
-| `@snap-engine/snapsort-react` | `@snap-engine/snapsort/react` |
+| `@snap-engine/snapsort-react`  | `@snap-engine/snapsort/react`  |
+| `container.addItem(item)`      | `container.attachItem(item)`   |
+| `container.configuration`      | `container.config`             |
+| `animation.clickMove`          | `animation.move`               |
 
 Remove the old adapter package from your dependencies and install
 `@snap-engine/snapsort` instead. The package root remains the framework-neutral
@@ -228,9 +230,18 @@ API. Version 0.5 does not include compatibility shims for the retired package
 names.
 
 Animations are also opt-in. Omit `ContainerConfig.animation` for immediate
-reorders and drops, or pass the exported `defaultAnimations` preset to retain
-SnapSort's standard 100ms motion. The former `disableFlip` option has been
-removed; `animation: null` and per-channel `null` values remain supported.
+reorders, drops, and programmatic moves, or pass the exported
+`defaultAnimations` preset to retain SnapSort's standard 100ms motion. The
+former `disableFlip` option has been removed; `animation: null` and per-channel
+`null` values remain supported.
+
+The 0.5 API is intentionally synchronous and mode-based. Mutation events no
+longer contain a `phase`, `ContainerCallbacks.awaitMutation` and the React
+`useSnapSortAwaitMutation` helper are removed, and `flushMutation` is the only
+framework mutation boundary. Custom `ContainerConfig.strategy` injection and
+the root exports `SortStrategy`, `DropTargetStrategy`, and
+`DragLifecycleStrategy` are also removed; select a built-in behavior through
+`ContainerConfig.mode` and the exported `SortMode` type.
 
 ## DOM ownership contract
 
@@ -256,9 +267,6 @@ never fight over the same DOM nodes. The contract:
    elements lazily from item identity (`findItemByKey`), revalidates them with
    `isConnected`, and verifies placement. It never silently repairs adapter
    output, since that would mask an integration bug.
-
-`awaitMutation` remains deprecated for compatibility. Promise-returning
-mutation waits are not paint-atomic and are not supported by the FLIP path.
 
 `onVisualGeometryInvalidated` is the low-level seam for visuals owned by other
 systems. SnapSort coalesces drag, ghost, and FLIP changes at the root container

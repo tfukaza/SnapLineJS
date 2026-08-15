@@ -41,10 +41,10 @@ import {
 import { DragSession } from "./drag/session";
 import { beginItemDrag } from "./drag/group";
 import {
-  attachItem,
   detachItem,
   elementAfterRun,
   itemLocation,
+  placeItemAt,
 } from "./internal/tree-mutation";
 import { reconcileRootTreeState } from "./internal/tree-state";
 import {
@@ -53,6 +53,7 @@ import {
   clearVisualAnimationOffset,
   playDropAnimation,
   playElementRectAnimation,
+  withMoveAnimation,
   withReorderAnimation,
   type ElementRectAnimationOptions,
   type TransformOffset,
@@ -145,19 +146,19 @@ export class Item extends ElementObject {
   }
 
   /**
-   * Add an item to a container.
+   * Attach an item to the end of this container.
    *
    * @note The DOM element of the item must be set before calling this method.
    * @param item
    */
-  addItem(item: Item) {
+  attachItem(item: Item): void {
     if (
       this.children.includes(item) &&
       this.#itemOrderedList.find((i) => i === item)
     ) {
       throw new Error("Item is already a child of this container");
     }
-    this.attachItemToContainer(
+    placeItemAt(
       this as unknown as Container,
       item,
       this.#itemOrderedList.length,
@@ -1369,15 +1370,11 @@ export class Item extends ElementObject {
       return;
     }
 
-    this.withReorderAnimation(container, session ? items : null, move);
-  }
-
-  /**
-   * Attach an item to a container at a specific index.
-   * @internal
-   */
-  attachItemToContainer(container: Container, item: Item, index: number) {
-    attachItem(container, item, index);
+    if (session) {
+      this.withReorderAnimation(container, items, move);
+    } else {
+      withMoveAnimation(this, container, move);
+    }
   }
 
   #insertItemElement(
@@ -1425,7 +1422,7 @@ export class Item extends ElementObject {
   /**
    * Insert an item at a specific index in the item list and DOM, firing the
    * `onItemInsert` primitive. Used for insertion unrelated to a move (e.g.
-   * programmatic `addItem`-adjacent flows); dragged items dropping into a
+   * programmatic attachment-adjacent flows); dragged items dropping into a
    * new position should go through `moveItemAt` instead.
    * @internal
    */
@@ -1436,7 +1433,7 @@ export class Item extends ElementObject {
     session: DragSession | null = null,
   ) {
     assertCanFireItemInsert(container);
-    this.attachItemToContainer(container, item, index);
+    placeItemAt(container, item, index);
     this.#insertItemElement(container, item, index, session);
   }
 
@@ -1477,7 +1474,7 @@ export class Item extends ElementObject {
   ) {
     assertCanFireItemMove(container);
     items.forEach((member, i) => {
-      this.attachItemToContainer(container, member, index + i);
+      placeItemAt(container, member, index + i);
     });
     const itemAfterIndex = elementAfterRun(container, index, items.length);
     const to = buildDragLocation(container, index);
@@ -1501,7 +1498,7 @@ export class Item extends ElementObject {
   ) {
     assertCanFireGhostInsert(container);
     assertCanFireGhostRemove(container);
-    this.attachItemToContainer(container, ghostItem, index);
+    placeItemAt(container, ghostItem, index);
     this.#insertGhostElement(
       original,
       container,

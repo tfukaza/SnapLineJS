@@ -6,7 +6,7 @@ import type {
 import { defaultCallbacks } from "./mutation";
 import type { LayoutMainAxisAlign } from "./layout";
 import type { LayoutWrap } from "./snapshot";
-import type { SortMode, SortStrategy } from "./drag/drop-strategy";
+import type { SortMode } from "./drag/drop-strategy";
 import type { DragSession } from "./drag/session";
 
 export interface AnimationConfig {
@@ -17,14 +17,13 @@ export interface AnimationConfig {
 export interface ContainerAnimations {
   reorder?: AnimationConfig | null;
   drop?: AnimationConfig | null;
-  // Rename to just `move`?
-  clickMove?: AnimationConfig | null;
+  move?: AnimationConfig | null;
 }
 
 export const defaultAnimations: ContainerAnimations = {
   reorder: { duration: 100, timing_function: "ease-out" },
   drop: { duration: 100, timing_function: "ease-out" },
-  clickMove: { duration: 100, timing_function: "ease-out" },
+  move: { duration: 100, timing_function: "ease-out" },
 };
 
 export interface ContainerConfig {
@@ -37,10 +36,6 @@ export interface ContainerConfig {
   domOwnership?: "core" | "framework";
   /** Which built-in drop-target/lifecycle strategy pair to use for this tree. Default `"euclidean"`. */
   mode?: SortMode;
-  // TODO: Finalize the custom strategy API, including its composition model,
-  // public types, exports, tests, and documentation, before supporting consumer use.
-  /** @internal Experimental override; consumer integrations should use `mode`. */
-  strategy?: SortStrategy;
   /** Main layout direction. Default `"column"`. */
   direction?: "column" | "row";
   mainAxisAlign?: LayoutMainAxisAlign;
@@ -167,10 +162,6 @@ export class Container extends Item {
 
   set mode(value: SortMode) {
     this.#config.mode = value;
-  }
-
-  get configuration() {
-    return this.#config;
   }
 
   get callbacks() {

@@ -26,7 +26,7 @@ export function elementAfterRun(
 }
 
 /** @internal Attach an Item in engine and sortable state without mutating DOM. */
-export function attachItem(
+export function placeItemAt(
   container: Container,
   item: Item,
   index: number,

@@ -1,0 +1,21 @@
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "lib": ["ESNext", "DOM"],
+    "jsx": "react-jsx",
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "allowArbitraryExtensions": true,
+    "baseUrl": "../..",
+    "paths": {
+      "@snap-engine/core": ["./src/index.ts"],
+      "@snap-engine/core/animation": ["./src/animation.ts"],
+      "@snap-engine/core/collision": ["./src/collision.ts"],
+      "@snap-engine/core/debug": ["./src/debug.ts"]
+    }
+  },
+  "files": ["./snapsort-api-contract.ts"]
+}

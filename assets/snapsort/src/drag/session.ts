@@ -7,6 +7,7 @@ import type {
 import type { Container } from "../container";
 import type { Item } from "../item";
 import { stageVisualRectBeforeMutation } from "../internal/visual-rect";
+import { placeItemAt } from "../internal/tree-mutation";
 import { findHoveredItem, type DropCandidate } from "../algorithm";
 import {
   buildDragEndEvent,
@@ -588,7 +589,7 @@ export class DragSession {
       if (member.parent) return;
       const source = this.activeSources[i];
       if (!source) return;
-      member.attachItemToContainer(
+      placeItemAt(
         source.container,
         member,
         Math.min(source.index, source.container.itemOrderedList.length),

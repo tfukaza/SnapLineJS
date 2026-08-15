@@ -9,6 +9,7 @@ import { DragSession } from "../../assets/snapsort/src/drag/session";
 import type { DropPriorityEvent } from "../../assets/snapsort/src/events";
 import { Item } from "../../assets/snapsort/src/item";
 import { readVisualRect } from "../../assets/snapsort/src/internal/visual-rect";
+import { placeItemAt } from "../../assets/snapsort/src/internal/tree-mutation";
 
 type DomGlobal =
   | "window"
@@ -164,7 +165,7 @@ function mountContainer(
   const container = new Container(harness.engine, null, config);
   container.itemId = id;
   bindElement(harness, container, parent.element!, id, rect);
-  parent.addItem(container);
+  parent.attachItem(container);
   return container;
 }
 
@@ -177,7 +178,7 @@ function mountItem(
   const item = new Item(harness.engine, null);
   item.itemId = id;
   bindElement(harness, item, parent.element!, id, rect);
-  parent.addItem(item);
+  parent.attachItem(item);
   return item;
 }
 
@@ -340,7 +341,7 @@ test("Container exposes live non-ghost children and logical tree depth", () => {
     const ghost = new Item(harness.engine, null, true);
     ghost.itemId = "leaf";
     bindElement(harness, ghost, nested.element!, "ghost:leaf");
-    nested.attachItemToContainer(nested, ghost, 0);
+    placeItemAt(nested, ghost, 0);
 
     expect(root.depth).toBe(0);
     expect(section.depth).toBe(1);
@@ -424,7 +425,7 @@ test("reconciliation preserves an elementless framework ghost's logical slot", (
   }
 });
 
-test("addItem reparents across roots without leaving stale state", () => {
+test("attachItem reparents across roots without leaving stale state", () => {
   const harness = createStateHarness();
   try {
     const firstRoot = mountRoot(harness, "first-root");
@@ -433,7 +434,7 @@ test("addItem reparents across roots without leaving stale state", () => {
     const leaf = mountItem(harness, subtree, "leaf");
 
     secondRoot.element!.append(subtree.element!);
-    secondRoot.addItem(subtree);
+    secondRoot.attachItem(subtree);
 
     expect(firstRoot.itemList).toEqual([]);
     expect(firstRoot.itemOrderedList).toEqual([]);
@@ -452,14 +453,14 @@ test("addItem reparents across roots without leaving stale state", () => {
   }
 });
 
-test("rejected cyclic addItem leaves both logical trees unchanged", () => {
+test("rejected cyclic attachment leaves both logical trees unchanged", () => {
   const harness = createStateHarness();
   try {
     const root = mountRoot(harness);
     const ancestor = mountContainer(harness, root, "ancestor");
     const descendant = mountContainer(harness, ancestor, "descendant");
 
-    expect(() => descendant.addItem(ancestor)).toThrow(
+    expect(() => descendant.attachItem(ancestor)).toThrow(
       "An object cannot be parented to one of its children.",
     );
 
@@ -473,6 +474,49 @@ test("rejected cyclic addItem leaves both logical trees unchanged", () => {
     expect(descendant.depth).toBe(2);
     expectOrderedChildren(root);
     expectOrderedChildren(ancestor);
+  } finally {
+    harness.cleanup();
+  }
+});
+
+test("programmatic moves use the destination move animation channel", async () => {
+  const harness = createStateHarness();
+  try {
+    const root = mountRoot(harness);
+    const source = mountContainer(
+      harness,
+      root,
+      "source",
+      { x: 0, y: 0, width: 240, height: 240 },
+      {
+        animation: {
+          move: { duration: 0 },
+          reorder: null,
+        },
+      },
+    );
+    const destination = mountContainer(
+      harness,
+      root,
+      "destination",
+      { x: 260, y: 0, width: 240, height: 240 },
+      {
+        animation: {
+          move: null,
+          reorder: { duration: 0 },
+        },
+      },
+    );
+    const item = mountItem(harness, source, "item");
+
+    expect(source.moveItem("item", destination, 0)).toBe(true);
+    expect(item.parent).toBe(destination);
+
+    expect(destination.moveItem("item", source, 0)).toBe(true);
+    expect(item.parent).toBe(destination);
+
+    await drainFrames(harness.global);
+    expect(item.parent).toBe(source);
   } finally {
     harness.cleanup();
   }

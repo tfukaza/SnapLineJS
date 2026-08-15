@@ -223,7 +223,7 @@
                   animation: {
                     reorder: snapSortAnimation,
                     drop: snapSortAnimation,
-                    clickMove: snapSortAnimation,
+                    move: snapSortAnimation,
                   },
                   callbacks: {
                     getDropPriority: prioritizeIntersectingContainer,
@@ -277,7 +277,7 @@
                   animation: {
                     reorder: snapSortAnimation,
                     drop: snapSortAnimation,
-                    clickMove: snapSortAnimation,
+                    move: snapSortAnimation,
                   },
                   callbacks: {
                     getDropPriority: prioritizeIntersectingContainer,

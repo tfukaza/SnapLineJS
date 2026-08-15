@@ -1,6 +1,7 @@
 import type { Container } from "../container";
 import type { GhostRect } from "../events";
 import type { Item } from "../item";
+import { placeItemAt } from "../internal/tree-mutation";
 import {
   assertCanFireGhostInsert,
   assertCanFireGhostRemove,
@@ -225,7 +226,7 @@ export function restoreActiveItems(session: DragSession): void {
       .forEach((i) => {
         const member = session.items[i];
         if (member.parent) return;
-        member.attachItemToContainer(
+        placeItemAt(
           container,
           member,
           Math.min(

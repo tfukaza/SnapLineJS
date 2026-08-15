@@ -183,7 +183,7 @@ function dragSnapshotItems(item: ItemBase): ItemBase[] {
 
 function isContainerObject(item: ItemBase): item is Container {
   return (
-    "configuration" in item &&
+    "config" in item &&
     "direction" in item &&
     "name" in item &&
     "numberOfItems" in item
@@ -1266,7 +1266,7 @@ function configuredDropPriority(container: ItemBase): number {
   const value =
     "dropPriority" in container
       ? (container as any).dropPriority
-      : (container as any).configuration?.dropPriority;
+      : (container as any).config?.dropPriority;
   if (value !== undefined && !Number.isFinite(value)) {
     throw new TypeError(
       `SnapSort Container ${container.id}: dropPriority must be a finite number.`,

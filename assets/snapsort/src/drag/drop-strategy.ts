@@ -50,7 +50,8 @@ export const insertionDropTarget: DropTargetStrategy = {
 };
 
 export const swapDropTarget: DropTargetStrategy = {
-  resolve: (item, root, session) => determineSwapDropTarget(item, root, session),
+  resolve: (item, root, session) =>
+    determineSwapDropTarget(item, root, session),
 };
 
 const flowGhostLifecycle = new FlowGhostLifecycle();
@@ -80,13 +81,7 @@ export const builtinStrategies: Record<SortMode, SortStrategy> = {
   },
 };
 
-/**
- * Resolve the SortStrategy for a container. An explicit `strategy` (advanced,
- * for plugging custom drop-target/lifecycle behavior) always wins over `mode`.
- */
-export function resolveSortStrategy(
-  mode: SortMode | undefined,
-  strategy: SortStrategy | undefined,
-): SortStrategy {
-  return strategy ?? builtinStrategies[mode ?? "euclidean"];
+/** Resolve the internal strategy pair for a public sort mode. */
+export function resolveSortStrategy(mode: SortMode | undefined): SortStrategy {
+  return builtinStrategies[mode ?? "euclidean"];
 }

@@ -1417,7 +1417,7 @@ export function SnapSortComponentsDemo() {
                         animation: {
                           reorder: snapSortCubicAnimation,
                           drop: snapSortCubicAnimation,
-                          clickMove: snapSortCubicAnimation,
+                          move: snapSortCubicAnimation,
                         },
                         callbacks,
                       }}
@@ -1889,7 +1889,7 @@ export function SnapSortDuolingoDemo({ embedded = false }) {
                   animation: {
                     reorder: snapSortCubicAnimation,
                     drop: snapSortCubicAnimation,
-                    clickMove: snapSortCubicAnimation,
+                    move: snapSortCubicAnimation,
                   },
                   callbacks,
                 }}
@@ -1924,7 +1924,7 @@ export function SnapSortDuolingoDemo({ embedded = false }) {
                   animation: {
                     reorder: snapSortCubicAnimation,
                     drop: snapSortCubicAnimation,
-                    clickMove: snapSortCubicAnimation,
+                    move: snapSortCubicAnimation,
                   },
                   callbacks,
                 }}

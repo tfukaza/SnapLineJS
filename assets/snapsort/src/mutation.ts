@@ -12,7 +12,6 @@ import type {
   ItemMoveEvent,
   ItemRemoveEvent,
   ItemSwapEvent,
-  MutationPhase,
 } from "./events";
 import { buildGhostEvent, buildItemRunEvent } from "./event-builders";
 
@@ -24,8 +23,6 @@ import { buildGhostEvent, buildItemRunEvent } from "./event-builders";
  * receiver-local flush semantics and fallbacks (for example,
  * onItemMove -> onItemInsert) stay consistent.
  */
-
-const warnedAsyncMutationCallbacks = new WeakSet<() => void | Promise<void>>();
 
 // TODO: Add a shared transaction-domain coordinator so ordered ghost and item
 // mutation groups can use one adapter flush when every receiver shares a commit
@@ -41,22 +38,6 @@ export function fireMutation(container: Container, mutation: () => void): void {
   }
 
   mutation();
-
-  // Compatibility only: async results are intentionally not awaited because
-  // that would let the browser paint between DOM commit and FLIP inversion.
-  const awaitMutation = container.callbacks?.awaitMutation;
-  if (!awaitMutation) return;
-  const result = awaitMutation();
-  if (
-    result &&
-    typeof (result as Promise<void>).then === "function" &&
-    !warnedAsyncMutationCallbacks.has(awaitMutation)
-  ) {
-    warnedAsyncMutationCallbacks.add(awaitMutation);
-    console.warn(
-      "SnapSort: callbacks.awaitMutation returned a promise. Async framework commits are not paint-atomic; use the framework adapter's synchronous flushMutation hook instead.",
-    );
-  }
 }
 
 /** Run an optional callback only when its receiver actually implements it. */
@@ -146,7 +127,6 @@ export function fireItemInsert(
   index: number,
   beforeElement: HTMLElement | null,
   session: DragSession | null,
-  phase: MutationPhase = "commit",
 ): void {
   assertCanFireItemInsert(container);
   const onInsert = container.callbacks?.onItemInsert;
@@ -158,7 +138,6 @@ export function fireItemInsert(
     containerMetadata: container.metadata,
     index,
     beforeElement,
-    phase,
   };
   fireMutation(container, () => onInsert(event));
 }
@@ -167,7 +146,6 @@ export function fireItemRemove(
   container: Container,
   items: Item[],
   session: DragSession | null,
-  phase: MutationPhase = "commit",
 ): void {
   assertCanFireItemRemove(container);
   const onRemove = container.callbacks?.onItemRemove;
@@ -177,7 +155,6 @@ export function fireItemRemove(
     ...buildItemRunEvent(items),
     container,
     containerMetadata: container.metadata,
-    phase,
   };
   fireMutation(container, () => onRemove(event));
 }
@@ -195,7 +172,6 @@ export function fireItemMove(
   items: Item[],
   beforeElement: HTMLElement | null,
   session: DragSession | null,
-  phase: MutationPhase = "commit",
 ): void {
   assertCanFireItemMove(to.container);
   const onMove = to.container.callbacks?.onItemMove;
@@ -207,12 +183,11 @@ export function fireItemMove(
       to,
       froms,
       beforeElement,
-      phase,
     };
     fireMutation(to.container, () => onMove(event));
     return;
   }
-  fireItemInsert(to.container, items, to.index, beforeElement, session, phase);
+  fireItemInsert(to.container, items, to.index, beforeElement, session);
 }
 
 /**
@@ -225,7 +200,6 @@ export function fireItemSwap(
   a: { item: Item; container: Container; index: number },
   b: { item: Item; container: Container; index: number },
   session: DragSession | null,
-  phase: MutationPhase = "commit",
 ): void {
   assertCanFireItemSwap(a.container);
   const onSwap = a.container.callbacks?.onItemSwap;
@@ -248,7 +222,6 @@ export function fireItemSwap(
         containerMetadata: b.container.metadata,
         index: b.index,
       },
-      phase,
     };
     fireMutation(a.container, () => onSwap(event));
     return;
@@ -282,7 +255,6 @@ export function fireItemSwap(
     [a.item],
     beforeElementFor(b.container, b.index),
     session,
-    phase,
   );
   fireItemMove(
     [
@@ -300,7 +272,6 @@ export function fireItemSwap(
     [b.item],
     beforeElementFor(a.container, a.index),
     session,
-    phase,
   );
 }
 

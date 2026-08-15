@@ -48,7 +48,7 @@ export function beginItemDrag(item: Item, prop: dragStartProp): DragSession {
   const root = item.rootContainer;
   const group = collectSelectedDragGroup(root as unknown as Item, item);
   const pressedItem = findGroupAnchor(group, item);
-  const strategy = resolveSortStrategy(root.config.mode, root.config.strategy);
+  const strategy = resolveSortStrategy(root.config.mode);
   const sources = group.map(sourceFor);
   const session = new DragSession(
     root as Container,

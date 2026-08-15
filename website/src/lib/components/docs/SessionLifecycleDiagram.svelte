@@ -1191,7 +1191,7 @@
     if (route.kind !== "sync") return [];
 
     const matches = route.code?.match(
-      /\b(?:on[A-Z][A-Za-z0-9]*|canDrop|getDropPriority|createGhost|flushMutation|awaitMutation)\*?/g,
+      /\b(?:on[A-Z][A-Za-z0-9]*|canDrop|getDropPriority|createGhost|flushMutation)\*?/g,
     );
     return [...new Set(matches ?? [])];
   }

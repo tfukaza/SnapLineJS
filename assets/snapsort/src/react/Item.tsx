@@ -104,7 +104,7 @@ export const Item = forwardRef<ItemObject, ItemProps>(function SnapSortItem(
           // Ref attachment runs inside React's synchronous commit. Sync the
           // adopted Item's live ordering here so onDragStart can hand off to
           // a freshly-mounted replacement before passive effects run.
-          container.addItem(item);
+          container.attachItem(item);
         }
       } else if (previousElement) {
         item.detachElement(previousElement);
@@ -115,12 +115,12 @@ export const Item = forwardRef<ItemObject, ItemProps>(function SnapSortItem(
 
   useEffect(() => {
     if (ownsItemRef.current && item.parent !== container) {
-      container.addItem(item);
+      container.attachItem(item);
     } else if (
       item.parent === container &&
       !container.itemOrderedList.includes(item)
     ) {
-      container.addItem(item);
+      container.attachItem(item);
     }
     return () => {
       if (ownsItemRef.current) {

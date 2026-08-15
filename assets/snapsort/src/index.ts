@@ -10,7 +10,6 @@ export type {
   DragLocation,
   DropEffect,
   DragVisual,
-  MutationPhase,
   GhostRole,
   GhostKind,
   GhostRect,
@@ -42,9 +41,4 @@ export { Item } from "./item";
 export type { ItemId, ItemMetadata, ItemSnapshot } from "./snapshot";
 export { DragSession } from "./drag/session";
 export type { DragSessionStatus } from "./drag/session";
-export type {
-  SortMode,
-  SortStrategy,
-  DropTargetStrategy,
-} from "./drag/drop-strategy";
-export type { DragLifecycleStrategy } from "./drag/lifecycle";
+export type { SortMode } from "./drag/drop-strategy";

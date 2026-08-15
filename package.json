@@ -66,11 +66,12 @@
     "lint": "eslint src assets/snapline --ext .ts",
     "build": "vite build --mode production",
     "build:dev": "FRAMEWORK=test npx vite build --mode development",
+    "check:snapsort-api": "tsc -p tests/types/tsconfig.snapsort-api.json",
     "validate:packages": "node scripts/validate-packages.mjs",
     "check:website": "npm run check --prefix website",
     "check:adapters": "FRAMEWORK=test svelte-check --tsconfig assets/asset-base/tsconfig.json && FRAMEWORK=test svelte-check --tsconfig assets/snapsort/tsconfig.json && FRAMEWORK=test svelte-check --tsconfig assets/snapline/tsconfig.json",
     "typecheck": "tsc --noEmit",
-    "ci": "npm run validate:packages && npm run typecheck && npm run lint && npm run check:adapters && npm run check:website && npm run build",
+    "ci": "npm run validate:packages && npm run check:snapsort-api && npm run typecheck && npm run lint && npm run check:adapters && npm run check:website && npm run build",
     "prepublishOnly": "npm run lint",
     "wdio": "wdio run ./wdio.conf.ts"
   },

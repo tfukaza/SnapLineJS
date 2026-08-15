@@ -19,7 +19,7 @@ import {
 } from "@snap-engine/snapsort";
 import { flushSync } from "react-dom";
 import { useSnapSortEngine } from "./Engine";
-import { useSnapSortAwaitMutation } from "./useSnapSortAwaitMutation";
+import { useFlushSnapSortAttachments } from "./useFlushSnapSortAttachments";
 
 export const ContainerObjectContext = createContext<ContainerObject | null>(
   null,
@@ -103,16 +103,16 @@ export const Container = forwardRef<ContainerObject, ContainerProps>(
     const inheritedCallbacksRef = useRef<ContainerCallbacks | undefined>(
       containerObject?.callbacks,
     );
-    const flushCommittedMutation = useSnapSortAwaitMutation();
+    const flushSnapSortAttachments = useFlushSnapSortAttachments();
     const flushMutation = useCallback(
       (mutation: () => void) => {
         flushSync(mutation);
         // A state mutation can mount new Item/Container adapters. Flush once
         // more so their attachment effects run before core resumes its layout
         // reads, while remaining in the same pre-paint transaction.
-        flushCommittedMutation();
+        flushSnapSortAttachments();
       },
-      [flushCommittedMutation],
+      [flushSnapSortAttachments],
     );
     const callbacks = frameworkCallbacks(
       inheritedCallbacksRef.current,
@@ -143,7 +143,6 @@ export const Container = forwardRef<ContainerObject, ContainerProps>(
     container.selected = selected;
     container.metadata = metadata;
     container.config.mode = config.mode ?? container.config.mode;
-    container.config.strategy = config.strategy ?? container.config.strategy;
     container.config.name = config.name ?? container.config.name;
     container.config.animation = config.animation;
     container.config.domOwnership = "framework";
@@ -168,7 +167,7 @@ export const Container = forwardRef<ContainerObject, ContainerProps>(
 
     useEffect(() => {
       if (parentContainer && container.parent !== parentContainer) {
-        parentContainer.addItem(container as unknown as Item);
+        parentContainer.attachItem(container as unknown as Item);
       }
       return () => {
         if (ownsContainerRef.current) {

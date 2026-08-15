@@ -244,7 +244,7 @@ type ContainerProps = {
 | `direction` | `"column"` | Main layout direction: `"column"` or `"row"`. |
 | `mainAxisAlign` | `"start"` | Main-axis alignment for virtual placement. Supports `"start"` and `"center"`. |
 | `name` | Generated | Human-readable container name. |
-| `animation` | `undefined` | Optional reorder, drop, and click-move animation settings. Omit it or set it to `null` for no animation. |
+| `animation` | `undefined` | Optional reorder, drop, and programmatic-move animation settings. Omit it or set it to `null` for no animation. |
 | `dropPriority` | `0` | Base preference for candidate positions owned directly by this container. Higher eligible priorities are considered first. |
 | `callbacks` | No persistent mutation default | Required framework-state/ghost callbacks plus lifecycle and validation hooks. |
 
@@ -288,7 +288,6 @@ and do not change that receiver.
 | `onGhostInsert(event)` | Current ghost owner (`event.container`) | Target/source placement and root pointer-preview creation/movement | Required on every possible React ghost owner. Store/upsert the event and render `Ghost`; runs through that owner's `flushMutation`. |
 | `onGhostRemove(event)` | Ghost owner it is leaving (`event.container`) | Ghost crosses containers, is replaced, or the session ends | Required on every possible React ghost owner. Remove the matching rendered ghost; runs through the departing owner's `flushMutation`. |
 | `flushMutation(mutation)` | Same container as the callback being transacted | Structural and lifecycle mutations in every mode, plus programmatic mutations | Adapter hook, not a session event. React supplies it automatically. It wraps item move/insert/remove/swap, ghost insert/remove, and root target-change and drag-end callbacks. |
-| `awaitMutation()` | Same receiver, only when `flushMutation` is absent | Deprecated compatibility path after a mutation | React supplies `flushMutation`, so this fallback is not used. Promise results cannot provide a paint-atomic commit. |
 
 The table describes **dispatch**, which is separate from startup
 **configuration validation**. For framework-owned trees, SnapSort verifies
@@ -397,7 +396,7 @@ import { useRef } from "react";
 import { Container, Item } from "@snap-engine/snapsort/react";
 import type { Container as SnapSortContainer } from "@snap-engine/snapsort";
 
-export function ClickMove() {
+export function ProgrammaticMove() {
   const source = useRef<SnapSortContainer>(null);
   const target = useRef<SnapSortContainer>(null);
 

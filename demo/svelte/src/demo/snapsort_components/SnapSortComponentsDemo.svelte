@@ -398,7 +398,7 @@
                       animation: {
                         reorder: snapSortCubicAnimation,
                         drop: snapSortCubicAnimation,
-                        clickMove: snapSortCubicAnimation,
+                        move: snapSortCubicAnimation,
                       },
                       callbacks: {
                         onItemMove: handleSnapSortDomMove,

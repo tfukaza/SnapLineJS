@@ -100,7 +100,7 @@
       // Adopted Items are already parented before Svelte mounts them. Sync
       // the container's live ordering now so an onDragStart handoff can
       // validate and activate the freshly-mounted replacement immediately.
-      container!.addItem(resolvedItem);
+      container!.attachItem(resolvedItem);
     }
     return {
       destroy() {

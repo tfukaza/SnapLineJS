@@ -13,12 +13,12 @@ A single `Container`/`Item` class pair (per framework) whose drag/drop behavior 
 **Exports:**
 
 - `Container` - The only container class. `new Container(engine, parent, { mode, ... })`.
-- `defaultAnimations` - Opt-in standard reorder, drop, and click-move animation preset.
+- `defaultAnimations` - Opt-in standard reorder, drop, and programmatic-move animation preset.
 - `Item` - The only item class (including ghosts/markers). Never needs a mode.
 - `DragSession` - Owns all per-drag state (pointer, drag visual, ghosts, drop target); lives at `container.dragSession` on the root while a drag is active. Its public `handoff()` method is an advanced, copy-neutral pointer/session transfer primitive.
 - Event types: `ItemInsertEvent`, `ItemRemoveEvent`, `ItemMoveEvent`, `ItemSwapEvent`, `GhostCreateEvent`, `GhostInsertEvent`, `GhostRemoveEvent`, `DragStartEvent`, `DragEndEvent`, `DropTargetChangeEvent`, `CanDropEvent`, `DropPriorityEvent`, `VisualGeometryInvalidationEvent`, `DragLocation`.
 - Drag presentation types: `DragVisual` (`"item" | "preview" | "none"`) and `DropEffect` (`"move" | "none"`).
-- `ContainerCallbacks`, `ContainerConfig`, `SortMode`, `SortStrategy`, `DropTargetStrategy`, `DragLifecycleStrategy`.
+- `ContainerCallbacks`, `ContainerConfig`, and `SortMode`.
 
 ### @snap-engine/snapsort/callbacks
 
@@ -40,7 +40,7 @@ A single `Container`/`Item` class pair (per framework) whose drag/drop behavior 
 **Language:** React (TSX)
 **Dependencies:** the package root plus optional `react`, `react-dom`, and `@snap-engine/asset-base` peers
 
-**Exports:** `Engine`/`SnapSortEngine`, `Container`, `Item`, `Ghost`, `Handle`, `useSnapSortEngine`, deprecated `useSnapSortAwaitMutation`, `ContainerObjectContext`, `ItemObjectContext`.
+**Exports:** `Engine`/`SnapSortEngine`, `Container`, `Item`, `Ghost`, `Handle`, `useSnapSortEngine`, `ContainerObjectContext`, `ItemObjectContext`.
 
 ## File Structure
 
@@ -81,22 +81,22 @@ snapsort/
         ├── Item.tsx
         ├── Ghost.tsx
         ├── Handle.tsx
-        └── useSnapSortAwaitMutation.ts
+        └── useFlushSnapSortAttachments.ts
 ```
 
 ## Core Architecture
 
 ### Three independent axes
 
-Keep these three concerns separate:
+Keep these three internal concerns separate:
 
 - **Drop-target resolution** (`DropTargetStrategy`, `drag/drop-strategy.ts`): which algorithm (`determineDropTarget` / `determineProgressiveDropTarget` / `determineInsertionDropTarget` / `determineSwapDropTarget` in `algorithm.ts`) picks the winning candidate.
 - **Placement feedback** (`DragLifecycleStrategy`, `drag/lifecycle.ts`): how target ghosts, insertion markers, or swap hover state describe the prospective result.
 - **Pointer representation** (`DragSession.dragVisual`, `drag/item-visual.ts`, `drag/pointer-preview.ts`): whether the actual item, one root-owned pointer preview, or no visual follows the pointer. Built-in defaults are item for euclidean/progressive, none for insertion, and preview for swap. Consumers can choose another value in `onDragStart`.
 
-`ContainerConfig.mode` picks a built-in pair from `builtinStrategies`;
-`ContainerConfig.strategy` overrides with a custom pair. A custom drop-target
-resolver owns its full resolution policy, including eligibility and priority.
+`ContainerConfig.mode` picks a built-in pair from `builtinStrategies`. The
+strategy interfaces remain internal implementation details; the supported
+public configuration surface is the built-in `SortMode` union.
 
 ### DragSession
 
@@ -135,7 +135,7 @@ resulting item/ghost structure.
   fires on the item's current owner; swap fires once on the dragged item's
   pre-swap owner; hover fires on the owner of `overItem`; ghost callbacks fire
   on the ghost owner recorded in the event.
-- Primitives: `onItemInsert`, `onItemRemove`, `onGhostInsert`, `onGhostRemove`, `createGhost` (was `createItemGhost`; dispatches on `event.kind: "flow" | "marker"`), synchronous `flushMutation`; `awaitMutation` is deprecated.
+- Primitives: `onItemInsert`, `onItemRemove`, `onGhostInsert`, `onGhostRemove`, `createGhost` (was `createItemGhost`; dispatches on `event.kind: "flow" | "marker"`), and synchronous `flushMutation`.
 - Semantic: `onItemMove` (preferred — carries `from`/`to` `DragLocation`s).
 - Lifecycle: `onDragStart` (return `false` to veto before ghost or item lifecycle state changes), `onDragEnd`, `onDropTargetChange` (fires only when the prospective container/index actually changes).
 - Drop policy: `canDrop` first rejects an ineligible destination, then
@@ -154,8 +154,7 @@ resulting item/ghost structure.
 - `flushMutation` is an integration boundary, not a session callback. It is
   read from the same receiver as item mutations, ghost insert/remove, and root
   target-change/end callbacks. Drag start, ghost creation, hover, policy,
-  and visual invalidation dispatch directly. `awaitMutation` is only the
-  deprecated fallback when the receiver has no `flushMutation`.
+  and visual invalidation dispatch directly.
 - `onItemRemove` is not the source half of a normal move. It represents
   programmatic removal from the item's current owner.
 

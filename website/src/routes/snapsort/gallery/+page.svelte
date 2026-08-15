@@ -1152,7 +1152,7 @@
                       animation: {
                         reorder: sentenceAnimation,
                         drop: sentenceAnimation,
-                        clickMove: sentenceAnimation,
+                        move: sentenceAnimation,
                       },
                       callbacks: {
                         onItemMove: handleSentenceMove,
@@ -1198,7 +1198,7 @@
                       animation: {
                         reorder: sentenceAnimation,
                         drop: sentenceAnimation,
-                        clickMove: sentenceAnimation,
+                        move: sentenceAnimation,
                       },
                       callbacks: {
                         onItemMove: handleSentenceMove,

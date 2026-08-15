@@ -42,10 +42,10 @@ const visualAnimationOffsets = new WeakMap<Item, TransformOffset>();
 
 export function animationConfigFor(
   container: Container | null,
-  kind: "reorder" | "drop",
+  kind: "reorder" | "drop" | "move",
 ): AnimationConfig | null {
-  if (!container || container.configuration.animation === null) return null;
-  return container.configuration.animation?.[kind] ?? null;
+  if (!container || container.config.animation === null) return null;
+  return container.config.animation?.[kind] ?? null;
 }
 
 export function parentItem(item: Item): Item | null {
@@ -400,13 +400,14 @@ export function playDropAnimation(
   );
 }
 
-export function withReorderAnimation(
+function withConfiguredAnimation(
   item: Item,
   container: Container | null,
   excludedItem: Item | Item[] | null,
+  kind: "reorder" | "move",
   mutate: () => void,
 ): void {
-  const animationConfig = animationConfigFor(container, "reorder");
+  const animationConfig = animationConfigFor(container, kind);
   const root = (container?.rootContainer ??
     item.rootContainer) as unknown as Item;
   const excludedSet = excludedItem
@@ -444,4 +445,21 @@ export function withReorderAnimation(
     () => playFlipAnimations(snapshot, animationConfig, root, excludedItem),
     { stage: "WRITE_3", queueId: `${queuePrefix}-play` },
   );
+}
+
+export function withReorderAnimation(
+  item: Item,
+  container: Container | null,
+  excludedItem: Item | Item[] | null,
+  mutate: () => void,
+): void {
+  withConfiguredAnimation(item, container, excludedItem, "reorder", mutate);
+}
+
+export function withMoveAnimation(
+  item: Item,
+  container: Container,
+  mutate: () => void,
+): void {
+  withConfiguredAnimation(item, container, null, "move", mutate);
 }

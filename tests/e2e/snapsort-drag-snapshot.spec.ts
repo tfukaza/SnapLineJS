@@ -138,7 +138,7 @@ test("DragSession.handoff transfers a pending multi-item run without destroying 
         element.dataset.testHandoffItem = id;
         host.append(element);
         item.element = element;
-        root.addItem(item);
+        root.attachItem(item);
         return item;
       };
       const origins = [mount("origin-a"), mount("origin-b")];
@@ -275,7 +275,7 @@ test("DragSession.handoff rejects invalid runs and pointer-transfer failures ato
         const element = document.createElement("div");
         if (connected) host.append(element);
         item.element = element;
-        root.addItem(item);
+        root.attachItem(item);
         return item;
       };
       const location = (root: any, index: number) => ({
@@ -489,13 +489,13 @@ test("container animations are opt-in and expose the standard preset", () => {
   });
   const disabled = new SnapSortContainer(engine, null, { animation: null });
 
-  expect(immediate.configuration.animation).toBeUndefined();
+  expect(immediate.config.animation).toBeUndefined();
   expect(immediate.reorderAnimationConfig(immediate)).toBeNull();
   expect(immediate.dropAnimationConfig(immediate)).toBeNull();
   expect(defaultAnimations).toEqual({
     reorder: { duration: 100, timing_function: "ease-out" },
     drop: { duration: 100, timing_function: "ease-out" },
-    clickMove: { duration: 100, timing_function: "ease-out" },
+    move: { duration: 100, timing_function: "ease-out" },
   });
   expect(animated.reorderAnimationConfig(animated)).toBe(
     defaultAnimations.reorder,
@@ -765,7 +765,7 @@ type MockSnapSortItem = {
   dragPointerPosition: { x: number; y: number } | null;
   depth: number;
   name?: string;
-  configuration?: Record<string, unknown>;
+  config?: Record<string, unknown>;
   numberOfItems?: number;
   addDebugRect: () => void;
   addDebugCircle: () => void;
@@ -1048,7 +1048,7 @@ function mockSnapSortContainer(
   direction: "row" | "column",
 ): MockSnapSortItem {
   const item = mockSnapSortItem(id, rect, children, direction);
-  item.configuration = {};
+  item.config = {};
   item.name = id;
   item.numberOfItems = children.length;
   return item;
@@ -1512,7 +1512,7 @@ test("swap collects every hovered container before applying priority", () => {
       dragPointerPosition: { get: () => null },
     });
     if (container) {
-      item.configuration = {};
+      item.config = {};
       item.name = itemId;
       item.numberOfItems = children.length;
     }

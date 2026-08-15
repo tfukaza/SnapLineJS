@@ -331,8 +331,6 @@ validateUnifiedPackage({
     "./svelte": "./src/svelte/index.ts",
     "./svelte/*.svelte": "./src/svelte/*.svelte",
     "./react": "./src/react/index.ts",
-    "./react/useSnapSortAwaitMutation":
-      "./src/react/useSnapSortAwaitMutation.ts",
     "./react/*": "./src/react/*.tsx",
   },
   frameworkPeers: ["@snap-engine/asset-base", "react", "react-dom", "svelte"],

@@ -203,7 +203,7 @@ function createColumn(column) {
       animation: {
         reorder: snapSortAnimation,
         drop: snapSortAnimation,
-        clickMove: snapSortAnimation,
+        move: snapSortAnimation,
       },
     },
     { columnId: column.id },
@@ -222,7 +222,7 @@ function createContainer(element, parent, config, metadata) {
   container.metadata = metadata;
   container.element = element;
   if (parent) {
-    parent.addItem(container);
+    parent.attachItem(container);
   }
   return container;
 }
@@ -260,7 +260,7 @@ function createInsertionContainer(element, parent, config, metadata, locked) {
   container.metadata = metadata;
   container.element = element;
   if (parent) {
-    parent.addItem(container);
+    parent.attachItem(container);
   }
   return container;
 }
@@ -315,7 +315,7 @@ function createFileTreeFile(node, depth, parentContainer) {
   const itemObject = new Item(fileTreeEngine, null);
   itemObject.metadata = { itemId: node.id };
   itemObject.element = itemElement;
-  parentContainer.addItem(itemObject);
+  parentContainer.attachItem(itemObject);
 }
 
 function createTreeRow(node, depth, isFolder) {
@@ -391,7 +391,7 @@ function createItem(item, container) {
   const itemObject = new Item(engine, null);
   itemObject.metadata = { itemId: item.id };
   itemObject.element = itemElement;
-  container.addItem(itemObject);
+  container.attachItem(itemObject);
   itemObjects.set(item.id, itemObject);
 
   return itemObject;
@@ -496,7 +496,7 @@ function moveItemAcrossColumns(itemId, direction) {
   if (itemObject) {
     targetContainer.element.append(itemObject.element);
     sourceContainer.detachItemFromContainer(sourceContainer, itemObject);
-    targetContainer.addItem(itemObject);
+    targetContainer.attachItem(itemObject);
   }
   scheduleStateSync();
 }
