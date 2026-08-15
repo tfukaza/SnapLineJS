@@ -6,6 +6,7 @@ import type {
 } from "@snap-engine/core";
 import type { Container } from "../container";
 import type { Item } from "../item";
+import { stageVisualRectBeforeMutation } from "../internal/visual-rect";
 import { findHoveredItem, type DropCandidate } from "../algorithm";
 import {
   buildDragEndEvent,
@@ -439,6 +440,15 @@ export class DragSession {
 
   pointerMove(prop: dragProp): void {
     const item = this.primaryItem;
+    item.schedule(
+      () => {
+        if (this.status !== "active") return;
+        this.pointer = { x: prop.position.x, y: prop.position.y };
+        const ghostItem = this.ghostItem;
+        if (ghostItem) stageVisualRectBeforeMutation(ghostItem);
+      },
+      { stage: "READ_1", queueId: `drag-read-${item.id}` },
+    );
     item.schedule(
       async () => {
         if (this.status !== "active") return;

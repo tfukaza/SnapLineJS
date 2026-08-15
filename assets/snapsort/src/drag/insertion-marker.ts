@@ -14,6 +14,10 @@ import {
 import type { DragLifecycleStrategy } from "./lifecycle";
 import type { DragSession } from "./session";
 import {
+  consumeStagedVisualRect,
+  readVisualRect,
+} from "../internal/visual-rect";
+import {
   restoreActiveItems,
   startDragVisual,
   stopDragVisual,
@@ -88,9 +92,7 @@ async function moveGhost(
     assertCanFireGhostRemove(previousTarget.container);
   }
 
-  const firstRect = ghostItem?.element?.isConnected
-    ? ghostItem.element.getBoundingClientRect()
-    : null;
+  const firstRect = ghostItem ? consumeStagedVisualRect(ghostItem) : null;
 
   if (!ghostItem) {
     ghostItem = item.createGhostItem(session, "marker", container, ghostRect);
@@ -139,15 +141,32 @@ async function moveGhost(
   if (!ghostElement || ghostItem.frameworkManagedGhostElement) return;
 
   updateInsertionGhostStyle(container, ghostRect, ghostItem);
-  const lastRect = ghostElement.getBoundingClientRect();
-  item.playElementRectAnimation(
-    ghostItem,
-    firstRect,
-    lastRect,
-    ghostElement,
-    item.reorderAnimationConfig(container),
-    ghostItem,
-    { coordinateParent: container },
+  let lastRect: DOMRect | null = null;
+  ghostItem.schedule(
+    () => {
+      lastRect = readVisualRect(ghostItem);
+    },
+    {
+      stage: "READ_2",
+      queueId: `insertion-marker-read-last-${session.pressedItem.id}`,
+    },
+  );
+  ghostItem.schedule(
+    () => {
+      item.playElementRectAnimation(
+        ghostItem,
+        firstRect,
+        lastRect,
+        ghostElement,
+        item.reorderAnimationConfig(container),
+        ghostItem,
+        { coordinateParent: container },
+      );
+    },
+    {
+      stage: "WRITE_2",
+      queueId: `insertion-marker-play-${session.pressedItem.id}`,
+    },
   );
 }
 
@@ -207,8 +226,7 @@ function drop(session: DragSession): void {
       }
       if (session.dragVisual !== "item") return;
       items.forEach((member, i) => {
-        const first = member.element?.getBoundingClientRect() ?? null;
-        dropRects[i].first = first;
+        dropRects[i].first = readVisualRect(member);
       });
     },
     {
@@ -281,7 +299,7 @@ function drop(session: DragSession): void {
           ? currentItem.element
           : null;
         dropRects[i].element = element;
-        dropRects[i].last = element?.getBoundingClientRect() ?? null;
+        dropRects[i].last = readVisualRect(currentItem);
       });
     },
     {

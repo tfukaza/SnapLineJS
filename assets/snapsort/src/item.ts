@@ -1,4 +1,4 @@
-import { BaseObject, ElementObject, cloneDomProperty } from "@snap-engine/core";
+import { ElementObject, cloneDomProperty } from "@snap-engine/core";
 import type { AnimationConfig, Container } from "./container";
 import type { dragStartProp, dragProp, dragEndProp } from "@snap-engine/core";
 import { AnimationObject } from "@snap-engine/core/animation";
@@ -38,12 +38,29 @@ import {
   fireItemRemove,
   settleMutation,
 } from "./mutation";
-import { resolveSortStrategy } from "./drag/drop-strategy";
 import { DragSession } from "./drag/session";
-import { reconcileTreeState } from "./tree-state";
+import { beginItemDrag } from "./drag/group";
+import {
+  attachItem,
+  detachItem,
+  elementAfterRun,
+  itemLocation,
+} from "./internal/tree-mutation";
+import { reconcileRootTreeState } from "./internal/tree-state";
+import {
+  ancestorVisualOffset,
+  animationConfigFor,
+  clearVisualAnimationOffset,
+  playDropAnimation,
+  playElementRectAnimation,
+  withReorderAnimation,
+  type ElementRectAnimationOptions,
+  type TransformOffset,
+} from "./internal/flip-animation";
+import { readVisualRect } from "./internal/visual-rect";
 
-// The minimum distance threshold for triggering FLIP animations
 const MIN_FLIP_DISTANCE = 0.5;
+const useInternalAnimationModule: boolean = true;
 
 interface FlipAnimationState {
   item: Item;
@@ -55,55 +72,6 @@ interface FlipAnimationState {
   lastParent: DOMRect | null;
   lastParentItem: Item | null;
   targetElement: HTMLElement | null;
-}
-
-interface TransformOffset {
-  x: number;
-  y: number;
-}
-
-interface ElementRectAnimationOptions {
-  coordinateParent?: Item | null;
-  firstParent?: DOMRect | null;
-  firstParentItem?: Item | null;
-  lastParent?: DOMRect | null;
-  lastParentItem?: Item | null;
-  subtractAncestorOffset?: boolean;
-  initialOffset?: TransformOffset;
-}
-
-/**
- * Gathers all selected items in the tree for a drag operation.
- */
-function collectSelectedDragGroup(root: Item, pressed: Item): Item[] {
-  if (!pressed.selected) return [pressed];
-
-  const group: Item[] = [];
-  const visit = (node: Item) => {
-    for (const child of node.itemOrderedList) {
-      if (child.isGhost || child.locked) continue;
-      if (child.selected) {
-        group.push(child);
-        continue;
-      }
-      visit(child);
-    }
-  };
-  visit(root);
-  return group.length > 0 ? group : [pressed];
-}
-
-/**
- * Traverses the tree of selected items to identify
- * the nearest ancestor of `pressed` that is in the selection group.
- */
-function findGroupAnchor(group: Item[], pressed: Item): Item {
-  let current: BaseObject | null = pressed;
-  while (current instanceof Item) {
-    if (group.includes(current)) return current;
-    current = current.parent;
-  }
-  return pressed;
 }
 
 export class Item extends ElementObject {
@@ -309,12 +277,10 @@ export class Item extends ElementObject {
    * @returns
    */
   getIndexAndContainer(): { index: number; container: Container | null } {
-    if (!this.parent) {
-      return { index: -1, container: null };
-    }
-    const parentContainer = this.parent as unknown as Container;
-    const idx = parentContainer.itemOrderedList.indexOf(this);
-    return { index: idx, container: parentContainer };
+    const location = itemLocation(this);
+    return location
+      ? { index: location.index, container: location.container }
+      : { index: -1, container: null };
   }
 
   get metadata(): ItemMetadata {
@@ -444,6 +410,7 @@ export class Item extends ElementObject {
   }
 
   cancelAnimations() {
+    clearVisualAnimationOffset(this);
     this.#visualAnimationOffset = { x: 0, y: 0 };
     super.cancelAnimations();
   }
@@ -452,72 +419,12 @@ export class Item extends ElementObject {
     return this.parent instanceof Item ? this.parent : null;
   }
 
-  /**
-   * Calculate the aggregated visual offset of all parent containers
-   * while they are being animated. In simple terms, this
-   * function answers the question "How much has this item's container
-   * drifted from its original position due to animations applied to it
-   * or any of its ancestors?"
-   *
-   * @param parent The starting ancestor item.
-   * @returns The aggregated visual offset as a TransformOffset object.
-   */
-  #ancestorVisualOffset(parent: Item | null): TransformOffset {
-    const offset = { x: 0, y: 0 };
-    let current: BaseObject | null = parent;
-    while (current) {
-      if (current instanceof Item) {
-        const currentOffset = current.#visualAnimationOffset;
-        offset.x += currentOffset.x;
-        offset.y += currentOffset.y;
-      }
-      current = current.parent;
-    }
-    return offset;
-  }
-
   #setVisualAnimationOffset(x: number, y: number) {
     this.#visualAnimationOffset = { x, y };
   }
 
   #clearVisualAnimationOffset() {
     this.#visualAnimationOffset = { x: 0, y: 0 };
-  }
-
-  /**
-   * Return this item's children sorted by their DOM order.
-   *
-   * @returns Child objects ordered by their current element order in the DOM.
-   */
-  #childrenInDomOrder(): Item[] {
-    const children = this.children.filter(
-      (child): child is Item => child instanceof Item,
-    );
-    const childSet = new Set(children);
-    const seen = new Set<Item>();
-    const logicalOrder = [
-      ...this.#itemOrderedList.filter((child) => {
-        if (!childSet.has(child) || seen.has(child)) return false;
-        seen.add(child);
-        return true;
-      }),
-      ...children.filter((child) => {
-        if (seen.has(child)) return false;
-        seen.add(child);
-        return true;
-      }),
-    ];
-    const hasDomPosition = (item: Item) => item.element?.isConnected === true;
-    const domOrdered = logicalOrder.filter(hasDomPosition).sort((a, b) => {
-      const cmp = a.element!.compareDocumentPosition(b.element!);
-      if (cmp & Node.DOCUMENT_POSITION_FOLLOWING) return -1;
-      if (cmp & Node.DOCUMENT_POSITION_PRECEDING) return 1;
-      return 0;
-    });
-    let domIndex = 0;
-    return logicalOrder.map((item) =>
-      hasDomPosition(item) ? domOrdered[domIndex++] : item,
-    );
   }
 
   static #containerColors = new Map<string, string>();
@@ -577,26 +484,8 @@ export class Item extends ElementObject {
     if (!root) {
       throw new Error("Root container not found");
     }
-    root[reconcileTreeState]();
+    reconcileRootTreeState(root);
     root.queueReadTree("READ_1", `snapsort-read-root-${this.id}`);
-  }
-
-  /**
-   * Reconcile logical children with the DOM order after a synchronous
-   * structural mutation has committed.
-   * @internal
-   */
-  [reconcileTreeState](): void {
-    const root = this.rootContainer;
-    root.#updateState(root);
-  }
-
-  #updateState(root: Container) {
-    this.#rootContainer = root;
-    this.#itemOrderedList = this.#childrenInDomOrder();
-    for (const child of this.#itemOrderedList) {
-      child.#updateState(root);
-    }
   }
 
   /** @internal */
@@ -776,18 +665,12 @@ export class Item extends ElementObject {
    * @internal
    */
   reorderAnimationConfig(container: Container | null): AnimationConfig | null {
-    if (!container) return null;
-    const config = container.configuration;
-    if (config.animation === null) return null;
-    return config.animation?.reorder ?? null;
+    return animationConfigFor(container, "reorder");
   }
 
   /** @internal */
   dropAnimationConfig(container: Container | null): AnimationConfig | null {
-    if (!container) return null;
-    const config = container.configuration;
-    if (config.animation === null) return null;
-    return config.animation?.drop ?? null;
+    return animationConfigFor(container, "drop");
   }
 
   /**
@@ -832,9 +715,8 @@ export class Item extends ElementObject {
       return {
         item,
         key: this.itemKey(item),
-        // TODO: These should be done via readDom
-        first: item.element!.getBoundingClientRect(),
-        firstParent: parentItem?.element?.getBoundingClientRect() ?? null,
+        first: readVisualRect(item),
+        firstParent: parentItem ? readVisualRect(parentItem) : null,
         firstParentItem: parentItem,
         last: null,
         lastParent: null,
@@ -852,7 +734,7 @@ export class Item extends ElementObject {
    * @returns Nothing.
    */
   #captureFlipLast(snapshot: FlipAnimationState[], root: Item) {
-    root[reconcileTreeState]();
+    reconcileRootTreeState(root as unknown as Container);
     const currentItems = new Map(
       root
         .#collectFlipItems(root, null)
@@ -870,8 +752,8 @@ export class Item extends ElementObject {
       }
       const parentItem = entry.item.#parentItem();
       entry.lastParentItem = parentItem;
-      entry.lastParent = parentItem?.element?.getBoundingClientRect() ?? null;
-      entry.last = entry.targetElement?.getBoundingClientRect() ?? null;
+      entry.lastParent = parentItem ? readVisualRect(parentItem) : null;
+      entry.last = readVisualRect(entry.item);
     }
   }
 
@@ -1081,6 +963,18 @@ export class Item extends ElementObject {
     animationOwner: Item,
     options: ElementRectAnimationOptions = {},
   ) {
+    if (useInternalAnimationModule) {
+      return playElementRectAnimation(
+        item,
+        first,
+        last,
+        targetElement,
+        animationConfig,
+        animationOwner,
+        options,
+      );
+    }
+
     if (!targetElement || !first || !last || !animationConfig) return;
 
     const { dx, dy, useParentLocalDelta } = this.#rectAnimationDelta(
@@ -1174,7 +1068,7 @@ export class Item extends ElementObject {
     let x = dx * (1 - t);
     let y = dy * (1 - t);
     if (subtractAncestorOffset) {
-      const ancestorOffset = this.#ancestorVisualOffset(coordinateParent);
+      const ancestorOffset = ancestorVisualOffset(coordinateParent);
       x -= ancestorOffset.x;
       y -= ancestorOffset.y;
     }
@@ -1210,13 +1104,13 @@ export class Item extends ElementObject {
     animationConfig: AnimationConfig | null,
     animationOwner: Item,
   ) {
-    this.playElementRectAnimation(
+    return playDropAnimation(
       this,
       first,
       last,
       targetElement,
       animationConfig,
-      targetElement === this.element ? this : animationOwner,
+      animationOwner,
     );
   }
 
@@ -1233,6 +1127,10 @@ export class Item extends ElementObject {
     excludedItem: Item | Item[] | null,
     mutate: () => void,
   ) {
+    if (useInternalAnimationModule) {
+      return withReorderAnimation(this, container, excludedItem, mutate);
+    }
+
     const animationConfig = this.reorderAnimationConfig(container);
     const targetRoot = container
       ? ((container as unknown as Item)
@@ -1328,7 +1226,7 @@ export class Item extends ElementObject {
         if (!parentItem?.element?.isConnected) return;
         // Account for offsets if the container is being animated.
         const visual = parentItem.readDom();
-        const ancestorOffset = this.#ancestorVisualOffset(parentItem);
+        const ancestorOffset = ancestorVisualOffset(parentItem);
         session.dragLayoutPosition.set(this, {
           x: visual.x - ancestorOffset.x,
           y: visual.y - ancestorOffset.y,
@@ -1367,7 +1265,7 @@ export class Item extends ElementObject {
     }
 
     // Account for offsets if the container is being animated.
-    const ancestorOffset = this.#ancestorVisualOffset(parentItem);
+    const ancestorOffset = ancestorVisualOffset(parentItem);
     const groupOffset = session.groupVisualOffsets.get(this) ?? {
       x: 0,
       y: 0,
@@ -1479,24 +1377,7 @@ export class Item extends ElementObject {
    * @internal
    */
   attachItemToContainer(container: Container, item: Item, index: number) {
-    const destination = container as unknown as Item;
-    const currentParent =
-      item.parent instanceof Item ? (item.parent as Item) : null;
-    destination.appendChild(item);
-    if (currentParent) {
-      currentParent.#itemOrderedList = currentParent.#itemOrderedList.filter(
-        (entry) => entry !== item,
-      );
-    }
-    destination.#itemOrderedList = destination.#itemOrderedList.filter(
-      (entry) => entry !== item,
-    );
-    item.rootContainer = container.rootContainer;
-    if (index >= container.itemOrderedList.length) {
-      container.itemOrderedList.push(item);
-    } else {
-      container.itemOrderedList.splice(index, 0, item);
-    }
+    attachItem(container, item, index);
   }
 
   #insertItemElement(
@@ -1505,14 +1386,11 @@ export class Item extends ElementObject {
     index: number,
     session: DragSession | null,
   ) {
-    const itemAfterIndex =
-      index >= container.itemOrderedList.length - 1
-        ? null
-        : container.itemOrderedList[index + 1].element;
+    const itemAfterIndex = elementAfterRun(container, index, 1);
     try {
       fireItemInsert(container, [item], index, itemAfterIndex, session);
     } finally {
-      container[reconcileTreeState]();
+      reconcileRootTreeState(container.rootContainer);
     }
   }
 
@@ -1526,10 +1404,7 @@ export class Item extends ElementObject {
     kind: GhostKind,
     role: GhostRole,
   ) {
-    const itemAfterIndex =
-      index >= container.itemOrderedList.length - 1
-        ? null
-        : container.itemOrderedList[index + 1].element;
+    const itemAfterIndex = elementAfterRun(container, index, 1);
     try {
       fireGhostInsert(
         container,
@@ -1543,7 +1418,7 @@ export class Item extends ElementObject {
         role,
       );
     } finally {
-      container[reconcileTreeState]();
+      reconcileRootTreeState(container.rootContainer);
     }
   }
 
@@ -1604,16 +1479,12 @@ export class Item extends ElementObject {
     items.forEach((member, i) => {
       this.attachItemToContainer(container, member, index + i);
     });
-    const runEndIndex = index + items.length;
-    const itemAfterIndex =
-      runEndIndex >= container.itemOrderedList.length
-        ? null
-        : container.itemOrderedList[runEndIndex].element;
+    const itemAfterIndex = elementAfterRun(container, index, items.length);
     const to = buildDragLocation(container, index);
     try {
       fireItemMove(froms, to, items, itemAfterIndex, session);
     } finally {
-      container[reconcileTreeState]();
+      reconcileRootTreeState(container.rootContainer);
     }
   }
 
@@ -1649,10 +1520,7 @@ export class Item extends ElementObject {
    * @param item
    */
   detachItemFromContainer(container: Container, item: Item) {
-    container.removeChild(item);
-    (container as unknown as Item).#itemOrderedList = (
-      container as unknown as Item
-    ).#itemOrderedList.filter((i) => i !== item);
+    detachItem(container, item);
   }
 
   /**
@@ -1673,7 +1541,7 @@ export class Item extends ElementObject {
     try {
       fireItemRemove(container, [item], session);
     } finally {
-      container[reconcileTreeState]();
+      reconcileRootTreeState(container.rootContainer);
     }
   }
 
@@ -1691,7 +1559,7 @@ export class Item extends ElementObject {
     try {
       fireGhostRemove(container, original, ghostItem, session, kind, role);
     } finally {
-      container[reconcileTreeState]();
+      reconcileRootTreeState(container.rootContainer);
     }
   }
 
@@ -1703,44 +1571,7 @@ export class Item extends ElementObject {
   dragStart(prop: dragStartProp) {
     if (prop.objectId !== this.id) return;
     if (this.#locked) return;
-
-    // Take a snapshot of the current state.
-    // Any DOM read for this is queued into READ_1 stage.
-    this.takeRootSnapshot();
-    // Record the initial container and index of the item
-    const { index: currentIndex, container: currentContainer } =
-      this.getIndexAndContainer();
-    if (!currentContainer) {
-      throw new Error("Item has no parent container");
-    }
-
-    const root = this.rootContainer;
-    const group = collectSelectedDragGroup(root as unknown as Item, this);
-    const pressedItem = findGroupAnchor(group, this);
-    const strategy = resolveSortStrategy(
-      root.config.mode,
-      root.config.strategy,
-    );
-    const sources: DragLocation[] = group.map((member) => {
-      if (member === this) {
-        return buildDragLocation(currentContainer, currentIndex);
-      }
-      const { index, container } = member.getIndexAndContainer();
-      if (!container) {
-        throw new Error("Item has no parent container");
-      }
-      return buildDragLocation(container, index);
-    });
-    const session = new DragSession(
-      root,
-      group,
-      sources,
-      strategy,
-      prop,
-      pressedItem,
-    );
-    root.dragSession = session;
-    session.begin(prop);
+    beginItemDrag(this, prop);
   }
 
   /**

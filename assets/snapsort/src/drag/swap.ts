@@ -10,7 +10,8 @@ import {
 } from "../mutation";
 import type { DragLifecycleStrategy } from "./lifecycle";
 import type { DragSession } from "./session";
-import { reconcileTreeState } from "../tree-state";
+import { reconcileRootTreeState } from "../internal/tree-state";
+import { readVisualRect } from "../internal/visual-rect";
 import {
   restoreActiveItems,
   startDragVisual,
@@ -95,15 +96,14 @@ function drop(session: DragSession): void {
         session.dragVisual === "preview"
           ? pointerPreviewMemberRects(session)[0]
           : session.dragVisual === "item"
-            ? item.element?.getBoundingClientRect() ?? null
+            ? readVisualRect(item)
             : null;
 
       dropTarget = resolveDropTarget();
       if (!dropTarget || dropTarget.item === item) return;
       displacedAnimation.item = dropTarget.item;
       displacedAnimation.key = root.itemKey(dropTarget.item);
-      displacedAnimation.first =
-        dropTarget.item.element?.getBoundingClientRect() ?? null;
+      displacedAnimation.first = readVisualRect(dropTarget.item);
     },
     { stage: "READ_1", queueId: `drag-end-swap-read-first-${item.id}` },
   );
@@ -174,7 +174,7 @@ function drop(session: DragSession): void {
           mutationError = error;
           mutationFailed = true;
         } finally {
-          root[reconcileTreeState]();
+          reconcileRootTreeState(root);
         }
         await settleMutation();
       }
@@ -195,8 +195,7 @@ function drop(session: DragSession): void {
       draggedAnimation.element = currentDraggedItem.element?.isConnected
         ? currentDraggedItem.element
         : null;
-      draggedAnimation.last =
-        draggedAnimation.element?.getBoundingClientRect() ?? null;
+      draggedAnimation.last = readVisualRect(currentDraggedItem);
 
       if (!displacedAnimation.item || !displacedAnimation.key) return;
       const currentDisplacedItem =
@@ -204,8 +203,7 @@ function drop(session: DragSession): void {
       displacedAnimation.element = currentDisplacedItem.element?.isConnected
         ? currentDisplacedItem.element
         : null;
-      displacedAnimation.last =
-        displacedAnimation.element?.getBoundingClientRect() ?? null;
+      displacedAnimation.last = readVisualRect(currentDisplacedItem);
     },
     { stage: "READ_2", queueId: `drag-end-swap-read-last-${item.id}` },
   );

@@ -30,7 +30,8 @@ export function validateItemVisual(session: DragSession): void {
   }
 }
 
-function computeGroupOffsets(session: DragSession): void {
+/** @internal Compute a dragged run's offsets along its source flow axis. */
+export function computeGroupOffsets(session: DragSession): void {
   const pressedIndex = session.items.indexOf(session.pressedItem);
   const axisContainer =
     session.activeSources[pressedIndex]?.container ??

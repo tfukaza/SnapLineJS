@@ -7,6 +7,7 @@ import {
   settleMutation,
 } from "../mutation";
 import type { DragSession } from "./session";
+import { readVisualRect } from "../internal/visual-rect";
 
 interface GroupGeometry {
   x: number;
@@ -122,6 +123,7 @@ export function updatePointerPreview(session: DragSession): void {
     return;
   }
 
+  // TODO: Needs to be a callback
   const rootBox =
     session.root.dragSnapshot?.box ?? session.root.currentDomProperty;
   element.dataset.snapsortGhost = "pointer";
@@ -164,9 +166,8 @@ export async function removePointerPreview(
 export function pointerPreviewMemberRects(
   session: DragSession,
 ): Array<DOMRect | null> {
-  const preview = session.ghosts
-    .get("pointer")
-    ?.element?.getBoundingClientRect();
+  const previewItem = session.ghosts.get("pointer");
+  const preview = previewItem ? readVisualRect(previewItem) : null;
   if (!preview) return session.items.map(() => null);
 
   const group = frozenGroupGeometry(session);

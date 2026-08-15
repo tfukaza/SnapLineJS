@@ -1,11 +1,14 @@
 import { expect, test } from "@playwright/test";
 import { JSDOM } from "jsdom";
+import { readFileSync, readdirSync } from "node:fs";
+import { join } from "node:path";
 import { determineSwapDropTarget } from "../../assets/snapsort/src/algorithm";
 import { Container } from "../../assets/snapsort/src/container";
 import { builtinStrategies } from "../../assets/snapsort/src/drag/drop-strategy";
 import { DragSession } from "../../assets/snapsort/src/drag/session";
 import type { DropPriorityEvent } from "../../assets/snapsort/src/events";
 import { Item } from "../../assets/snapsort/src/item";
+import { readVisualRect } from "../../assets/snapsort/src/internal/visual-rect";
 
 type DomGlobal =
   | "window"
@@ -248,6 +251,84 @@ function expectOrderedChildren(container: Container): void {
     expect(item.parent).toBe(container);
   }
 }
+
+test("visual rectangles are immutable screen-space snapshots and cache reads", () => {
+  const harness = createStateHarness();
+  try {
+    harness.engine.camera = {
+      getCameraFromScreen: (x: number, y: number) => [x, y],
+      getWorldFromCamera: (x: number, y: number) => [x / 2, y / 2],
+      getCameraDeltaFromWorldDelta: (x: number, y: number) => [x * 2, y * 2],
+      getWorldDeltaFromCameraDelta: (x: number, y: number) => [x / 2, y / 2],
+    };
+    const root = mountRoot(harness);
+    const item = mountItem(harness, root, "item", {
+      x: 30,
+      y: 45,
+      width: 80,
+      height: 50,
+    });
+    let reads = 0;
+    const element = item.element!;
+    Object.defineProperty(element, "getBoundingClientRect", {
+      configurable: true,
+      value: () => {
+        reads += 1;
+        return new DOMRect(30, 45, 80, 50);
+      },
+    });
+    const cache = new Map();
+
+    harness.global.currentStage = "READ_1";
+    const first = readVisualRect(item, cache);
+    const repeated = readVisualRect(item, cache);
+    harness.global.currentStage = "IDLE";
+
+    expect(first).toBe(repeated);
+    expect(reads).toBe(1);
+    expect(first?.coordinateSpace).toBe("screen");
+    expect([first?.x, first?.y, first?.width, first?.height]).toEqual([
+      30, 45, 80, 50,
+    ]);
+    expect(Object.isFrozen(first)).toBe(true);
+
+    setRect(element, { x: 90, y: 100, width: 20, height: 10 });
+    expect([first?.x, first?.y, first?.width, first?.height]).toEqual([
+      30, 45, 80, 50,
+    ]);
+  } finally {
+    harness.cleanup();
+  }
+});
+
+test("visual rectangle reads reject write stages", () => {
+  const harness = createStateHarness();
+  try {
+    const root = mountRoot(harness);
+    const item = mountItem(harness, root, "item");
+    harness.global.currentStage = "WRITE_1";
+    expect(() => readVisualRect(item)).toThrow("Reading DOM during WRITE_1");
+  } finally {
+    harness.cleanup();
+  }
+});
+
+test("SnapSort production source has no direct layout rectangle reads", () => {
+  const sourceRoot = join(process.cwd(), "assets/snapsort/src");
+  const sourceFiles = (directory: string): string[] =>
+    readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+      const path = join(directory, entry.name);
+      return entry.isDirectory()
+        ? sourceFiles(path)
+        : /\.(ts|svelte)$/.test(entry.name)
+          ? [path]
+          : [];
+    });
+  const offenders = sourceFiles(sourceRoot).filter((path) =>
+    /\.getBoundingClientRect\s*\(/.test(readFileSync(path, "utf8")),
+  );
+  expect(offenders).toEqual([]);
+});
 
 test("Container exposes live non-ghost children and logical tree depth", () => {
   const harness = createStateHarness();

@@ -13,6 +13,7 @@ import {
 } from "../mutation";
 import type { DragLifecycleStrategy } from "./lifecycle";
 import type { DragSession } from "./session";
+import { readVisualRect } from "../internal/visual-rect";
 import {
   pointerPreviewMemberRects,
   removePointerPreview,
@@ -20,7 +21,11 @@ import {
   updatePointerPreview,
   validatePointerPreview,
 } from "./pointer-preview";
-import { resetItemVisual, restoreActiveItems } from "./item-visual";
+import {
+  computeGroupOffsets,
+  resetItemVisual,
+  restoreActiveItems,
+} from "./item-visual";
 
 /**
  * Flow-layout spacer ghosts: euclidean and progressive modes. Each ghost is a
@@ -272,14 +277,7 @@ function drop(session: DragSession): void {
       }
       if (session.dragVisual !== "item") return;
       items.forEach((member, i) => {
-        if (!member.element) return;
-        const first = member.readDom({ unapplyTransform: false }, "READ_1");
-        dropRects[i].first = new DOMRect(
-          first.screenX,
-          first.screenY,
-          first.width,
-          first.height,
-        );
+        dropRects[i].first = readVisualRect(member);
       });
     },
     {
@@ -371,7 +369,7 @@ function drop(session: DragSession): void {
           ? currentItem.element
           : null;
         dropRects[i].element = element;
-        dropRects[i].last = element?.getBoundingClientRect() ?? null;
+        dropRects[i].last = readVisualRect(currentItem);
       });
     },
     {
@@ -422,23 +420,7 @@ export class FlowGhostLifecycle implements DragLifecycleStrategy {
 
     const pressedItem = session.pressedItem;
     if (session.dragVisual === "item") {
-      const axis = pressedSource.container.direction === "row" ? "x" : "y";
-      let cumulative = 0;
-      let pressedCumulative = 0;
-      const cumulativeByItem = new Map<Item, number>();
-      for (const member of session.items) {
-        cumulativeByItem.set(member, cumulative);
-        if (member === pressedItem) pressedCumulative = cumulative;
-        const box = member.dragSnapshot?.box;
-        cumulative += axis === "y" ? box?.height ?? 0 : box?.width ?? 0;
-      }
-      for (const member of session.items) {
-        const delta = (cumulativeByItem.get(member) ?? 0) - pressedCumulative;
-        session.groupVisualOffsets.set(
-          member,
-          axis === "y" ? { x: 0, y: delta } : { x: delta, y: 0 },
-        );
-      }
+      computeGroupOffsets(session);
     }
 
     session.items.forEach((member, i) => {
