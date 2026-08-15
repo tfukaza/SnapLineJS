@@ -51,6 +51,7 @@ demo/svelte/src/snapengine/
 # Local design notes / plans
 /plan-*.md
 TODO.md
+/.tmp/
 
 # Exceptions
 !vite.config.mjs
