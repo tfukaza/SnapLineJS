@@ -130,16 +130,6 @@ class GlobalManager {
       void (async () => {
         const timestamp = Date.now();
 
-        // Process each stage for ALL engines before moving to the next stage.
-        // Stages are awaited so framework adapters can flush DOM work from
-        // queued callbacks before the next layout read.
-        //
-        // Each stage's queue is swapped out BEFORE it drains, never replaced
-        // after. Because every callback is awaited, an adapter's microtask
-        // flush can run mid-drain and schedule into the stage currently
-        // running; replacing the map afterwards would discard that task
-        // outright, stranding a node at a half-applied geometry with no retry.
-        // Swapping first means such a task deterministically runs next frame.
         const drain = async (stage: FrameStages) => {
           this.currentStage = stage;
           const batch = this.queue[stage];
