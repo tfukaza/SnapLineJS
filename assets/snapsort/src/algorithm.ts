@@ -12,14 +12,13 @@ import {
   childRelativeOffset,
   contentBoxOrigin,
   contentBoxSize,
+  createLayoutResolutionPlan,
   flowAxesForDirection,
-  flowLayoutPositions,
-  inferFlowLayoutMetrics,
   virtualEntrySizeFor,
-  layoutItems,
   pointFromAxes,
   virtualDimensions as layoutVirtualDimensions,
-  type LayoutFilter,
+  type LayoutPlanDiagnostics,
+  type LayoutResolutionPlan,
   type VirtualInsertion,
 } from "./layout";
 import type { ItemSnapshot } from "./snapshot";
@@ -546,6 +545,7 @@ export function virtualLayoutRecursive(
   dragCenterY: number,
   session: DragSession | null = null,
   debugEnabled = false,
+  layoutDiagnostics?: LayoutPlanDiagnostics<ItemBase>,
 ): { candidates: FlowCandidate[]; endX: number; endY: number } {
   const snapshot = createLayoutSnapshot(container);
   const draggedBox = requireDragSnapshotBox(draggedItem);
@@ -563,18 +563,22 @@ export function virtualLayoutRecursive(
     height: dragGhostH,
   };
   const excludeValues = session ? session.itemSet : new Set([draggedItem]);
+  const layoutPlan = createLayoutResolutionPlan(snapshot.root, {
+    filter: { excludeValues },
+    insertions: activeInsertions,
+    diagnostics: layoutDiagnostics,
+  });
   return virtualLayoutRecursiveFromSnapshot(
     snapshot.root,
     startX,
     startY,
-    { excludeValues },
+    layoutPlan,
     draggedBox,
     dragGhostW,
     dragGhostH,
     dragCenterX,
     dragCenterY,
     dragRect,
-    activeInsertions,
     session,
     debugEnabled,
   );
@@ -584,31 +588,29 @@ function virtualLayoutRecursiveFromSnapshot(
   containerSnapshot: ItemSnapshot<ItemBase>,
   startX: number,
   startY: number,
-  filter: LayoutFilter<ItemBase>,
+  layoutPlan: LayoutResolutionPlan<ItemBase>,
   draggedBox: DomProperty,
   dragGhostW: number,
   dragGhostH: number,
   dragCenterX: number,
   dragCenterY: number,
   dragRect: Rect,
-  baseInsertions: VirtualInsertion<ItemBase>[] = [],
   session: DragSession | null = null,
   debugEnabled = false,
 ): { candidates: FlowCandidate[]; endX: number; endY: number } {
   const container = containerSnapshot.value;
-  const axes = flowAxesForDirection(containerSnapshot.direction);
+  const containerPlan = layoutPlan.containerPlan(containerSnapshot);
+  const axes = containerPlan.axes;
   const isColumn = axes.direction === "column";
   const containerProp = containerSnapshot.box;
-  const contentSize = contentBoxSize(containerProp);
-  const itemSnapshots = layoutItems(containerSnapshot, filter);
-  const metrics = inferFlowLayoutMetrics(containerSnapshot, axes);
-  const descendantBaseInsertions = baseInsertions.filter(
-    (baseInsertion) => baseInsertion.container !== containerSnapshot,
-  );
-  const flowPositions = flowLayoutPositions(containerSnapshot, startX, startY, {
-    filter,
-    insertions: descendantBaseInsertions,
-  }).itemPositions;
+  const contentSize = containerPlan.contentSize;
+  const itemSnapshots = containerPlan.eligibleChildren;
+  const metrics = containerPlan.metrics;
+  const flowPositions = layoutPlan.layoutPositions(
+    containerSnapshot,
+    startX,
+    startY,
+  ).itemPositions;
   const candidates: FlowCandidate[] = [];
   const lineCrossStart =
     (axes.cross === "x" ? startX : startY) + metrics.crossStart;
@@ -679,10 +681,12 @@ function virtualLayoutRecursiveFromSnapshot(
         margin: draggedBox.margin,
       },
     };
-    const layout = flowLayoutPositions(containerSnapshot, startX, startY, {
-      filter,
-      insertions: [...descendantBaseInsertions, insertion],
-    });
+    const layout = layoutPlan.layoutPositions(
+      containerSnapshot,
+      startX,
+      startY,
+      [insertion],
+    );
     const rect = layout.virtualRects.get(insertion) ?? {
       ...fallbackPosition,
       width: entryWidth,
@@ -770,14 +774,13 @@ function virtualLayoutRecursiveFromSnapshot(
           itemSnapshot,
           childOrigin.x,
           childOrigin.y,
-          filter,
+          layoutPlan,
           draggedBox,
           dragGhostW,
           dragGhostH,
           dragCenterX,
           dragCenterY,
           dragRect,
-          baseInsertions,
           session,
           debugEnabled,
         );

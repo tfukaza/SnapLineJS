@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import {
   contentBoxOrigin,
+  createLayoutResolutionPlan,
   flowAxesForDirection,
   flowLayoutPositions,
   inferFlowLayoutMetrics,
@@ -47,6 +48,123 @@ function ghostInsertion(
     entry: { ...entry, margin: { top: 0, right: 0, bottom: 0, left: 0 } },
   };
 }
+
+test.describe("layout resolution plans", () => {
+  test("visits each eligible snapshot once across repeated candidate materialization", () => {
+    const nestedChildren = [0, 1, 2].map((index) =>
+      makeItemSnapshot(
+        `nested-${index}`,
+        makeBox({ x: 10, y: 10 + index * 24, width: 80, height: 20 }),
+      ),
+    );
+    const nested = makeContainerSnapshot(
+      makeBox({ x: 0, y: 0, width: 100, height: 90 }),
+      nestedChildren,
+      "column",
+    );
+    const excludedChild = makeItemSnapshot(
+      "excluded-child",
+      makeBox({ x: 0, y: 0, width: 20, height: 20 }),
+    );
+    const excluded = makeContainerSnapshot(
+      makeBox({ x: 0, y: 100, width: 100, height: 30 }),
+      [excludedChild],
+      "column",
+    );
+    const peer = makeItemSnapshot(
+      "peer",
+      makeBox({ x: 0, y: 140, width: 100, height: 20 }),
+    );
+    const root = makeContainerSnapshot(
+      makeBox({ x: 0, y: 0, width: 120, height: 180 }),
+      [nested, excluded, peer],
+      "column",
+    );
+    const visits = new Map<string, number>();
+    const plan = createLayoutResolutionPlan(root, {
+      filter: { excludeSnapshots: new Set([excluded]) },
+      diagnostics: {
+        onSnapshotVisit: (snapshot) =>
+          visits.set(snapshot.key, (visits.get(snapshot.key) ?? 0) + 1),
+      },
+    });
+
+    const insertion = (index: number): VirtualInsertion<string> => ({
+      container: nested,
+      index,
+      entry: {
+        width: 80,
+        height: 20,
+        margin: { top: 0, right: 0, bottom: 0, left: 0 },
+      },
+    });
+    for (let index = 0; index <= nestedChildren.length; index++) {
+      plan.layoutPositions(nested, 10, 10, [insertion(index)]);
+    }
+
+    expect([...visits.values()]).toEqual([1, 1, 1, 1, 1, 1]);
+    expect(visits.has(excluded.key)).toBe(false);
+    expect(visits.has(excludedChild.key)).toBe(false);
+    expect(Object.isFrozen(plan.containerPlan(root))).toBe(true);
+    expect(Object.isFrozen(plan.containerPlan(root).eligibleChildren)).toBe(
+      true,
+    );
+  });
+
+  test("caches descendant insertion dimensions while replacing local insertions per candidate", () => {
+    const nestedChildren = [0, 1].map((index) =>
+      makeItemSnapshot(
+        `nested-${index}`,
+        makeBox({ x: index * 44, y: 0, width: 40, height: 40 }),
+      ),
+    );
+    const nested = makeContainerSnapshot(
+      makeBox({ x: 0, y: 0, width: 84, height: 40 }),
+      nestedChildren,
+      "row",
+    );
+    const sibling = makeItemSnapshot(
+      "sibling",
+      makeBox({ x: 0, y: 50, width: 84, height: 40 }),
+    );
+    const root = makeContainerSnapshot(
+      makeBox({ x: 0, y: 0, width: 100, height: 160 }),
+      [nested, sibling],
+      "column",
+    );
+    const activeInsertion = ghostInsertion(nested, 2, {
+      width: 40,
+      height: 40,
+    });
+    const plan = createLayoutResolutionPlan(root, {
+      insertions: [activeInsertion],
+    });
+
+    // The descendant insertion wraps and doubles the nested container height;
+    // the parent reuses that cached dimension when placing its next child.
+    expect(plan.virtualDimensions(nested).height).toBeCloseTo(80, 4);
+    expect(plan.layoutPositions(root, 0, 0).itemPositions.get(sibling)).toEqual(
+      {
+        x: 0,
+        y: 90,
+      },
+    );
+
+    // A container's active insertion affects its parent-facing dimensions,
+    // but its own candidate simulation starts clean and substitutes the local
+    // candidate, matching the live pending-ghost replacement behavior.
+    expect(plan.layoutPositions(nested, 0, 0).virtualRects.size).toBe(0);
+    const candidate = ghostInsertion(nested, 0, {
+      width: 40,
+      height: 40,
+    });
+    expect(
+      plan
+        .layoutPositions(nested, 0, 0, [candidate])
+        .virtualRects.get(candidate),
+    ).toEqual({ x: 0, y: 0, width: 40, height: 40 });
+  });
+});
 
 test.describe("inferFlowLayoutMetrics", () => {
   test("infers gaps, line size, and extent from a wrapped row grid", () => {

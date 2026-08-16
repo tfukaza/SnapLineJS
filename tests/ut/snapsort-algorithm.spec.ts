@@ -87,7 +87,11 @@ function mockItem(
   return item;
 }
 
-function flowTargets(root: MockItem, dragged: MockItem) {
+function flowTargets(
+  root: MockItem,
+  dragged: MockItem,
+  onSnapshotVisit?: (snapshot: ItemSnapshot<MockItem>) => void,
+) {
   return virtualLayoutRecursive(
     root as never,
     root.dragSnapshot.box.x,
@@ -97,6 +101,9 @@ function flowTargets(root: MockItem, dragged: MockItem) {
     dragged.dragSnapshot.box.height,
     dragged.dragPositionX + dragged.dragSnapshot.box.width / 2,
     dragged.dragPositionY + dragged.dragSnapshot.box.height / 2,
+    null,
+    false,
+    onSnapshotVisit ? { onSnapshotVisit } : undefined,
   ).candidates.map((candidate) => candidate.target);
 }
 
@@ -116,11 +123,13 @@ test("flow candidates simulate each eligible flat gap exactly once", () => {
     { children, container: true },
   );
 
-  const targets = flowTargets(root, dragged).filter(
-    (target) => target.container === root,
-  );
+  const visits = new Map<string, number>();
+  const targets = flowTargets(root, dragged, (snapshot) => {
+    visits.set(snapshot.key, (visits.get(snapshot.key) ?? 0) + 1);
+  }).filter((target) => target.container === root);
   expect(targets.map((target) => target.index)).toEqual([0, 1, 2, 3, 4]);
   expect(new Set(targets.map((target) => target.index)).size).toBe(5);
+  expect([...visits.values()]).toEqual([1, 1, 1, 1, 1]);
 });
 
 test("flow gap eligibility preserves locked-neighbor and container rules", () => {
