@@ -1,13 +1,14 @@
 import type { AnimationObject } from "@snap-engine/core/animation";
 import type {
+  DomProperty,
   GestureHandoffControl,
   dragStartProp,
   dragProp,
 } from "@snap-engine/core";
 import type { Container } from "../container";
 import type { Item } from "../item";
+import { reconcileRootTreeState } from "../internal/tree-state";
 import { stageVisualRectBeforeMutation } from "../internal/visual-rect";
-import { placeItemAt } from "../internal/tree-mutation";
 import { findHoveredItem, type ResolvedDropTarget } from "../algorithm";
 import {
   buildDragEndEvent,
@@ -20,7 +21,6 @@ import type {
   DragVisual,
   DropEffect,
   GhostRect,
-  GhostRole,
 } from "../events";
 import {
   fireDragItemEnter,
@@ -29,10 +29,11 @@ import {
   fireOptionalMutation,
 } from "../mutation";
 import type { SortStrategy } from "./drop-strategy";
-import { resetItemVisual } from "./item-visual";
+import { resetItemVisual, restoreActiveItems } from "./item-visual";
 import { clearDragSession } from "./session-store";
 
 export type DragSessionStatus = "pending" | "active" | "dropping" | "ended";
+export type GhostChannel = "target" | "source" | "pointer";
 
 export interface DragSession {
   readonly root: Container;
@@ -49,12 +50,11 @@ export interface DragSession {
   handoff(replacements: readonly Item[]): void;
 }
 
-/** @internal Ghost placement the lifecycle strategy is currently targeting. */
-export interface GhostTarget {
-  ghostItem: Item;
-  container: Container;
-  index: number;
-  ghostRect?: GhostRect | null;
+/** @internal Placement the active lifecycle is currently targeting. */
+export interface DropPlacement {
+  readonly container: Container;
+  readonly index: number;
+  readonly ghostRect: GhostRect | null;
 }
 
 /** @internal Direction-aware size of the whole dragged group, used to size a single group ghost/marker. */
@@ -65,23 +65,20 @@ export interface GroupDimensions {
   sumH: number;
 }
 
-function reportDragSessionError(error: unknown): void {
-  const reportedError =
-    error instanceof Error ? error : new Error(String(error));
-  const reportError = globalThis.reportError;
-  if (typeof reportError === "function") {
-    reportError(reportedError);
-    return;
-  }
-  console.error(reportedError);
-}
-
 function freezePoint(point: { x: number; y: number }) {
   return Object.freeze({ x: point.x, y: point.y });
 }
 
 function freezeLocation(location: DragLocation): DragLocation {
   return Object.freeze({ ...location });
+}
+
+function freezePlacement(
+  container: Container,
+  index: number,
+  ghostRect: GhostRect | null,
+): DropPlacement {
+  return Object.freeze({ container, index, ghostRect });
 }
 
 class PublicDragSession implements DragSession {
@@ -145,7 +142,6 @@ export class DragSessionController {
   readonly root: Container;
   /** Pointer id driving this drag (from `dragStartProp`). */
   readonly pointerId: number;
-  // TODO: Feels hacky?
   readonly #handoffTo: GestureHandoffControl["handoffTo"];
   /**
    * The items currently receiving this drag. Stable except across `handoff`.
@@ -154,7 +150,6 @@ export class DragSessionController {
   items!: readonly Item[];
   sources: readonly DragLocation[];
   /** The item the pointer actually grabbed — may differ from `items[0]` (the run head) for disjoint selections. Anchors pointer-follow geometry. Replaced on `handoff`. */
-  // TODO: Can be unified with items?
   pressedItem!: Item;
   /** `items` as a Set, for O(1) exclusion checks in layout/algorithm code. */
   itemSet!: Set<Item>;
@@ -230,40 +225,26 @@ export class DragSessionController {
    * the target ghost. Ghosts can be added, moved, or removed independently at
    * any point during a drag.
    */
-  readonly ghosts: Map<GhostRole, Item> = new Map();
+  readonly ghostsByChannel: Map<GhostChannel, Item> = new Map();
 
   /**
    * Flow-mode target ghosts: one logical anchor per dragged member, ordered
    * to parallel `items`, inserted as a contiguous run at the prospective drop
-   * slot. Each anchor fires its own `createGhost`/`onGhostInsert` (with the
-   * full `items` list), so the framework adapter decides whether to render
+   * slot. Each anchor fires its own `onGhostInsert` (with the
+   * full `items` list), so the renderer adapter decides whether to render
    * them as separate ghosts, one merged ghost, or none — the core never
    * forces a single group-sized spacer. Empty for insertion/swap modes, which
-   * use `ghosts` (`"target"`/`"pointer"`) instead. The run head
-   * (`flowGhostRun[0]`) is what `ghostItem`/`pendingGhostTarget` track.
+   * use `ghostsByChannel` (`"target"`/`"pointer"`) instead.
    */
   readonly flowGhostRun: Item[] = [];
 
   /** @internal Source-slot spacers used when insertion/swap hoist real Items. */
   readonly sourceGhostRun: Item[] = [];
 
-  /** Convenience accessor for the `"target"` ghost — the placeholder most lifecycles track. */
-  get ghostItem(): Item | null {
-    return this.ghosts.get("target") ?? null;
-  }
-
-  set ghostItem(value: Item | null) {
-    if (value) {
-      this.ghosts.set("target", value);
-    } else {
-      this.ghosts.delete("target");
-    }
-  }
-
-  /** The ghost placement most recently requested by the lifecycle strategy. */
-  pendingGhostTarget: GhostTarget | null = null;
+  /** The placement most recently requested by the lifecycle strategy. */
+  pendingPlacement: DropPlacement | null = null;
   /** Last drop candidate resolved by the drop-target strategy (raw, snapshot-space index). */
-  dropTarget: ResolvedDropTarget | null = null;
+  resolvedDropTarget: ResolvedDropTarget | null = null;
   /** The item whose hitbox the pointer is currently over, if any — drives `onDragItemEnter`/`Move`/`Leave`. */
   hoveredItem: Item | null = null;
 
@@ -429,13 +410,30 @@ export class DragSessionController {
     return this.items[0];
   }
 
+  /** @internal Return the captured box for one current participant. */
+  dragBoxFor(item: Item): DomProperty {
+    if (!this.itemSet.has(item)) {
+      throw new Error(
+        "DragSession: drag geometry is only available for current participants.",
+      );
+    }
+    const box = item.dragSnapshot?.box;
+    if (!box) {
+      throw new Error(
+        `DragSession: participant "${item.resolvedItemId}" has no captured drag geometry.`,
+      );
+    }
+    return box;
+  }
+
   /**
    * Compute this session's group dimensions from each member's drag
    * snapshot box. Called once drag snapshots are captured (READ_1 of
    * `begin`). Degenerates to the pressed item's own box for a single item.
    */
-  // TODO: Need to factor in gaps between items
-  private computeGroupDims(): GroupDimensions {
+  // Consecutive margins are represented here; CSS `gap` is not present in
+  // per-item boxes and therefore cannot be reconstructed from this snapshot.
+  #computeGroupDims(): GroupDimensions {
     let maxW = 0;
     let maxH = 0;
     let sumW = 0;
@@ -446,8 +444,7 @@ export class DragSessionController {
       margin: { top: number; bottom: number; left: number; right: number };
     } | null = null;
     for (const member of this.items) {
-      const box = member.dragSnapshot?.box;
-      if (!box) continue;
+      const box = this.dragBoxFor(member);
       maxW = Math.max(maxW, box.width);
       maxH = Math.max(maxH, box.height);
       const columnGap = prevBox
@@ -487,7 +484,7 @@ export class DragSessionController {
         };
         root.readDragSnapshotTree();
         root.captureDragSnapshotTree();
-        this.groupDims = this.computeGroupDims();
+        this.groupDims = this.#computeGroupDims();
       },
       { stage: "READ_1", queueId: `drag-start-offset-${item.id}` },
     );
@@ -495,27 +492,22 @@ export class DragSessionController {
     item.schedule(
       async () => {
         if (this.#isEnded()) return;
-        let vetoed = false;
+        let completed = false;
         try {
-          vetoed =
+          const vetoed =
             root.callbacks?.onDragStart?.(buildDragStartEvent(this)) === false;
-          if (!vetoed) {
-            this.strategy.lifecycle.validateStart?.(this);
+          if (vetoed) {
+            this.#clearSessionState();
+            completed = true;
+            return;
           }
-        } catch (error) {
-          this.#endBeforeActivation(error);
-          return;
-        }
-        if (vetoed) {
-          this.#endBeforeActivation();
-          return;
-        }
+          this.strategy.lifecycle.validateStart(this);
 
-        try {
           this.status = "active";
           await this.strategy.lifecycle.dragStart(this);
           if (this.#isEnded()) {
             this.#clearSessionState();
+            completed = true;
             return;
           }
           for (const member of this.items) {
@@ -523,8 +515,9 @@ export class DragSessionController {
               member.element.dataset.snapsortDragging = "true";
             }
           }
-        } catch (error) {
-          this.#cancelAfterError(error);
+          completed = true;
+        } finally {
+          if (!completed) this.scheduleErrorFinalizer();
         }
       },
       { stage: "WRITE_1" },
@@ -537,7 +530,7 @@ export class DragSessionController {
       () => {
         if (this.status !== "active") return;
         this.pointer = freezePoint(prop.position);
-        const ghostItem = this.ghostItem;
+        const ghostItem = this.ghostsByChannel.get("target");
         if (ghostItem) stageVisualRectBeforeMutation(ghostItem);
       },
       { stage: "READ_1", queueId: `drag-read-${item.id}` },
@@ -545,12 +538,14 @@ export class DragSessionController {
     item.schedule(
       async () => {
         if (this.status !== "active") return;
+        let completed = false;
         try {
           this.pointer = freezePoint(prop.position);
           await this.updateDropTarget();
           await this.strategy.lifecycle.dragMove(this);
-        } catch (error) {
-          this.#cancelAfterError(error);
+          completed = true;
+        } finally {
+          if (!completed) this.scheduleErrorFinalizer();
         }
       },
       { stage: "WRITE_1", queueId: `drag-${item.id}` },
@@ -558,20 +553,8 @@ export class DragSessionController {
     this.root.queueReadTree("READ_2", `drag-${item.id}`);
   }
 
-  #endBeforeActivation(error?: unknown): void {
-    if (error !== undefined) {
-      reportDragSessionError(error);
-    }
-    this.#clearSessionState();
-  }
-
   #isEnded(): boolean {
     return this.status === "ended";
-  }
-
-  #cancelAfterError(error: unknown): void {
-    reportDragSessionError(error);
-    this.cancel();
   }
 
   /** @internal Unwinds an input-cancelled drag without committing a drop. */
@@ -588,36 +571,35 @@ export class DragSessionController {
     this.dragTransformSyncAnimation = null;
     this.#dropEffect = "none";
 
+    let completed = false;
     try {
-      const lifecycle = this.strategy.lifecycle;
-      // TODO: Have consistent lifecycle API so this if statement is not needed
-      if (lifecycle.cancel) {
-        lifecycle.cancel(this);
-      } else {
-        lifecycle.drop(this);
-      }
-    } catch (cleanupError) {
-      reportDragSessionError(cleanupError);
-      this.#forceEndAfterError();
+      this.strategy.lifecycle.drop(this);
+      completed = true;
+    } finally {
+      if (!completed) this.scheduleErrorFinalizer();
     }
   }
 
   /** @internal Ensure a throwing scheduled drop callback cannot strand state. */
   scheduleDropFinalizer(): void {
-    // Consumer callbacks can throw again while the scheduled drop unwinds.
-    // A later-stage watchdog guarantees the session and visual flags do not
-    // remain stuck even when that cleanup task aborts early.
-    this.root.schedule(
-      () => {
-        if (this.status !== "ended") {
-          this.#forceEndAfterError();
-        }
-      },
-      {
-        stage: "WRITE_3",
-        queueId: `drag-error-finalize-${this.pressedItem.id}`,
-      },
-    );
+    this.#scheduleFailureFinalizer(true);
+  }
+
+  /** @internal Mark a failed task and defer cleanup to the engine's error boundary. */
+  scheduleErrorFinalizer(): void {
+    if (this.status === "ended") return;
+    const shouldFireDragEnd = this.status !== "pending";
+    this.#markFailedDrop();
+    this.#scheduleFailureFinalizer(shouldFireDragEnd);
+  }
+
+  #markFailedDrop(): void {
+    if (this.#isEnded()) return;
+    this.cancelled = true;
+    this.status = "dropping";
+    this.#dropEffect = "none";
+    this.dragTransformSyncAnimation?.cancel();
+    this.dragTransformSyncAnimation = null;
   }
 
   #clearSessionState(): void {
@@ -630,12 +612,12 @@ export class DragSessionController {
     this.dragVisualStart.clear();
     this.groupVisualOffsets.clear();
     this.groupDims = null;
-    this.pendingGhostTarget = null;
-    this.dropTarget = null;
+    this.pendingPlacement = null;
+    this.resolvedDropTarget = null;
     this.hoveredItem = null;
     this.flowGhostRun.length = 0;
     this.sourceGhostRun.length = 0;
-    this.ghosts.clear();
+    this.ghostsByChannel.clear();
     this.root.clearDragSnapshotTree();
     this.clearDraggingFlags();
   }
@@ -652,11 +634,9 @@ export class DragSessionController {
   complete(destination: DragLocation | null): void {
     try {
       this.clearHoveredItem();
-    } catch (error) {
+    } finally {
       this.#clearSessionState();
-      throw error;
     }
-    this.#clearSessionState();
     fireOptionalMutation(
       this.root,
       this.root.callbacks?.onDragEnd,
@@ -664,29 +644,43 @@ export class DragSessionController {
     );
   }
 
-  #forceEndAfterError(): void {
-    const members = [...this.items];
-    resetItemVisual(this);
-
+  #scheduleFailureFinalizer(shouldFireDragEnd: boolean): void {
     const ghosts = new Set([
       ...this.flowGhostRun,
       ...this.sourceGhostRun,
-      ...this.ghosts.values(),
+      ...this.ghostsByChannel.values(),
     ]);
-    for (const ghost of ghosts) ghost.destroy(false);
-
-    members.forEach((member, i) => {
-      if (member.parent) return;
-      const source = this.activeSources[i];
-      if (!source) return;
-      placeItemAt(
-        source.container,
-        member,
-        Math.min(source.index, source.container.itemOrderedList.length),
+    let finalized = false;
+    const finalizer = this.root.schedule(null, {
+      stage: "WRITE_3",
+      queueId: `drag-error-finalize-${this.pressedItem.id}`,
+    });
+    finalizer.addCallback(() => this.#markFailedDrop());
+    for (const ghost of ghosts) {
+      finalizer.addCallback(() => {
+        if (!this.#isEnded() && ghost.ghostState) ghost.removeGhost();
+      });
+    }
+    finalizer.addCallback(() => {
+      if (this.#isEnded()) return;
+      resetItemVisual(this);
+      for (const ghost of ghosts) {
+        if (!ghost.isDeleteRequested) ghost.destroy(false);
+      }
+      restoreActiveItems(this);
+      reconcileRootTreeState(this.root);
+      this.#clearSessionState();
+      finalized = true;
+    });
+    if (!shouldFireDragEnd) return;
+    finalizer.addCallback(() => {
+      if (!finalized) return;
+      fireOptionalMutation(
+        this.root,
+        this.root.callbacks?.onDragEnd,
+        buildDragEndEvent(this, null),
       );
     });
-
-    this.#clearSessionState();
   }
 
   /**
@@ -712,54 +706,48 @@ export class DragSessionController {
       // container). The target ghost should not linger over a target that no
       // longer exists — clear it and report the loss, same as any other
       // drop-target change.
-      const previousGhostLocation = lifecycle.currentGhostLocation(this);
-      if (previousGhostLocation || this.dropTarget) {
-        this.dropTarget = null;
-        await lifecycle.removeGhost(this, "target");
+      const previousPlacement = lifecycle.currentPlacement(this);
+      if (previousPlacement || this.resolvedDropTarget) {
+        this.resolvedDropTarget = null;
+        await lifecycle.clearPlacement(this);
         this.#invalidateVisualGeometry(
-          previousGhostLocation ? [previousGhostLocation.container] : [],
+          previousPlacement ? [previousPlacement.container] : [],
           "ghost",
         );
-        this.fireDropTargetChange(previousGhostLocation, null);
+        this.#fireDropTargetChange(previousPlacement, null);
       }
-      this.updateHoveredItem(null);
+      this.#updateHoveredItem(null);
       return;
     }
-    this.dropTarget = target;
+    this.resolvedDropTarget = target;
 
-    const ghostSource = lifecycle.currentGhostLocation(this);
-    const targetIndex =
-      target.container != null
-        ? lifecycle.translateTargetIndex(this, target)
-        : -1;
-    const targetContainer = target.container as unknown as Container;
+    const currentPlacement = lifecycle.currentPlacement(this);
+    const placement = freezePlacement(
+      target.container,
+      lifecycle.placementIndexFor(this, target),
+      target.ghostRect ?? null,
+    );
 
-    this.updateHoveredItem(targetContainer);
+    this.#updateHoveredItem(placement.container);
 
-    if (!targetContainer) return;
     const changed =
-      !ghostSource ||
-      targetContainer !== ghostSource.container ||
-      targetIndex !== ghostSource.index;
+      !currentPlacement ||
+      placement.container !== currentPlacement.container ||
+      placement.index !== currentPlacement.index;
     if (changed) {
-      await lifecycle.moveGhost(
-        this,
-        targetContainer,
-        targetIndex,
-        target.ghostRect,
-      );
+      await lifecycle.syncPlacement(this, placement);
       this.#invalidateVisualGeometry(
-        ghostSource
-          ? [ghostSource.container, targetContainer]
-          : [targetContainer],
+        currentPlacement
+          ? [currentPlacement.container, placement.container]
+          : [placement.container],
         "ghost",
       );
-      this.fireDropTargetChange(ghostSource, {
-        container: targetContainer,
-        index: targetIndex,
+      this.#fireDropTargetChange(currentPlacement, {
+        container: placement.container,
+        index: placement.index,
       });
     }
-    lifecycle.afterSyncDropTarget(this);
+    lifecycle.afterPlacementSync(this);
   }
 
   #invalidateVisualGeometry(
@@ -775,7 +763,7 @@ export class DragSessionController {
     this.root.invalidateVisualGeometry(items, reason);
   }
 
-  private fireDropTargetChange(
+  #fireDropTargetChange(
     previous: { container: Container; index: number } | null,
     current: { container: Container; index: number } | null,
   ): void {
@@ -818,7 +806,7 @@ export class DragSessionController {
    * resolved slot/gap, but its hit-test is scoped to the currently resolved
    * target container passed here.
    */
-  private updateHoveredItem(container: Container | null): void {
+  #updateHoveredItem(container: Container | null): void {
     const item = this.primaryItem;
     const nextHovered = container
       ? findHoveredItem(item, container, this)

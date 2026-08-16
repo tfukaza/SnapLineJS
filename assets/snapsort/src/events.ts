@@ -24,9 +24,6 @@ export type DropEffect = "move" | "none";
 /** What follows the pointer during a drag, independent of placement feedback. */
 export type DragVisual = "item" | "preview" | "none";
 
-/** Which visual job a temporary ghost performs during a drag. */
-export type GhostRole = "target" | "source" | "pointer";
-
 export type VisualGeometryInvalidationReason =
   | "drag"
   | "ghost"
@@ -87,13 +84,8 @@ export interface ItemSwapParticipant {
 
 /**
  * Fired when `"swap"` mode commits: the occupants of `a`'s and `b`'s slots
- * trade places. No default: falls back to two `onItemMove` calls (further
- * falling back to `onItemInsert`) when unregistered, which is a correct
- * substitute for adjacent-in-the-same-container or cross-container swaps,
- * but reads as "each item independently moved" — not a strict pairwise
- * swap — for non-adjacent same-container slots, since `onItemMove` has no
- * way to say "leave everything in between untouched." Provide `onItemSwap`
- * for state models that need that distinction.
+ * trade places. Every adapter must provide this atomic operation; the Vanilla
+ * adapter exchanges the two DOM nodes through temporary placeholders.
  */
 export interface ItemSwapEvent {
   session: DragSession | null;
@@ -131,49 +123,110 @@ export interface GhostRect {
   height: number;
 }
 
-/**
- * Which visual form a ghost uses: `"flow"` is a layout spacer and `"marker"`
- * is an overlay used for either an insertion target or a pointer preview. Use
- * `GhostRole` to distinguish source, target, and pointer responsibilities.
- */
-export type GhostKind = "flow" | "marker";
-
-export interface GhostEventBase {
-  session: DragSession;
-  kind: GhostKind;
-  /** Which role this ghost plays in the current drag; see `GhostRole`. */
-  role: GhostRole;
-  container: Container;
-  containerMetadata: Record<string, unknown>;
-  original: Item;
-  originalItemId: ItemId;
-  originalMetadata: ItemMetadata;
-  /** The full dragged run this ghost represents, ordered. For a multi-item flow run, `original` is the member represented by this anchor; the single-item case is `items[0]`. */
-  items: Item[];
-  itemIds: ItemId[];
-  ghostItem: Item;
-  ghostItemId: ItemId;
-  ghostMetadata: ItemMetadata;
-  ghostRect?: GhostRect | null;
+export interface GhostSlotLocation {
+  readonly type: "slot";
+  readonly container: Container;
+  readonly containerMetadata: Record<string, unknown>;
+  /**
+   * Zero-based position in the materialized flow sequence. Ordinary
+   * non-dragged entries and earlier source/target spacers consume positions;
+   * dragged entries retained by a framework and overlay ghosts do not. Local
+   * spacer positions must be unique, reachable non-negative integers.
+   */
+  readonly index: number;
 }
 
-export interface GhostCreateEvent extends GhostEventBase {}
-
-export interface GhostInsertEvent extends GhostEventBase {
-  index: number;
-  beforeElement: HTMLElement | null;
+export interface GhostOverlayLocation {
+  readonly type: "overlay";
+  readonly container: Container;
+  readonly containerMetadata: Record<string, unknown>;
 }
 
-/**
- * Fired when a ghost is removed from `container`'s list. For flow mode this
- * includes a run anchor RELOCATING to a different container (not just the
- * run being torn down at drop/cancel): `container` here is the one the
- * anchor is LEAVING, so an adapter keeping per-container ghost state must
- * treat this as "this container's ghost is gone," not only "the drag ended."
- */
-export interface GhostRemoveEvent extends GhostEventBase {}
+export type GhostLocation = GhostSlotLocation | GhostOverlayLocation;
 
-export type GhostEvent = GhostCreateEvent | GhostInsertEvent | GhostRemoveEvent;
+/**
+ * Immutable ghost render state. Framework adapters keep these values in
+ * framework state; the Vanilla adapter applies them directly to the DOM.
+ */
+export interface GhostStateBase {
+  readonly session: DragSession;
+  readonly original: Item;
+  readonly originalItemId: ItemId;
+  readonly originalMetadata: ItemMetadata;
+  readonly items: readonly Item[];
+  readonly itemIds: readonly ItemId[];
+  readonly ghostItem: Item;
+  readonly ghostItemId: ItemId;
+  readonly ghostMetadata: ItemMetadata;
+  readonly rect: GhostRect;
+}
+
+export type GhostState =
+  | (GhostStateBase & {
+      readonly type: "source-spacer";
+      readonly location: GhostSlotLocation;
+    })
+  | (GhostStateBase & {
+      readonly type: "target-spacer";
+      readonly location: GhostSlotLocation;
+    })
+  | (GhostStateBase & {
+      readonly type: "insertion-marker";
+      readonly location: GhostSlotLocation;
+    })
+  | (GhostStateBase & {
+      readonly type: "pointer-preview";
+      readonly location: GhostOverlayLocation;
+    });
+
+type GhostStatePlacementFor<State extends GhostState> = State extends GhostState
+  ? Pick<State, "type" | "location">
+  : never;
+
+/** A ghost variant paired with the only location kind that it can occupy. */
+export type GhostStatePlacement = GhostStatePlacementFor<GhostState>;
+
+export interface GhostCreateEvent {
+  readonly operation: "create";
+  readonly ghost: GhostState;
+}
+
+type GhostInsertEventFor<State extends GhostState> = State extends GhostState
+  ? {
+      readonly operation: "insert";
+      readonly ghost: State;
+      readonly to: State["location"];
+      readonly beforeElement: HTMLElement | null;
+    }
+  : never;
+
+type GhostMoveEventFor<State extends GhostState> = State extends GhostState
+  ? {
+      readonly operation: "move";
+      readonly ghost: State;
+      readonly from: State["location"];
+      readonly to: State["location"];
+      readonly beforeElement: HTMLElement | null;
+    }
+  : never;
+
+type GhostRemoveEventFor<State extends GhostState> = State extends GhostState
+  ? {
+      readonly operation: "remove";
+      readonly ghost: State;
+      readonly from: State["location"];
+    }
+  : never;
+
+export type GhostInsertEvent = GhostInsertEventFor<GhostState>;
+export type GhostMoveEvent = GhostMoveEventFor<GhostState>;
+export type GhostRemoveEvent = GhostRemoveEventFor<GhostState>;
+
+export type GhostEvent =
+  | GhostCreateEvent
+  | GhostInsertEvent
+  | GhostMoveEvent
+  | GhostRemoveEvent;
 
 export interface DragStartEvent {
   session: DragSession;
@@ -349,62 +402,74 @@ export interface DragItemHoverEvent {
 /**
  * Callbacks installed on one specific `Container`.
  *
- * SnapSort reads each callback only from the receiver named below. Callbacks
- * are not inherited from a parent or root container and do not bubble through
- * the container tree. Event fields such as `source`, `container`, or `to`
- * describe related locations; they do not change which container receives
- * the callback. Install a shared handler explicitly on every container that
- * should use it.
+ * SnapSort reads each callback only from the receiver named below, following
+ * one rule: anything that mutates or renders application/ghost state resolves
+ * on the root container's controlled `callbacks` property (falling back to
+ * the root-scoped adapter),
+ * while anything consulted about a specific container's policy, geometry, or
+ * hover reads that container directly. Root-dispatched callbacks cannot be
+ * registered on a descendant container: construction, assignment, and subtree
+ * attachment reject them. Event fields such as `container`, `from`/`froms`,
+ * `to`, or `a`/`b` identify the semantic containers instead.
+ *
+ * Item and ghost representation callbacks are synchronous commands inside the
+ * root adapter's commit boundary. They must finish their projection and return
+ * normally. Throwing is an integration fault, not a transaction veto: SnapSort
+ * lets the original exception propagate unchanged. During scheduled drag work,
+ * the engine boundary reports it and SnapSort queues transient core cleanup
+ * before the next paint. It cannot roll back arbitrary application or DOM side
+ * effects that already ran. Use `onDragStart` or `canDrop` for supported
+ * rejection.
  */
 export interface ContainerCallbacks {
   /**
-   * Fires on the direct destination for euclidean, progressive, and insertion
-   * commits and for programmatic moves. An insertion-mode `"move"` or a
-   * programmatic move that leaves the item in its existing placement is a
-   * no-op. Vanilla swap fallback also emits two destination-owned moves when
-   * `onItemSwap` is absent. Preferred by state-backed frameworks: one semantic
-   * event per move.
+   * Root-dispatched. Fires for euclidean, progressive, and insertion commits
+   * and for programmatic moves; `event.froms`/`event.to` identify the source
+   * and destination containers. An insertion-mode `"move"` or a programmatic
+   * move that leaves the item in its existing placement is a no-op. Preferred
+   * by state-backed adapters: one semantic event per move.
    */
   onItemMove?: (event: ItemMoveEvent) => void;
 
   /**
-   * Fires on the direct destination for primitive insertions and as the
-   * fallback when that destination has no `onItemMove`, regardless of the
-   * originating mode/operation. The Vanilla default performs direct DOM
-   * mutation.
+   * Root-dispatched. Fires for primitive insertions and as the fallback when
+   * the root has no `onItemMove`, regardless of the originating
+   * mode/operation; `event.container` identifies the destination. The Vanilla
+   * default performs direct DOM mutation.
    */
   onItemInsert?: (event: ItemInsertEvent) => void;
 
   /**
-   * Fires on the item's current direct owner for programmatic removal. An
-   * ordinary move does not also emit `onItemRemove` on its source.
+   * Root-dispatched. Fires for programmatic removal; `event.container`
+   * identifies the item's direct owner. An ordinary move does not also emit
+   * `onItemRemove` for its source.
    */
   onItemRemove?: (event: ItemRemoveEvent) => void;
 
   /**
-   * Swap mode only: fires once on the dragged item's pre-swap direct owner
-   * (`event.a.container`). `event.b.container` receives no second swap event.
-   * Vanilla has no default and falls back to two destination-owned
-   * `onItemMove` calls when unregistered (see `ItemSwapEvent`).
+   * Root-dispatched, swap mode only: fires once per swap. `event.a` is the
+   * dragged item's pre-swap slot and `event.b` the other item's; no second
+   * swap event exists. The Vanilla adapter provides an atomic DOM
+   * implementation.
    */
   onItemSwap?: (event: ItemSwapEvent) => void;
 
   /**
-   * Fires directly on the tree root in every built-in mode. Returning `false`
+   * Root-dispatched in every built-in mode. Returning `false`
    * vetoes the drag before ghost or item lifecycle state changes;
    * `event.source.container` identifies the direct source.
    */
   onDragStart?: (event: DragStartEvent) => void | false;
 
   /**
-   * Fires on the tree root when an activated drag ends in every built-in mode,
+   * Root-dispatched when an activated drag ends in every built-in mode,
    * including cancellation and a return to the source. It does not fire when
    * startup is vetoed or fails before activation.
    */
   onDragEnd?: (event: DragEndEvent) => void;
 
   /**
-   * Fires on the tree root in every built-in mode, but only when the
+   * Root-dispatched in every built-in mode, but only when the
    * prospective direct container/index changes. `event.current` identifies
    * that target; the target container does not receive this callback.
    */
@@ -430,7 +495,7 @@ export interface ContainerCallbacks {
   onDragItemLeave?: (event: DragItemHoverEvent) => void;
 
   /**
-   * Fires directly on the root container at most once per engine frame when
+   * Root-dispatched at most once per engine frame when
    * transient item geometry may have changed. It is independent of the
    * built-in mode and may also fire outside an active session. Notification
    * only; consumers decide what external geometry, if any, to invalidate.
@@ -455,46 +520,32 @@ export interface ContainerCallbacks {
   /**
    * Consulted synchronously on an insertion candidate's direct destination.
    * Return the complete final marker rectangle in world coordinates. This is
-   * a pure geometry calculation and is not wrapped by `flushMutation`.
+   * a pure geometry calculation and is not wrapped by the adapter commit.
    */
   getInsertionMarkerRect?: (event: InsertionMarkerRectEvent) => GhostRect;
 
   /**
    * Consulted synchronously on the direct owner of each hover candidate.
    * Return a world-space rectangle or circle. This is a pure geometry
-   * calculation and is not wrapped by `flushMutation`.
+   * calculation and is not wrapped by the adapter commit.
    */
   getItemHitbox?: (event: ItemHitboxEvent) => ItemHitbox;
 
   /**
-   * Fires directly on `event.container` when a ghost is created: a flow
-   * placement/source spacer, an insertion target marker, or a root-owned
-   * pointer preview. Not wrapped by `flushMutation`; `event.kind` and
-   * `event.role` distinguish its form and responsibility.
-   */
-  createGhost?: (event: GhostCreateEvent) => HTMLElement | void | null;
-
-  /**
-   * Fires on the direct ghost owner (`event.container`) through that owner's
-   * `flushMutation`: a flow source/target spacer, insertion target, or the root
-   * pointer preview. May repeat to move or update a ghost.
+   * Root-dispatched. Fires when a ghost becomes present;
+   * `event.ghost.location.container` identifies the destination.
    */
   onGhostInsert?: (event: GhostInsertEvent) => void;
 
   /**
-   * Fires on the direct owner the ghost is leaving (`event.container`) through
-   * that owner's `flushMutation`: a flow source/target spacer, insertion
-   * target, or the root pointer preview.
+   * Root-dispatched. Fires once when an existing ghost changes location;
+   * `event.from`/`event.to` identify the source and destination containers.
    */
-  onGhostRemove?: (event: GhostRemoveEvent) => void;
+  onGhostMove?: (event: GhostMoveEvent) => void;
 
   /**
-   * Integration hook, not a session event. SnapSort reads it from the same
-   * receiver as the callback being wrapped: item move/insert/remove/swap,
-   * ghost insert/remove, or root drop-target-change/drag-end.
-   * Framework adapters provide it automatically to commit state and DOM
-   * synchronously before SnapSort reads geometry. Drag start, ghost creation,
-   * hover, policy, and visual-invalidation callbacks are not wrapped.
+   * Root-dispatched. Fires when a present ghost becomes absent;
+   * `event.ghost.location.container` identifies the last owner.
    */
-  flushMutation?: (mutation: () => void) => void;
+  onGhostRemove?: (event: GhostRemoveEvent) => void;
 }

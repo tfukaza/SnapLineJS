@@ -27,9 +27,7 @@ const initialColumns = [
   {
     id: "active",
     title: "Active",
-    items: [
-      { id: "item-5", label: "Board polish", detail: "Column controls" },
-    ],
+    items: [{ id: "item-5", label: "Board polish", detail: "Column controls" }],
   },
   {
     id: "done",
@@ -70,12 +68,8 @@ document.addEventListener("DOMContentLoaded", () => {
   fileTreeEngine.assignDom(fileTreeCanvasElement);
   fileTreeEngine.camera?.setCameraPosition(0, 0);
 
-  document
-    .getElementById("add-item-button")
-    .addEventListener("click", addItem);
-  document
-    .getElementById("reset-button")
-    .addEventListener("click", resetBoard);
+  document.getElementById("add-item-button").addEventListener("click", addItem);
+  document.getElementById("reset-button").addEventListener("click", resetBoard);
   document
     .getElementById("reset-tree-button")
     .addEventListener("click", resetFileTree);
@@ -217,7 +211,7 @@ function createColumn(column) {
 }
 
 function createContainer(element, parent, config, metadata) {
-  const container = new Container(engine, null, config);
+  const container = new Container(engine, parent, config);
   container.locked = true;
   container.metadata = metadata;
   container.element = element;
@@ -227,9 +221,19 @@ function createContainer(element, parent, config, metadata) {
   return container;
 }
 
+function destroySnapSortSubtree(object) {
+  for (const child of [...object.children]) {
+    destroySnapSortSubtree(child);
+  }
+  object.destroy(false);
+}
+
 function buildFileTree() {
+  if (fileTreeRootContainer) {
+    destroySnapSortSubtree(fileTreeRootContainer);
+    fileTreeRootContainer = null;
+  }
   fileTreeElement.textContent = "";
-  fileTreeRootContainer?.destroy();
 
   fileTreeRootContainer = createInsertionContainer(
     fileTreeElement,
@@ -252,7 +256,7 @@ function buildFileTree() {
 }
 
 function createInsertionContainer(element, parent, config, metadata, locked) {
-  const container = new Container(fileTreeEngine, null, {
+  const container = new Container(fileTreeEngine, parent, {
     ...config,
     mode: "insertion",
   });
@@ -389,6 +393,7 @@ function createItem(item, container) {
   container.element.append(itemElement);
 
   const itemObject = new Item(engine, null);
+  itemObject.itemId = item.id;
   itemObject.metadata = { itemId: item.id };
   itemObject.element = itemElement;
   container.attachItem(itemObject);
@@ -482,21 +487,10 @@ function moveItemAcrossColumns(itemId, direction) {
   if (!sourceContainer || !targetContainer || sourceIndex === -1) return;
 
   const destinationIndex = Math.min(sourceIndex, targetColumn.items.length);
-  const movedBySnapSort = sourceContainer.moveItem(
-    itemId,
-    targetContainer,
-    destinationIndex,
-  );
-  if (movedBySnapSort) {
-    scheduleStateSync();
-    return;
-  }
-
-  const itemObject = itemObjects.get(itemId);
-  if (itemObject) {
-    targetContainer.element.append(itemObject.element);
-    sourceContainer.detachItemFromContainer(sourceContainer, itemObject);
-    targetContainer.attachItem(itemObject);
+  if (!sourceContainer.moveItem(itemId, targetContainer, destinationIndex)) {
+    throw new Error(
+      `SnapSort vanilla demo: item "${itemId}" exists in application state but not in the SnapSort tree.`,
+    );
   }
   scheduleStateSync();
 }
@@ -520,7 +514,8 @@ function createBoardElement() {
   const boardFrame = canvasElement.querySelector(".board-frame");
   const nextBoardElement = document.createElement("div");
   nextBoardElement.id = "vanilla-board";
-  nextBoardElement.className = "snapsort-container snapsort-mode-euclidean board";
+  nextBoardElement.className =
+    "snapsort-container snapsort-mode-euclidean board";
   nextBoardElement.ariaLabel = "SnapSort vanilla Kanban board";
   boardFrame.append(nextBoardElement);
   return nextBoardElement;

@@ -1,10 +1,16 @@
 import type { Container } from "../container";
-import type { GhostRect } from "../events";
+import { buildGhostSlotLocation } from "../event-builders";
 import type { Item } from "../item";
-import { placeItemAt } from "../internal/tree-mutation";
+import {
+  assertCanPlaceItems,
+  detachItem,
+  placeItemAtUnchecked,
+  type ItemPlacement,
+} from "../internal/tree-mutation";
 import {
   assertCanFireGhostInsert,
   assertCanFireGhostRemove,
+  fireMutation,
   settleMutation,
 } from "../mutation";
 import type { DragSessionController as DragSession } from "./session";
@@ -14,11 +20,6 @@ import {
   updatePointerPreview,
   validatePointerPreview,
 } from "./pointer-preview";
-
-function sourceRect(item: Item): GhostRect | null {
-  const box = item.dragSnapshot?.box;
-  return box ? { x: 0, y: 0, width: box.width, height: box.height } : null;
-}
 
 /** @internal Validate callbacks needed to keep source slots stable. */
 export function validateItemVisual(session: DragSession): void {
@@ -44,8 +45,8 @@ export function computeGroupOffsets(session: DragSession): void {
   for (const member of session.items) {
     cumulativeByItem.set(member, cumulative);
     if (member === session.pressedItem) pressedCumulative = cumulative;
-    const box = member.dragSnapshot?.box;
-    cumulative += axis === "y" ? box?.height ?? 0 : box?.width ?? 0;
+    const box = session.dragBoxFor(member);
+    cumulative += axis === "y" ? box.height : box.width;
   }
   for (const member of session.items) {
     const delta = (cumulativeByItem.get(member) ?? 0) - pressedCumulative;
@@ -65,54 +66,58 @@ export async function startItemVisual(session: DragSession): Promise<void> {
   validateItemVisual(session);
   computeGroupOffsets(session);
 
-  session.items.forEach((member, i) => {
+  const plan = session.items.map((member, i) => {
     const source = session.activeSources[i];
-    const container = source.container;
-    const liveIndex = container.itemOrderedList.indexOf(member);
+    if (!source) {
+      throw new Error(
+        "SnapSort: dragVisual item participants require parallel source locations.",
+      );
+    }
+    const liveIndex = source.container.itemOrderedList.indexOf(member);
     if (liveIndex < 0) {
       throw new Error(
         "SnapSort: a dragVisual item must still be attached when its drag starts.",
       );
     }
-
-    const rect = sourceRect(member);
-    const ghost = member.createGhostItem(
-      session,
-      "flow",
-      container,
-      rect,
-      "source",
-    );
-    if (!ghost) return;
-    ghost.rootContainer = session.root;
-    session.sourceGhostRun.push(ghost);
-    if (session.sourceGhostRun.length === 1) {
-      session.ghosts.set("source", ghost);
-    }
-    container.insertGhostAt(
+    const box = session.dragBoxFor(member);
+    return {
       member,
-      container,
-      ghost,
+      container: source.container,
       liveIndex,
-      rect,
-      session,
-      "flow",
-      "source",
-    );
-    member.detachItemFromContainer(container, member);
-
-    const snapshot = member.dragSnapshot;
-    member.style = {
-      cursor: "grabbing",
-      position: "absolute",
-      zIndex: "1000",
-      top: "0px",
-      left: "0px",
-      width: snapshot ? `${snapshot.box.width}px` : "",
-      height: snapshot ? `${snapshot.box.height}px` : "",
+      box,
+      rect: { x: 0, y: 0, width: box.width, height: box.height },
     };
-    session.dragCoordinateParent.set(member, container);
-    member.refreshDraggedItemPosition();
+  });
+
+  fireMutation(session.root, () => {
+    plan.forEach(({ member, container, liveIndex, box, rect }) => {
+      const ghost = member.createGhostItem(
+        session,
+        {
+          type: "source-spacer",
+          location: buildGhostSlotLocation(container, liveIndex),
+        },
+        rect,
+      );
+      session.sourceGhostRun.push(ghost);
+      if (session.sourceGhostRun.length === 1) {
+        session.ghostsByChannel.set("source", ghost);
+      }
+      container.insertGhost(ghost);
+      detachItem(container, member);
+
+      member.style = {
+        cursor: "grabbing",
+        position: "absolute",
+        zIndex: "1000",
+        top: "0px",
+        left: "0px",
+        width: `${box.width}px`,
+        height: `${box.height}px`,
+      };
+      session.dragCoordinateParent.set(member, container);
+      member.refreshDraggedItemPosition();
+    });
   });
   await settleMutation();
 }
@@ -148,29 +153,22 @@ export function resetItemVisual(session: DragSession): void {
 export async function stopItemVisual(session: DragSession): Promise<void> {
   resetItemVisual(session);
 
-  for (let i = 0; i < session.sourceGhostRun.length; i++) {
-    const ghost = session.sourceGhostRun[i];
-    const container = ghost.parent as unknown as Container | null;
-    if (container) {
-      session.items[i].removeGhostFrom(
-        session.items[i],
-        container,
-        ghost,
-        session,
-        "flow",
-        "source",
-      );
-    }
+  if (session.sourceGhostRun.length > 0) {
+    fireMutation(session.root, () => {
+      for (const ghost of session.sourceGhostRun) {
+        ghost.removeGhost();
+      }
+    });
   }
   await settleMutation();
   for (const ghost of session.sourceGhostRun) {
-    ghost.destroy(!ghost.frameworkManagedGhostElement);
+    ghost.destroy(false);
   }
   session.sourceGhostRun.length = 0;
-  session.ghosts.delete("source");
+  session.ghostsByChannel.delete("source");
 }
 
-/** @internal Validate integration requirements for the selected pointer visual. */
+/** @internal Validate adapter requirements for the selected pointer visual. */
 export function validateDragVisual(session: DragSession): void {
   if (session.dragVisual === "item") {
     validateItemVisual(session);
@@ -209,13 +207,19 @@ export async function stopDragVisual(session: DragSession): Promise<void> {
 /** @internal Reattach a detached run to its pre-handoff participant locations. */
 export function restoreActiveItems(session: DragSession): void {
   const byContainer = new Map<Container, number[]>();
+  const placements: ItemPlacement[] = [];
   session.items.forEach((_, i) => {
     const source = session.activeSources[i];
     if (!source) return;
     const indices = byContainer.get(source.container) ?? [];
     indices.push(i);
     byContainer.set(source.container, indices);
+    const member = session.items[i];
+    if (!member.parent) {
+      placements.push({ container: source.container, item: member });
+    }
   });
+  assertCanPlaceItems(placements);
   for (const [container, indices] of byContainer) {
     indices
       .slice()
@@ -226,7 +230,7 @@ export function restoreActiveItems(session: DragSession): void {
       .forEach((i) => {
         const member = session.items[i];
         if (member.parent) return;
-        placeItemAt(
+        placeItemAtUnchecked(
           container,
           member,
           Math.min(

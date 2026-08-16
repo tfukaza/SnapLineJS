@@ -1,14 +1,19 @@
+import type { BaseObject, Engine } from "@snap-engine/core";
 import { Item } from "./item";
 import type {
   ContainerCallbacks,
   VisualGeometryInvalidationReason,
 } from "./events";
-import { defaultCallbacks } from "./mutation";
 import type { LayoutMainAxisAlign } from "./layout";
 import type { LayoutWrap } from "./snapshot";
 import type { SortMode } from "./drag/drop-strategy";
 import type { DragSession } from "./drag/session";
 import { getDragSession } from "./drag/session-store";
+import {
+  createVanillaAdapter,
+  STRUCTURAL_CALLBACKS,
+  type SnapSortAdapter,
+} from "./adapter";
 
 export interface AnimationConfig {
   timing_function?: string;
@@ -28,13 +33,6 @@ export const defaultAnimations: ContainerAnimations = {
 };
 
 export interface ContainerConfig {
-  /**
-   * @internal DOM structure is owned either by the core Vanilla defaults or
-   * by a framework adapter. Framework adapters set this unconditionally so
-   * omitted callbacks can never fall through to direct DOM mutation.
-   */
-  // TODO: Can always be "framework" after we make the vanilla adapter
-  domOwnership?: "core" | "framework";
   /** Which built-in drop-target/lifecycle strategy pair to use for this tree. Default `"euclidean"`. */
   mode?: SortMode;
   /** Main layout direction. Default `"column"`. */
@@ -48,26 +46,62 @@ export interface ContainerConfig {
   animation?: ContainerAnimations | null;
   /** Base priority assigned to every drop candidate owned directly by this container. Default `0`. */
   dropPriority?: number;
-  /**
-   * Callbacks owned by this container instance. They are not inherited from
-   * parent/root containers and do not bubble; lifecycle, mutation, policy,
-   * hover, and ghost callbacks each have an explicit receiver documented by
-   * `ContainerCallbacks`. Reuse a handler object explicitly on each container
-   * that should participate.
-   */
-  callbacks?: ContainerCallbacks;
+  /** Callbacks owned by this container instance. See `ContainerCallbacks` for dispatch ownership. */
+  callbacks?: Readonly<ContainerCallbacks>;
 }
 
-const defaultConfig: ContainerConfig = {
-  domOwnership: "core",
+/** Construction-only options, including the root-scoped renderer adapter. */
+export interface ContainerOptions extends ContainerConfig {
+  readonly adapter?: SnapSortAdapter;
+}
+
+/** Live container configuration; callbacks use the controlled `callbacks` property instead. */
+export type ContainerRuntimeConfig = Omit<ContainerConfig, "callbacks">;
+
+const defaultConfig: ContainerRuntimeConfig = {
   mode: "euclidean",
   direction: "column",
   dropPriority: 0,
-  callbacks: defaultCallbacks,
+};
+
+const ROOT_DISPATCHED_CALLBACKS = [
+  ...STRUCTURAL_CALLBACKS,
+  "onDragStart",
+  "onDragEnd",
+  "onDropTargetChange",
+  "onVisualGeometryInvalidated",
+] as const satisfies readonly (keyof ContainerCallbacks)[];
+
+const EMPTY_CALLBACKS: Readonly<ContainerCallbacks> = Object.freeze({});
+
+function assertNoRootDispatchedCallbacks(
+  callbacks: Readonly<ContainerCallbacks>,
+  containerName: string,
+): void {
+  for (const name of ROOT_DISPATCHED_CALLBACKS) {
+    if (callbacks[name] !== undefined) {
+      throw new Error(
+        `SnapSort: callbacks.${name} is root-dispatched; register it on the root container, not on "${containerName}".`,
+      );
+    }
+  }
+}
+
+function freezeCallbacks(
+  callbacks: Readonly<ContainerCallbacks>,
+): Readonly<ContainerCallbacks> {
+  return Object.freeze({ ...callbacks });
+}
+
+type ResolvedContainerRuntimeConfig = ContainerRuntimeConfig & {
+  name: string;
 };
 
 export class Container extends Item {
-  #config: ContainerConfig;
+  #config: ResolvedContainerRuntimeConfig;
+  #callbacks: Readonly<ContainerCallbacks> = EMPTY_CALLBACKS;
+  readonly #adapter: SnapSortAdapter;
+  #mutationDepth = 0;
   #visualInvalidationItems = new Set<Item>();
   #visualInvalidationReasons = new Set<VisualGeometryInvalidationReason>();
 
@@ -76,29 +110,54 @@ export class Container extends Item {
     return this.rootContainer === this ? getDragSession(this) : null;
   }
 
-  constructor(engine: any, parent: Container | null, config?: ContainerConfig) {
+  constructor(
+    engine: Engine,
+    parent: Container | null,
+    options?: ContainerOptions,
+  ) {
+    const inheritedAdapter = parent?.adapter;
+    if (
+      inheritedAdapter &&
+      options?.adapter &&
+      options.adapter !== inheritedAdapter
+    ) {
+      throw new Error(
+        "SnapSort: every Container in one root must share the same adapter object.",
+      );
+    }
+    const callbacks = freezeCallbacks(options?.callbacks ?? EMPTY_CALLBACKS);
+    if (parent) {
+      assertNoRootDispatchedCallbacks(
+        callbacks,
+        options?.name ?? "a descendant container",
+      );
+    }
+
     super(engine, parent);
     this.locked = true;
-    const domOwnership = config?.domOwnership ?? defaultConfig.domOwnership;
-    this.#config = {
-      ...defaultConfig,
-      ...(config || {}),
-      domOwnership,
-      callbacks:
-        domOwnership === "framework"
-          ? { ...(config?.callbacks || {}) }
-          : {
-              ...defaultConfig.callbacks,
-              ...(config?.callbacks || {}),
-            },
-    };
+    this.#adapter =
+      inheritedAdapter ?? options?.adapter ?? createVanillaAdapter();
 
-    if (!this.#config.name) {
+    let name = options?.name;
+    if (!name) {
       if (!this.global.data["dragAndDropContainerCounter"]) {
         this.global.data["dragAndDropContainerCounter"] = 0;
       }
-      this.#config.name = `container-${this.global.data["dragAndDropContainerCounter"]++}`;
+      name = `container-${this.global.data["dragAndDropContainerCounter"]++}`;
     }
+
+    this.#config = {
+      mode: options?.mode ?? defaultConfig.mode,
+      direction: options?.direction ?? defaultConfig.direction,
+      mainAxisAlign: options?.mainAxisAlign,
+      wrap: options?.wrap,
+      stretchItems: options?.stretchItems,
+      name,
+      animation: options?.animation,
+      dropPriority: options?.dropPriority ?? defaultConfig.dropPriority,
+    };
+    Object.seal(this.#config);
+    this.#callbacks = callbacks;
 
     this.style = {
       position: "relative",
@@ -110,12 +169,100 @@ export class Container extends Item {
     this.global.data["dragAndDropContainers"].push(this);
   }
 
-  /** @internal */
-  get domOwnership() {
-    return this.#config.domOwnership ?? "core";
+  get adapter(): SnapSortAdapter {
+    return this.#adapter;
   }
 
-  get name() {
+  /** @internal Validate root and adapter ownership before an Item is placed. */
+  assertCanPlaceItem(item: Item): void {
+    if (item.engine !== this.engine) {
+      throw new Error("SnapSort: Items cannot move between Engines.");
+    }
+
+    if (item === this) {
+      throw new Error("An object cannot be parented to itself.");
+    }
+    let ancestor: BaseObject | null = this.parent;
+    while (ancestor) {
+      if (ancestor === item) {
+        throw new Error("An object cannot be parented to one of its children.");
+      }
+      ancestor = ancestor.parent;
+    }
+
+    const root = this.rootContainer;
+    if (item.rootContainer !== item && item.rootContainer !== root) {
+      throw new Error("SnapSort: Items cannot move between independent roots.");
+    }
+    this.#assertSubtreeOwnership(item, root.adapter);
+  }
+
+  #assertSubtreeOwnership(object: BaseObject, adapter: SnapSortAdapter): void {
+    if (object.engine !== this.engine) {
+      throw new Error("SnapSort: Items cannot move between Engines.");
+    }
+    if (object instanceof Container && object.adapter !== adapter) {
+      throw new Error(
+        "SnapSort: every Container in one root must share the same adapter object.",
+      );
+    }
+    if (object instanceof Container) {
+      assertNoRootDispatchedCallbacks(object.callbacks, object.name);
+    }
+    for (const child of object.children) {
+      this.#assertSubtreeOwnership(child, adapter);
+    }
+  }
+
+  /** @internal Run ordered representation work in this root's commit domain. */
+  commitMutation(mutation: () => void): void {
+    const root = this.rootContainer;
+    if (root !== this) {
+      root.commitMutation(mutation);
+      return;
+    }
+    if (this.#mutationDepth > 0) {
+      mutation();
+      return;
+    }
+    let calls = 0;
+    let acceptingMutation = true;
+    try {
+      this.#adapter.commit(() => {
+        if (!acceptingMutation) {
+          throw new Error(
+            "SnapSort: an adapter cannot invoke a retained mutation after commit returns.",
+          );
+        }
+        calls += 1;
+        if (calls > 1) {
+          throw new Error(
+            "SnapSort: an adapter must invoke its mutation exactly once.",
+          );
+        }
+        this.#mutationDepth += 1;
+        try {
+          mutation();
+        } finally {
+          this.#mutationDepth -= 1;
+        }
+      });
+    } finally {
+      acceptingMutation = false;
+    }
+    if (calls === 0) {
+      throw new Error(
+        "SnapSort: an adapter must invoke its mutation synchronously.",
+      );
+    }
+    if (calls > 1) {
+      throw new Error(
+        "SnapSort: an adapter must invoke its mutation exactly once.",
+      );
+    }
+  }
+
+  get name(): string {
     return this.#config.name;
   }
 
@@ -167,13 +314,21 @@ export class Container extends Item {
     this.#config.mode = value;
   }
 
-  get callbacks() {
-    return this.#config.callbacks;
+  get callbacks(): Readonly<ContainerCallbacks> {
+    return this.#callbacks;
+  }
+
+  set callbacks(value: Readonly<ContainerCallbacks>) {
+    const callbacks = freezeCallbacks(value);
+    if (this.rootContainer !== this) {
+      assertNoRootDispatchedCallbacks(callbacks, this.name);
+    }
+    this.#callbacks = callbacks;
   }
 
   /**
    * Queue one coalesced notification that rendered item geometry may have
-   * changed. This is a low-level integration seam, not a DOM mutation hook.
+   * changed. This is a low-level adapter seam, not a DOM mutation hook.
    * @internal
    */
   invalidateVisualGeometry(
@@ -190,7 +345,7 @@ export class Container extends Item {
       if (!item.isGhost) this.#visualInvalidationItems.add(item);
     }
     this.#visualInvalidationReasons.add(reason);
-    // Always publish at the geometry-read-safe READ_1 integration boundary.
+    // Always publish at the geometry-read-safe READ_1 adapter boundary.
     // Stage queues are swapped before draining, so work scheduled into the
     // active stage is retained for the next frame. The stable queueId keeps
     // repeated invalidations coalesced until that READ_1 delivery.
@@ -210,7 +365,7 @@ export class Container extends Item {
         };
         this.#visualInvalidationItems.clear();
         this.#visualInvalidationReasons.clear();
-        this.callbacks?.onVisualGeometryInvalidated?.(event);
+        this.callbacks.onVisualGeometryInvalidated?.(event);
       },
       {
         stage: "READ_1",
@@ -227,7 +382,7 @@ export class Container extends Item {
     return this.itemList.length;
   }
 
-  get config() {
+  get config(): ContainerRuntimeConfig {
     return this.#config;
   }
 

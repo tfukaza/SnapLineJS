@@ -2,54 +2,45 @@ import type { AnimationConfig, Container } from "../container";
 import type { Item } from "../item";
 import type { ResolvedDropTarget } from "../algorithm";
 import { buildDragLocation } from "../event-builders";
-import type { DragLocation, GhostRect, GhostRole } from "../events";
+import type { DragLocation } from "../events";
 import {
   assertCanFireItemSwap,
   fireItemSwap,
   settleMutation,
 } from "../mutation";
 import type { DragLifecycleStrategy } from "./lifecycle";
-import type { DragSessionController as DragSession } from "./session";
+import type {
+  DragSessionController as DragSession,
+  DropPlacement,
+} from "./session";
 import { reconcileRootTreeState } from "../internal/tree-state";
+import { assertCanPlaceItems } from "../internal/tree-mutation";
 import { readVisualRect } from "../internal/visual-rect";
 import {
   restoreActiveItems,
   startDragVisual,
   stopDragVisual,
-  stopItemVisual,
   updateDragVisual,
   validateDragVisual,
 } from "./item-visual";
+import { pointerPreviewMemberRects } from "./pointer-preview";
 import {
-  pointerPreviewMemberRects,
-  removePointerPreview,
-} from "./pointer-preview";
+  animationConfigFor,
+  playDropAnimation,
+} from "../internal/flip-animation";
 
 /**
- * Swap mode has no target-role ghost: the current hover target is exposed
+ * Swap mode has no target-spacer state: the current hover target is exposed
  * through `onDragItemEnter`/`Move`/`Leave`. Pointer representation is chosen
  * independently through `dragVisual`: the real Item can be hoisted with a
  * source spacer, the shared group preview can follow the pointer, or neither
  * can be rendered. A `"move"` drop swaps the primary Item with its target.
  */
 
-async function removeGhost(
-  session: DragSession,
-  role: GhostRole = "target",
-): Promise<void> {
-  if (role === "target") {
-    // Swap mode has no target-role ghost — hover feedback is entirely the
-    // consumer's job via onDragItemEnter/Move/Leave.
-    session.pendingGhostTarget = null;
-    return;
-  }
-  if (role === "pointer") await removePointerPreview(session);
-}
-
 function drop(session: DragSession): void {
   const item = session.primaryItem;
   const root = session.root;
-  const draggedKey = root.itemKey(item);
+  const draggedItemId = item.resolvedItemId;
   const draggedAnimation: {
     first: DOMRect | null;
     last: DOMRect | null;
@@ -58,14 +49,14 @@ function drop(session: DragSession): void {
   } = { first: null, last: null, element: null, config: null };
   const displacedAnimation: {
     item: Item | null;
-    key: string | null;
+    itemId: string | null;
     first: DOMRect | null;
     last: DOMRect | null;
     element: HTMLElement | null;
     config: AnimationConfig | null;
   } = {
     item: null,
-    key: null,
+    itemId: null,
     first: null,
     last: null,
     element: null,
@@ -78,7 +69,8 @@ function drop(session: DragSession): void {
   } | null = null;
 
   const resolveDropTarget = () => {
-    const pending = session.pendingGhostTarget;
+    if (session.cancelled) return null;
+    const pending = session.pendingPlacement;
     const container = pending?.container ?? null;
     const index = pending?.index ?? -1;
     const targetItem =
@@ -102,7 +94,7 @@ function drop(session: DragSession): void {
       dropTarget = resolveDropTarget();
       if (!dropTarget || dropTarget.item === item) return;
       displacedAnimation.item = dropTarget.item;
-      displacedAnimation.key = root.itemKey(dropTarget.item);
+      displacedAnimation.itemId = dropTarget.item.resolvedItemId;
       displacedAnimation.first = readVisualRect(dropTarget.item);
     },
     { stage: "READ_1", queueId: `drag-end-swap-read-first-${item.id}` },
@@ -115,7 +107,7 @@ function drop(session: DragSession): void {
         restoreActiveItems(session);
       }
       if (session.dragVisual === "preview") await stopDragVisual(session);
-      session.pendingGhostTarget = null;
+      session.pendingPlacement = null;
       session.clearHoveredItem();
       session.clearDraggingFlags();
 
@@ -127,10 +119,9 @@ function drop(session: DragSession): void {
       const bIndex = targetLocation?.index ?? -1;
 
       let destination: DragLocation | null = null;
-      let mutationError: unknown;
-      let mutationFailed = false;
-      draggedAnimation.config = item.dropAnimationConfig(
+      draggedAnimation.config = animationConfigFor(
         bContainer ?? aLocation.container,
+        "drop",
       );
 
       if (bContainer && targetItem && targetItem !== item) {
@@ -146,60 +137,89 @@ function drop(session: DragSession): void {
       ) {
         const aContainer = aLocation.container;
         const aIndex = aLocation.index;
-        displacedAnimation.config =
-          targetItem.reorderAnimationConfig(aContainer);
-        if (displacedAnimation.key !== root.itemKey(targetItem)) {
+        displacedAnimation.config = animationConfigFor(aContainer, "reorder");
+        if (displacedAnimation.itemId !== targetItem.resolvedItemId) {
           displacedAnimation.item = null;
-          displacedAnimation.key = null;
+          displacedAnimation.itemId = null;
           displacedAnimation.first = null;
         }
 
+        assertCanPlaceItems([
+          { container: bContainer, item },
+          { container: aContainer, item: targetItem },
+        ]);
         assertCanFireItemSwap(aContainer);
+
+        const aChildrenBeforeSwap = [...aContainer.children];
+        const aOrderBeforeSwap = [...aContainer.itemOrderedList];
+        const bChildrenBeforeSwap =
+          bContainer === aContainer
+            ? aChildrenBeforeSwap
+            : [...bContainer.children];
+        const bOrderBeforeSwap =
+          bContainer === aContainer
+            ? aOrderBeforeSwap
+            : [...bContainer.itemOrderedList];
 
         // Update bookkeeping directly as a genuine swap: both items simply
         // trade slots (reparenting is a no-op when they share a container),
         // independent of whatever event ends up firing below.
-        (bContainer as unknown as Item).appendChild(item);
-        (aContainer as unknown as Item).appendChild(targetItem);
+        bContainer.appendChild(item);
+        aContainer.appendChild(targetItem);
         aContainer.itemOrderedList[aIndex] = targetItem;
         bContainer.itemOrderedList[bIndex] = item;
 
+        let projected = false;
         try {
           fireItemSwap(
             { item, container: aContainer, index: aIndex },
             { item: targetItem, container: bContainer, index: bIndex },
             session,
           );
-        } catch (error) {
-          mutationError = error;
-          mutationFailed = true;
+          projected = true;
         } finally {
-          reconcileRootTreeState(root);
+          if (!projected) {
+            aContainer.appendChild(item);
+            bContainer.appendChild(targetItem);
+            aContainer.children = aChildrenBeforeSwap;
+            aContainer.itemOrderedList.splice(
+              0,
+              aContainer.itemOrderedList.length,
+              ...aOrderBeforeSwap,
+            );
+            if (bContainer !== aContainer) {
+              bContainer.children = bChildrenBeforeSwap;
+              bContainer.itemOrderedList.splice(
+                0,
+                bContainer.itemOrderedList.length,
+                ...bOrderBeforeSwap,
+              );
+            }
+            reconcileRootTreeState(root);
+            session.scheduleErrorFinalizer();
+          }
         }
+        reconcileRootTreeState(root);
         await settleMutation();
       }
 
-      try {
-        session.complete(destination);
-      } catch (error) {
-        if (!mutationFailed) throw error;
-      }
-      if (mutationFailed) throw mutationError;
+      session.complete(destination);
     },
     { stage: "WRITE_1", queueId: `drag-end-swap-${item.id}` },
   );
 
   root.schedule(
     () => {
-      const currentDraggedItem = root.findItemByKey(draggedKey) ?? item;
+      const currentDraggedItem = root.findItemByKey(draggedItemId) ?? item;
       draggedAnimation.element = currentDraggedItem.element?.isConnected
         ? currentDraggedItem.element
         : null;
       draggedAnimation.last = readVisualRect(currentDraggedItem);
 
-      if (!displacedAnimation.item || !displacedAnimation.key) return;
+      if (!displacedAnimation.item || !displacedAnimation.itemId) return;
       const currentDisplacedItem =
-        root.findItemByKey(displacedAnimation.key) ?? displacedAnimation.item;
+        root.findItemByKey(displacedAnimation.itemId) ??
+        displacedAnimation.item;
       displacedAnimation.element = currentDisplacedItem.element?.isConnected
         ? currentDisplacedItem.element
         : null;
@@ -210,27 +230,31 @@ function drop(session: DragSession): void {
 
   root.schedule(
     () => {
-      item.playDropAnimation(
+      playDropAnimation(
+        item,
         draggedAnimation.first,
         draggedAnimation.last,
         draggedAnimation.element,
         draggedAnimation.config,
         root,
       );
-      displacedAnimation.item?.playDropAnimation(
-        displacedAnimation.first,
-        displacedAnimation.last,
-        displacedAnimation.element,
-        displacedAnimation.config,
-        root,
-      );
+      if (displacedAnimation.item) {
+        playDropAnimation(
+          displacedAnimation.item,
+          displacedAnimation.first,
+          displacedAnimation.last,
+          displacedAnimation.element,
+          displacedAnimation.config,
+          root,
+        );
+      }
     },
     { stage: "WRITE_2", queueId: `drag-end-swap-play-${item.id}` },
   );
 }
 
 export class SwapLifecycle implements DragLifecycleStrategy {
-  readonly ghostKind = "marker" as const;
+  readonly placementOccupiesFlowSlots = false;
 
   validateStart(session: DragSession): void {
     if (session.dropEffect === "move") {
@@ -240,9 +264,6 @@ export class SwapLifecycle implements DragLifecycleStrategy {
   }
 
   async dragStart(session: DragSession): Promise<void> {
-    if (session.dropEffect === "move") {
-      assertCanFireItemSwap(session.activeSources[0].container);
-    }
     await startDragVisual(session);
     if (session.dragVisual === "preview") updateDragVisual(session);
     await session.updateDropTarget();
@@ -252,48 +273,27 @@ export class SwapLifecycle implements DragLifecycleStrategy {
     updateDragVisual(session);
   }
 
-  currentGhostLocation(
+  currentPlacement(
     session: DragSession,
   ): { container: Container; index: number } | null {
-    const pending = session.pendingGhostTarget;
+    const pending = session.pendingPlacement;
     if (!pending) return null;
     return { container: pending.container, index: pending.index };
   }
 
-  translateTargetIndex(
-    _session: DragSession,
-    target: ResolvedDropTarget,
-  ): number {
+  placementIndexFor(_session: DragSession, target: ResolvedDropTarget): number {
     return target.index;
   }
 
-  moveGhost(
-    session: DragSession,
-    container: Container,
-    index: number,
-    ghostRect: GhostRect | null | undefined,
-  ): void {
-    const pointerGhost = session.ghosts.get("pointer") ?? session.primaryItem;
-    session.pendingGhostTarget = {
-      ghostItem: pointerGhost,
-      container,
-      index,
-      ghostRect,
-    };
+  syncPlacement(session: DragSession, placement: DropPlacement): void {
+    session.pendingPlacement = placement;
   }
 
-  async removeGhost(
-    session: DragSession,
-    role: GhostRole = "target",
-  ): Promise<void> {
-    if (role === "source") {
-      await stopItemVisual(session);
-      return;
-    }
-    await removeGhost(session, role);
+  clearPlacement(session: DragSession): void {
+    session.pendingPlacement = null;
   }
 
-  afterSyncDropTarget(_session: DragSession): void {
+  afterPlacementSync(_session: DragSession): void {
     // The pointer ghost tracks the raw pointer directly; it needs no
     // resync when the resolved target changes.
   }
@@ -301,13 +301,5 @@ export class SwapLifecycle implements DragLifecycleStrategy {
   drop(session: DragSession): void {
     session.scheduleDropFinalizer();
     drop(session);
-  }
-
-  cancel(session: DragSession): void {
-    // A swap has no detached source item to restore. Clearing the pending
-    // target makes the ordinary drop path remove its pointer ghost and end
-    // lifecycle state without exchanging either item.
-    session.pendingGhostTarget = null;
-    this.drop(session);
   }
 }

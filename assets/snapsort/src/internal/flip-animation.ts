@@ -1,6 +1,7 @@
 import { AnimationObject } from "@snap-engine/core/animation";
 import type { AnimationConfig, Container } from "../container";
 import { Item } from "../item";
+import { renderKey, type RenderKey } from "../render-key";
 import { settleMutation } from "../mutation";
 import { getDragSessionController } from "../drag/session-store";
 import { reconcileRootTreeState } from "./tree-state";
@@ -12,7 +13,7 @@ import {
 
 const MIN_FLIP_DISTANCE = 0.5;
 
-export interface TransformOffset {
+interface TransformOffset {
   x: number;
   y: number;
 }
@@ -29,7 +30,7 @@ export interface ElementRectAnimationOptions {
 
 interface FlipAnimationState {
   item: Item;
-  key: string;
+  key: RenderKey;
   first: VisualRectSnapshot | null;
   firstParent: VisualRectSnapshot | null;
   firstParentItem: Item | null;
@@ -49,7 +50,7 @@ export function animationConfigFor(
   return container.config.animation?.[kind] ?? null;
 }
 
-export function parentItem(item: Item): Item | null {
+function parentItem(item: Item): Item | null {
   return item.parent instanceof Item ? item.parent : null;
 }
 
@@ -73,29 +74,50 @@ export function ancestorVisualOffset(parent: Item | null): TransformOffset {
   return offset;
 }
 
-function collectFlipItems(
-  node: Item,
-  exclude: Set<Item> | null,
-  items: Item[] = [],
-): Item[] {
+function visitFlipItems(node: Item, visitor: (item: Item) => void): void {
   for (const child of node.itemOrderedList) {
-    if (!exclude?.has(child) && child.element) items.push(child);
-    collectFlipItems(child, exclude, items);
+    if (child.element) visitor(child);
+    visitFlipItems(child, visitor);
   }
+}
+
+function renderKeyForItem(item: Item): RenderKey {
+  return renderKey(item.isGhost ? "ghost" : "item", item.resolvedItemId);
+}
+
+function duplicateFlipItemError(item: Item): Error {
+  const kind = item.isGhost ? "ghost" : "item";
+  return new Error(
+    `SnapSort: duplicate ${kind} ID "${item.resolvedItemId}" cannot participate in FLIP animation.`,
+  );
+}
+
+function indexFlipItems(root: Container): Map<RenderKey, Item> {
+  const items = new Map<RenderKey, Item>();
+  visitFlipItems(root, (item) => {
+    const key = renderKeyForItem(item);
+    if (items.has(key)) throw duplicateFlipItemError(item);
+    items.set(key, item);
+  });
   return items;
 }
 
 function captureFlipSnapshot(
-  owner: Item,
-  root: Item,
+  root: Container,
   exclude: Set<Item> | null,
 ): FlipAnimationState[] {
+  const keys = new Set<RenderKey>();
   const cache: VisualRectReadCache = new Map();
-  return collectFlipItems(root, exclude).map((item) => {
+  const snapshot: FlipAnimationState[] = [];
+  visitFlipItems(root, (item) => {
+    const key = renderKeyForItem(item);
+    if (keys.has(key)) throw duplicateFlipItemError(item);
+    keys.add(key);
+    if (exclude?.has(item)) return;
     const parent = parentItem(item);
-    return {
+    snapshot.push({
       item,
-      key: owner.itemKey(item),
+      key,
       first: readVisualRect(item, cache),
       firstParent: parent ? readVisualRect(parent, cache) : null,
       firstParentItem: parent,
@@ -103,19 +125,17 @@ function captureFlipSnapshot(
       lastParent: null,
       lastParentItem: null,
       targetElement: item.element,
-    };
+    });
   });
+  return snapshot;
 }
 
 function captureFlipLast(
-  owner: Item,
   snapshot: FlipAnimationState[],
-  root: Item,
+  root: Container,
 ): void {
-  reconcileRootTreeState(root as unknown as Container);
-  const currentItems = new Map(
-    collectFlipItems(root, null).map((item) => [owner.itemKey(item), item]),
-  );
+  reconcileRootTreeState(root);
+  const currentItems = indexFlipItems(root);
   const cache: VisualRectReadCache = new Map();
   for (const entry of snapshot) {
     const currentItem = currentItems.get(entry.key) ?? null;
@@ -139,19 +159,22 @@ function rectAnimationDelta(
   last: DOMRect,
   options: ElementRectAnimationOptions,
 ) {
-  const useParentLocalDelta = Boolean(
-    options.firstParent &&
-      options.lastParent &&
-      options.firstParentItem === options.lastParentItem,
-  );
+  const { firstParent, lastParent } = options;
+  if (
+    firstParent &&
+    lastParent &&
+    options.firstParentItem === options.lastParentItem
+  ) {
+    return {
+      dx: first.x - firstParent.x - (last.x - lastParent.x),
+      dy: first.y - firstParent.y - (last.y - lastParent.y),
+      useParentLocalDelta: true,
+    };
+  }
   return {
-    dx: useParentLocalDelta
-      ? first.x - options.firstParent!.x - (last.x - options.lastParent!.x)
-      : first.x - last.x,
-    dy: useParentLocalDelta
-      ? first.y - options.firstParent!.y - (last.y - options.lastParent!.y)
-      : first.y - last.y,
-    useParentLocalDelta,
+    dx: first.x - last.x,
+    dy: first.y - last.y,
+    useParentLocalDelta: false,
   };
 }
 
@@ -236,7 +259,7 @@ export function playElementRectAnimation(
 
 function flipAnimationDepth(
   entry: FlipAnimationState,
-  entriesByItem: Map<Item, FlipAnimationState>,
+  entriesByItem: ReadonlyMap<Item, FlipAnimationState>,
 ): number {
   let depth = 0;
   let parent = entry.lastParentItem;
@@ -250,7 +273,7 @@ function flipAnimationDepth(
 function isFlipAncestor(
   possibleAncestor: FlipAnimationState,
   descendant: FlipAnimationState,
-  entriesByItem: Map<Item, FlipAnimationState>,
+  entriesByItem: ReadonlyMap<Item, FlipAnimationState>,
 ): boolean {
   let parent = descendant.lastParentItem;
   while (parent) {
@@ -261,10 +284,10 @@ function isFlipAncestor(
 }
 
 function initialFlipOffsets(
-  snapshot: FlipAnimationState[],
+  snapshot: readonly FlipAnimationState[],
+  entriesByItem: ReadonlyMap<Item, FlipAnimationState>,
 ): Map<Item, TransformOffset> {
   const initialOffsets = new Map<Item, TransformOffset>();
-  const entriesByItem = new Map(snapshot.map((entry) => [entry.item, entry]));
   const ancestorOffsetFor = (parent: Item | null): TransformOffset => {
     const offset = { x: 0, y: 0 };
     let current = parent;
@@ -322,7 +345,8 @@ function playFlipAnimations(
 ): void {
   const duration = animationConfig.duration ?? 160;
   const easing = animationConfig.timing_function ?? "ease-out";
-  const entriesByItem = new Map(snapshot.map((entry) => [entry.item, entry]));
+  const entriesByItem = new Map<Item, FlipAnimationState>();
+  for (const entry of snapshot) entriesByItem.set(entry.item, entry);
   const orderedSnapshot = snapshot.slice().sort((a, b) => {
     if (isFlipAncestor(a, b, entriesByItem)) return -1;
     if (isFlipAncestor(b, a, entriesByItem)) return 1;
@@ -331,7 +355,7 @@ function playFlipAnimations(
       flipAnimationDepth(b, entriesByItem)
     );
   });
-  const initialOffsets = initialFlipOffsets(orderedSnapshot);
+  const initialOffsets = initialFlipOffsets(orderedSnapshot, entriesByItem);
 
   for (const entry of orderedSnapshot) {
     if (!entry.targetElement || !entry.first || !entry.last) continue;
@@ -411,8 +435,7 @@ function withConfiguredAnimation(
   mutate: () => void,
 ): void {
   const animationConfig = animationConfigFor(container, kind);
-  const root = (container?.rootContainer ??
-    item.rootContainer) as unknown as Item;
+  const root = container?.rootContainer ?? item.rootContainer;
   const excludedSet = excludedItem
     ? new Set(Array.isArray(excludedItem) ? excludedItem : [excludedItem])
     : null;
@@ -421,31 +444,45 @@ function withConfiguredAnimation(
     return;
   }
 
-  let snapshot: FlipAnimationState[] = [];
+  let snapshot: FlipAnimationState[] | null = null;
+  let mutationComplete = false;
+  let lastCaptureComplete = false;
   const queuePrefix = `snapsort-flip-${root.id}`;
   root.schedule(
     () => {
-      snapshot = captureFlipSnapshot(item, root, excludedSet);
+      snapshot = captureFlipSnapshot(root, excludedSet);
     },
     { stage: "READ_2", queueId: `${queuePrefix}-read-first` },
   );
   root.schedule(
     async () => {
+      if (snapshot === null) return;
       for (const entry of snapshot) {
         entry.item.cancelAnimations();
         if (entry.item.element) entry.item.element.style.transform = "";
       }
       mutate();
       await settleMutation();
+      mutationComplete = true;
     },
     { stage: "WRITE_2", queueId: `${queuePrefix}-mutate` },
   );
-  root.schedule(() => captureFlipLast(item, snapshot, root), {
-    stage: "READ_3",
-    queueId: `${queuePrefix}-read-last`,
-  });
   root.schedule(
-    () => playFlipAnimations(snapshot, animationConfig, root, excludedItem),
+    () => {
+      if (snapshot === null || !mutationComplete) return;
+      captureFlipLast(snapshot, root);
+      lastCaptureComplete = true;
+    },
+    {
+      stage: "READ_3",
+      queueId: `${queuePrefix}-read-last`,
+    },
+  );
+  root.schedule(
+    () => {
+      if (snapshot === null || !lastCaptureComplete) return;
+      playFlipAnimations(snapshot, animationConfig, root, excludedItem);
+    },
     { stage: "WRITE_3", queueId: `${queuePrefix}-play` },
   );
 }

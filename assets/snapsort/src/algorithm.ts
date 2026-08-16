@@ -44,7 +44,7 @@ type ResolvedItemHitbox =
   | { shape: "circle"; circle: CollisionCircle };
 
 export interface VirtualGhost {
-  container: ItemBase;
+  container: Container;
   index: number;
   width: number;
   height: number;
@@ -56,7 +56,7 @@ export interface VirtualDimensions {
 }
 
 export interface ResolvedDropTarget {
-  container: ItemBase;
+  container: Container;
   index: number;
   ghostRect?: InsertionGhostRect;
 }
@@ -91,12 +91,6 @@ interface SwapCandidate {
   area: number;
 }
 
-function getDirection(node: ItemBase): "column" | "row" {
-  return "direction" in node && typeof (node as any).direction === "string"
-    ? (node as any).direction
-    : "column";
-}
-
 function euclidean(x1: number, y1: number, x2: number, y2: number): number {
   return Math.sqrt((x1 - x2) ** 2 + (y1 - y2) ** 2);
 }
@@ -115,14 +109,14 @@ function groupCandidateDistance(
   rect: Rect,
   isColumn: boolean,
 ): number {
-  const only = session?.primaryItem;
-  if (!session || session.items.length <= 1) {
+  if (!session) return 0;
+  if (session.items.length === 1) {
+    const only = session.primaryItem;
     const cx = rect.x + rect.width / 2;
     const cy = rect.y + rect.height / 2;
-    if (!only) return 0;
-    const box = only.dragSnapshot?.box;
-    const w = box?.width ?? rect.width;
-    const h = box?.height ?? rect.height;
+    const box = session.dragBoxFor(only);
+    const w = box.width;
+    const h = box.height;
     const dcx = only.dragPositionX + w / 2;
     const dcy = only.dragPositionY + h / 2;
     return euclidean(cx, cy, dcx, dcy);
@@ -131,9 +125,9 @@ function groupCandidateDistance(
   let cumulative = 0;
   let sum = 0;
   for (const member of session.items) {
-    const box = member.dragSnapshot?.box;
-    const w = box?.width ?? 0;
-    const h = box?.height ?? 0;
+    const box = session.dragBoxFor(member);
+    const w = box.width;
+    const h = box.height;
     const slotCenterX = isColumn
       ? rect.x + rect.width / 2
       : rect.x + cumulative + w / 2;
@@ -207,7 +201,7 @@ function frozenRect(rect: Rect): Rect {
 }
 
 interface ContainerResolutionBase {
-  readonly container: ItemBase;
+  readonly container: Container;
   readonly containerMetadata: Record<string, unknown>;
   readonly containerRect: Rect;
   readonly containerContentRect: Rect;
@@ -226,7 +220,7 @@ interface ResolutionContext {
   readonly sources: readonly ReturnType<typeof buildItemLocation>[];
   readonly pointer: Readonly<{ x: number; y: number }>;
   readonly dragRect: Rect;
-  readonly containers: Map<ItemBase, ContainerResolutionBase>;
+  readonly containers: Map<Container, ContainerResolutionBase>;
 }
 
 function createResolutionContext(
@@ -261,13 +255,13 @@ function createResolutionContext(
 
 function containerResolutionBase(
   context: ResolutionContext,
-  container: ItemBase,
+  container: Container,
 ): ContainerResolutionBase {
   const cached = context.containers.get(container);
   if (cached) return cached;
   const base = Object.freeze({
     container,
-    containerMetadata: (container as any).metadata,
+    containerMetadata: container.metadata,
     containerRect: frozenRect(requireDragSnapshotBox(container)),
     containerContentRect: frozenRect(containerContentRect(container)),
     depth: container.depth,
@@ -279,17 +273,35 @@ function containerResolutionBase(
 function assertRect(
   value: unknown,
   callbackName: string,
-  container: ItemBase,
+  container: Container,
 ): asserts value is Rect {
-  const rect = value as Partial<Rect> | null;
+  const x =
+    typeof value === "object" && value !== null && "x" in value
+      ? value.x
+      : undefined;
+  const y =
+    typeof value === "object" && value !== null && "y" in value
+      ? value.y
+      : undefined;
+  const width =
+    typeof value === "object" && value !== null && "width" in value
+      ? value.width
+      : undefined;
+  const height =
+    typeof value === "object" && value !== null && "height" in value
+      ? value.height
+      : undefined;
   if (
-    !rect ||
-    !Number.isFinite(rect.x) ||
-    !Number.isFinite(rect.y) ||
-    !Number.isFinite(rect.width) ||
-    !Number.isFinite(rect.height) ||
-    rect.width! < 0 ||
-    rect.height! < 0
+    typeof x !== "number" ||
+    !Number.isFinite(x) ||
+    typeof y !== "number" ||
+    !Number.isFinite(y) ||
+    typeof width !== "number" ||
+    !Number.isFinite(width) ||
+    typeof height !== "number" ||
+    !Number.isFinite(height) ||
+    width < 0 ||
+    height < 0
   ) {
     throw new TypeError(
       `SnapSort Container ${container.id}: ${callbackName} must return finite x, y, width, and height values with nonnegative dimensions.`,
@@ -300,7 +312,7 @@ function assertRect(
 function resolveItemHitbox(
   draggedItem: ItemBase,
   item: ItemBase,
-  container: ItemBase,
+  container: Container,
   session: DragSession,
 ): ResolvedItemHitbox {
   const box = item.dragSnapshot?.box;
@@ -308,9 +320,6 @@ function resolveItemHitbox(
     throw new Error(`SnapSort Item ${item.id}: missing drag snapshot box.`);
   }
   const defaultRect = frozenRect(box);
-  if (!isContainerObject(container)) {
-    return { shape: "rect", rect: defaultRect };
-  }
   const callback = container.callbacks?.getItemHitbox;
   if (!callback) return { shape: "rect", rect: defaultRect };
 
@@ -363,7 +372,7 @@ function resolveItemHitbox(
  */
 export function findHoveredItem(
   draggedItem: ItemBase,
-  container: ItemBase,
+  container: Container,
   session: DragSession,
 ): ItemBase | null {
   if (!container.dragSnapshot) return null;
@@ -425,21 +434,20 @@ function layoutInsertionFromGhost(
   };
 }
 
-function activeGhostInsertionsFromPendingTarget(
+function activeFlowInsertionsFromPendingPlacement(
   byItem: Map<ItemBase, ItemSnapshot<ItemBase>>,
   session: DragSession | null,
-  draggedBox: DomProperty,
-  dragGhostW: number,
-  dragGhostH: number,
 ): VirtualInsertion<ItemBase>[] {
   // Insertion and swap lifecycles use absolute marker/pointer ghosts. They do
   // not occupy a flow slot and must never influence virtual list layout.
-  if (!session || session.strategy.lifecycle.ghostKind !== "flow") return [];
+  if (!session || !session.strategy.lifecycle.placementOccupiesFlowSlots) {
+    return [];
+  }
 
-  const pendingTarget = session?.pendingGhostTarget;
-  if (!pendingTarget?.container) return [];
+  const pendingPlacement = session.pendingPlacement;
+  if (!pendingPlacement) return [];
 
-  const container = byItem.get(pendingTarget.container);
+  const container = byItem.get(pendingPlacement.container);
   if (!container) return [];
 
   // The live flow lifecycle renders one spacer anchor for every dragged
@@ -447,28 +455,19 @@ function activeGhostInsertionsFromPendingTarget(
   // layout the browser is actually showing. Treating a multi-item run as one
   // group-sized virtual entry made the predicted slots drift from the real
   // ghost DOM after a few moves, especially in wrapped or unequal lists.
-  const memberBoxes =
-    session && session.items.length > 0
-      ? session.items.map((member) => member.dragSnapshot?.box ?? draggedBox)
-      : [
-          {
-            ...draggedBox,
-            width: dragGhostW,
-            height: dragGhostH,
-          },
-        ];
+  const memberBoxes = session.items.map((member) => session.dragBoxFor(member));
 
   return memberBoxes.map((box, offset) => {
     const size = virtualEntrySizeFor(container, box);
     return {
       container,
-      index: pendingTarget.index + offset,
+      index: pendingPlacement.index + offset,
       entry: { ...size, margin: box.margin },
     };
   });
 }
 
-function containerContentRect(container: ItemBase): Rect {
+function containerContentRect(container: Container): Rect {
   const prop = requireDragSnapshotBox(container);
   const origin = contentBoxOrigin(prop);
   const size = contentBoxSize(prop);
@@ -520,7 +519,7 @@ function chooseByContentBox<T extends CandidateGeometry>(
 }
 
 export function virtualDimensions(
-  container: ItemBase,
+  container: Container,
   draggedItem: ItemBase,
   ghost?: VirtualGhost,
 ): VirtualDimensions {
@@ -535,7 +534,7 @@ export function virtualDimensions(
 }
 
 export function virtualLayoutRecursive(
-  container: ItemBase,
+  container: Container,
   startX: number,
   startY: number,
   draggedItem: ItemBase,
@@ -549,12 +548,9 @@ export function virtualLayoutRecursive(
 ): { candidates: FlowCandidate[]; endX: number; endY: number } {
   const snapshot = createLayoutSnapshot(container);
   const draggedBox = requireDragSnapshotBox(draggedItem);
-  const activeInsertions = activeGhostInsertionsFromPendingTarget(
+  const activeInsertions = activeFlowInsertionsFromPendingPlacement(
     snapshot.byItem,
     session,
-    draggedBox,
-    dragGhostW,
-    dragGhostH,
   );
   const dragRect: Rect = {
     x: draggedItem.dragPositionX,
@@ -569,6 +565,7 @@ export function virtualLayoutRecursive(
     diagnostics: layoutDiagnostics,
   });
   return virtualLayoutRecursiveFromSnapshot(
+    container,
     snapshot.root,
     startX,
     startY,
@@ -585,6 +582,7 @@ export function virtualLayoutRecursive(
 }
 
 function virtualLayoutRecursiveFromSnapshot(
+  container: Container,
   containerSnapshot: ItemSnapshot<ItemBase>,
   startX: number,
   startY: number,
@@ -598,7 +596,6 @@ function virtualLayoutRecursiveFromSnapshot(
   session: DragSession | null = null,
   debugEnabled = false,
 ): { candidates: FlowCandidate[]; endX: number; endY: number } {
-  const container = containerSnapshot.value;
   const containerPlan = layoutPlan.containerPlan(containerSnapshot);
   const axes = containerPlan.axes;
   const isColumn = axes.direction === "column";
@@ -727,7 +724,7 @@ function virtualLayoutRecursiveFromSnapshot(
     candidates.push(makeCandidate(index, fallbackPosition));
   };
 
-  if (itemSnapshots.length === 0 && isContainerObject(container)) {
+  if (itemSnapshots.length === 0) {
     addCandidate(0, { x: startX, y: startY });
   }
 
@@ -735,8 +732,7 @@ function virtualLayoutRecursiveFromSnapshot(
     const itemSnapshot = itemSnapshots[index];
     const item = itemSnapshot.value;
     const prop = itemSnapshot.box;
-    const isContainer =
-      itemSnapshot.children.length > 0 || isContainerObject(item);
+    const isContainer = isContainerObject(item);
     const rel = childRelativeOffset(containerProp, prop);
     const measuredPosition = { x: startX + rel.x, y: startY + rel.y };
     const simulatedPosition =
@@ -771,6 +767,7 @@ function virtualLayoutRecursiveFromSnapshot(
       // child container.
       if (rectsIntersect(childHitRect, dragRect)) {
         const childResult = virtualLayoutRecursiveFromSnapshot(
+          item,
           itemSnapshot,
           childOrigin.x,
           childOrigin.y,
@@ -804,7 +801,7 @@ function virtualLayoutRecursiveFromSnapshot(
 
 function collectDropCandidates(
   item: ItemBase,
-  root: ItemBase,
+  root: Container,
   session: DragSession | null = null,
   debugEnabled = false,
 ): {
@@ -901,7 +898,7 @@ function chooseProgressiveCandidate(
 }
 
 function drawCandidateDebug(
-  root: ItemBase,
+  root: Container,
   item: ItemBase,
   candidates: CandidateGeometry[],
   best: CandidateGeometry | null,
@@ -1063,17 +1060,13 @@ function drawCandidateDebug(
   }
 }
 
-function isInsertionContainer(container: ItemBase): container is Container {
-  return isContainerObject(container);
-}
-
 function insertionMarkerRect(
   container: Container,
   index: number,
   items: ItemBase[],
   snapshotItems: ItemBase[],
 ): InsertionGhostRect {
-  const direction = getDirection(container);
+  const direction = container.direction;
   const contentRect = containerContentRect(container);
   const thickness = 3;
 
@@ -1103,11 +1096,14 @@ function insertionMarkerRect(
     const next = index === 0 ? snapshotItems[0] : items[index];
     const previousRect = previous ? requireDragSnapshotBox(previous) : null;
     const nextRect = next ? requireDragSnapshotBox(next) : null;
-    const markerCenter = previousRect
-      ? nextRect
-        ? (previousRect.x + previousRect.width + nextRect.x) / 2
-        : previousRect.x + previousRect.width
-      : nextRect!.x;
+    const markerCenter = adjacentMarkerCenter(
+      previousRect,
+      nextRect,
+      "x",
+      "width",
+      container,
+      index,
+    );
 
     return {
       x: markerCenter - thickness / 2,
@@ -1124,11 +1120,14 @@ function insertionMarkerRect(
   const next = index === 0 ? snapshotItems[0] : items[index];
   const previousRect = previous ? requireDragSnapshotBox(previous) : null;
   const nextRect = next ? requireDragSnapshotBox(next) : null;
-  const markerCenter = previousRect
-    ? nextRect
-      ? (previousRect.y + previousRect.height + nextRect.y) / 2
-      : previousRect.y + previousRect.height
-    : nextRect!.y;
+  const markerCenter = adjacentMarkerCenter(
+    previousRect,
+    nextRect,
+    "y",
+    "height",
+    container,
+    index,
+  );
 
   return {
     x: contentRect.x,
@@ -1136,6 +1135,24 @@ function insertionMarkerRect(
     width: Math.max(1, contentRect.width),
     height: thickness,
   };
+}
+
+function adjacentMarkerCenter(
+  previousRect: DomProperty | null,
+  nextRect: DomProperty | null,
+  axis: "x" | "y",
+  size: "width" | "height",
+  container: Container,
+  index: number,
+): number {
+  if (previousRect && nextRect) {
+    return (previousRect[axis] + previousRect[size] + nextRect[axis]) / 2;
+  }
+  if (previousRect) return previousRect[axis] + previousRect[size];
+  if (nextRect) return nextRect[axis];
+  throw new Error(
+    `SnapSort: insertion container "${container.name}" has no adjacent snapshot for slot ${index}.`,
+  );
 }
 
 function configuredInsertionMarkerRect(
@@ -1173,7 +1190,7 @@ function configuredInsertionMarkerRect(
 
 function collectInsertionCandidates(
   item: ItemBase,
-  root: ItemBase,
+  root: Container,
   context: ResolutionContext,
 ): {
   candidates: InsertionCandidate[];
@@ -1187,7 +1204,7 @@ function collectInsertionCandidates(
     : new Set([item]);
   const candidates: InsertionCandidate[] = [];
 
-  const visit = (container: ItemBase) => {
+  const visit = (container: Container) => {
     if (excludeSet.has(container)) return;
 
     const snapshotOrderedList = dragSnapshotItems(container);
@@ -1208,35 +1225,30 @@ function collectInsertionCandidates(
       return snapshotIndex === -1 ? index : snapshotIndex;
     };
 
-    if (isInsertionContainer(container)) {
-      for (let index = 0; index <= children.length; index++) {
-        const insertionIndex = indexForGap(index);
-        const defaultRect = insertionMarkerRect(
-          container,
-          index,
-          children,
-          snapshotChildren,
-        );
-        const ghostRect = configuredInsertionMarkerRect(
-          container,
-          insertionIndex,
-          context,
-          defaultRect,
-        );
-        const ghostCenterX = ghostRect.x + ghostRect.width / 2;
-        const ghostCenterY = ghostRect.y + ghostRect.height / 2;
-        const distance = distanceToRect(
-          { x: pointerX, y: pointerY },
-          ghostRect,
-        );
-        candidates.push({
-          target: { container, index: insertionIndex, ghostRect },
-          ghostCenterX,
-          ghostCenterY,
-          distance,
-          placementRect: ghostRect,
-        });
-      }
+    for (let index = 0; index <= children.length; index++) {
+      const insertionIndex = indexForGap(index);
+      const defaultRect = insertionMarkerRect(
+        container,
+        index,
+        children,
+        snapshotChildren,
+      );
+      const ghostRect = configuredInsertionMarkerRect(
+        container,
+        insertionIndex,
+        context,
+        defaultRect,
+      );
+      const ghostCenterX = ghostRect.x + ghostRect.width / 2;
+      const ghostCenterY = ghostRect.y + ghostRect.height / 2;
+      const distance = distanceToRect({ x: pointerX, y: pointerY }, ghostRect);
+      candidates.push({
+        target: { container, index: insertionIndex, ghostRect },
+        ghostCenterX,
+        ghostCenterY,
+        distance,
+        placementRect: ghostRect,
+      });
     }
 
     for (const child of children) {
@@ -1278,17 +1290,14 @@ function chooseInsertionCandidate(
   return best;
 }
 
-function configuredDropPriority(container: ItemBase): number {
-  const value =
-    "dropPriority" in container
-      ? (container as any).dropPriority
-      : (container as any).config?.dropPriority;
-  if (value !== undefined && !Number.isFinite(value)) {
+function configuredDropPriority(container: Container): number {
+  const value = container.dropPriority;
+  if (!Number.isFinite(value)) {
     throw new TypeError(
       `SnapSort Container ${container.id}: dropPriority must be a finite number.`,
     );
   }
-  return value ?? 0;
+  return value;
 }
 
 function dropPolicyEvent(
@@ -1307,7 +1316,7 @@ function dropPolicyEvent(
     itemsMetadata: [...context.itemsMetadata],
     source: context.source,
     sources: [...context.sources],
-    container: base.container as DropPriorityEvent["container"],
+    container: base.container,
     containerMetadata: base.containerMetadata,
     index: candidate.target.index,
     pointer: context.pointer,
@@ -1328,7 +1337,7 @@ function applyDropPolicy<T extends { target: ResolvedDropTarget }>(
   getContext: () => ResolutionContext,
 ): T[] {
   if (candidates.length === 0) return candidates;
-  const byContainer = new Map<ItemBase, T[]>();
+  const byContainer = new Map<Container, T[]>();
   for (const candidate of candidates) {
     const group = byContainer.get(candidate.target.container);
     if (group) {
@@ -1340,22 +1349,21 @@ function applyDropPolicy<T extends { target: ResolvedDropTarget }>(
 
   const eligible: Array<{ candidate: T; priority: number }> = [];
   for (const [container, directCandidates] of byContainer) {
-    const callbacks =
-      "callbacks" in container ? (container as any).callbacks : undefined;
+    const callbacks = container.callbacks;
     let event:
       | (Omit<DropPriorityEvent, "staticPriority"> &
           Pick<CanDropEvent, "index">)
       | undefined;
     const getEvent = () =>
       (event ??= dropPolicyEvent(directCandidates[0], getContext()));
-    if (callbacks?.canDrop?.(getEvent() as CanDropEvent) === false) continue;
+    if (callbacks?.canDrop?.(getEvent()) === false) continue;
 
     const staticPriority = configuredDropPriority(container);
     const override = callbacks?.getDropPriority
       ? callbacks.getDropPriority({
           ...getEvent(),
           staticPriority,
-        } as DropPriorityEvent)
+        })
       : undefined;
     if (override !== undefined && !Number.isFinite(override)) {
       throw new TypeError(
@@ -1375,14 +1383,13 @@ function applyDropPolicy<T extends { target: ResolvedDropTarget }>(
     .map((entry) => entry.candidate);
 }
 
-// TODO: Not all resolution uses center point
+/** Resolve the live pointer, falling back to the drag box center for standalone predictions. */
 function resolutionPointer(
   item: ItemBase,
   session: DragSession | null,
 ): { x: number; y: number } {
-  const itemPointer =
-    "dragPointerPosition" in item ? item.dragPointerPosition : null;
-  if (session?.pointer) return session.pointer;
+  const itemPointer = item.dragPointerPosition;
+  if (session) return session.pointer;
   if (itemPointer) return itemPointer;
   const box = requireDragSnapshotBox(item);
   return {
@@ -1397,7 +1404,7 @@ function isDropDebugEnabled(item: ItemBase): boolean {
 
 export function determineDropTarget(
   item: ItemBase,
-  root: ItemBase,
+  root: Container,
   session: DragSession | null = null,
 ): ResolvedDropTarget | null {
   const debugEnabled = isDropDebugEnabled(root);
@@ -1430,7 +1437,7 @@ export function determineDropTarget(
 
 export function determineProgressiveDropTarget(
   item: ItemBase,
-  root: ItemBase,
+  root: Container,
   session: DragSession | null = null,
 ): ResolvedDropTarget | null {
   const debugEnabled = isDropDebugEnabled(root);
@@ -1460,7 +1467,7 @@ export function determineProgressiveDropTarget(
 
 export function determineInsertionDropTarget(
   item: ItemBase,
-  root: ItemBase,
+  root: Container,
   session: DragSession | null = null,
 ): ResolvedDropTarget | null {
   const debugEnabled = isDropDebugEnabled(root);
@@ -1492,25 +1499,23 @@ export function determineInsertionDropTarget(
  */
 export function determineSwapDropTarget(
   item: ItemBase,
-  root: ItemBase,
+  root: Container,
   session: DragSession | null = null,
 ): ResolvedDropTarget | null {
   if (!session) return null;
   const candidates: SwapCandidate[] = [];
 
-  const visit = (container: ItemBase) => {
+  const visit = (container: Container) => {
     if (container === item) return;
 
-    if (isInsertionContainer(container)) {
-      const hovered = findHoveredItem(item, container, session);
-      const index = hovered ? container.itemOrderedList.indexOf(hovered) : -1;
-      if (hovered && index !== -1) {
-        const box = requireDragSnapshotBox(hovered);
-        candidates.push({
-          target: { container, index },
-          area: box.width * box.height,
-        });
-      }
+    const hovered = findHoveredItem(item, container, session);
+    const index = hovered ? container.itemOrderedList.indexOf(hovered) : -1;
+    if (hovered && index !== -1) {
+      const box = requireDragSnapshotBox(hovered);
+      candidates.push({
+        target: { container, index },
+        area: box.width * box.height,
+      });
     }
 
     for (const child of dragSnapshotItems(container)) {
@@ -1533,7 +1538,7 @@ export function determineSwapDropTarget(
   return best?.target ?? null;
 }
 
-export function debugDropTargetTree(node: ItemBase, draggedItem: ItemBase) {
+export function debugDropTargetTree(node: Container, draggedItem: ItemBase) {
   const items = node.itemOrderedList.filter(
     (item) => item !== draggedItem && !item.isGhost,
   );
@@ -1555,7 +1560,7 @@ export function debugDropTargetTree(node: ItemBase, draggedItem: ItemBase) {
       TAG_COLLISIONS,
     );
 
-    if (item.children.length > 0) {
+    if (isContainerObject(item)) {
       debugDropTargetTree(item, draggedItem);
     }
   }

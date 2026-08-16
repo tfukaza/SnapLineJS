@@ -3,9 +3,24 @@ import { buildDragLocation } from "../event-builders";
 import type { DragLocation } from "../events";
 import { Item } from "../item";
 
-function removeFromOrder(container: Container, item: Item): void {
+function removeFromOrder(container: Item, item: Item): void {
   const index = container.itemOrderedList.indexOf(item);
   if (index !== -1) container.itemOrderedList.splice(index, 1);
+}
+
+/** One proposed Item placement, used to validate a complete mutation first. */
+export interface ItemPlacement {
+  readonly container: Container;
+  readonly item: Item;
+}
+
+/** @internal Validate every proposed placement before any Item is mutated. */
+export function assertCanPlaceItems(
+  placements: readonly ItemPlacement[],
+): void {
+  for (const { container, item } of placements) {
+    container.assertCanPlaceItem(item);
+  }
 }
 
 /** @internal Resolve an Item's current live sortable location. */
@@ -31,9 +46,19 @@ export function placeItemAt(
   item: Item,
   index: number,
 ): void {
+  container.assertCanPlaceItem(item);
+  placeItemAtUnchecked(container, item, index);
+}
+
+/** @internal Attach an Item after its complete placement batch was validated. */
+export function placeItemAtUnchecked(
+  container: Container,
+  item: Item,
+  index: number,
+): void {
   const currentParent = item.parent instanceof Item ? item.parent : null;
   container.appendChild(item);
-  if (currentParent) removeFromOrder(currentParent as Container, item);
+  if (currentParent) removeFromOrder(currentParent, item);
   removeFromOrder(container, item);
   item.rootContainer = container.rootContainer;
   const clampedIndex = Math.max(
@@ -44,7 +69,18 @@ export function placeItemAt(
 }
 
 /** @internal Detach an Item from engine and sortable state without mutating DOM. */
-export function detachItem(container: Container, item: Item): void {
+export function detachItem(container: Item, item: Item): void {
   container.removeChild(item);
   removeFromOrder(container, item);
+}
+
+/** @internal Permanently unlink an Item and release its root ownership. */
+export function releaseItem(item: Item): void {
+  const parent = item.parent;
+  if (parent instanceof Item) {
+    detachItem(parent, item);
+  } else if (parent) {
+    parent.removeChild(item);
+  }
+  item.rootContainer = null;
 }

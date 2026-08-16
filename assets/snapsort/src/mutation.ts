@@ -2,42 +2,38 @@ import type { Container } from "./container";
 import type { Item } from "./item";
 import type { DragSessionController as DragSession } from "./drag/session";
 import type {
-  ContainerCallbacks,
   DragItemHoverEvent,
   DragLocation,
-  GhostCreateEvent,
-  GhostInsertEvent,
-  GhostRemoveEvent,
+  GhostState,
   ItemInsertEvent,
   ItemMoveEvent,
   ItemRemoveEvent,
   ItemSwapEvent,
 } from "./events";
-import { buildGhostEvent, buildItemRunEvent } from "./event-builders";
+import type { SnapSortAdapterCallbacks } from "./adapter";
+import {
+  buildGhostInsertEvent,
+  buildGhostMoveEvent,
+  buildGhostRemoveEvent,
+  buildItemRunEvent,
+} from "./event-builders";
 
 /**
  * Shared dispatch helpers for item/ghost mutations, ghost creation, and item
- * hover. Root lifecycle callbacks are dispatched by the drag session and
- * lifecycle strategies, destination policy by the drop algorithm, and visual
- * invalidation by Container. Consumer mutations use `fireMutation` here so
- * receiver-local flush semantics and fallbacks (for example,
- * onItemMove -> onItemInsert) stay consistent.
+ * hover. Structural mutation callbacks resolve on the root container's
+ * controlled `callbacks` property, then fall back to the root-scoped adapter
+ * — the semantic containers appear only in event payloads (`event.container`,
+ * `from`/`to`, `a`/`b`). Root
+ * lifecycle callbacks are dispatched by the drag session and lifecycle
+ * strategies, per-container policy by the drop algorithm, hover by the
+ * `overItem` owner, and visual invalidation by Container. Consumer mutations
+ * use `fireMutation` here so root-adapter commit semantics and fallbacks (for
+ * example, onItemMove -> onItemInsert) stay consistent.
  */
 
-// TODO: Add a shared transaction-domain coordinator so ordered ghost and item
-// mutation groups can use one adapter flush when every receiver shares a commit
-// domain. Keep receiver-local flushing as the fallback, and consider one
-// item-like ghost relocation event with nullable source/destination locations.
-
-/** Run a consumer mutation inside its framework adapter's synchronous commit boundary. */
+/** Run a consumer mutation inside its root adapter's synchronous commit boundary. */
 export function fireMutation(container: Container, mutation: () => void): void {
-  const flushMutation = container.callbacks?.flushMutation;
-  if (flushMutation) {
-    flushMutation(mutation);
-    return;
-  }
-
-  mutation();
+  container.rootContainer.commitMutation(mutation);
 }
 
 /** Run an optional callback only when its receiver actually implements it. */
@@ -50,75 +46,133 @@ export function fireOptionalMutation<Event>(
   fireMutation(container, () => callback(event));
 }
 
-/** Yield to framework commit/effect microtasks without crossing a paint. */
+/** Yield to adapter commit/effect microtasks without crossing a paint. */
 export async function settleMutation(): Promise<void> {
   await Promise.resolve();
 }
 
 function missingCallbackError(
   container: Container,
-  callback: keyof ContainerCallbacks,
+  callback: keyof SnapSortAdapterCallbacks,
   operation: string,
 ): Error {
-  if (container.domOwnership === "framework") {
-    return new Error(
-      `SnapSort: framework-owned container "${container.name}" requires callbacks.${String(callback)} to ${operation}. Update framework state synchronously in that callback; SnapSort will not mutate framework-owned DOM.`,
-    );
-  }
+  const root = container.rootContainer;
+  const involving =
+    root === container ? "" : ` (involving container "${container.name}")`;
   return new Error(
-    `SnapSort: container "${container.name}" requires callbacks.${String(callback)} to ${operation}.`,
+    `SnapSort: root container "${root.name}" or its adapter requires callbacks.${String(callback)} to ${operation}${involving}.`,
   );
 }
 
-type RequiredMutationCallback =
-  | "onItemInsert"
-  | "onItemRemove"
-  | "onGhostInsert"
-  | "onGhostRemove";
-
-function assertHasCallback(
+function resolveMutationCallback<Name extends keyof SnapSortAdapterCallbacks>(
   container: Container,
-  callback: RequiredMutationCallback,
-  operation: string,
-): void {
-  if (!container.callbacks?.[callback]) {
-    throw missingCallbackError(container, callback, operation);
+  name: Name,
+): SnapSortAdapterCallbacks[Name] {
+  const root = container.rootContainer;
+  return root.callbacks[name] ?? root.adapter.callbacks[name];
+}
+
+type ResolvedItemMoveCallback =
+  | {
+      readonly operation: "move";
+      readonly callback: NonNullable<SnapSortAdapterCallbacks["onItemMove"]>;
+    }
+  | {
+      readonly operation: "insert";
+    };
+
+function resolveItemMoveCallback(
+  container: Container,
+): ResolvedItemMoveCallback | null {
+  const root = container.rootContainer;
+  const rootCallbacks = root.callbacks;
+  if (rootCallbacks.onItemMove) {
+    return { operation: "move", callback: rootCallbacks.onItemMove };
   }
+  if (rootCallbacks.onItemInsert) {
+    return { operation: "insert" };
+  }
+
+  const adapterCallbacks = root.adapter.callbacks;
+  if (adapterCallbacks.onItemMove) {
+    return { operation: "move", callback: adapterCallbacks.onItemMove };
+  }
+  if (adapterCallbacks.onItemInsert) {
+    return { operation: "insert" };
+  }
+  return null;
+}
+
+function missingItemMoveCallbackError(container: Container): Error {
+  const root = container.rootContainer;
+  const involving =
+    root === container ? "" : ` (involving container "${container.name}")`;
+  return new Error(
+    `SnapSort: root container "${root.name}" or its adapter requires callbacks.onItemMove or callbacks.onItemInsert to move an item${involving}.`,
+  );
+}
+
+const requiredMutationOperations = {
+  onItemInsert: "insert an item",
+  onItemRemove: "remove an item",
+  onItemSwap: "swap items",
+  onGhostInsert: "render a drag ghost",
+  onGhostMove: "move a drag ghost",
+  onGhostRemove: "remove a drag ghost",
+} as const satisfies Record<
+  Exclude<keyof SnapSortAdapterCallbacks, "onItemMove">,
+  string
+>;
+
+type RequiredMutationCallback = keyof typeof requiredMutationOperations;
+
+function requireMutationCallback<Name extends RequiredMutationCallback>(
+  container: Container,
+  callback: Name,
+): NonNullable<SnapSortAdapterCallbacks[Name]> {
+  const resolved = resolveMutationCallback(container, callback);
+  if (resolved) return resolved;
+  throw missingCallbackError(
+    container,
+    callback,
+    requiredMutationOperations[callback],
+  );
 }
 
 /** @internal Validate a persistent insertion before core changes its tree bookkeeping. */
 export function assertCanFireItemInsert(container: Container): void {
-  assertHasCallback(container, "onItemInsert", "insert an item");
+  requireMutationCallback(container, "onItemInsert");
 }
 
 /** @internal Validate a persistent removal before core changes its tree bookkeeping. */
 export function assertCanFireItemRemove(container: Container): void {
-  assertHasCallback(container, "onItemRemove", "remove an item");
+  requireMutationCallback(container, "onItemRemove");
 }
 
 /** @internal Validate a semantic move before core changes its tree bookkeeping. */
 export function assertCanFireItemMove(container: Container): void {
-  if (container.callbacks?.onItemMove || container.callbacks?.onItemInsert)
-    return;
-  throw missingCallbackError(container, "onItemMove", "move an item");
+  if (resolveItemMoveCallback(container)) return;
+  throw missingItemMoveCallbackError(container);
 }
 
-/** @internal Framework state models must express swaps atomically. */
+/** @internal Every adapter must express swaps atomically. */
 export function assertCanFireItemSwap(container: Container): void {
-  if (container.callbacks?.onItemSwap) return;
-  if (container.domOwnership === "framework") {
-    throw missingCallbackError(container, "onItemSwap", "swap items");
-  }
+  requireMutationCallback(container, "onItemSwap");
 }
 
 /** @internal Validate ghost insertion before core changes ghost bookkeeping. */
 export function assertCanFireGhostInsert(container: Container): void {
-  assertHasCallback(container, "onGhostInsert", "render a drag ghost");
+  requireMutationCallback(container, "onGhostInsert");
 }
 
 /** @internal Validate ghost removal before core changes ghost bookkeeping. */
 export function assertCanFireGhostRemove(container: Container): void {
-  assertHasCallback(container, "onGhostRemove", "remove a drag ghost");
+  requireMutationCallback(container, "onGhostRemove");
+}
+
+/** @internal Validate ghost relocation before core changes ghost bookkeeping. */
+export function assertCanFireGhostMove(container: Container): void {
+  requireMutationCallback(container, "onGhostMove");
 }
 
 export function fireItemInsert(
@@ -128,9 +182,7 @@ export function fireItemInsert(
   beforeElement: HTMLElement | null,
   session: DragSession | null,
 ): void {
-  assertCanFireItemInsert(container);
-  const onInsert = container.callbacks?.onItemInsert;
-  if (!onInsert) return;
+  const onInsert = requireMutationCallback(container, "onItemInsert");
   const event: ItemInsertEvent = {
     session: session?.handle ?? null,
     ...buildItemRunEvent(items),
@@ -147,9 +199,7 @@ export function fireItemRemove(
   items: readonly Item[],
   session: DragSession | null,
 ): void {
-  assertCanFireItemRemove(container);
-  const onRemove = container.callbacks?.onItemRemove;
-  if (!onRemove) return;
+  const onRemove = requireMutationCallback(container, "onItemRemove");
   const event: ItemRemoveEvent = {
     session: session?.handle ?? null,
     ...buildItemRunEvent(items),
@@ -160,9 +210,10 @@ export function fireItemRemove(
 }
 
 /**
- * Fire the semantic move event on the destination container for the whole
- * dragged run in one call. Falls back to the insert-only primitive path when
- * no `onItemMove` is registered, which matches the pre-refactor behavior (a
+ * Fire the semantic move event for the whole dragged run in one call; the
+ * root resolves the handler and `from`/`froms`/`to` carry the source and
+ * destination. Falls back to the insert-only primitive path when no
+ * `onItemMove` is registered, which matches the pre-refactor behavior (a
  * DOM `insertBefore` inherently moves the node, so no explicit remove is
  * needed on the source).
  */
@@ -173,9 +224,11 @@ export function fireItemMove(
   beforeElement: HTMLElement | null,
   session: DragSession | null,
 ): void {
-  assertCanFireItemMove(to.container);
-  const onMove = to.container.callbacks?.onItemMove;
-  if (onMove) {
+  const resolved = resolveItemMoveCallback(to.container);
+  if (!resolved) {
+    throw missingItemMoveCallbackError(to.container);
+  }
+  if (resolved.operation === "move") {
     const event: ItemMoveEvent = {
       session: session?.handle ?? null,
       ...buildItemRunEvent(items),
@@ -184,7 +237,7 @@ export function fireItemMove(
       froms: [...froms],
       beforeElement,
     };
-    fireMutation(to.container, () => onMove(event));
+    fireMutation(to.container, () => resolved.callback(event));
     return;
   }
   fireItemInsert(to.container, items, to.index, beforeElement, session);
@@ -201,78 +254,27 @@ export function fireItemSwap(
   b: { item: Item; container: Container; index: number },
   session: DragSession | null,
 ): void {
-  assertCanFireItemSwap(a.container);
-  const onSwap = a.container.callbacks?.onItemSwap;
-  if (onSwap) {
-    const event: ItemSwapEvent = {
-      session: session?.handle ?? null,
-      a: {
-        item: a.item,
-        itemId: a.item.resolvedItemId,
-        itemMetadata: a.item.metadata,
-        container: a.container,
-        containerMetadata: a.container.metadata,
-        index: a.index,
-      },
-      b: {
-        item: b.item,
-        itemId: b.item.resolvedItemId,
-        itemMetadata: b.item.metadata,
-        container: b.container,
-        containerMetadata: b.container.metadata,
-        index: b.index,
-      },
-    };
-    fireMutation(a.container, () => onSwap(event));
-    return;
-  }
-
-  // No onItemSwap: approximate as two onItemMove calls (see ItemSwapEvent's
-  // doc for the known limitation on non-adjacent same-container swaps).
-  // Bookkeeping is already the final, correct swap, so `beforeElement` reads
-  // straight off each destination container's current itemOrderedList.
-  const beforeElementFor = (
-    container: Container,
-    index: number,
-  ): HTMLElement | null =>
-    index >= container.itemOrderedList.length - 1
-      ? null
-      : container.itemOrderedList[index + 1]?.element ?? null;
-
-  fireItemMove(
-    [
-      {
-        container: a.container,
-        containerMetadata: a.container.metadata,
-        index: a.index,
-      },
-    ],
-    {
-      container: b.container,
-      containerMetadata: b.container.metadata,
-      index: b.index,
-    },
-    [a.item],
-    beforeElementFor(b.container, b.index),
-    session,
-  );
-  fireItemMove(
-    [
-      {
-        container: b.container,
-        containerMetadata: b.container.metadata,
-        index: b.index,
-      },
-    ],
-    {
+  const onSwap = requireMutationCallback(a.container, "onItemSwap");
+  const event: ItemSwapEvent = {
+    session: session?.handle ?? null,
+    a: {
+      item: a.item,
+      itemId: a.item.resolvedItemId,
+      itemMetadata: a.item.metadata,
       container: a.container,
       containerMetadata: a.container.metadata,
       index: a.index,
     },
-    [b.item],
-    beforeElementFor(a.container, a.index),
-    session,
-  );
+    b: {
+      item: b.item,
+      itemId: b.item.resolvedItemId,
+      itemMetadata: b.item.metadata,
+      container: b.container,
+      containerMetadata: b.container.metadata,
+      index: b.index,
+    },
+  };
+  fireMutation(a.container, () => onSwap(event));
 }
 
 function buildDragItemHoverEvent(
@@ -304,7 +306,7 @@ function fireDragItemHover(
   overItem: Item,
   session: DragSession,
 ): void {
-  container.callbacks?.[callback]?.(
+  container.callbacks[callback]?.(
     buildDragItemHoverEvent(session, item, overItem, container),
   );
 }
@@ -337,145 +339,33 @@ export function fireDragItemLeave(
 }
 
 export function fireGhostInsert(
-  container: Container,
-  original: Item,
   ghostItem: Item,
-  index: number,
   beforeElement: HTMLElement | null,
-  ghostRect: GhostInsertEvent["ghostRect"],
-  session: DragSession,
-  kind: GhostInsertEvent["kind"],
-  role: GhostInsertEvent["role"] = "target",
 ): void {
-  assertCanFireGhostInsert(container);
-  const onInsert = container.callbacks?.onGhostInsert;
-  if (!onInsert) return;
-  const event: GhostInsertEvent = {
-    ...buildGhostEvent(
-      session,
-      kind,
-      role,
-      original,
-      ghostItem,
-      container,
-      ghostRect,
-    ),
-    index,
-    beforeElement,
-  };
+  const state = ghostItem.ghostState;
+  if (!state) throw new Error("SnapSort: ghost has no state.");
+  const container = state.location.container;
+  const onInsert = requireMutationCallback(container, "onGhostInsert");
+  const event = buildGhostInsertEvent(state, beforeElement);
   fireMutation(container, () => onInsert(event));
 }
 
-export function fireGhostRemove(
-  container: Container,
-  original: Item,
-  ghostItem: Item,
-  session: DragSession,
-  kind: GhostRemoveEvent["kind"],
-  role: GhostRemoveEvent["role"] = "target",
+export function fireGhostMove(
+  previous: GhostState,
+  next: GhostState,
+  beforeElement: HTMLElement | null,
 ): void {
-  assertCanFireGhostRemove(container);
-  const onRemove = container.callbacks?.onGhostRemove;
-  if (!onRemove) return;
-  const event: GhostRemoveEvent = {
-    ...buildGhostEvent(
-      session,
-      kind,
-      role,
-      original,
-      ghostItem,
-      container,
-      session.pendingGhostTarget?.ghostItem === ghostItem
-        ? session.pendingGhostTarget.ghostRect
-        : undefined,
-    ),
-  };
+  const container = next.location.container;
+  const onMove = requireMutationCallback(container, "onGhostMove");
+  const event = buildGhostMoveEvent(previous, next, beforeElement);
+  fireMutation(container, () => onMove(event));
+}
+
+export function fireGhostRemove(ghostItem: Item): void {
+  const state = ghostItem.ghostState;
+  if (!state) throw new Error("SnapSort: ghost has no state.");
+  const container = state.location.container;
+  const onRemove = requireMutationCallback(container, "onGhostRemove");
+  const event = buildGhostRemoveEvent(state);
   fireMutation(container, () => onRemove(event));
 }
-
-export function fireCreateGhost(
-  event: GhostCreateEvent,
-): HTMLElement | void | null {
-  return event.container.callbacks?.createGhost?.(event);
-}
-
-// --- Default DOM implementations, merged with user config in Container's constructor. ---
-
-function defaultInsertItem(event: ItemInsertEvent) {
-  // Insert every item before the same anchor, in run order: each item lands
-  // immediately before the anchor and after whichever run member was just
-  // inserted, so the DOM ends up in `items` order.
-  for (const item of event.items) {
-    event.container.element?.insertBefore(item.element!, event.beforeElement);
-  }
-}
-
-function defaultRemoveItem(event: ItemRemoveEvent): void {
-  for (const item of event.items) {
-    item.element?.remove();
-  }
-}
-
-function defaultInsertGhost(event: GhostInsertEvent) {
-  event.container.element?.insertBefore(
-    event.ghostItem.element!,
-    event.beforeElement,
-  );
-}
-
-function defaultRemoveGhost(event: GhostRemoveEvent): void {
-  event.ghostItem.element?.remove();
-}
-
-function defaultCreateFlowGhost(event: GhostCreateEvent): HTMLElement {
-  const ghostElement = document.createElement("div");
-  ghostElement.id = "spacer";
-
-  const origProp =
-    event.original.dragSnapshot?.box ?? event.original.currentDomProperty;
-  // `ghostRect`, when present, is the geometry chosen for this flow spacer.
-  // Fall back to the original Item's box for direct Vanilla construction.
-  const width = event.ghostRect?.width ?? origProp.width;
-  const height = event.ghostRect?.height ?? origProp.height;
-  ghostElement.style.width = width + "px";
-  ghostElement.style.height = height + "px";
-  ghostElement.style.margin = `${origProp.margin.top}px ${origProp.margin.right}px ${origProp.margin.bottom}px ${origProp.margin.left}px`;
-  ghostElement.style.boxSizing = "border-box";
-  ghostElement.classList.add("ghost");
-
-  return ghostElement;
-}
-
-function defaultCreateMarkerGhost(event: GhostCreateEvent): HTMLElement {
-  const ghostElement = document.createElement("div");
-  ghostElement.id = "spacer";
-  const { ghostRect } = event;
-  const width = ghostRect?.width ?? 0;
-
-  ghostElement.dataset.snapsortGhost = "insertion";
-  ghostElement.style.position = "absolute";
-  ghostElement.style.width = `${width}px`;
-  ghostElement.style.height = "0px";
-  ghostElement.style.borderRadius = "999px";
-  ghostElement.style.borderTop = "3px solid currentColor";
-  ghostElement.style.background = "currentColor";
-  ghostElement.style.color = "rgb(37, 99, 235)";
-  ghostElement.style.pointerEvents = "none";
-  ghostElement.style.boxSizing = "border-box";
-
-  return ghostElement;
-}
-
-function defaultCreateGhost(event: GhostCreateEvent): HTMLElement {
-  return event.kind === "marker"
-    ? defaultCreateMarkerGhost(event)
-    : defaultCreateFlowGhost(event);
-}
-
-export const defaultCallbacks = {
-  onItemInsert: defaultInsertItem,
-  onItemRemove: defaultRemoveItem,
-  onGhostInsert: defaultInsertGhost,
-  onGhostRemove: defaultRemoveGhost,
-  createGhost: defaultCreateGhost,
-};

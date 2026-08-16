@@ -1,22 +1,26 @@
 export { Container, defaultAnimations } from "./container";
 export type {
   ContainerConfig,
+  ContainerOptions,
+  ContainerRuntimeConfig,
   AnimationConfig,
   ContainerAnimations,
 } from "./container";
-export { defaultCallbacks } from "./mutation";
 export type {
   ContainerCallbacks,
   DragLocation,
   DropEffect,
   DragVisual,
-  GhostRole,
-  GhostKind,
   GhostRect,
-  GhostEventBase,
+  GhostLocation,
+  GhostSlotLocation,
+  GhostOverlayLocation,
+  GhostState,
+  GhostStatePlacement,
   GhostEvent,
   GhostCreateEvent,
   GhostInsertEvent,
+  GhostMoveEvent,
   GhostRemoveEvent,
   ItemInsertEvent,
   ItemRemoveEvent,
@@ -36,6 +40,20 @@ export type {
   VisualGeometryInvalidationEvent,
   VisualGeometryInvalidationReason,
 } from "./events";
+export type {
+  SnapSortAdapter,
+  SnapSortAdapterCallbacks,
+  CreateVanillaAdapterOptions,
+} from "./adapter";
+export { createVanillaAdapter } from "./adapter";
+export type { RenderEntry } from "./ghost-state";
+export { renderKey, type RenderKey } from "./render-key";
+export {
+  insertGhostState,
+  moveGhostState,
+  removeGhostState,
+  composeRenderEntries,
+} from "./ghost-state";
 export type { LayoutMainAxisAlign } from "./layout";
 export { Item } from "./item";
 export type { ItemId, ItemMetadata, ItemSnapshot } from "./snapshot";
