@@ -10,5 +10,8 @@
 - The engine owns the representation.
 - When representation must change due to data mutation, request the engine to update.
 
+- During development, fail fast and loud.
+- During production, fail slow and silent. 
+
 - No external dependencies.
 - Prioritize code maintainability, reliability, feature set, browser support, bundle size, in that order.
