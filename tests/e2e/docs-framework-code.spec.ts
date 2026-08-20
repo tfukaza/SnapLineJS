@@ -34,6 +34,23 @@ async function dragBetween(
   await page.waitForTimeout(150);
 }
 
+test("core concepts demo reduces ghost teardown through the framework tree", async ({
+  page,
+}) => {
+  const pageErrors: Error[] = [];
+  page.on("pageerror", (error) => pageErrors.push(error));
+  const response = await page.goto("/docs/snapsort/guides/01_core_concepts");
+  expect(response?.status()).toBe(200);
+
+  const diagram = page.locator(".snapsort-concepts-diagram");
+  const items = diagram.locator(".snapsort-concepts-item");
+  await expect(items).toHaveCount(4);
+  await dragBetween(page, items.first(), items.nth(1));
+
+  await expect(diagram.locator(".snapsort-concepts-ghost")).toHaveCount(0);
+  expect(pageErrors).toEqual([]);
+});
+
 test("SnapSort Svelte reference lists only its component pages", async ({
   page,
 }) => {

@@ -785,6 +785,39 @@ test("ghost removal globally and idempotently purges stale copies", () => {
   }
 });
 
+test("core removal callbacks reduce Items after root ownership is released", () => {
+  const harness = createRenderTreeHarness();
+  try {
+    let tree = createBoardState(["dragged"]).tree;
+    harness.root.callbacks = {
+      onItemRemove(event) {
+        tree = reduceRenderTree(tree, event);
+      },
+      onGhostInsert(event) {
+        tree = reduceRenderTree(tree, event);
+      },
+      onGhostRemove(event) {
+        tree = reduceRenderTree(tree, event);
+      },
+    };
+
+    const ghost = createSpacer(harness, harness.source, 0);
+    harness.source.insertGhost(ghost.ghostItem);
+    expect(
+      childTree(tree, "source").entries.map((entry) => entry.itemId),
+    ).toEqual(["dragged", ghost.ghostItemId]);
+
+    expect(() => ghost.ghostItem.removeGhost()).not.toThrow();
+    expect(ordinaryIds(childTree(tree, "source"))).toEqual(["dragged"]);
+    expect(childTree(tree, "source").entries).toHaveLength(1);
+
+    expect(harness.source.removeItem("dragged")).toBe(true);
+    expect(childTree(tree, "source").entries).toEqual([]);
+  } finally {
+    harness.cleanup();
+  }
+});
+
 test("ghost materialization preserves source anchors and retained dragged entries", () => {
   const harness = createRenderTreeHarness(["B"]);
   try {

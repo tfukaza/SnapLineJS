@@ -557,12 +557,14 @@ function assertItemRun(
 function assertItemEventRoot(
   item: Item,
   expectedRoot: Container,
-  allowDetached: boolean,
+  allowReleased: boolean,
 ): void {
-  const actualRoot = item.rootContainer;
+  // A removed Item deliberately falls back to itself after core releases its
+  // root ownership and before the synchronous framework callback runs.
+  const actualRoot: Item = item.rootContainer;
   if (
     actualRoot === expectedRoot ||
-    (allowDetached && item instanceof Container && actualRoot === item)
+    (allowReleased && item.parent === null && actualRoot === item)
   ) {
     return;
   }
@@ -593,10 +595,10 @@ function assertEventItemRoots(
     return;
   }
 
-  const allowDetached = !("froms" in event);
-  assertItemEventRoot(event.item, expectedRoot, allowDetached);
+  const allowReleased = !("froms" in event);
+  assertItemEventRoot(event.item, expectedRoot, allowReleased);
   for (const item of event.items) {
-    assertItemEventRoot(item, expectedRoot, allowDetached);
+    assertItemEventRoot(item, expectedRoot, allowReleased);
   }
 }
 
