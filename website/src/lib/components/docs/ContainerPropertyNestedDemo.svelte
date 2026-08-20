@@ -1,15 +1,29 @@
 <script lang="ts">
   import { Engine } from "@snap-engine/asset-base/svelte";
-  import { defaultAnimations, type ItemMoveEvent } from "@snap-engine/snapsort";
+  import {
+    createRenderEntry,
+    createRenderTree,
+    defaultAnimations,
+    reduceRenderTree,
+    type ContainerCallbacks,
+    type GhostLifecycleEvent,
+    type ItemMoveEvent,
+  } from "@snap-engine/snapsort";
   import { rejectDrop } from "@snap-engine/snapsort/callbacks";
-  import { Container, Item } from "@snap-engine/snapsort/svelte";
+  import { Container, Ghost, Item } from "@snap-engine/snapsort/svelte";
 
   type Group = { id: string; label: string };
-  let groups = $state<Group[]>([
-    { id: "design", label: "Design" },
-    { id: "build", label: "Build" },
-    { id: "ship", label: "Ship" },
-  ]);
+  let groups = $state.raw(
+    createRenderTree(
+      [
+        { id: "design", label: "Design" },
+        { id: "build", label: "Build" },
+        { id: "ship", label: "Ship" },
+      ].map((group) =>
+        createRenderEntry<Group>(group, group.id, createRenderTree()),
+      ),
+    ),
+  );
   let allowDrag = $state(true);
   let selectedIds = $state(new Set<string>(["design", "build"]));
 
@@ -21,14 +35,19 @@
   }
 
   function onItemMove(event: ItemMoveEvent) {
-    const movedIds = new Set(event.itemIds.map(String));
-    const moving = groups.filter((group) => movedIds.has(group.id));
-    if (moving.length === 0) return;
-
-    const next = groups.filter((group) => !movedIds.has(group.id));
-    next.splice(Math.min(event.to.index, next.length), 0, ...moving);
-    groups = next;
+    groups = reduceRenderTree(groups, event);
   }
+
+  function onGhostMove(event: GhostLifecycleEvent) {
+    groups = reduceRenderTree(groups, event);
+  }
+
+  const callbacks = {
+    onItemMove,
+    onGhostInsert: onGhostMove,
+    onGhostMove,
+    onGhostRemove: onGhostMove,
+  } satisfies ContainerCallbacks;
 </script>
 
 <div class="nested-demo">
@@ -39,37 +58,46 @@
 
   <Engine id="container-property-nested">
     <Container
+      itemId="container-property-nested-root"
       className="nested-root"
-      items={groups}
-      config={{ animation: defaultAnimations, callbacks: { onItemMove } }}
+      config={{ animation: defaultAnimations, callbacks }}
     >
-      {#snippet entry(group)}
+      {#each groups.entries as entry (entry.itemId)}
+        {#if entry.isGhost}
+          <Ghost ghost={entry.ghost} />
+        {:else if entry.childTree}
         <Container
-          itemId={group.id}
+          itemId={entry.itemId}
           locked={!allowDrag}
-          selected={selectedIds.has(group.id)}
-          className={`nested-card${selectedIds.has(group.id) ? " is-selected" : ""}`}
-          items={[]}
+          selected={selectedIds.has(entry.itemId)}
+          className={`nested-card${selectedIds.has(entry.itemId) ? " is-selected" : ""}`}
           config={{ animation: defaultAnimations, callbacks: { canDrop: rejectDrop } }}
         >
-          {#snippet before()}
-            <div class="nested-card-content">
-              <strong>{group.label}</strong>
-              <button
-                type="button"
-                aria-pressed={selectedIds.has(group.id)}
-                onclick={() => toggleSelected(group.id)}
-              >
-                {selectedIds.has(group.id) ? "Selected" : "Select"}
-              </button>
-            </div>
-          {/snippet}
+          <div class="nested-card-content">
+            <strong>{entry.value.label}</strong>
+            <button
+              type="button"
+              aria-pressed={selectedIds.has(entry.itemId)}
+              onclick={() => toggleSelected(entry.itemId)}
+            >
+              {selectedIds.has(entry.itemId) ? "Selected" : "Select"}
+            </button>
+          </div>
 
-          {#snippet entry(_entry)}
-            <Item itemId="unused">Unused</Item>
-          {/snippet}
+          {#each entry.childTree.entries as child (child.itemId)}
+            {#if child.isGhost}
+              <Ghost ghost={child.ghost} />
+            {:else if child.childTree}
+              <Container itemId={child.itemId} />
+            {:else}
+              <Item itemId={child.itemId}>{child.value.label}</Item>
+            {/if}
+          {/each}
         </Container>
-      {/snippet}
+        {:else}
+          <Item itemId={entry.itemId}>{entry.value.label}</Item>
+        {/if}
+      {/each}
     </Container>
   </Engine>
 </div>

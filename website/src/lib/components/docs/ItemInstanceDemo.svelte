@@ -1,35 +1,52 @@
 <script lang="ts">
   import { Engine } from "@snap-engine/asset-base/svelte";
   import {
+    createRenderEntries,
+    createRenderTree,
     defaultAnimations,
+    reduceRenderTree,
+    type ContainerCallbacks,
+    type GhostLifecycleEvent,
     type Item as SnapSortItem,
     type ItemMoveEvent,
   } from "@snap-engine/snapsort";
-  import { Container } from "@snap-engine/snapsort/svelte";
+  import { Container, Ghost } from "@snap-engine/snapsort/svelte";
   import AdoptedItemRow from "./AdoptedItemRow.svelte";
 
   type Task = { id: string; label: string };
 
-  let tasks = $state<Task[]>([
-    { id: "adopt-one", label: "Application-owned item" },
-    { id: "adopt-two", label: "Another adopted item" },
-  ]);
+  let tasks = $state.raw(
+    createRenderTree(
+      createRenderEntries<Task>(
+        [
+          { id: "adopt-one", label: "Application-owned item" },
+          { id: "adopt-two", label: "Another adopted item" },
+        ],
+        (task) => task.id,
+      ),
+    ),
+  );
   let report = $state("Choose an item to inspect its adopted core Item.");
 
   function inspect(item: SnapSortItem) {
     const { index } = item.getIndexAndContainer();
-    report = `ID: ${String(item.resolvedItemId)} · index: ${index} · origin: ${String(item.metadata.origin)}`;
+    report = `ID: ${item.itemId} · index: ${index} · origin: ${String(item.metadata.origin)}`;
   }
 
   function onItemMove(event: ItemMoveEvent) {
-    const itemId = String(event.itemId);
-    const task = tasks.find((entry) => entry.id === itemId);
-    if (!task) return;
-
-    const next = tasks.filter((entry) => entry.id !== itemId);
-    next.splice(Math.min(event.to.index, next.length), 0, task);
-    tasks = next;
+    tasks = reduceRenderTree(tasks, event);
   }
+
+  function onGhostMove(event: GhostLifecycleEvent) {
+    tasks = reduceRenderTree(tasks, event);
+  }
+
+  const callbacks = {
+    onItemMove,
+    onGhostInsert: onGhostMove,
+    onGhostMove,
+    onGhostRemove: onGhostMove,
+  } satisfies ContainerCallbacks;
 </script>
 
 <div class="item-instance-demo">
@@ -37,17 +54,21 @@
 
   <Engine id="item-example-instance">
     <Container
+      itemId="item-example-instance-root"
       className="adopted-list"
-      items={tasks}
-      config={{ animation: defaultAnimations, callbacks: { onItemMove } }}
+      config={{ animation: defaultAnimations, callbacks }}
     >
-      {#snippet entry(task)}
-        <AdoptedItemRow
-          id={task.id}
-          label={task.label}
-          onInspect={inspect}
-        />
-      {/snippet}
+      {#each tasks.entries as entry (entry.itemId)}
+        {#if entry.isGhost}
+          <Ghost ghost={entry.ghost} />
+        {:else}
+          <AdoptedItemRow
+            id={entry.itemId}
+            label={entry.value.label}
+            onInspect={inspect}
+          />
+        {/if}
+      {/each}
     </Container>
   </Engine>
 </div>

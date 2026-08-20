@@ -1,10 +1,14 @@
 <script lang="ts">
   import { Engine } from "@snap-engine/asset-base/svelte";
-  import { Container } from "@snap-engine/snapsort/svelte";
-  import type {
-    ContainerCallbacks,
-    ItemMoveEvent,
+  import { Container, Ghost } from "@snap-engine/snapsort/svelte";
+  import {
+    createRenderEntry,
+    createRenderTree,
+    reduceRenderTree,
+    type RenderTree,
   } from "@snap-engine/snapsort";
+  import type { ContainerCallbacks } from "@snap-engine/snapsort";
+  import { renderTreeCallbacks } from "../snapsort-render-tree";
   import FileTreeNode from "./FileTreeNode.svelte";
   import type { TreeNodeData } from "./FileTreeNode.svelte";
 
@@ -66,139 +70,78 @@
   ];
 
   let nextId = $state(1);
-  let tree = $state<TreeNodeData[]>(structuredClone(initialTree));
+  function createFileTree(nodes: readonly TreeNodeData[]): RenderTree<TreeNodeData> {
+    return createRenderTree(
+      nodes.map((node) =>
+        createRenderEntry(
+          { ...node, children: undefined },
+          node.id,
+          node.kind === "folder"
+            ? createFileTree(node.children ?? [])
+            : null,
+        ),
+      ),
+    );
+  }
+
+  let tree = $state.raw(createFileTree(initialTree));
   const treeAnimation = {
     duration: 260,
     timing_function: "cubic-bezier(0.2, 0, 0, 1)",
   };
 
-  function cloneNode(node: TreeNodeData): TreeNodeData {
-    return {
-      ...node,
-      children: node.children?.map(cloneNode),
-    };
-  }
-
-  function extractNode(
-    nodes: TreeNodeData[],
+  function toggleNodeOpen(
+    current: RenderTree<TreeNodeData>,
     nodeId: string,
-  ): { nodes: TreeNodeData[]; node: TreeNodeData | null } {
-    let removed: TreeNodeData | null = null;
-    const nextNodes: TreeNodeData[] = [];
-
-    for (const node of nodes) {
-      if (node.id === nodeId) {
-        removed = cloneNode(node);
-        continue;
-      }
-
-      if (node.children) {
-        const result = extractNode(node.children, nodeId);
-        if (result.node) {
-          removed = result.node;
-          nextNodes.push({ ...node, children: result.nodes });
-          continue;
-        }
-      }
-
-      nextNodes.push(cloneNode(node));
-    }
-
-    return { nodes: nextNodes, node: removed };
-  }
-
-  function containsNode(node: TreeNodeData, nodeId: string): boolean {
-    if (node.id === nodeId) return true;
-    return node.children?.some((child) => containsNode(child, nodeId)) ?? false;
-  }
-
-  function insertNode(
-    nodes: TreeNodeData[],
-    containerId: string,
-    index: number,
-    nodeToInsert: TreeNodeData,
-  ): TreeNodeData[] {
-    if (containerId === "root") {
-      const nextNodes = nodes.map(cloneNode);
-      nextNodes.splice(Math.max(0, Math.min(index, nextNodes.length)), 0, nodeToInsert);
-      return nextNodes;
-    }
-
-    return nodes.map((node) => {
-      if (node.id === containerId) {
-        const children = node.children?.map(cloneNode) ?? [];
-        children.splice(Math.max(0, Math.min(index, children.length)), 0, nodeToInsert);
-        return { ...node, open: true, children };
-      }
-
-      return {
-        ...node,
-        children: node.children
-          ? insertNode(node.children, containerId, index, nodeToInsert)
-          : undefined,
-      };
-    });
-  }
-
-  function toggleNodeOpen(nodes: TreeNodeData[], nodeId: string): TreeNodeData[] {
-    return nodes.map((node) => {
-      if (node.id === nodeId && node.kind === "folder") {
-        return { ...node, open: node.open === false };
-      }
-
-      return {
-        ...node,
-        children: node.children ? toggleNodeOpen(node.children, nodeId) : undefined,
-      };
-    });
+  ): RenderTree<TreeNodeData> {
+    return {
+      ...current,
+      entries: current.entries.map((entry) => {
+        if (entry.isGhost) return entry;
+        return {
+          ...entry,
+          value:
+            entry.itemId === nodeId && entry.value.kind === "folder"
+              ? { ...entry.value, open: entry.value.open === false }
+              : entry.value,
+          childTree: entry.childTree
+            ? toggleNodeOpen(entry.childTree, nodeId)
+            : null,
+        };
+      }),
+    };
   }
 
   function toggleFolderOpen(nodeId: string) {
     tree = toggleNodeOpen(tree, nodeId);
   }
 
-  function handleMove(event: ItemMoveEvent) {
-    const nodeId = event.itemId;
-    const containerId = event.to.containerMetadata.containerId;
-    if (typeof nodeId !== "string" || typeof containerId !== "string") return;
-
-    const extracted = extractNode(tree, nodeId);
-    if (!extracted.node) return;
-    if (containsNode(extracted.node, containerId)) return;
-
-    tree = insertNode(extracted.nodes, containerId, event.to.index, extracted.node);
-  }
-
   function reset() {
     nextId = 1;
-    tree = structuredClone(initialTree);
+    tree = createFileTree(initialTree);
   }
 
   function addFile() {
     const id = `tree-new-${nextId++}`;
-    tree = [
-      ...tree.map(cloneNode),
-      {
-        id,
-        name: `new-file-${id.replace("tree-new-", "")}.ts`,
-        kind: "file",
-      },
-    ];
+    tree = {
+      ...tree,
+      entries: [
+        ...tree.entries,
+        createRenderEntry(
+          {
+            id,
+            name: `new-file-${id.replace("tree-new-", "")}.ts`,
+            kind: "file",
+          },
+          id,
+        ),
+      ],
+    };
   }
 
-  const callbacks: ContainerCallbacks = {
-    onItemMove: handleMove,
-    getInsertionMarkerRect: ({ containerMetadata, defaultRect }) => {
-      const depth = Number(containerMetadata.insertionDepth ?? 0);
-      const left = 8 + depth * 14;
-      const right = 8;
-      return {
-        ...defaultRect,
-        x: defaultRect.x + left,
-        width: Math.max(0, defaultRect.width - left - right),
-      };
-    },
-  };
+  const callbacks = renderTreeCallbacks(
+    (event) => (tree = reduceRenderTree(tree, event)),
+  ) satisfies ContainerCallbacks;
 </script>
 
 <div class="file-tree-demo">
@@ -218,6 +161,7 @@
 
     <Engine id="snapsort-file-tree-demo-canvas">
       <Container
+        itemId="file-explorer-root"
         className="code-tree"
         config={{
           mode: "insertion",
@@ -233,14 +177,28 @@
         metadata={{
           containerId: "root",
           treeId: "snapenginejs",
-          insertionDepth: 0,
         }}
-        items={tree}
-        getItemId={(node) => node.id}
       >
-        {#snippet entry(node)}
-          <FileTreeNode {node} depth={0} {callbacks} onToggleFolder={toggleFolderOpen} />
-        {/snippet}
+        {#each tree.entries as entry (entry.itemId)}
+          {#if entry.isGhost}
+            {#if entry.ghost.type === "insertion-marker"}
+              <Ghost
+                ghost={entry.ghost}
+                insertionMarker={{
+                  thickness: 3,
+                  startInset: 8,
+                  endInset: 8,
+                }}
+              />
+            {:else}
+              <Ghost ghost={entry.ghost} />
+            {/if}
+          {:else if entry.childTree}
+            <FileTreeNode node={entry.value} tree={entry.childTree} depth={0} onToggleFolder={toggleFolderOpen} />
+          {:else}
+            <FileTreeNode node={entry.value} tree={null} depth={0} onToggleFolder={toggleFolderOpen} />
+          {/if}
+        {/each}
       </Container>
     </Engine>
   </aside>
@@ -333,8 +291,8 @@
   }
 
   :global(.snapsort-container.tree-folder) {
-    width: 100%;
-    margin: 0 !important;
+    width: calc(100% - 14px);
+    margin: 0 0 0 14px !important;
     border: 0 !important;
     outline: 0 !important;
     background: transparent;
@@ -363,6 +321,11 @@
     font-size: 14px;
     font-weight: 500;
     position: relative;
+  }
+
+  :global(.tree-folder > .tree-row) {
+    width: calc(100% + 14px);
+    margin-left: -14px !important;
   }
 
   :global(.snapsort-item.tree-row:hover),

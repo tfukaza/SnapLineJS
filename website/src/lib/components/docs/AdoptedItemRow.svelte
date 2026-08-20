@@ -20,8 +20,7 @@
   const engine = getContext<Engine>("engine");
   const container = getContext<SnapSortContainer>("container");
   const initialId = untrack(() => id);
-  const item = new SnapSortItem(engine, container);
-  item.itemId = initialId;
+  const item = new SnapSortItem(engine, container, { itemId: initialId });
   item.metadata = { origin: "application" };
 
   onDestroy(() => {
@@ -29,7 +28,7 @@
   });
 </script>
 
-<Item {item} className="adopted-card">
+<Item itemId={initialId} {item} className="adopted-card">
   <span>{label}</span>
   <button type="button" onclick={() => onInspect(item)}>
     Inspect core item

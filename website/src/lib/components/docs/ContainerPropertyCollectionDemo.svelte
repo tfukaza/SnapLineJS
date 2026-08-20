@@ -1,36 +1,61 @@
 <script lang="ts">
   import { Engine } from "@snap-engine/asset-base/svelte";
-  import { defaultAnimations, type ItemMoveEvent } from "@snap-engine/snapsort";
-  import { Container, Item } from "@snap-engine/snapsort/svelte";
+  import {
+    createRenderEntries,
+    createRenderTree,
+    defaultAnimations,
+    reduceRenderTree,
+    type ContainerCallbacks,
+    type GhostLifecycleEvent,
+    type ItemMoveEvent,
+  } from "@snap-engine/snapsort";
+  import { Container, Ghost, Item } from "@snap-engine/snapsort/svelte";
 
   type Task = { key: string; label: string };
-  let tasks = $state<Task[]>([
-    { key: "write", label: "Write outline" },
-    { key: "review", label: "Review draft" },
-    { key: "publish", label: "Publish" },
-  ]);
+  let tasks = $state.raw(
+    createRenderTree(
+      createRenderEntries<Task>(
+        [
+          { key: "write", label: "Write outline" },
+          { key: "review", label: "Review draft" },
+          { key: "publish", label: "Publish" },
+        ],
+        (task) => task.key,
+      ),
+    ),
+  );
 
   function onItemMove(event: ItemMoveEvent) {
-    const task = tasks.find((entry) => entry.key === event.itemId);
-    if (!task) return;
-    const next = tasks.filter((entry) => entry.key !== event.itemId);
-    next.splice(Math.min(event.to.index, next.length), 0, task);
-    tasks = next;
+    tasks = reduceRenderTree(tasks, event);
   }
+
+  function onGhostMove(event: GhostLifecycleEvent) {
+    tasks = reduceRenderTree(tasks, event);
+  }
+
+  const callbacks = {
+    onItemMove,
+    onGhostInsert: onGhostMove,
+    onGhostMove,
+    onGhostRemove: onGhostMove,
+  } satisfies ContainerCallbacks;
 </script>
 
 <Engine id="container-property-collection">
   <Container
+    itemId="container-property-collection-root"
     className="property-list"
-    items={tasks}
-    getItemId={(task) => task.key}
-    config={{ animation: defaultAnimations, callbacks: { onItemMove } }}
+    config={{ animation: defaultAnimations, callbacks }}
   >
-    {#snippet entry(task)}
-      <Item itemId={task.key} className="property-item">
-        {task.label}
-      </Item>
-    {/snippet}
+    {#each tasks.entries as entry (entry.itemId)}
+      {#if entry.isGhost}
+        <Ghost ghost={entry.ghost} />
+      {:else}
+        <Item itemId={entry.itemId} className="property-item">
+          {entry.value.label}
+        </Item>
+      {/if}
+    {/each}
   </Container>
 </Engine>
 

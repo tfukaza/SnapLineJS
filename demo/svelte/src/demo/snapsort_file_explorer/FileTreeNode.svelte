@@ -10,20 +10,20 @@
 </script>
 
 <script lang="ts">
-  import { Container, Item } from "@snap-engine/snapsort/svelte";
+  import { Container, Ghost, Item } from "@snap-engine/snapsort/svelte";
   import { rejectDrop } from "@snap-engine/snapsort/callbacks";
-  import type { ContainerCallbacks } from "@snap-engine/snapsort";
+  import type { RenderTree } from "@snap-engine/snapsort";
   import FileTreeNode from "./FileTreeNode.svelte";
 
   let {
     node,
+    tree,
     depth = 0,
-    callbacks,
     onToggleFolder,
   }: {
     node: TreeNodeData;
+    tree: RenderTree<TreeNodeData> | null;
     depth?: number;
-    callbacks: ContainerCallbacks;
     onToggleFolder: (nodeId: string) => void;
   } = $props();
 
@@ -52,10 +52,7 @@
       mode: "insertion",
       direction: "column",
       name: `code-file-tree-${node.id}`,
-      callbacks: {
-        ...callbacks,
-        ...(node.open === false ? { canDrop: rejectDrop } : {}),
-      },
+      callbacks: node.open === false ? { canDrop: rejectDrop } : undefined,
       animation: {
         reorder: treeAnimation,
         drop: treeAnimation,
@@ -64,30 +61,44 @@
     locked={false}
     metadata={{
       containerId: node.id,
-      insertionDepth: depth + 1,
     }}
-    items={node.open !== false ? (node.children ?? []) : []}
-    getItemId={(child) => child.id}
   >
-    {#snippet before()}
-      <div class="tree-row folder-row" style={`--depth: ${depth}`}>
-        <span class="indent" aria-hidden="true"></span>
-        <button
-          type="button"
-          class:open={node.open !== false}
-          class="chevron"
-          aria-label={node.open !== false ? `Collapse ${node.name}` : `Expand ${node.name}`}
-          onpointerdown={handleChevronPointerDown}
-          onclick={handleChevronClick}
-        ></button>
-        <span class="folder-icon" aria-hidden="true"></span>
-        <span class="row-name">{node.name}</span>
-      </div>
-    {/snippet}
+    <div class="tree-row folder-row" style={`--depth: ${depth}`}>
+      <span class="indent" aria-hidden="true"></span>
+      <button
+        type="button"
+        class:open={node.open !== false}
+        class="chevron"
+        aria-label={node.open !== false ? `Collapse ${node.name}` : `Expand ${node.name}`}
+        onpointerdown={handleChevronPointerDown}
+        onclick={handleChevronClick}
+      ></button>
+      <span class="folder-icon" aria-hidden="true"></span>
+      <span class="row-name">{node.name}</span>
+    </div>
 
-    {#snippet entry(child)}
-      <FileTreeNode node={child} depth={depth + 1} {callbacks} {onToggleFolder} />
-    {/snippet}
+    {#if node.open !== false && tree}
+      {#each tree.entries as entry (entry.itemId)}
+        {#if entry.isGhost}
+          {#if entry.ghost.type === "insertion-marker"}
+            <Ghost
+              ghost={entry.ghost}
+              insertionMarker={{
+                thickness: 3,
+                startInset: 8,
+                endInset: 8,
+              }}
+            />
+          {:else}
+            <Ghost ghost={entry.ghost} />
+          {/if}
+        {:else if entry.childTree}
+          <FileTreeNode node={entry.value} tree={entry.childTree} depth={depth + 1} {onToggleFolder} />
+        {:else}
+          <FileTreeNode node={entry.value} tree={null} depth={depth + 1} {onToggleFolder} />
+        {/if}
+      {/each}
+    {/if}
   </Container>
 {:else}
   <Item

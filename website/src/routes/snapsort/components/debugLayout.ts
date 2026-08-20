@@ -67,13 +67,7 @@ function liveViewportRect(element: HTMLElement | null) {
 }
 
 function debugLabel(item: ItemType, snapshot: ItemSnapshot<ItemType> | null) {
-  const itemId = snapshot?.metadata.itemId;
-  const containerId = snapshot?.metadata.containerId;
-  const configuredName = "name" in item && typeof item.name === "string" ? item.name : null;
-
-  if (typeof itemId === "string") return itemId;
-  if (typeof containerId === "string") return containerId;
-  return configuredName ?? snapshot?.key ?? item.id;
+  return snapshot?.itemId ?? item.itemId;
 }
 
 function addDebugRect(
@@ -124,7 +118,7 @@ function collectItemDebugRects(
   visited.add(item);
 
   const snapshot = item.dragSnapshot;
-  const isContainer = "configuration" in item;
+  const isContainer = "config" in item;
   const label = debugLabel(item, snapshot);
 
   if (snapshot) {

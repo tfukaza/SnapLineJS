@@ -2,13 +2,24 @@
   import { onMount } from "svelte";
   import ClientDemoFrame from "$lib/components/ClientDemoFrame.svelte";
   import { Engine } from "@snap-engine/asset-base/svelte";
-  import { Container, Item } from "@snap-engine/snapsort/svelte";
-  import type { ItemMoveEvent } from "@snap-engine/snapsort";
+  import { Container, Ghost, Item } from "@snap-engine/snapsort/svelte";
+  import {
+    createRenderEntries,
+    createRenderTree,
+    reduceRenderTree,
+    type ContainerCallbacks,
+    type GhostLifecycleEvent,
+    type ItemMoveEvent,
+  } from "@snap-engine/snapsort";
   import * as Tone from "tone";
 
   const recessedPadIndices = new Set([5, 6, 9, 10]);
   const padIndices = Array.from({ length: 16 }, (_, index) => index);
-  let padOrder = $state<number[]>(padIndices.slice());
+  let padOrder = $state.raw(
+    createRenderTree(
+      createRenderEntries(padIndices, (index) => `pad-${index}`),
+    ),
+  );
   const waveShapes = ["sine", "triangle8", "square8", "sawtooth8"] as const;
   type WaveShape = (typeof waveShapes)[number];
 
@@ -122,16 +133,11 @@
   }
 
   function handlePadMove(event: ItemMoveEvent) {
-    const itemId = event.itemId;
-    if (typeof itemId !== "string" || !itemId.startsWith("pad-")) return;
+    padOrder = reduceRenderTree(padOrder, event);
+  }
 
-    const movedPad = Number(itemId.slice("pad-".length));
-    if (!Number.isInteger(movedPad)) return;
-
-    const nextOrder = padOrder.filter((index) => index !== movedPad);
-    const targetIndex = Math.max(0, Math.min(event.to.index, nextOrder.length));
-    nextOrder.splice(targetIndex, 0, movedPad);
-    padOrder = nextOrder;
+  function handlePadGhost(event: GhostLifecycleEvent) {
+    padOrder = reduceRenderTree(padOrder, event);
   }
 
   function handlePadPointerDown() {
@@ -141,6 +147,14 @@
   function handlePadDragStart() {
     draggedPadGesture = true;
   }
+
+  const padCallbacks = {
+    onDragStart: handlePadDragStart,
+    onItemMove: handlePadMove,
+    onGhostInsert: handlePadGhost,
+    onGhostMove: handlePadGhost,
+    onGhostRemove: handlePadGhost,
+  } satisfies ContainerCallbacks;
 
   function handlePadClick(index: number) {
     if (draggedPadGesture) {
@@ -222,43 +236,43 @@
               aria-describedby="hero-demo-instructions"
             >
               <Container
+                itemId="landing-synth-root"
                 config={{
                   direction: "row",
                   mode: "euclidean",
-                  callbacks: {
-                    onDragStart: handlePadDragStart,
-                    onItemMove: handlePadMove,
-                  },
+                  callbacks: padCallbacks,
                 }}
-                items={padOrder}
-                getItemId={(index) => `pad-${index}`}
               >
-                {#snippet entry(index)}
-                  <Item itemId={`pad-${index}`} className="hero-synth-item">
+                {#each padOrder.entries as entry (entry.itemId)}
+                  {#if entry.isGhost}
+                    <Ghost ghost={entry.ghost} />
+                  {:else}
+                  <Item itemId={entry.itemId} className="hero-synth-item">
                     <div
-                      class={`hero-synth-button ${padColorClasses[index]} ${activePadIndex === index ? "is-active" : ""}`}
-                      data-pad-index={index}
-                      onclick={() => handlePadClick(index)}
+                      class={`hero-synth-button ${padColorClasses[entry.value]} ${activePadIndex === entry.value ? "is-active" : ""}`}
+                      data-pad-index={entry.value}
+                      onclick={() => handlePadClick(entry.value)}
                       onpointerdown={handlePadPointerDown}
                       onkeydown={(event) => {
                         if (event.key === "Enter" || event.key === " ") {
                           event.preventDefault();
-                          playPad(index);
+                          playPad(entry.value);
                         }
                       }}
-                      aria-label={`Pad ${index + 1}, ${padNotes[index]}. Press to play; drag to reorder.`}
+                      aria-label={`Pad ${entry.value + 1}, ${padNotes[entry.value]}. Press to play; drag to reorder.`}
                       aria-describedby="hero-demo-instructions"
                       role="button"
                       tabindex="0"
                     >
-                      {#if recessedPadIndices.has(index)}
+                      {#if recessedPadIndices.has(entry.value)}
                         <div class="hero-synth-button-indent"></div>
                       {:else}
                         <div class="hero-synth-button-bump"></div>
                       {/if}
                     </div>
                   </Item>
-                {/snippet}
+                  {/if}
+                {/each}
               </Container>
             </div>
           </div>

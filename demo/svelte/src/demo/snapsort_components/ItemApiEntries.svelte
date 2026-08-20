@@ -4,19 +4,32 @@
   import {
     Container as SnapSortContainer,
     Item as SnapSortItem,
+    type RenderEntry,
   } from "@snap-engine/snapsort";
-  import { Item } from "@snap-engine/snapsort/svelte";
+  import {
+    Container as ContainerView,
+    Ghost,
+    Item,
+  } from "@snap-engine/snapsort/svelte";
+
+  let {
+    entries,
+    onUnmount,
+  }: {
+    entries: readonly RenderEntry<"generated" | "adopted">[];
+    onUnmount: () => void;
+  } = $props();
 
   const engine = getContext<Engine>("engine");
   const container = getContext<SnapSortContainer>("container");
-  const adoptedItem = new SnapSortItem(engine, container);
-  adoptedItem.itemId = "item-api-adopted";
+  const adoptedItem = new SnapSortItem(engine, container, {
+    itemId: "item-api-adopted",
+  });
   adoptedItem.metadata = { origin: "application" };
   adoptedItem.selected = true;
 
   let generatedItem = $state<SnapSortItem | null>(null);
   let adoptedBinding = $state<SnapSortItem | null>(adoptedItem);
-  let showItems = $state(true);
   let report = $state("ready");
   let generatedMetadata = $state({ version: 1 });
   let nativeClicks = $state(0);
@@ -42,26 +55,33 @@
   });
 </script>
 
-{#if showItems}
-  <Item
-    bind:item={generatedItem}
-    itemId="item-api-generated"
-    metadata={generatedMetadata}
-    data-testid="item-api-generated"
-    aria-label="Generated Item"
-    onclick={() => nativeClicks++}
-  >
-    Generated item
-  </Item>
-  <Item bind:item={adoptedBinding}>
-    Adopted item
-  </Item>
-{/if}
+{#each entries as entry (entry.itemId)}
+  {#if entry.isGhost}
+    <Ghost ghost={entry.ghost} />
+  {:else if entry.childTree}
+    <ContainerView itemId={entry.itemId} />
+  {:else if entry.value === "generated"}
+    <Item
+      bind:item={generatedItem}
+      itemId={entry.itemId}
+      metadata={generatedMetadata}
+      data-testid="item-api-generated"
+      aria-label="Generated Item"
+      onclick={() => nativeClicks++}
+    >
+      Generated item
+    </Item>
+  {:else}
+    <Item bind:item={adoptedBinding} itemId={entry.itemId}>
+      Adopted item
+    </Item>
+  {/if}
+{/each}
 
 <button type="button" data-testid="item-api-inspect" onclick={inspect}>
   Inspect items
 </button>
-<button type="button" data-testid="item-api-unmount" onclick={() => (showItems = false)}>
+<button type="button" data-testid="item-api-unmount" onclick={onUnmount}>
   Unmount items
 </button>
 <button

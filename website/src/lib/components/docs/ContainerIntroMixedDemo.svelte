@@ -2,71 +2,55 @@
   import { Engine } from "@snap-engine/asset-base/svelte";
   import type {
     CanDropEvent,
-    Container as SnapSortContainer,
+    ContainerCallbacks,
+    GhostLifecycleEvent,
     ItemMoveEvent,
   } from "@snap-engine/snapsort";
-  import { defaultAnimations } from "@snap-engine/snapsort";
-  import { Container, Item } from "@snap-engine/snapsort/svelte";
+  import {
+    createRenderEntry,
+    createRenderTree,
+    defaultAnimations,
+    reduceRenderTree,
+  } from "@snap-engine/snapsort";
+  import { Container, Ghost, Item } from "@snap-engine/snapsort/svelte";
 
   type Task = { kind: "task"; id: string; label: string };
   type TaskGroup = {
     kind: "group";
     id: string;
     label: string;
-    items: Task[];
-    container?: SnapSortContainer;
   };
   type BoardEntry = Task | TaskGroup;
 
-  let entries = $state<BoardEntry[]>([
-    { kind: "task", id: "inbox", label: "Inbox zero" },
-    {
-      kind: "group",
-      id: "today",
-      label: "Today",
-      items: [
-        { kind: "task", id: "draft", label: "Draft update" },
-        { kind: "task", id: "review", label: "Review changes" },
-      ],
-    },
-    { kind: "task", id: "notes", label: "Archive notes" },
-    {
-      kind: "group",
-      id: "later",
-      label: "Later",
-      items: [{ kind: "task", id: "publish", label: "Publish update" }],
-    },
-  ]);
+  const taskEntry = (id: string, label: string) =>
+    createRenderEntry<BoardEntry>({ kind: "task", id, label }, id);
 
-  function onBoardMove(event: ItemMoveEvent) {
-    const entry = entries.find((candidate) => candidate.id === event.itemId);
-    if (!entry) return;
+  let board = $state.raw(
+    createRenderTree<BoardEntry>([
+      taskEntry("inbox", "Inbox zero"),
+      createRenderEntry(
+        { kind: "group", id: "today", label: "Today" },
+        "today",
+        createRenderTree([
+          taskEntry("draft", "Draft update"),
+          taskEntry("review", "Review changes"),
+        ]),
+      ),
+      taskEntry("notes", "Archive notes"),
+      createRenderEntry(
+        { kind: "group", id: "later", label: "Later" },
+        "later",
+        createRenderTree([taskEntry("publish", "Publish update")]),
+      ),
+    ]),
+  );
 
-    const next = entries.filter((candidate) => candidate.id !== event.itemId);
-    next.splice(Math.min(event.to.index, next.length), 0, entry);
-    entries = next;
+  function onItemMove(event: ItemMoveEvent) {
+    board = reduceRenderTree(board, event);
   }
 
-  function onTaskMove(event: ItemMoveEvent) {
-    const groups = entries.filter(
-      (entry): entry is TaskGroup => entry.kind === "group",
-    );
-    const task = groups
-      .flatMap((group) => group.items)
-      .find((candidate) => candidate.id === event.itemId);
-    const destination = groups.find(
-      (group) => group.container === event.to.container,
-    );
-    if (!task || !destination) return;
-
-    for (const group of groups) {
-      group.items = group.items.filter((candidate) => candidate.id !== task.id);
-    }
-    destination.items.splice(
-      Math.min(event.to.index, destination.items.length),
-      0,
-      task,
-    );
+  function onGhostMove(event: GhostLifecycleEvent) {
+    board = reduceRenderTree(board, event);
   }
 
   function canDropWithinGroup(event: CanDropEvent) {
@@ -75,34 +59,46 @@
       event.containerMetadata.dropGroup
     );
   }
+
+  const callbacks = {
+    onItemMove,
+    onGhostInsert: onGhostMove,
+    onGhostMove,
+    onGhostRemove: onGhostMove,
+    canDrop: canDropWithinGroup,
+  } satisfies ContainerCallbacks;
 </script>
 
 <Engine id="container-intro-mixed">
   <Container
-    items={entries}
+    itemId="container-intro-mixed-root"
     metadata={{ dropGroup: "board-entries" }}
-    config={{ animation: defaultAnimations, callbacks: { onItemMove: onBoardMove, canDrop: canDropWithinGroup } }}
+    config={{ animation: defaultAnimations, callbacks }}
   >
-    {#snippet entry(boardEntry)}
-      {#if boardEntry.kind === "task"}
-        <Item itemId={boardEntry.id}>{boardEntry.label}</Item>
-      {:else}
+    {#each board.entries as entry (entry.itemId)}
+      {#if entry.isGhost}
+        <Ghost ghost={entry.ghost} />
+      {:else if entry.childTree}
         <Container
-          bind:container={boardEntry.container}
-          itemId={boardEntry.id}
+          itemId={entry.itemId}
           locked={false}
-          items={boardEntry.items}
           metadata={{ dropGroup: "group-tasks" }}
-          config={{ animation: defaultAnimations, callbacks: { onItemMove: onTaskMove, canDrop: canDropWithinGroup } }}
+          config={{ animation: defaultAnimations, callbacks: { canDrop: canDropWithinGroup } }}
         >
-          {#snippet before()}
-            <strong>{boardEntry.label}</strong>
-          {/snippet}
-          {#snippet entry(task)}
-            <Item itemId={task.id}>{task.label}</Item>
-          {/snippet}
+          <strong>{entry.value.label}</strong>
+          {#each entry.childTree.entries as child (child.itemId)}
+            {#if child.isGhost}
+              <Ghost ghost={child.ghost} />
+            {:else if child.childTree}
+              <Container itemId={child.itemId} />
+            {:else}
+              <Item itemId={child.itemId}>{child.value.label}</Item>
+            {/if}
+          {/each}
         </Container>
+      {:else}
+        <Item itemId={entry.itemId}>{entry.value.label}</Item>
       {/if}
-    {/snippet}
+    {/each}
   </Container>
 </Engine>

@@ -12,12 +12,16 @@ A single `Container`/`Item` class pair (per framework) whose drag/drop behavior 
 
 **Exports:**
 
-- `Container` - The only container class. `new Container(engine, parent, { mode, ... })`.
+- `Container` - The only container class. `new Container(engine, parent, { itemId, mode, ... })`.
 - `defaultAnimations` - Opt-in standard reorder, drop, and programmatic-move animation preset.
-- `Item` - The only item class (including ghosts/markers). Never needs a mode.
+- `Item` - The only ordinary item class. `new Item(engine, parent, { itemId })`; identity is required and construction-only. Ghosts/markers are created internally.
 - `DragSession` - Type-only public handle for one gesture. Callback events and `root.dragSession` expose the same stable handle; lifecycle/controller state remains internal.
-- Event types: `ItemInsertEvent`, `ItemRemoveEvent`, `ItemMoveEvent`, `ItemSwapEvent`, `GhostCreateEvent`, `GhostInsertEvent`, `GhostRemoveEvent`, `DragStartEvent`, `DragEndEvent`, `DropTargetChangeEvent`, `CanDropEvent`, `DropPriorityEvent`, `VisualGeometryInvalidationEvent`, `DragLocation`.
+- Event types: `ItemInsertEvent`, `ItemRemoveEvent`, `ItemMoveEvent`, `ItemSwapEvent`, `GhostCreateEvent`, `GhostInsertEvent`, `GhostMoveEvent`, `GhostRemoveEvent`, `DragStartEvent`, `DragEndEvent`, `DropTargetChangeEvent`, `CanDropEvent`, `DropPriorityEvent`, `VisualGeometryInvalidationEvent`, `DragLocation`.
 - Drag presentation types: `DragVisual` (`"item" | "preview" | "none"`) and `DropEffect` (`"move" | "none"`).
+- Ghost/insertion render types: `GhostState`, `InsertionMarkerState`, `InsertionGapSegment`, and `InsertionMarkerNeighbor`.
+- Render-state types and helpers: `RenderEntry`, `RenderTree`, `RenderTreeEvent`, `createRenderEntry`, `createRenderEntries`, `createRenderTree`, and `reduceRenderTree`.
+- Insertion presentation types and helpers: `InsertionMarkerRectOptions`, `ContainerLocalRect`, `insertionMarkerRect`, `toContainerLocalRect`, and `stockInsertionMarkerRectOptions`.
+- `createVanillaAdapter` and `CreateVanillaAdapterOptions`.
 - `ContainerCallbacks`, `ContainerConfig`, and `SortMode`.
 
 ### @snap-engine/snapsort/callbacks
@@ -54,7 +58,11 @@ snapsort/
     ├── container.ts        # Container class + ContainerConfig
     ├── item.ts             # Item class: tree membership, FLIP animation, dispatchers
     ├── events.ts           # Callback event interfaces + ContainerCallbacks
-    ├── mutation.ts         # Mutation/ghost/hover dispatch helpers + Vanilla defaults
+    ├── event-builders.ts   # Immutable item/ghost event and render-state builders
+    ├── mutation.ts         # Mutation, ghost, and hover dispatch helpers
+    ├── adapter.ts          # Renderer boundary and Vanilla implementation
+    ├── render-state.ts     # Framework-owned nested render-tree reducer
+    ├── insertion-geometry.ts # Marker rectangle and world/local projection helpers
     ├── algorithm.ts        # Candidate generation, drop policy, and placement
     ├── callbacks.ts        # Standard drop-policy callbacks
     ├── layout.ts           # Pure flow-layout simulation
@@ -124,32 +132,40 @@ lifecycle activation. It does not mount data, imply copy semantics, destroy
 either run, or clean application state. Framework integrations must commit the
 replacement DOM before calling it.
 
+The public `items`/`sources` observations and `snapshotItemSet` continue to
+describe the original gesture participants and frozen root snapshot after a
+handoff. The controller separately updates `activeItems`/`activeSources` to the
+replacements and their mounted locations. Do not rewrite the original
+resolution snapshot when retargeting pointer ownership.
+
 ### Mutator (`mutation.ts`)
 
-This module centralizes item/ghost mutations, ghost creation, and item-hover
-dispatch; it is not the dispatch point for every `ContainerCallbacks` entry.
+This module centralizes item/ghost mutations and item-hover dispatch; it is not
+the dispatch point for every `ContainerCallbacks` entry.
 The drag session/lifecycle strategies dispatch root lifecycle callbacks, the
 drop algorithm invokes destination policy, and `Container` publishes visual
 geometry invalidation. `fireItemMove` fires `onItemMove` on the destination
 container if defined, else falls back to destination `onItemInsert`. The
-default callback implementations in this module mutate DOM and are exclusively
-the Vanilla/core integration. Framework adapters must not install or inherit
-them: Svelte/React state is the single source of truth, structural callbacks
-must synchronously update that state, and the framework must render the
-resulting item/ghost structure.
+Vanilla callbacks live behind `createVanillaAdapter` in `adapter.ts` and own
+its DOM mutations. Framework adapters must not install or inherit them:
+Svelte/React state is the single source of truth, structural callbacks must
+synchronously update that state, and the framework must render the resulting
+item/ghost structure.
 
 ### Callbacks (`events.ts`)
 
-- Callback configuration is per-container: callbacks neither inherit from the
-  root/parent nor bubble. A shared handler object must be installed explicitly
-  on each participating container.
+- Structural and root-lifecycle callbacks resolve on the independent root and
+  structural callbacks fall back to its adapter. Descendants cannot configure
+  `STRUCTURAL_CALLBACKS`; event locations identify the semantic containers.
+- Root-dispatched structural callbacks: `onItemMove`, `onItemInsert`,
+  `onItemRemove`, `onItemSwap`, `onGhostInsert`, `onGhostMove`, and
+  `onGhostRemove`. They execute through the root adapter's synchronous
+  `commit` boundary.
 - Root-owned lifecycle/integration callbacks: `onDragStart`,
   `onDropTargetChange`, `onDragEnd`, and `onVisualGeometryInvalidated`.
-- Direct-container callbacks: moves/inserts fire on the destination; removal
-  fires on the item's current owner; swap fires once on the dragged item's
-  pre-swap owner; hover fires on the owner of `overItem`; ghost callbacks fire
-  on the ghost owner recorded in the event.
-- Primitives: `onItemInsert`, `onItemRemove`, `onGhostInsert`, `onGhostRemove`, `createGhost` (was `createItemGhost`; dispatches on `event.kind: "flow" | "marker"`), and synchronous `flushMutation`.
+- Direct-container callbacks are limited to destination drop policy and the
+  hitbox/hover behavior of an Item's direct owner; they do not inherit or
+  bubble.
 - Semantic: `onItemMove` (preferred — carries `from`/`to` `DragLocation`s).
 - Lifecycle: `onDragStart` (return `false` to veto before ghost or item lifecycle state changes), `onDragEnd`, `onDropTargetChange` (fires only when the prospective container/index actually changes).
 - Drop policy: `canDrop` first rejects an ineligible destination, then
@@ -157,18 +173,18 @@ resulting item/ghost structure.
   resolution. Both are consulted once per container, not once per candidate
   slot, and must be cheap. Only candidates tied at the highest priority reach
   the active placement algorithm.
-- Geometry policy: insertion candidates call `getInsertionMarkerRect` on the
-  direct destination; hover candidates call `getItemHitbox` on the candidate
-  item's direct owner. Both are synchronous calculations outside
-  `flushMutation`; item metadata remains read-only application data.
+- Geometry policy: hover candidates call `getItemHitbox` on the candidate
+  item's direct owner. Insertion targeting does not call renderer presentation
+  code; core creates canonical gap and neighbor state, then ghost callbacks
+  publish it through the adapter commit. Item metadata remains read-only
+  application data.
 - Integration: `onVisualGeometryInvalidated` — one root-coalesced notification
   when drag, ghost, or FLIP transforms may have changed rendered item geometry.
   Consumers use it to invalidate dependent visuals without SnapSort knowing
   what those visuals are.
-- `flushMutation` is an integration boundary, not a session callback. It is
-  read from the same receiver as item mutations, ghost insert/remove, and root
-  target-change/end callbacks. Drag start, ghost creation, hover, policy,
-  and visual invalidation dispatch directly.
+- `SnapSortAdapter.commit` is the renderer integration boundary, not a session
+  callback. Structural item and ghost commands use it; drag start, hover,
+  policy, geometry, and visual invalidation dispatch directly.
 - `onItemRemove` is not the source half of a normal move. It represents
   programmatic removal from the item's current owner.
 
@@ -182,15 +198,78 @@ no pre-mutation FLIP rectangle and must be ignored safely by animation code.
 
 - Never structurally mutate framework-rendered nodes with `insertBefore`,
   `appendChild`, `remove`, or equivalent DOM APIs.
-- Every framework-owned destination that can commit a persistent move supplies
-  `onItemMove` (or the lower-level `onItemInsert`); swap mode supplies
-  `onItemSwap`. Imperative remove support supplies `onItemRemove`.
-- Callbacks update Svelte/React state synchronously. Adapter-provided
-  `flushMutation` commits the framework render before SnapSort reads geometry.
-- Svelte owns its ghost entries inside `Container`; React consumers own ghost
-  state and render `Ghost` as documented. Vanilla core retains DOM callbacks.
+- A framework root that can commit a persistent move supplies `onItemMove` (or
+  the lower-level `onItemInsert`); swap mode supplies `onItemSwap` and
+  imperative remove support supplies `onItemRemove`. Route by event fields,
+  not callback receiver identity.
+- Callbacks update Svelte/React state synchronously. Adapter-provided `commit`
+  publishes the framework render before SnapSort reads geometry.
+- Svelte and React consumers may keep one immutable `RenderTree` per root.
+  `reduceRenderTree` routes nested Containers by `itemId`, applies item
+  moves/swaps/removals and ghost lifecycle events, and deliberately excludes
+  `ItemInsertEvent`, which lacks the application value to materialize.
+- Ordinary entries with a null `childTree` render `Item`; non-null child trees
+  render `Container`; ghost entries render `Ghost`. A nested Container is
+  already the sortable Item and is never wrapped in another Item.
+- Svelte stores immutable roots with `$state.raw(...)`; React uses ordinary
+  component state. Frameworks own direct children and keyed loops. There is no
+  adapter-owned ghost collection or hidden renderer outlet. The Vanilla
+  adapter owns its structural DOM commands.
+
+### Insertion geometry ownership
+
+- The insertion algorithm owns candidate geometry. It creates zero-thickness
+  world-space gap segments between retained items and ranks pointer distance
+  to each segment's center. It does not rank a rendered marker or ghost.
+- Exact center/score ties use distance to adjacent frozen item rectangles as a
+  second key, then preserve stable tree traversal order. There is no implicit
+  deepest-container preference. Nested file-tree targeting should use an
+  actual inset Container box so the nested gap center moves with the layout.
+- Wrapped rows and columns use the selected visual line's measured cross-axis
+  band. A boundary that wraps uses the next line's leading edge and band;
+  append uses the previous line's trailing edge and band.
+- `InsertionMarkerState` exposes `gap`, frozen `previous`/`next` neighbors,
+  `isCurrentPlacement`, identity, and slot location. A geometry or
+  current-placement change at the same container/index is still an
+  `onGhostMove`; `onDropTargetChange` remains reserved for location changes.
+- Renderer code owns line thickness, color, and along-line insets. Framework
+  `Ghost` components accept an `insertionMarker` option object. Vanilla accepts
+  the same object through `createVanillaAdapter({ insertionMarker: ... })`.
+- `insertionMarkerRect(marker, options)` requires explicit finite,
+  non-negative `thickness`, `startInset`, and `endInset` values. It throws when
+  the two insets exceed the canonical gap length; never clamp an invalid
+  request. `stockInsertionMarkerRectOptions` is a named built-in renderer
+  contract (`3/0/0`), not a helper default.
+- `insertionMarkerRect` expands around the canonical centerline and delegates
+  to `toContainerLocalRect`. The projection helper converts any world-space
+  rectangle to coordinates from the destination padding-box outer edge using
+  its border and live scroll position, without subtracting padding. Both
+  helpers require a mounted destination.
+- Presentation insets never feed candidate ranking. Reject any proposal that
+  sends a renderer-computed line rectangle back into the drop algorithm.
 
 ## Key Concepts
+
+### Stable application identity
+
+Every ordinary Item and Container, including each independent root, receives a
+non-empty `itemId` at construction. The property is read-only for the object's
+entire lifetime. IDs are unique across one root tree, including nested
+containers and live ghosts; independent roots may reuse them. Framework
+components require the same prop for owned and adopted objects and reject a
+changed or mismatched ID. Replacing an identity requires a keyed remount.
+
+Uniqueness is a committed logical-tree invariant. Enforce it at placement,
+reconciliation, RenderTree, FLIP, and active-session boundaries rather than in
+the raw constructor: one synchronous framework commit may briefly contain a
+retiring object and its same-ID replacement. Retiring `isDeleteRequested`
+objects do not participate in the committed-tree check.
+
+RenderTree state belongs to one stable root component. Reducers recognize that
+root structurally and route nested Containers by `itemId`; they intentionally
+trust that a root callback is paired with its own state. Destroying the root
+ends that state lifetime, so callers must discard it and create a fresh tree
+before mounting a replacement root.
 
 ### Drop policy
 

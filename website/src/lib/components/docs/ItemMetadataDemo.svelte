@@ -1,20 +1,32 @@
 <script lang="ts">
   import { Engine } from "@snap-engine/asset-base/svelte";
   import {
+    createRenderEntries,
+    createRenderTree,
     defaultAnimations,
+    reduceRenderTree,
+    type ContainerCallbacks,
     type DragStartEvent,
+    type GhostLifecycleEvent,
     type ItemMoveEvent,
   } from "@snap-engine/snapsort";
-  import { Container, Item } from "@snap-engine/snapsort/svelte";
+  import { Container, Ghost, Item } from "@snap-engine/snapsort/svelte";
 
   type Priority = "High" | "Medium" | "Low";
   type Task = { id: string; label: string; owner: string; priority: Priority };
 
-  let tasks = $state<Task[]>([
-    { id: "brief", label: "Product brief", owner: "Mina", priority: "High" },
-    { id: "notes", label: "Research notes", owner: "Theo", priority: "Medium" },
-    { id: "assets", label: "Image assets", owner: "Ari", priority: "Low" },
-  ]);
+  let tasks = $state.raw(
+    createRenderTree(
+      createRenderEntries<Task>(
+        [
+          { id: "brief", label: "Product brief", owner: "Mina", priority: "High" },
+          { id: "notes", label: "Research notes", owner: "Theo", priority: "Medium" },
+          { id: "assets", label: "Image assets", owner: "Ari", priority: "Low" },
+        ],
+        (task) => task.id,
+      ),
+    ),
+  );
   let status = $state("Drag a card to read the metadata SnapSort receives.");
 
   function describe(event: DragStartEvent | ItemMoveEvent) {
@@ -28,15 +40,21 @@
   }
 
   function onItemMove(event: ItemMoveEvent) {
-    const itemId = String(event.itemId);
-    const task = tasks.find((entry) => entry.id === itemId);
-    if (!task) return;
-
-    const next = tasks.filter((entry) => entry.id !== itemId);
-    next.splice(Math.min(event.to.index, next.length), 0, task);
-    tasks = next;
+    tasks = reduceRenderTree(tasks, event);
     status = `Dropped ${describe(event)}`;
   }
+
+  function onGhostMove(event: GhostLifecycleEvent) {
+    tasks = reduceRenderTree(tasks, event);
+  }
+
+  const callbacks = {
+    onDragStart,
+    onItemMove,
+    onGhostInsert: onGhostMove,
+    onGhostMove,
+    onGhostRemove: onGhostMove,
+  } satisfies ContainerCallbacks;
 </script>
 
 <div class="item-metadata-demo">
@@ -44,25 +62,26 @@
 
   <Engine id="item-example-metadata">
     <Container
+      itemId="item-example-metadata-root"
       className="metadata-list"
-      items={tasks}
-      config={{
-        animation: defaultAnimations,
-        callbacks: { onDragStart, onItemMove },
-      }}
+      config={{ animation: defaultAnimations, callbacks }}
     >
-      {#snippet entry(task)}
-        <Item
-          itemId={task.id}
-          metadata={{ owner: task.owner, priority: task.priority }}
-          className="metadata-card"
-        >
-          <span>{task.label}</span>
-          <span class="metadata-details">
-            {task.owner} · {task.priority}
-          </span>
-        </Item>
-      {/snippet}
+      {#each tasks.entries as entry (entry.itemId)}
+        {#if entry.isGhost}
+          <Ghost ghost={entry.ghost} />
+        {:else}
+          <Item
+            itemId={entry.itemId}
+            metadata={{ owner: entry.value.owner, priority: entry.value.priority }}
+            className="metadata-card"
+          >
+            <span>{entry.value.label}</span>
+            <span class="metadata-details">
+              {entry.value.owner} · {entry.value.priority}
+            </span>
+          </Item>
+        {/if}
+      {/each}
     </Container>
   </Engine>
 </div>

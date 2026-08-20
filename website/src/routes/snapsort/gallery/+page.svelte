@@ -13,17 +13,24 @@
   import SnapSortContextBoundary from "../SnapSortContextBoundary.svelte";
   import FileExplorerExample from "../FileExplorerExample.svelte";
   import type {
+    ContainerCallbacks,
     Container as SortContainer,
     DragEndEvent,
     DragItemHoverEvent,
     DragStartEvent,
     DropTargetChangeEvent,
-    GhostInsertEvent,
     ItemMoveEvent,
-    ItemRemoveEvent,
     ItemSwapEvent,
+    RenderTree,
+    RenderTreeEvent,
   } from "@snap-engine/snapsort";
-  import { defaultAnimations } from "@snap-engine/snapsort";
+  import {
+    createRenderEntries,
+    createRenderEntry,
+    createRenderTree,
+    defaultAnimations,
+    reduceRenderTree,
+  } from "@snap-engine/snapsort";
   import {
     prioritizeIntersectingContainer,
     rejectDrop,
@@ -60,7 +67,7 @@
     id: string;
     type: EditorFieldType;
     label: string;
-    options?: EditorOption[];
+    options?: RenderTree<EditorOption>;
   };
 
   let { data } = $props();
@@ -77,7 +84,40 @@
     configureInput(examplesEngine);
   });
 
-  let todoItems = $state([
+  function ordinaryValues<T>(tree: RenderTree<T>): T[] {
+    return tree.entries.flatMap((entry) =>
+      entry.isGhost ? [] : [entry.value],
+    );
+  }
+
+  function entryOrder<T>(tree: RenderTree<T>): string {
+    return tree.entries
+      .filter((entry) => !entry.isGhost)
+      .map((entry) => entry.itemId)
+      .join(",");
+  }
+
+  function structuralCallbacks(
+    handler: (event: RenderTreeEvent) => void,
+  ): ContainerCallbacks {
+    return {
+      onItemMove: handler,
+      onGhostInsert: handler,
+      onGhostMove: handler,
+      onGhostRemove: handler,
+    };
+  }
+
+  type TodoItem = {
+    id: string;
+    text: string;
+    due: string;
+    priority: string;
+    estimate: string;
+    checked: boolean;
+  };
+
+  const initialTodoItems: TodoItem[] = [
     {
       id: "t-1",
       text: "Plan the grocery run",
@@ -142,7 +182,10 @@
       estimate: "8m",
       checked: false,
     },
-  ]);
+  ];
+  let todoItems = $state.raw(
+    createRenderTree(createRenderEntries(initialTodoItems, (todo) => todo.id)),
+  );
 
   const kanbanTodo = [
     {
@@ -224,14 +267,36 @@
     id: string;
     title: string;
     target: string;
-    cards: KanbanCard[];
   };
+  type KanbanValue = KanbanCard | KanbanColumn;
 
-  let kanbanColumns: KanbanColumn[] = $state([
-    { id: "kanban-todo", title: "To Do", target: "kanban-review", cards: [...kanbanTodo] },
-    { id: "kanban-review", title: "Review", target: "kanban-done", cards: [...kanbanReview] },
-    { id: "kanban-done", title: "Done", target: "kanban-todo", cards: [...kanbanDone] },
-  ]);
+  const kanbanColumnEntry = (
+    column: KanbanColumn,
+    cards: readonly KanbanCard[],
+  ) =>
+    createRenderEntry<KanbanValue>(
+      column,
+      column.id,
+      createRenderTree(
+        createRenderEntries<KanbanValue>(cards, (card) => card.id),
+      ),
+    );
+  let kanbanColumns = $state.raw(
+    createRenderTree<KanbanValue>([
+      kanbanColumnEntry(
+        { id: "kanban-todo", title: "To Do", target: "kanban-review" },
+        kanbanTodo,
+      ),
+      kanbanColumnEntry(
+        { id: "kanban-review", title: "Review", target: "kanban-done" },
+        kanbanReview,
+      ),
+      kanbanColumnEntry(
+        { id: "kanban-done", title: "Done", target: "kanban-todo" },
+        kanbanDone,
+      ),
+    ]),
+  );
 
   const sentenceWords: SentenceTile[] = [
     { id: "sw-1", text: "あり" },
@@ -267,43 +332,74 @@
     };
   }
 
-  function defaultEditorOptions(type: EditorFieldType): EditorOption[] | undefined {
+  function createEditorOptions(options: readonly EditorOption[]) {
+    return createRenderTree(createRenderEntries(options, (option) => option.id));
+  }
+
+  function defaultEditorOptions(type: EditorFieldType): RenderTree<EditorOption> | undefined {
     if (type === "multipleChoice" || type === "checkboxes") {
-      return [createEditorOption("Option 1"), createEditorOption("Option 2")];
+      return createEditorOptions([
+        createEditorOption("Option 1"),
+        createEditorOption("Option 2"),
+      ]);
     }
     if (type === "dropdown") {
-      return [
+      return createEditorOptions([
         createEditorOption("Option 1"),
         createEditorOption("Option 2"),
         createEditorOption("Option 3"),
-      ];
+      ]);
     }
     return undefined;
   }
 
   let editorFieldCount = 3;
-  let editorFields: EditorField[] = $state([
-    { id: "editor-field-1", type: "shortText", label: "Question 1" },
-    {
-      id: "editor-field-2",
-      type: "multipleChoice",
-      label: "Question 2",
-      options: [
-        { id: "editor-option-1", label: "Option 1" },
-        { id: "editor-option-2", label: "Option 2" },
-      ],
-    },
-    { id: "editor-field-3", type: "rating", label: "Question 3" },
-  ]);
+  let editorFields = $state.raw(
+    createRenderTree(
+      createRenderEntries<EditorField>(
+        [
+          { id: "editor-field-1", type: "shortText", label: "Question 1" },
+          {
+            id: "editor-field-2",
+            type: "multipleChoice",
+            label: "Question 2",
+            options: createEditorOptions([
+              { id: "editor-option-1", label: "Option 1" },
+              { id: "editor-option-2", label: "Option 2" },
+            ]),
+          },
+          { id: "editor-field-3", type: "rating", label: "Question 3" },
+        ],
+        (field) => field.id,
+      ),
+    ),
+  );
 
   let sentenceAnswerContainer: SortContainer | undefined = $state();
   let sentenceBankContainer: SortContainer | undefined = $state();
-  let sentenceAnswerTiles: SentenceTile[] = $state([]);
-  let sentenceBankTiles: SentenceTile[] = $state([...sentenceWords]);
+  type SentenceValue = SentenceTile | { zone: SentenceZone };
+  let sentenceTiles = $state.raw(
+    createRenderTree<SentenceValue>([
+      createRenderEntry(
+        { zone: "answer" },
+        "sentence-zone-answer",
+        createRenderTree(),
+      ),
+      createRenderEntry(
+        { zone: "bank" },
+        "sentence-zone-bank",
+        createRenderTree(
+          createRenderEntries<SentenceValue>(
+            sentenceWords,
+            (tile) => "id" in tile ? tile.id : `sentence-zone-${tile.zone}`,
+          ),
+        ),
+      ),
+    ]),
+  );
   let sentenceResult = $state("");
   let sentencePointerStart: { x: number; y: number } | null = null;
   let suppressSentenceClick = false;
-  const sentenceZones: SentenceZone[] = ["answer", "bank"];
   let debug = $state(false);
   let canvasComponent: Engine | null = null;
 
@@ -324,169 +420,171 @@
 
   function addEditorField(type: EditorFieldType) {
     editorFieldCount += 1;
-    editorFields = [
+    const field: EditorField = {
+      id: `editor-field-${editorFieldCount}`,
+      type,
+      label: `Question ${editorFieldCount}`,
+      options: defaultEditorOptions(type),
+    };
+    editorFields = {
       ...editorFields,
-      {
-        id: `editor-field-${editorFieldCount}`,
-        type,
-        label: `Question ${editorFieldCount}`,
-        options: defaultEditorOptions(type),
-      },
-    ];
+      entries: [
+        ...editorFields.entries,
+        createRenderEntry(field, field.id),
+      ],
+    };
   }
 
   function updateEditorFieldLabel(id: string, label: string) {
-    editorFields = editorFields.map((field) =>
-      field.id === id ? { ...field, label } : field,
-    );
+    editorFields = {
+      ...editorFields,
+      entries: editorFields.entries.map((entry) =>
+        !entry.isGhost && entry.itemId === id
+          ? { ...entry, value: { ...entry.value, label } }
+          : entry,
+      ),
+    };
   }
 
   function updateEditorFieldOptions(
     fieldId: string,
-    update: (options: EditorOption[]) => EditorOption[],
+    update: (options: RenderTree<EditorOption>) => RenderTree<EditorOption>,
   ) {
-    editorFields = editorFields.map((field) =>
-      field.id === fieldId
-        ? { ...field, options: update(field.options ?? []) }
-        : field,
-    );
+    editorFields = {
+      ...editorFields,
+      entries: editorFields.entries.map((entry) =>
+        !entry.isGhost && entry.itemId === fieldId
+          ? {
+              ...entry,
+              value: {
+                ...entry.value,
+                options: update(entry.value.options ?? createRenderTree()),
+              },
+            }
+          : entry,
+      ),
+    };
   }
 
   function updateEditorOptionLabel(fieldId: string, optionId: string, label: string) {
     updateEditorFieldOptions(fieldId, (options) =>
-      options.map((option) => option.id === optionId ? { ...option, label } : option),
+      ({
+        ...options,
+        entries: options.entries.map((entry) =>
+          !entry.isGhost && entry.itemId === optionId
+            ? { ...entry, value: { ...entry.value, label } }
+            : entry,
+        ),
+      }),
     );
   }
 
   function addEditorOption(fieldId: string) {
-    const field = editorFields.find((candidate) => candidate.id === fieldId);
-    const nextLabel = `Option ${(field?.options?.length ?? 0) + 1}`;
-    updateEditorFieldOptions(fieldId, (options) => [...options, createEditorOption(nextLabel)]);
+    const field = editorFields.entries.find(
+      (entry) => !entry.isGhost && entry.itemId === fieldId,
+    );
+    const optionCount =
+      field && !field.isGhost && field.value.options
+        ? ordinaryValues(field.value.options).length
+        : 0;
+    const option = createEditorOption(`Option ${optionCount + 1}`);
+    updateEditorFieldOptions(fieldId, (options) => ({
+      ...options,
+      entries: [...options.entries, createRenderEntry(option, option.id)],
+    }));
   }
 
   function removeEditorOption(fieldId: string, optionId: string) {
+    updateEditorFieldOptions(fieldId, (options) => {
+      if (ordinaryValues(options).length <= 1) return options;
+      return {
+        ...options,
+        entries: options.entries.filter(
+          (entry) => entry.isGhost || entry.itemId !== optionId,
+        ),
+      };
+    });
+  }
+
+  function handleEditorOptionEvent(fieldId: string, event: RenderTreeEvent) {
     updateEditorFieldOptions(fieldId, (options) =>
-      options.length <= 1 ? options : options.filter((option) => option.id !== optionId),
+      reduceRenderTree(options, event),
     );
   }
 
-  function reorderEditorOption(fieldId: string, optionId: string, index: number) {
-    updateEditorFieldOptions(fieldId, (options) => {
-      const option = options.find((candidate) => candidate.id === optionId);
-      if (!option) return options;
-
-      const nextOptions = options.filter((candidate) => candidate.id !== optionId);
-      const targetIndex = Math.max(0, Math.min(index, nextOptions.length));
-      nextOptions.splice(targetIndex, 0, option);
-      return nextOptions;
-    });
+  function handleEditorFieldEvent(event: RenderTreeEvent) {
+    editorFields = reduceRenderTree(editorFields, event);
   }
 
-  function handleEditorOptionMove(event: ItemMoveEvent) {
-    const fieldId = event.to.containerMetadata.fieldId;
-    const optionId = event.itemId;
-    if (typeof fieldId !== "string" || typeof optionId !== "string") return;
-
-    reorderEditorOption(fieldId, optionId, event.to.index);
+  function handleTodoEvent(event: RenderTreeEvent) {
+    todoItems = reduceRenderTree(todoItems, event);
   }
 
-  function handleEditorFieldMove(event: ItemMoveEvent) {
-    const field = editorFields.find((candidate) => candidate.id === event.itemId);
-    if (!field) return;
-    const next = editorFields.filter((candidate) => candidate.id !== event.itemId);
-    next.splice(Math.max(0, Math.min(event.to.index, next.length)), 0, field);
-    editorFields = next;
+  function setTodoChecked(itemId: string, checked: boolean) {
+    todoItems = {
+      ...todoItems,
+      entries: todoItems.entries.map((entry) =>
+        !entry.isGhost && entry.itemId === itemId
+          ? { ...entry, value: { ...entry.value, checked } }
+          : entry,
+      ),
+    };
   }
 
-  function handleTodoMove(event: ItemMoveEvent) {
-    const todo = todoItems.find((candidate) => candidate.id === event.itemId);
-    if (!todo) return;
-    const next = todoItems.filter((candidate) => candidate.id !== event.itemId);
-    next.splice(Math.max(0, Math.min(event.to.index, next.length)), 0, todo);
-    todoItems = next;
-  }
-
-  function handleKanbanMove(event: ItemMoveEvent) {
-    const targetColumnId = event.to.containerMetadata.columnId;
-    if (typeof targetColumnId !== "string") return;
-    let moved: KanbanCard | undefined;
-    const withoutMoved = kanbanColumns.map((column) => {
-      const card = column.cards.find((candidate) => candidate.id === event.itemId);
-      if (card) moved = card;
-      return {
-        ...column,
-        cards: column.cards.filter((candidate) => candidate.id !== event.itemId),
-      };
-    });
-    if (!moved) return;
-    kanbanColumns = withoutMoved.map((column) => {
-      if (column.id !== targetColumnId) return column;
-      const cards = column.cards.slice();
-      cards.splice(Math.max(0, Math.min(event.to.index, cards.length)), 0, moved!);
-      return { ...column, cards };
-    });
+  function handleKanbanEvent(event: RenderTreeEvent) {
+    kanbanColumns = reduceRenderTree(kanbanColumns, event);
   }
 
   function sentenceContainerForZone(zone: SentenceZone) {
     return zone === "answer" ? sentenceAnswerContainer : sentenceBankContainer;
   }
 
-  function findSentenceTile(tileId: string | undefined) {
-    if (!tileId) return null;
-    return [...sentenceAnswerTiles, ...sentenceBankTiles].find((tile) => tile.id === tileId) ?? null;
+  function sentenceZoneTree(zone: SentenceZone): RenderTree<SentenceValue> | null {
+    const entry = sentenceTiles.entries.find(
+      (candidate) =>
+        !candidate.isGhost &&
+        "zone" in candidate.value &&
+        candidate.value.zone === zone,
+    );
+    return entry && !entry.isGhost ? entry.childTree : null;
   }
 
-  function updateSentenceTileZone(tileId: string, targetZone: SentenceZone, targetIndex: number) {
-    const allTiles = [...sentenceAnswerTiles, ...sentenceBankTiles];
-    const movedTile = allTiles.find((tile) => tile.id === tileId);
-    if (!movedTile) return;
+  function findSentenceTile(tileId: string | undefined): SentenceTile | null {
+    if (!tileId) return null;
+    for (const zone of ["answer", "bank"] as const) {
+      const entry = sentenceZoneTree(zone)?.entries.find(
+        (candidate) => !candidate.isGhost && candidate.itemId === tileId,
+      );
+      if (entry && !entry.isGhost && "text" in entry.value) return entry.value;
+    }
+    return null;
+  }
 
-    const nextAnswerTiles = sentenceAnswerTiles.filter((tile) => tile.id !== tileId);
-    const nextBankTiles = sentenceBankTiles.filter((tile) => tile.id !== tileId);
-    const targetTiles = targetZone === "answer" ? nextAnswerTiles : nextBankTiles;
-    const destinationIndex = Math.max(0, Math.min(targetIndex, targetTiles.length));
-
-    targetTiles.splice(destinationIndex, 0, movedTile);
-    sentenceAnswerTiles = nextAnswerTiles;
-    sentenceBankTiles = nextBankTiles;
+  function handleSentenceEvent(event: RenderTreeEvent) {
+    sentenceTiles = reduceRenderTree(sentenceTiles, event);
     sentenceResult = "";
   }
 
-  function handleSentenceMove(event: ItemMoveEvent) {
-    const itemId = event.itemId;
-
-    const targetZone = event.to.containerMetadata.zone;
-    if (targetZone !== "answer" && targetZone !== "bank") return;
-
-    updateSentenceTileZone(itemId, targetZone, event.to.index);
+  function sentenceGhostTileText(itemId: string): string {
+    return findSentenceTile(itemId)?.text ?? "";
   }
 
-  function handleSentenceRemove(event: ItemRemoveEvent) {
-    const itemId = event.itemId;
-
-    sentenceAnswerTiles = sentenceAnswerTiles.filter((tile) => tile.id !== itemId);
-    sentenceBankTiles = sentenceBankTiles.filter((tile) => tile.id !== itemId);
-  }
-
-  /** Ghost snippet content for both sentence zones — looks up the dragged tile's text via its itemId. */
-  function sentenceGhostTileText(event: GhostInsertEvent): string {
-    return findSentenceTile(event.originalItemId)?.text ?? "";
-  }
-
-  function moveSentenceTileToZone(tile: SentenceTile, targetZone: SentenceZone) {
-    const sourceZone: SentenceZone = sentenceAnswerTiles.some((candidate) => candidate.id === tile.id)
+  function moveSentenceTileToZone(tile: SentenceValue, targetZone: SentenceZone) {
+    if (!("text" in tile)) return;
+    const sourceZone: SentenceZone = sentenceZoneTree("answer")?.entries.some(
+      (candidate) => !candidate.isGhost && candidate.itemId === tile.id,
+    )
       ? "answer"
       : "bank";
     const sourceContainer = sentenceContainerForZone(sourceZone);
     const targetContainer = sentenceContainerForZone(targetZone);
-    const fallbackIndex = targetZone === "answer" ? sentenceAnswerTiles.length : sentenceBankTiles.length;
+    const targetIndex = sentenceZoneTree(targetZone)?.entries.filter(
+      (entry) => !entry.isGhost,
+    ).length ?? 0;
 
     if (sourceContainer && targetContainer) {
-      const movedBySnapSort = sourceContainer.moveItem(tile.id, targetContainer, fallbackIndex);
-      if (movedBySnapSort) return;
+      sourceContainer.moveItem(tile.id, targetContainer, targetIndex);
     }
-
-    updateSentenceTileZone(tile.id, targetZone, fallbackIndex);
   }
 
   function handleSentenceTilePointerDown(event: PointerEvent) {
@@ -518,7 +616,12 @@
   }
 
   function checkSentence() {
-    const words = sentenceAnswerTiles.map((tile) => tile.text);
+    const answer = sentenceZoneTree("answer");
+    const words = answer
+      ? ordinaryValues(answer).flatMap((value) =>
+          "text" in value ? [value.text] : [],
+        )
+      : [];
     const correct = ["多く", "の", "用途", "が", "あり", "ます"];
 
     if (
@@ -541,13 +644,9 @@
     icon: string;
   };
 
-  type PaletteBlock = PaletteBlockTemplate & {
+  type CloneBlock = PaletteBlockTemplate & {
     id: string;
-  };
-
-  type CanvasBlock = {
-    id: string;
-    type: PaletteBlockType;
+    template: boolean;
   };
 
   const paletteBlockTemplates: PaletteBlockTemplate[] = [
@@ -557,7 +656,6 @@
     { type: "spacer", label: "Spacer", icon: "space_bar" },
   ];
   type CloneZone = "palette" | "canvas";
-  const cloneZones: CloneZone[] = ["palette", "canvas"];
 
   const blockIcon: Record<PaletteBlockType, string> = {
     button: "smart_button",
@@ -574,13 +672,60 @@
   };
 
   let paletteInstanceCount = 0;
-  let paletteBlocks: PaletteBlock[] = $state(
-    paletteBlockTemplates.map((template) => ({
+  type CloneValue = CloneBlock | { zone: CloneZone };
+  const initialPaletteBlocks: CloneBlock[] = paletteBlockTemplates.map(
+    (template) => ({
       ...template,
       id: `palette-${template.type}-${paletteInstanceCount++}`,
-    })),
+      template: true,
+    }),
   );
-  let canvasBlocks: CanvasBlock[] = $state([]);
+  let cloneWorkspace = $state.raw(
+    createRenderTree<CloneValue>([
+      createRenderEntry(
+        { zone: "palette" },
+        "clone-palette",
+        createRenderTree(
+          createRenderEntries<CloneValue>(
+            initialPaletteBlocks,
+            (block) => "id" in block ? block.id : `clone-${block.zone}`,
+          ),
+        ),
+      ),
+      createRenderEntry(
+        { zone: "canvas" },
+        "clone-canvas",
+        createRenderTree(),
+      ),
+    ]),
+  );
+
+  function cloneZoneTree(zone: CloneZone): RenderTree<CloneValue> | null {
+    const entry = cloneWorkspace.entries.find(
+      (candidate) =>
+        !candidate.isGhost &&
+        "zone" in candidate.value &&
+        candidate.value.zone === zone,
+    );
+    return entry && !entry.isGhost ? entry.childTree : null;
+  }
+
+  function updateCloneZone(
+    zone: CloneZone,
+    update: (tree: RenderTree<CloneValue>) => RenderTree<CloneValue>,
+  ) {
+    cloneWorkspace = {
+      ...cloneWorkspace,
+      entries: cloneWorkspace.entries.map((entry) =>
+        !entry.isGhost &&
+        "zone" in entry.value &&
+        entry.value.zone === zone &&
+        entry.childTree
+          ? { ...entry, childTree: update(entry.childTree) }
+          : entry,
+      ),
+    };
+  }
 
   function handleCloneDragStart(event: DragStartEvent) {
     // Metadata chooses the application recipe. The preview is presentation
@@ -591,7 +736,7 @@
   }
 
   function handleCloneMove(event: ItemMoveEvent) {
-    const blockId = String(event.itemId);
+    const blockId = event.itemId;
     const type = event.itemMetadata.blockType;
     if (
       typeof type !== "string" ||
@@ -601,48 +746,43 @@
     }
 
     if (event.itemMetadata.template === true) {
-      const original = paletteBlocks.find((block) => block.id === blockId);
-      if (!original) return;
-
-      const nextPalette = paletteBlocks.filter((block) => block.id !== blockId);
-      const sourceIndex = Math.max(
-        0,
-        Math.min(event.from.index, nextPalette.length),
+      const original = cloneZoneTree("palette")?.entries.find(
+        (entry) => !entry.isGhost && entry.itemId === blockId,
       );
-      nextPalette.splice(sourceIndex, 0, {
-        ...original,
-        id: `palette-${original.type}-${paletteInstanceCount++}`,
-      });
+      if (!original || original.isGhost || !("template" in original.value)) return;
 
-      const nextCanvas = canvasBlocks.slice();
-      const targetIndex = Math.max(
-        0,
-        Math.min(event.to.index, nextCanvas.length),
-      );
-      nextCanvas.splice(targetIndex, 0, {
-        id: blockId,
-        type: type as PaletteBlockType,
+      cloneWorkspace = reduceRenderTree(cloneWorkspace, event);
+      const replacement: CloneBlock = {
+        ...original.value,
+        id: `palette-${original.value.type}-${paletteInstanceCount++}`,
+        template: true,
+      };
+      updateCloneZone("palette", (tree) => {
+        const entries = [...tree.entries];
+        entries.splice(
+          Math.max(0, Math.min(event.from.index, entries.length)),
+          0,
+          createRenderEntry<CloneValue>(replacement, replacement.id),
+        );
+        return { ...tree, entries };
       });
-
-      // Both assignments run inside SnapSort's synchronous mutation
-      // transaction: the original stable ID lands on canvas and a fresh ID
-      // replaces its template slot before FLIP reads final geometry.
-      paletteBlocks = nextPalette;
-      canvasBlocks = nextCanvas;
       return;
     }
 
-    // Canvas entries use the same callback as a plain reorder.
-    const block = canvasBlocks.find((candidate) => candidate.id === blockId);
-    if (!block) return;
-    const next = canvasBlocks.filter((candidate) => candidate.id !== blockId);
-    const index = Math.max(0, Math.min(event.to.index, next.length));
-    next.splice(index, 0, block);
-    canvasBlocks = next;
+    cloneWorkspace = reduceRenderTree(cloneWorkspace, event);
+  }
+
+  function handleCloneGhost(event: RenderTreeEvent) {
+    cloneWorkspace = reduceRenderTree(cloneWorkspace, event);
   }
 
   function removeCanvasBlock(id: string) {
-    canvasBlocks = canvasBlocks.filter((block) => block.id !== id);
+    updateCloneZone("canvas", (tree) => ({
+      ...tree,
+      entries: tree.entries.filter(
+        (entry) => entry.isGhost || entry.itemId !== id,
+      ),
+    }));
   }
 
   // --- Trash It: session.dropEffect = "none" + onDragEnd cleanup ---
@@ -652,16 +792,33 @@
     text: string;
   };
 
-  let trashTasks: TrashTask[] = $state([
-    { id: "trash-task-1", text: "Reply to design feedback" },
-    { id: "trash-task-2", text: "Archive last sprint's board" },
-    { id: "trash-task-3", text: "Renew the SSL certificate" },
-    { id: "trash-task-4", text: "Clean up unused feature flags" },
-    { id: "trash-task-5", text: "Update the onboarding checklist" },
-  ]);
   type TrashZone = "list" | "bin";
-  const trashZones: TrashZone[] = ["list", "bin"];
-  const emptyTrashTasks: TrashTask[] = [];
+  type TrashValue = TrashTask | { zone: TrashZone };
+  let trashTasks = $state.raw(
+    createRenderTree<TrashValue>([
+      createRenderEntry(
+        { zone: "list" },
+        "trash-zone-list",
+        createRenderTree(
+          createRenderEntries<TrashValue>(
+            [
+              { id: "trash-task-1", text: "Reply to design feedback" },
+              { id: "trash-task-2", text: "Archive last sprint's board" },
+              { id: "trash-task-3", text: "Renew the SSL certificate" },
+              { id: "trash-task-4", text: "Clean up unused feature flags" },
+              { id: "trash-task-5", text: "Update the onboarding checklist" },
+            ],
+            (value) => "id" in value ? value.id : `trash-zone-${value.zone}`,
+          ),
+        ),
+      ),
+      createRenderEntry(
+        { zone: "bin" },
+        "trash-zone-bin",
+        createRenderTree(),
+      ),
+    ]),
+  );
   let trashHovered = $state(false);
 
   function handleTrashDropTargetChange(event: DropTargetChangeEvent) {
@@ -670,26 +827,44 @@
     trashHovered = overTrash;
   }
 
-  function handleTrashListMove(event: ItemMoveEvent) {
-    const taskId = event.itemId;
-    const task = trashTasks.find((candidate) => candidate.id === taskId);
-    if (!task) return;
-    const next = trashTasks.filter((candidate) => candidate.id !== taskId);
-    const index = Math.max(0, Math.min(event.to.index, next.length));
-    next.splice(index, 0, task);
-    trashTasks = next;
+  function handleTrashEvent(event: RenderTreeEvent) {
+    trashTasks = reduceRenderTree(trashTasks, event);
   }
 
-  function handleTrashBinMove(event: ItemMoveEvent) {
-    trashTasks = trashTasks.filter((task) => task.id !== event.itemId);
+  function trashZoneTree(zone: TrashZone): RenderTree<TrashValue> | null {
+    const entry = trashTasks.entries.find(
+      (candidate) =>
+        !candidate.isGhost &&
+        "zone" in candidate.value &&
+        candidate.value.zone === zone,
+    );
+    return entry && !entry.isGhost ? entry.childTree : null;
+  }
+
+  function removeTrashTask(itemId: string) {
+    trashTasks = {
+      ...trashTasks,
+      entries: trashTasks.entries.map((entry) =>
+        !entry.isGhost && entry.childTree
+          ? {
+              ...entry,
+              childTree: {
+                ...entry.childTree,
+                entries: entry.childTree.entries.filter(
+                  (child) => child.isGhost || child.itemId !== itemId,
+                ),
+              },
+            }
+          : entry,
+      ),
+    };
   }
 
   function handleTrashDragEnd(event: DragEndEvent) {
     const shouldDelete = trashHovered || event.destination?.containerMetadata.role === "trash";
     trashHovered = false;
     if (!shouldDelete) return;
-    const taskId = event.itemId;
-    trashTasks = trashTasks.filter((task) => task.id !== taskId);
+    removeTrashTask(event.itemId);
   }
 
   // --- Swap Grid: mode: "swap" + onDragItemEnter/Leave hover highlight ---
@@ -700,28 +875,28 @@
     color: string;
   };
 
-  let swapTiles: SwapTile[] = $state([
-    { id: "swap-1", label: "A1", color: "#ff7a59" },
-    { id: "swap-2", label: "A2", color: "#ffb703" },
-    { id: "swap-3", label: "A3", color: "#06d6a0" },
-    { id: "swap-4", label: "B1", color: "#4cc9f0" },
-    { id: "swap-5", label: "B2", color: "#4361ee" },
-    { id: "swap-6", label: "B3", color: "#7209b7" },
-    { id: "swap-7", label: "C1", color: "#f72585" },
-    { id: "swap-8", label: "C2", color: "#3a86ff" },
-    { id: "swap-9", label: "C3", color: "#8ecae6" },
-  ]);
+  let swapTiles = $state.raw(
+    createRenderTree(
+      createRenderEntries<SwapTile>(
+        [
+          { id: "swap-1", label: "A1", color: "#ff7a59" },
+          { id: "swap-2", label: "A2", color: "#ffb703" },
+          { id: "swap-3", label: "A3", color: "#06d6a0" },
+          { id: "swap-4", label: "B1", color: "#4cc9f0" },
+          { id: "swap-5", label: "B2", color: "#4361ee" },
+          { id: "swap-6", label: "B3", color: "#7209b7" },
+          { id: "swap-7", label: "C1", color: "#f72585" },
+          { id: "swap-8", label: "C2", color: "#3a86ff" },
+          { id: "swap-9", label: "C3", color: "#8ecae6" },
+        ],
+        (tile) => tile.id,
+      ),
+    ),
+  );
   let swapHoveredId: string | null = $state(null);
 
   function handleSwapCommit(event: ItemSwapEvent) {
-    const aId = event.a.itemId;
-    const bId = event.b.itemId;
-    const aIndex = swapTiles.findIndex((tile) => tile.id === aId);
-    const bIndex = swapTiles.findIndex((tile) => tile.id === bId);
-    if (aIndex === -1 || bIndex === -1) return;
-    const next = swapTiles.slice();
-    [next[aIndex], next[bIndex]] = [next[bIndex], next[aIndex]];
-    swapTiles = next;
+    swapTiles = reduceRenderTree(swapTiles, event);
   }
 
   function handleSwapHoverEnter(event: DragItemHoverEvent) {
@@ -735,10 +910,134 @@
     }
   }
 
-  function swapGhostTile(event: GhostInsertEvent) {
-    return swapTiles.find((tile) => tile.id === event.originalItemId);
+  function handleSwapGhost(event: RenderTreeEvent) {
+    swapTiles = reduceRenderTree(swapTiles, event);
   }
+
+  function swapGhostTile(itemId: string) {
+    const entry = swapTiles.entries.find(
+      (candidate) => !candidate.isGhost && candidate.itemId === itemId,
+    );
+    return entry && !entry.isGhost ? entry.value : undefined;
+  }
+
+  const todoCallbacks = structuralCallbacks(handleTodoEvent);
+  const kanbanCallbacks = {
+    ...structuralCallbacks(handleKanbanEvent),
+    canDrop: rejectDrop,
+  } satisfies ContainerCallbacks;
+  const sentenceCallbacks = {
+    ...structuralCallbacks(handleSentenceEvent),
+    canDrop: rejectDrop,
+  } satisfies ContainerCallbacks;
+  const cloneCallbacks = {
+    onItemMove: handleCloneMove,
+    onGhostInsert: handleCloneGhost,
+    onGhostMove: handleCloneGhost,
+    onGhostRemove: handleCloneGhost,
+    canDrop: rejectDrop,
+    onDragStart: handleCloneDragStart,
+  } satisfies ContainerCallbacks;
+  const trashCallbacks = {
+    ...structuralCallbacks(handleTrashEvent),
+    canDrop: rejectDrop,
+    onDropTargetChange: handleTrashDropTargetChange,
+    onDragEnd: handleTrashDragEnd,
+  } satisfies ContainerCallbacks;
+  const swapCallbacks = {
+    onItemSwap: handleSwapCommit,
+    onGhostInsert: handleSwapGhost,
+    onGhostMove: handleSwapGhost,
+    onGhostRemove: handleSwapGhost,
+    onDragItemEnter: handleSwapHoverEnter,
+    onDragItemLeave: handleSwapHoverLeave,
+  } satisfies ContainerCallbacks;
+  const editorFieldCallbacks = structuralCallbacks(handleEditorFieldEvent);
 </script>
+
+{#snippet editorOptions(field: EditorField)}
+  {@const options = field.options ?? createRenderTree<EditorOption>()}
+  {@const firstOptionId = options.entries.find((entry) => !entry.isGhost)?.itemId}
+  <SnapSortContextBoundary>
+    <Container
+      itemId={`gallery-${field.id}-options-root`}
+      className="editor-option-stack"
+      config={{
+        animation: defaultAnimations,
+        mode: "progressive",
+        direction: "column",
+        name: `editor-options-${field.id}`,
+        callbacks: structuralCallbacks((event) =>
+          handleEditorOptionEvent(field.id, event)
+        ),
+      }}
+      locked={true}
+      metadata={{ fieldId: field.id }}
+    >
+      {#each options.entries as optionEntry (optionEntry.itemId)}
+        {#if optionEntry.isGhost}
+          <Ghost ghost={optionEntry.ghost} />
+        {:else}
+          <Item itemId={optionEntry.itemId} className="editor-option-item">
+            <div class="editor-option-row">
+              <Handle className="editor-option-handle">
+                <i class="material-symbols-rounded editor-option-grip" aria-hidden="true">drag_indicator</i>
+              </Handle>
+              {#if field.type === "multipleChoice"}
+                <label class="radio-label">
+                  <input type="radio" name={`${field.id}-choice`} checked={optionEntry.itemId === firstOptionId} tabindex="-1" />
+                  <span></span>
+                </label>
+              {:else if field.type === "checkboxes"}
+                <label class="checkbox-label">
+                  <input type="checkbox" checked={optionEntry.itemId === firstOptionId} tabindex="-1" />
+                  <span></span>
+                </label>
+              {:else}
+                <i class="material-symbols-rounded editor-option-type-icon" aria-hidden="true">arrow_drop_down</i>
+              {/if}
+              <input
+                class="editor-option-input"
+                type="text"
+                value={optionEntry.value.label}
+                aria-label="Option text"
+                oninput={(event) =>
+                  updateEditorOptionLabel(field.id, optionEntry.itemId, event.currentTarget.value)}
+                onpointerdown={(event) => event.stopPropagation()}
+                onclick={(event) => event.stopPropagation()}
+              />
+              <button
+                class="editor-option-action"
+                type="button"
+                aria-label="Remove option"
+                disabled={ordinaryValues(options).length <= 1}
+                onpointerdown={(event) => event.stopPropagation()}
+                onclick={(event) => {
+                  event.stopPropagation();
+                  removeEditorOption(field.id, optionEntry.itemId);
+                }}
+              >
+                <i class="material-symbols-rounded" aria-hidden="true">delete</i>
+              </button>
+            </div>
+          </Item>
+        {/if}
+      {/each}
+    </Container>
+  </SnapSortContextBoundary>
+  <button
+    class="editor-add-option"
+    type="button"
+    onpointerdown={(event) => event.stopPropagation()}
+    onclick={(event) => {
+      event.stopPropagation();
+      addEditorOption(field.id);
+    }}
+  >
+    <i class="material-symbols-rounded" aria-hidden="true">add</i>
+    Add option
+  </button>
+{/snippet}
 
 <SeoHead
   title="SnapSort Gallery | Interactive drag and drop examples"
@@ -788,7 +1087,7 @@
             </p>
           </div>
           <div class="project-list">
-            {#each todoItems as todo}
+            {#each ordinaryValues(todoItems) as todo}
               <div class="project-card" class:checked={todo.checked}>
                 <i class="material-symbols-rounded project-drag-handle" aria-hidden="true">drag_indicator</i>
                 <label>
@@ -827,10 +1126,12 @@
               <div class="sentence-workspace-root">
                 <div class="sentence-drop-zone"></div>
                 <div class="sentence-source-zone">
-                  {#each sentenceBankTiles as tile}
-                    <button type="button" class="word-card sentence-word" tabindex="-1">
-                      {tile.text}
-                    </button>
+                  {#each ordinaryValues(sentenceZoneTree("bank") ?? createRenderTree()) as tile}
+                    {#if "text" in tile}
+                      <button type="button" class="word-card sentence-word" tabindex="-1">
+                        {tile.text}
+                      </button>
+                    {/if}
                   {/each}
                 </div>
               </div>
@@ -896,11 +1197,13 @@
           <div class="trash-workspace">
             <div class="trash-root">
               <div class="trash-list">
-                {#each trashTasks as task}
-                  <div class="trash-task">
-                    <i class="material-symbols-rounded trash-task-grip" aria-hidden="true">drag_indicator</i>
-                    <span>{task.text}</span>
-                  </div>
+                {#each ordinaryValues(trashZoneTree("list") ?? createRenderTree()) as task}
+                  {#if "text" in task}
+                    <div class="trash-task">
+                      <i class="material-symbols-rounded trash-task-grip" aria-hidden="true">drag_indicator</i>
+                      <span>{task.text}</span>
+                    </div>
+                  {/if}
                 {/each}
               </div>
               <div class="trash-zone">
@@ -925,7 +1228,7 @@
           </div>
           <div class="swap-workspace">
             <div class="swap-static-grid">
-              {#each swapTiles as tile}
+              {#each ordinaryValues(swapTiles) as tile}
                 <div class="swap-static-item">
                   <div class="swap-tile card" style={`--tile-color: ${tile.color};`}>
                     <span class="swap-tile-grip" aria-hidden="true">
@@ -961,7 +1264,7 @@
                 <h4 class="editor-canvas-title">My Form</h4>
               </div>
               <div class="editor-field-list">
-                {#each editorFields as field}
+                {#each ordinaryValues(editorFields) as field}
                   <div class="editor-field">
                     <i class="material-symbols-rounded editor-field-grip" aria-hidden="true">drag_indicator</i>
                     <div class="editor-field-main">
@@ -970,7 +1273,7 @@
                         <textarea rows="3" readonly tabindex="-1">Long answer response</textarea>
                       {:else if field.options}
                         <div class="editor-option-stack">
-                          {#each field.options as option}
+                          {#each ordinaryValues(field.options) as option}
                             <div class="editor-option-row">
                               <i class="material-symbols-rounded editor-option-grip" aria-hidden="true">drag_indicator</i>
                               <input class="editor-option-input" type="text" value={option.label} tabindex="-1" readonly />
@@ -1003,30 +1306,37 @@
         </div>
         <div class="project-list">
           <Container
-            config={{ animation: defaultAnimations, direction: "column", callbacks: { onItemMove: handleTodoMove } }}
-            items={todoItems}
-            getItemId={(todo) => todo.id}
+            itemId="gallery-todo-root"
+            config={{ animation: defaultAnimations, direction: "column", callbacks: todoCallbacks }}
           >
-            {#snippet entry(todo)}
-              <Item itemId={todo.id}>
-                <div class="project-card" class:checked={todo.checked}>
+            {#each todoItems.entries as entry (entry.itemId)}
+              {#if entry.isGhost}
+                <Ghost ghost={entry.ghost} />
+              {:else}
+              <Item itemId={entry.itemId}>
+                <div class="project-card" class:checked={entry.value.checked}>
                   <Handle className="project-drag-handle">
                     <i class="material-symbols-rounded" aria-hidden="true">drag_indicator</i>
                   </Handle>
                   <label>
-                    <input type="checkbox" bind:checked={todo.checked} />
+                    <input
+                      type="checkbox"
+                      checked={entry.value.checked}
+                      onchange={(event) => setTodoChecked(entry.itemId, event.currentTarget.checked)}
+                    />
                     <span></span>
                   </label>
-                  <span class="project-text">{todo.text}</span>
+                  <span class="project-text">{entry.value.text}</span>
                   <div class="project-meta" aria-label="Task metadata">
                     <span class="project-meta-item">
                       <i class="material-symbols-rounded" aria-hidden="true">schedule</i>
-                      {todo.due}
+                      {entry.value.due}
                     </span>
                   </div>
                 </div>
               </Item>
-            {/snippet}
+              {/if}
+            {/each}
           </Container>
         </div>
       </div>
@@ -1042,68 +1352,74 @@
         </div>
         <div class="kanban-board">
           <Container
+            itemId="gallery-kanban-root"
             config={{
               animation: defaultAnimations,
               direction: "row",
               name: "kanban-root",
-              callbacks: { canDrop: rejectDrop },
+              callbacks: kanbanCallbacks,
             }}
             locked={true}
-            items={kanbanColumns}
-            getItemId={(column) => column.id}
           >
-            {#snippet entry(column)}
+            {#each kanbanColumns.entries as entry (entry.itemId)}
+              {#if entry.isGhost}
+                <Ghost ghost={entry.ghost} />
+              {:else if entry.childTree && "title" in entry.value}
               <Container
                 className="kanban-column"
-                itemId={column.id}
+                itemId={entry.itemId}
                 config={{
                   animation: defaultAnimations,
                   direction: "column",
-                  name: column.id,
-                  callbacks: { onItemMove: handleKanbanMove },
-                  ...({ onClickAction: { action: "moveTo", target: column.target } } as object),
+                  name: entry.itemId,
+                  ...({ onClickAction: { action: "moveTo", target: entry.value.target } } as object),
                 }}
                 locked={true}
-                metadata={{ columnId: column.id }}
-                items={column.cards}
-                getItemId={(card) => card.id}
+                metadata={{ columnId: entry.itemId }}
               >
-                {#snippet before()}
-                  <h4>{column.title}</h4>
-                {/snippet}
-                {#snippet entry(card)}
-                  <Item itemId={card.id}>
+                <h4>{entry.value.title}</h4>
+                {#each entry.childTree.entries as child (child.itemId)}
+                  {#if child.isGhost}
+                    <Ghost ghost={child.ghost} />
+                  {:else if child.childTree}
+                    <Container itemId={child.itemId} />
+                  {:else if "text" in child.value}
+                  <Item itemId={child.itemId}>
                     <div class="kanban-card">
                       <div class="kanban-header">
-                        <span class="kanban-title">{card.text}</span>
-                        <span class="kanban-tag">{card.tag}</span>
+                        <span class="kanban-title">{child.value.text}</span>
+                        <span class="kanban-tag">{child.value.tag}</span>
                       </div>
-                      <p class="kanban-desc">{card.desc}</p>
+                      <p class="kanban-desc">{child.value.desc}</p>
                       <div class="kanban-footer">
                         <span
                           class="kanban-avatar"
-                          style={`--avatar-color: ${card.avatarColor};`}
-                          title={card.assignee}
-                          aria-label={card.assignee}
+                          style={`--avatar-color: ${child.value.avatarColor};`}
+                          title={child.value.assignee}
+                          aria-label={child.value.assignee}
                         >
-                          {card.avatar}
+                          {child.value.avatar}
                         </span>
                         <div class="kanban-meta" aria-label="Task metadata">
                           <span class="kanban-meta-item">
                             <i class="material-symbols-rounded" aria-hidden="true">event</i>
-                            {card.due}
+                            {child.value.due}
                           </span>
                           <span class="kanban-meta-item">
                             <i class="material-symbols-rounded" aria-hidden="true">forum</i>
-                            {card.activity}
+                            {child.value.activity}
                           </span>
                         </div>
                       </div>
                     </div>
                   </Item>
-                {/snippet}
+                  {/if}
+                {/each}
               </Container>
-            {/snippet}
+              {:else}
+                <Item itemId={entry.itemId}>{entry.itemId}</Item>
+              {/if}
+            {/each}
           </Container>
         </div>
       </div>
@@ -1127,23 +1443,24 @@
           </div>
           <div class="sentence-container-area">
             <Container
+              itemId="gallery-sentence-root"
               className="sentence-workspace-root"
               config={{
                 animation: defaultAnimations,
                 mode: "progressive",
                 direction: "column",
                 name: "sentence-root",
-                callbacks: { canDrop: rejectDrop },
+                callbacks: sentenceCallbacks,
               }}
               locked={true}
-              items={sentenceZones}
-              getItemId={(zone) => `sentence-zone-${zone}`}
             >
-              {#snippet entry(zone)}
-                {#if zone === "answer"}
+              {#each sentenceTiles.entries as entry (entry.itemId)}
+                {#if entry.isGhost}
+                  <Ghost ghost={entry.ghost} />
+                {:else if entry.childTree && "zone" in entry.value && entry.value.zone === "answer"}
                   <Container
                     className="sentence-drop-zone"
-                    itemId="sentence-zone-answer"
+                    itemId={entry.itemId}
                     bind:container={sentenceAnswerContainer}
                     config={{
                       mode: "progressive",
@@ -1155,40 +1472,41 @@
                         move: sentenceAnimation,
                       },
                       callbacks: {
-                        onItemMove: handleSentenceMove,
-                        onItemRemove: handleSentenceRemove,
                         getDropPriority: prioritizeIntersectingContainer,
                       },
                     }}
                     locked={true}
                     metadata={{ zone: "answer" }}
-                    items={sentenceAnswerTiles}
-                    getItemId={(tile) => tile.id}
                   >
-                    {#snippet entry(tile)}
-                      <Item itemId={tile.id} className="sentence-tile-wrapper">
+                    {#each entry.childTree.entries as child (child.itemId)}
+                      {#if child.isGhost}
+                        <Ghost ghost={child.ghost}>
+                          <button type="button" class="word-card sentence-word sentence-tile-ghost selected" tabindex="-1">
+                            {sentenceGhostTileText(child.ghost.original.itemId)}
+                          </button>
+                        </Ghost>
+                      {:else if child.childTree}
+                        <Container itemId={child.itemId} />
+                      {:else if "text" in child.value}
+                      <Item itemId={child.itemId} className="sentence-tile-wrapper">
                         <button
                           type="button"
                           class="word-card sentence-word selected"
                           onpointerdown={handleSentenceTilePointerDown}
                           onpointermove={handleSentenceTilePointerMove}
-                          onclick={(event) => handleSentenceTileClick(event, () => moveSentenceTileToZone(tile, "bank"))}
-                          aria-label={`Move ${tile.text} to bank`}
+                          onclick={(event) => handleSentenceTileClick(event, () => moveSentenceTileToZone(child.value, "bank"))}
+                          aria-label={`Move ${child.value.text} to bank`}
                         >
-                          {tile.text}
+                          {child.value.text}
                         </button>
                       </Item>
-                    {/snippet}
-                    {#snippet ghost(event)}
-                      <Ghost {event}>
-                        <button type="button" class="word-card sentence-word sentence-tile-ghost selected" tabindex="-1">{sentenceGhostTileText(event)}</button>
-                      </Ghost>
-                    {/snippet}
+                      {/if}
+                    {/each}
                   </Container>
-                {:else}
+                {:else if entry.childTree && "zone" in entry.value}
                   <Container
                     className="sentence-source-zone"
-                    itemId="sentence-zone-bank"
+                    itemId={entry.itemId}
                     bind:container={sentenceBankContainer}
                     config={{
                       mode: "progressive",
@@ -1201,38 +1519,39 @@
                         move: sentenceAnimation,
                       },
                       callbacks: {
-                        onItemMove: handleSentenceMove,
-                        onItemRemove: handleSentenceRemove,
                         getDropPriority: prioritizeIntersectingContainer,
                       },
                     }}
                     locked={true}
                     metadata={{ zone: "bank" }}
-                    items={sentenceBankTiles}
-                    getItemId={(tile) => tile.id}
                   >
-                    {#snippet entry(tile)}
-                      <Item itemId={tile.id} className="sentence-tile-wrapper">
+                    {#each entry.childTree.entries as child (child.itemId)}
+                      {#if child.isGhost}
+                        <Ghost ghost={child.ghost}>
+                          <button type="button" class="word-card sentence-word sentence-tile-ghost" tabindex="-1">
+                            {sentenceGhostTileText(child.ghost.original.itemId)}
+                          </button>
+                        </Ghost>
+                      {:else if child.childTree}
+                        <Container itemId={child.itemId} />
+                      {:else if "text" in child.value}
+                      <Item itemId={child.itemId} className="sentence-tile-wrapper">
                         <button
                           type="button"
                           class="word-card sentence-word"
                           onpointerdown={handleSentenceTilePointerDown}
                           onpointermove={handleSentenceTilePointerMove}
-                          onclick={(event) => handleSentenceTileClick(event, () => moveSentenceTileToZone(tile, "answer"))}
-                          aria-label={`Move ${tile.text} to answer`}
+                          onclick={(event) => handleSentenceTileClick(event, () => moveSentenceTileToZone(child.value, "answer"))}
+                          aria-label={`Move ${child.value.text} to answer`}
                         >
-                          {tile.text}
+                          {child.value.text}
                         </button>
                       </Item>
-                    {/snippet}
-                    {#snippet ghost(event)}
-                      <Ghost {event}>
-                        <button type="button" class="word-card sentence-word sentence-tile-ghost" tabindex="-1">{sentenceGhostTileText(event)}</button>
-                      </Ghost>
-                    {/snippet}
+                      {/if}
+                    {/each}
                   </Container>
                 {/if}
-              {/snippet}
+              {/each}
             </Container>
           </div>
           <div class="controls">
@@ -1271,111 +1590,126 @@
         </div>
         <div class="clone-workspace">
           <Container
+            itemId="gallery-clone-root"
             className="clone-root"
             config={{
               animation: defaultAnimations,
               direction: "row",
               name: "clone-root",
-              callbacks: {
-                canDrop: rejectDrop,
-                onDragStart: handleCloneDragStart,
-              },
+              callbacks: cloneCallbacks,
             }}
             locked={true}
-            items={cloneZones}
-            getItemId={(zone) => `clone-${zone}`}
           >
-            {#snippet ghost(event)}
-              <Ghost {event} className="clone-pointer-ghost">
-                {#if event.role === "pointer"}
-                  {@const type = event.originalMetadata.blockType as PaletteBlockType}
+            {#each cloneWorkspace.entries as entry (entry.itemId)}
+              {#if entry.isGhost}
+              <Ghost ghost={entry.ghost} className="clone-pointer-ghost">
+                {#if entry.ghost.type === "pointer-preview"}
+                  {@const type = entry.ghost.original.metadata.blockType as PaletteBlockType}
                   <div class="clone-block clone-block-{type} clone-pointer-preview">
                     <i class="material-symbols-rounded" aria-hidden="true">{blockIcon[type]}</i>
                     <span>{blockLabel[type]}</span>
                   </div>
                 {/if}
               </Ghost>
-            {/snippet}
-            {#snippet entry(zone)}
-              {#if zone === "palette"}
+              {:else if entry.childTree && "zone" in entry.value && entry.value.zone === "palette"}
                 <Container
                   className="clone-palette"
-                  itemId="clone-palette"
+                  itemId={entry.itemId}
                   config={{
                     animation: defaultAnimations,
                     direction: "column",
                     name: "clone-palette",
                     callbacks: {
                       canDrop: rejectDrop,
-                      onItemMove: handleCloneMove,
                     },
                   }}
                   locked={true}
                   metadata={{ copyZone: "palette" }}
-                  items={paletteBlocks}
-                  getItemId={(template) => template.id}
                 >
-                  {#snippet entry(template)}
+                  {#each entry.childTree.entries as child (child.itemId)}
+                    {#if child.isGhost}
+                      <Ghost ghost={child.ghost} className="clone-pointer-ghost">
+                        {#if child.ghost.type === "pointer-preview"}
+                          {@const type = child.ghost.original.metadata.blockType as PaletteBlockType}
+                          <div class="clone-block clone-block-{type} clone-pointer-preview">
+                            <i class="material-symbols-rounded" aria-hidden="true">{blockIcon[type]}</i>
+                            <span>{blockLabel[type]}</span>
+                          </div>
+                        {/if}
+                      </Ghost>
+                    {:else if child.childTree}
+                      <Container itemId={child.itemId} />
+                    {:else if "template" in child.value}
                     <Item
-                      itemId={template.id}
-                      metadata={{ blockType: template.type, template: true }}
+                      itemId={child.itemId}
+                      metadata={{ blockType: child.value.type, template: true }}
                     >
-                      <div class="clone-block clone-block-{template.type} clone-palette-block">
-                        <i class="material-symbols-rounded" aria-hidden="true">{template.icon}</i>
-                        <span>{template.label}</span>
+                      <div class="clone-block clone-block-{child.value.type} clone-palette-block">
+                        <i class="material-symbols-rounded" aria-hidden="true">{child.value.icon}</i>
+                        <span>{child.value.label}</span>
                       </div>
                     </Item>
-                  {/snippet}
+                    {/if}
+                  {/each}
                 </Container>
-              {:else}
+              {:else if entry.childTree && "zone" in entry.value}
                 <Container
                   className="clone-canvas"
-                  itemId="clone-canvas"
+                  itemId={entry.itemId}
                   config={{
                     animation: defaultAnimations,
                     direction: "column",
                     name: "clone-canvas",
                     callbacks: {
-                      onItemMove: handleCloneMove,
                       getDropPriority: prioritizeIntersectingContainer,
                     },
                   }}
                   locked={true}
                   metadata={{ copyZone: "canvas" }}
-                  items={canvasBlocks}
-                  getItemId={(block) => block.id}
                 >
-                  {#snippet before()}
-                    {#if canvasBlocks.length === 0}
-                      <p class="clone-canvas-empty">Drop blocks here</p>
-                    {/if}
-                  {/snippet}
-                  {#snippet entry(block)}
+                  {#if ordinaryValues(entry.childTree).length === 0}
+                    <p class="clone-canvas-empty">Drop blocks here</p>
+                  {/if}
+                  {#each entry.childTree.entries as child (child.itemId)}
+                    {#if child.isGhost}
+                      <Ghost ghost={child.ghost} className="clone-pointer-ghost">
+                        {#if child.ghost.type === "pointer-preview"}
+                          {@const type = child.ghost.original.metadata.blockType as PaletteBlockType}
+                          <div class="clone-block clone-block-{type} clone-pointer-preview">
+                            <i class="material-symbols-rounded" aria-hidden="true">{blockIcon[type]}</i>
+                            <span>{blockLabel[type]}</span>
+                          </div>
+                        {/if}
+                      </Ghost>
+                    {:else if child.childTree}
+                      <Container itemId={child.itemId} />
+                    {:else if "template" in child.value}
                     <Item
-                      itemId={block.id}
-                      metadata={{ blockType: block.type, template: false }}
+                      itemId={child.itemId}
+                      metadata={{ blockType: child.value.type, template: false }}
                     >
-                      <div class="clone-block clone-block-{block.type} clone-canvas-block">
-                        <i class="material-symbols-rounded" aria-hidden="true">{blockIcon[block.type]}</i>
-                        <span>{blockLabel[block.type]}</span>
+                      <div class="clone-block clone-block-{child.value.type} clone-canvas-block">
+                        <i class="material-symbols-rounded" aria-hidden="true">{blockIcon[child.value.type]}</i>
+                        <span>{blockLabel[child.value.type]}</span>
                         <button
                           type="button"
                           class="clone-block-remove"
-                          aria-label={`Remove ${blockLabel[block.type]}`}
+                          aria-label={`Remove ${blockLabel[child.value.type]}`}
                           onpointerdown={(event) => event.stopPropagation()}
                           onclick={(event) => {
                             event.stopPropagation();
-                            removeCanvasBlock(block.id);
+                            removeCanvasBlock(child.itemId);
                           }}
                         >
                           <i class="material-symbols-rounded" aria-hidden="true">close</i>
                         </button>
                       </div>
                     </Item>
-                  {/snippet}
+                    {/if}
+                  {/each}
                 </Container>
               {/if}
-            {/snippet}
+            {/each}
           </Container>
         </div>
       </div>
@@ -1392,79 +1726,78 @@
         </div>
         <div class="trash-workspace">
           <Container
+            itemId="gallery-trash-root"
             className="trash-root"
             config={{
               animation: defaultAnimations,
               direction: "column",
               name: "trash-root",
-              callbacks: {
-                canDrop: rejectDrop,
-                onDropTargetChange: handleTrashDropTargetChange,
-                onDragEnd: handleTrashDragEnd,
-              },
+              callbacks: trashCallbacks,
             }}
             locked={true}
-            items={trashZones}
-            getItemId={(zone) => `trash-zone-${zone}`}
           >
-            {#snippet entry(zone)}
-              {#if zone === "list"}
+            {#each trashTasks.entries as entry (entry.itemId)}
+              {#if entry.isGhost}
+                <Ghost ghost={entry.ghost} />
+              {:else if entry.childTree && "zone" in entry.value && entry.value.zone === "list"}
                 <Container
                   className="trash-list"
-                  itemId="trash-zone-list"
+                  itemId={entry.itemId}
                   config={{
                     animation: defaultAnimations,
                     direction: "column",
                     name: "trash-list",
-                    callbacks: {
-                      onItemMove: handleTrashListMove,
-                    },
                   }}
                   locked={true}
-                  items={trashTasks}
-                  getItemId={(task) => task.id}
                 >
-                  {#snippet entry(task)}
-                    <Item itemId={task.id}>
+                  {#each entry.childTree.entries as child (child.itemId)}
+                    {#if child.isGhost}
+                      <Ghost ghost={child.ghost} />
+                    {:else if child.childTree}
+                      <Container itemId={child.itemId} />
+                    {:else if "text" in child.value}
+                    <Item itemId={child.itemId}>
                       <div class="trash-task">
                         <i class="material-symbols-rounded trash-task-grip" aria-hidden="true">drag_indicator</i>
-                        <span>{task.text}</span>
+                        <span>{child.value.text}</span>
                       </div>
                     </Item>
-                  {/snippet}
+                    {/if}
+                  {/each}
                 </Container>
-              {:else}
+              {:else if entry.childTree && "zone" in entry.value}
                 <div class="trash-zone" class:trash-zone-active={trashHovered}>
                   <Container
                     className="trash-drop-target"
-                    itemId="trash-zone-bin"
+                    itemId={entry.itemId}
                     config={{
                       animation: defaultAnimations,
                       direction: "column",
                       name: "trash-bin",
                       callbacks: {
-                        onItemMove: handleTrashBinMove,
                         getDropPriority: prioritizeIntersectingContainer,
                       },
                     }}
                     locked={true}
                     metadata={{ role: "trash" }}
-                    items={emptyTrashTasks}
-                    getItemId={(task) => task.id}
                   >
-                    {#snippet before()}
-                      <div class="trash-zone-content">
-                        <i class="material-symbols-rounded" aria-hidden="true">delete</i>
-                        <span>Drop to delete</span>
-                      </div>
-                    {/snippet}
-                    {#snippet entry()}
-                      <!-- Trash bin has no rendered child items. -->
-                    {/snippet}
+                    <div class="trash-zone-content">
+                      <i class="material-symbols-rounded" aria-hidden="true">delete</i>
+                      <span>Drop to delete</span>
+                    </div>
+                    {#each entry.childTree.entries as child (child.itemId)}
+                      {#if child.isGhost}
+                        <Ghost ghost={child.ghost} />
+                      {:else if child.childTree}
+                        <Container itemId={child.itemId} />
+                      {:else if "text" in child.value}
+                        <Item itemId={child.itemId}>{child.value.text}</Item>
+                      {/if}
+                    {/each}
                   </Container>
                 </div>
               {/if}
-            {/snippet}
+            {/each}
           </Container>
         </div>
       </div>
@@ -1480,6 +1813,7 @@
         </div>
         <div class="swap-workspace">
           <Container
+            itemId="gallery-swap-root"
             className="swap-grid"
             config={{
               mode: "swap",
@@ -1495,22 +1829,31 @@
                   timing_function: "cubic-bezier(0.22, 1, 0.36, 1)",
                 },
               },
-              callbacks: {
-                onItemSwap: handleSwapCommit,
-                onDragItemEnter: handleSwapHoverEnter,
-                onDragItemLeave: handleSwapHoverLeave,
-              },
+              callbacks: swapCallbacks,
             }}
             locked={true}
-            items={swapTiles}
-            getItemId={(tile) => tile.id}
           >
-            {#snippet entry(tile)}
-              <Item itemId={tile.id} metadata={{ color: tile.color, label: tile.label }}>
+            {#each swapTiles.entries as entry (entry.itemId)}
+              {#if entry.isGhost}
+                {@const tile = swapGhostTile(entry.ghost.original.itemId)}
+                {#if tile}
+                  <Ghost
+                    ghost={entry.ghost}
+                    className="swap-tile card swap-tile-ghost"
+                    style={`--tile-color: ${tile.color};`}
+                  >
+                      <span class="swap-tile-grip" aria-hidden="true">
+                        <i></i><i></i><i></i><i></i><i></i><i></i>
+                      </span>
+                      <span class="swap-tile-label">{tile.label}</span>
+                  </Ghost>
+                {/if}
+              {:else}
+              <Item itemId={entry.itemId} metadata={{ color: entry.value.color, label: entry.value.label }}>
                 <div
                   class="swap-tile card"
-                  class:swap-tile-hovered={swapHoveredId === tile.id}
-                  style={`--tile-color: ${tile.color};`}
+                  class:swap-tile-hovered={swapHoveredId === entry.itemId}
+                  style={`--tile-color: ${entry.value.color};`}
                 >
                   <span class="swap-tile-grip" aria-hidden="true">
                     <i></i>
@@ -1520,25 +1863,11 @@
                     <i></i>
                     <i></i>
                   </span>
-                  <span class="swap-tile-label">{tile.label}</span>
+                  <span class="swap-tile-label">{entry.value.label}</span>
                 </div>
               </Item>
-            {/snippet}
-            {#snippet ghost(event)}
-              {@const tile = swapGhostTile(event)}
-              {#if tile}
-                <Ghost
-                  {event}
-                  className="swap-tile card swap-tile-ghost"
-                  style={`--tile-color: ${tile.color};`}
-                >
-                    <span class="swap-tile-grip" aria-hidden="true">
-                      <i></i><i></i><i></i><i></i><i></i><i></i>
-                    </span>
-                    <span class="swap-tile-label">{tile.label}</span>
-                </Ghost>
               {/if}
-            {/snippet}
+            {/each}
           </Container>
         </div>
       </div>
@@ -1570,13 +1899,15 @@
               <h4 class="editor-canvas-title">My Form</h4>
             </div>
             <Container
+              itemId="gallery-editor-fields-root"
               className="editor-field-list"
-              config={{ animation: defaultAnimations, direction: "column", callbacks: { onItemMove: handleEditorFieldMove } }}
-              items={editorFields}
-              getItemId={(field) => field.id}
+              config={{ animation: defaultAnimations, direction: "column", callbacks: editorFieldCallbacks }}
             >
-              {#snippet entry(field)}
-                <Item itemId={field.id}>
+              {#each editorFields.entries as entry (entry.itemId)}
+                {#if entry.isGhost}
+                  <Ghost ghost={entry.ghost} />
+                {:else}
+                <Item itemId={entry.itemId}>
                   <div class="editor-field">
                     <Handle className="editor-field-handle">
                       <i class="material-symbols-rounded editor-field-grip" aria-hidden="true">drag_indicator</i>
@@ -1585,220 +1916,21 @@
                       <input
                         class="editor-question-input"
                         type="text"
-                        value={field.label}
+                        value={entry.value.label}
                         aria-label="Question text"
                         oninput={(event) =>
-                          updateEditorFieldLabel(field.id, event.currentTarget.value)}
+                          updateEditorFieldLabel(entry.itemId, event.currentTarget.value)}
                         onpointerdown={(event) => event.stopPropagation()}
                         onclick={(event) => event.stopPropagation()}
                       />
-                      {#if field.type === "shortText"}
-                        <input id={field.id} type="text" value="Short answer" readonly tabindex="-1" />
-                      {:else if field.type === "longText"}
-                        <textarea id={field.id} rows="3" readonly tabindex="-1">Long answer response</textarea>
-                      {:else if field.type === "multipleChoice"}
-                        <SnapSortContextBoundary>
-                          <Container
-                            className="editor-option-stack"
-                            config={{
-                              animation: defaultAnimations,
-                              mode: "progressive",
-                              direction: "column",
-                              name: `editor-options-${field.id}`,
-                              callbacks: {
-                                onItemMove: handleEditorOptionMove,
-                              },
-                            }}
-                            locked={true}
-                            metadata={{ fieldId: field.id }}
-                            items={field.options ?? []}
-                            getItemId={(option) => option.id}
-                          >
-                            {#snippet entry(option)}
-                              <Item itemId={option.id} className="editor-option-item">
-                                <div class="editor-option-row">
-                                  <Handle className="editor-option-handle">
-                                    <i class="material-symbols-rounded editor-option-grip" aria-hidden="true">drag_indicator</i>
-                                  </Handle>
-                                  <label class="radio-label">
-                                    <input type="radio" name={`${field.id}-choice`} checked={option === field.options?.[0]} tabindex="-1" />
-                                    <span></span>
-                                  </label>
-                                  <input
-                                    class="editor-option-input"
-                                    type="text"
-                                    value={option.label}
-                                    aria-label="Option text"
-                                    oninput={(event) =>
-                                      updateEditorOptionLabel(field.id, option.id, event.currentTarget.value)}
-                                    onpointerdown={(event) => event.stopPropagation()}
-                                    onclick={(event) => event.stopPropagation()}
-                                  />
-                                  <button
-                                    class="editor-option-action"
-                                    type="button"
-                                    aria-label="Remove option"
-                                    disabled={(field.options?.length ?? 0) <= 1}
-                                    onpointerdown={(event) => event.stopPropagation()}
-                                    onclick={(event) => {
-                                      event.stopPropagation();
-                                      removeEditorOption(field.id, option.id);
-                                    }}
-                                  >
-                                    <i class="material-symbols-rounded" aria-hidden="true">delete</i>
-                                  </button>
-                                </div>
-                              </Item>
-                            {/snippet}
-                          </Container>
-                        </SnapSortContextBoundary>
-                        <button
-                          class="editor-add-option"
-                          type="button"
-                          onpointerdown={(event) => event.stopPropagation()}
-                          onclick={(event) => {
-                            event.stopPropagation();
-                            addEditorOption(field.id);
-                          }}
-                        >
-                          <i class="material-symbols-rounded" aria-hidden="true">add</i>
-                          Add option
-                        </button>
-                      {:else if field.type === "checkboxes"}
-                        <SnapSortContextBoundary>
-                          <Container
-                            className="editor-option-stack"
-                            config={{
-                              animation: defaultAnimations,
-                              mode: "progressive",
-                              direction: "column",
-                              name: `editor-options-${field.id}`,
-                              callbacks: {
-                                onItemMove: handleEditorOptionMove,
-                              },
-                            }}
-                            locked={true}
-                            metadata={{ fieldId: field.id }}
-                            items={field.options ?? []}
-                            getItemId={(option) => option.id}
-                          >
-                            {#snippet entry(option)}
-                              <Item itemId={option.id} className="editor-option-item">
-                                <div class="editor-option-row">
-                                  <Handle className="editor-option-handle">
-                                    <i class="material-symbols-rounded editor-option-grip" aria-hidden="true">drag_indicator</i>
-                                  </Handle>
-                                  <label class="checkbox-label">
-                                    <input type="checkbox" checked={option === field.options?.[0]} tabindex="-1" />
-                                    <span></span>
-                                  </label>
-                                  <input
-                                    class="editor-option-input"
-                                    type="text"
-                                    value={option.label}
-                                    aria-label="Option text"
-                                    oninput={(event) =>
-                                      updateEditorOptionLabel(field.id, option.id, event.currentTarget.value)}
-                                    onpointerdown={(event) => event.stopPropagation()}
-                                    onclick={(event) => event.stopPropagation()}
-                                  />
-                                  <button
-                                    class="editor-option-action"
-                                    type="button"
-                                    aria-label="Remove option"
-                                    disabled={(field.options?.length ?? 0) <= 1}
-                                    onpointerdown={(event) => event.stopPropagation()}
-                                    onclick={(event) => {
-                                      event.stopPropagation();
-                                      removeEditorOption(field.id, option.id);
-                                    }}
-                                  >
-                                    <i class="material-symbols-rounded" aria-hidden="true">delete</i>
-                                  </button>
-                                </div>
-                              </Item>
-                            {/snippet}
-                          </Container>
-                        </SnapSortContextBoundary>
-                        <button
-                          class="editor-add-option"
-                          type="button"
-                          onpointerdown={(event) => event.stopPropagation()}
-                          onclick={(event) => {
-                            event.stopPropagation();
-                            addEditorOption(field.id);
-                          }}
-                        >
-                          <i class="material-symbols-rounded" aria-hidden="true">add</i>
-                          Add option
-                        </button>
-                      {:else if field.type === "dropdown"}
-                        <SnapSortContextBoundary>
-                          <Container
-                            className="editor-option-stack"
-                            config={{
-                              animation: defaultAnimations,
-                              mode: "progressive",
-                              direction: "column",
-                              name: `editor-options-${field.id}`,
-                              callbacks: {
-                                onItemMove: handleEditorOptionMove,
-                              },
-                            }}
-                            locked={true}
-                            metadata={{ fieldId: field.id }}
-                            items={field.options ?? []}
-                            getItemId={(option) => option.id}
-                          >
-                            {#snippet entry(option)}
-                              <Item itemId={option.id} className="editor-option-item">
-                                <div class="editor-option-row">
-                                  <Handle className="editor-option-handle">
-                                    <i class="material-symbols-rounded editor-option-grip" aria-hidden="true">drag_indicator</i>
-                                  </Handle>
-                                  <i class="material-symbols-rounded editor-option-type-icon" aria-hidden="true">arrow_drop_down</i>
-                                  <input
-                                    class="editor-option-input"
-                                    type="text"
-                                    value={option.label}
-                                    aria-label="Option text"
-                                    oninput={(event) =>
-                                      updateEditorOptionLabel(field.id, option.id, event.currentTarget.value)}
-                                    onpointerdown={(event) => event.stopPropagation()}
-                                    onclick={(event) => event.stopPropagation()}
-                                  />
-                                  <button
-                                    class="editor-option-action"
-                                    type="button"
-                                    aria-label="Remove option"
-                                    disabled={(field.options?.length ?? 0) <= 1}
-                                    onpointerdown={(event) => event.stopPropagation()}
-                                    onclick={(event) => {
-                                      event.stopPropagation();
-                                      removeEditorOption(field.id, option.id);
-                                    }}
-                                  >
-                                    <i class="material-symbols-rounded" aria-hidden="true">delete</i>
-                                  </button>
-                                </div>
-                              </Item>
-                            {/snippet}
-                          </Container>
-                        </SnapSortContextBoundary>
-                        <button
-                          class="editor-add-option"
-                          type="button"
-                          onpointerdown={(event) => event.stopPropagation()}
-                          onclick={(event) => {
-                            event.stopPropagation();
-                            addEditorOption(field.id);
-                          }}
-                        >
-                          <i class="material-symbols-rounded" aria-hidden="true">add</i>
-                          Add option
-                        </button>
-                      {:else if field.type === "date"}
-                        <input id={field.id} type="date" tabindex="-1" />
+                      {#if entry.value.type === "shortText"}
+                        <input id={entry.itemId} type="text" value="Short answer" readonly tabindex="-1" />
+                      {:else if entry.value.type === "longText"}
+                        <textarea id={entry.itemId} rows="3" readonly tabindex="-1">Long answer response</textarea>
+                      {:else if entry.value.type === "multipleChoice" || entry.value.type === "checkboxes" || entry.value.type === "dropdown"}
+                        {@render editorOptions(entry.value)}
+                      {:else if entry.value.type === "date"}
+                        <input id={entry.itemId} type="date" tabindex="-1" />
                       {:else}
                         <div class="editor-rating-preview" aria-label="5 star rating">
                           {#each Array(5) as _, index}
@@ -1809,7 +1941,8 @@
                     </div>
                   </div>
                 </Item>
-              {/snippet}
+                {/if}
+              {/each}
             </Container>
           </div>
         </div>

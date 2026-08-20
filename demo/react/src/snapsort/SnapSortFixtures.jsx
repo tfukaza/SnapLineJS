@@ -12,7 +12,7 @@ import {
   prioritizeIntersectingContainer,
   rejectDrop,
 } from "@snap-engine/snapsort/callbacks";
-import { useCallback, useContext, useEffect, useId, useMemo, useRef, useState } from "react";
+import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 
 function hasMatchingDropGroup(event) {
   const sourceGroup = event.source?.containerMetadata.dropGroup;
@@ -40,9 +40,8 @@ function controlButtonProps(action) {
 }
 
 function DemoItem({ children, className = "demo-item", itemId, metadata, ...props }) {
-  const generatedItemId = useId();
   return (
-    <Item className={className} itemId={itemId ?? generatedItemId} metadata={metadata} {...props}>
+    <Item className={className} itemId={itemId} metadata={metadata} {...props}>
       {children}
     </Item>
   );
@@ -63,8 +62,7 @@ function ItemApiEntries() {
     throw new Error("Item API fixture must be rendered inside a Container.");
   }
   if (!adoptedItemRef.current) {
-    const item = new CoreItem(engine, container);
-    item.itemId = "item-api-adopted";
+    const item = new CoreItem(engine, container, { itemId: "item-api-adopted" });
     item.metadata = { origin: "application" };
     item.selected = true;
     adoptedItemRef.current = item;
@@ -116,7 +114,7 @@ function ItemApiEntries() {
           >
             Generated item
           </Item>
-          <Item item={adoptedItem} ref={captureAdoptedItem}>
+          <Item item={adoptedItem} itemId="item-api-adopted" ref={captureAdoptedItem}>
             Adopted item
           </Item>
         </>
@@ -143,7 +141,7 @@ function ItemApiFixture() {
   return (
     <section data-testid="item-api-fixture">
       <Engine id="item-api-engine">
-        <Container config={{ direction: "column" }}>
+        <Container itemId="item-api-root" config={{ direction: "column" }}>
           <ItemApiEntries />
         </Container>
       </Engine>
@@ -154,28 +152,31 @@ function ItemApiFixture() {
 function useFrameworkGhosts() {
   const [ghosts, setGhosts] = useState([]);
 
-  const onGhostInsert = useCallback((event) => {
-    const listId = event.containerMetadata.frameworkList;
+  const upsertGhost = useCallback((event) => {
+    const { ghost } = event;
+    const listId = ghost.location.containerMetadata.frameworkList;
     if (typeof listId !== "string") return;
     setGhosts((current) => [
-      ...current.filter((entry) => entry.event.ghostItem !== event.ghostItem),
-      { event, listId },
+      ...current.filter((entry) => entry.ghost.ghostItem !== ghost.ghostItem),
+      { ghost, listId },
     ]);
   }, []);
 
   const onGhostRemove = useCallback((event) => {
     setGhosts((current) =>
-      current.filter((entry) => entry.event.ghostItem !== event.ghostItem),
+      current.filter(
+        (entry) => entry.ghost.ghostItem !== event.ghost.ghostItem,
+      ),
     );
   }, []);
 
   const callbacks = useMemo(
     () => ({
-      createGhost: () => undefined,
-      onGhostInsert,
+      onGhostInsert: upsertGhost,
+      onGhostMove: upsertGhost,
       onGhostRemove,
     }),
-    [onGhostInsert, onGhostRemove],
+    [onGhostRemove, upsertGhost],
   );
 
   const renderWithGhosts = useCallback(
@@ -185,12 +186,15 @@ function useFrameworkGhosts() {
         node: renderItem(item),
       }));
       const listGhosts = ghosts
-        .filter((entry) => entry.listId === listId)
-        .sort((a, b) => a.event.index - b.event.index);
+        .filter(
+          (entry) =>
+            entry.listId === listId && entry.ghost.location.type === "slot",
+        )
+        .sort((a, b) => a.ghost.location.index - b.ghost.location.index);
 
       for (const entry of listGhosts) {
-        const draggedIds = new Set(entry.event.itemIds.map(String));
-        const coreIndex = Math.max(0, entry.event.index);
+        const draggedIds = new Set(entry.ghost.itemIds);
+        const coreIndex = Math.max(0, entry.ghost.location.index);
         let currentCoreIndex = 0;
         let index = rendered.length;
         for (let candidateIndex = 0; candidateIndex < rendered.length; candidateIndex++) {
@@ -203,12 +207,17 @@ function useFrameworkGhosts() {
           currentCoreIndex += 1;
         }
         rendered.splice(index, 0, {
-          id: `ghost-${entry.event.ghostItem.id}`,
+          id: entry.ghost.ghostItemId,
           node: (
             <Ghost
-              className={entry.event.kind === "flow" ? "ghost" : ""}
-              event={entry.event}
-              key={`ghost-${entry.event.ghostItem.id}`}
+              className={
+                entry.ghost.type === "source-spacer" ||
+                entry.ghost.type === "target-spacer"
+                  ? "ghost"
+                  : ""
+              }
+              ghost={entry.ghost}
+              key={entry.ghost.ghostItemId}
             />
           ),
         });
@@ -223,15 +232,16 @@ function useFrameworkGhosts() {
       ghosts
         .filter(
           (entry) =>
-            entry.listId === listId && entry.event.role === "pointer",
+            entry.listId === listId &&
+            entry.ghost.type === "pointer-preview",
         )
         .map((entry) => (
           <Ghost
             className="insertion-pointer-ghost"
-            event={entry.event}
-            key={`ghost-${entry.event.ghostItem.id}`}
+            ghost={entry.ghost}
+            key={entry.ghost.ghostItemId}
           >
-            {renderContent(entry.event)}
+            {renderContent(entry.ghost)}
           </Ghost>
         )),
     [ghosts],
@@ -458,6 +468,7 @@ export function SnapSortWebsiteCoreDemo() {
                       onItemMove: handleSidewaysMove,
                     },
                   }}
+                  itemId="website-sideways-root"
                   metadata={{ frameworkList: "website-sideways" }}
                 >
                   {renderWithGhosts("website-sideways", sidewaysItems, (item) => item.id, (item) => (
@@ -484,6 +495,7 @@ export function SnapSortWebsiteCoreDemo() {
                     direction: "column",
                     callbacks: { ...ghostCallbacks, onItemMove: handleNestedMove },
                   }}
+                  itemId="website-nested-root"
                   metadata={{ frameworkList: "website-nested-outer", zone: "outer" }}
                 >
                   {renderWithGhosts("website-nested-outer", nestedZones.outer, String, (item) =>
@@ -493,7 +505,6 @@ export function SnapSortWebsiteCoreDemo() {
                         config={{
                           animation: defaultAnimations,
                           direction: "column",
-                          callbacks: { ...ghostCallbacks, onItemMove: handleNestedMove },
                         }}
                         itemId="nested-group"
                         key="nested-group"
@@ -537,8 +548,13 @@ export function SnapSortWebsiteCoreDemo() {
                     animation: defaultAnimations,
                     direction: "row",
                     name: "core-multi-root",
-                    callbacks: { canDrop: rejectDrop },
+                    callbacks: {
+                      ...ghostCallbacks,
+                      canDrop: rejectDrop,
+                      onItemMove: handleMultiContainerMove,
+                    },
                   }}
+                  itemId="website-multi-root"
                   locked
                 >
                   {multiContainers.map((column) => (
@@ -548,11 +564,8 @@ export function SnapSortWebsiteCoreDemo() {
                         animation: defaultAnimations,
                         direction: "column",
                         name: column.id,
-                        callbacks: {
-                          ...ghostCallbacks,
-                          onItemMove: handleMultiContainerMove,
-                        },
                       }}
+                      itemId={column.id}
                       key={column.id}
                       locked
                       metadata={{ columnId: column.id, frameworkList: `website-column-${column.id}` }}
@@ -710,7 +723,6 @@ export function DropSnapNestedDemo() {
           config={{
             animation: defaultAnimations,
             direction: "column",
-            callbacks: frameworkCallbacks,
           }}
           itemId={itemId}
           key={itemId}
@@ -750,6 +762,7 @@ export function DropSnapNestedDemo() {
                 <p className="demo-hint">Cmd/ctrl-click to multi-select, then drag any selected item.</p>
                 <Container
                   config={{ animation: defaultAnimations, direction: "column", callbacks: frameworkCallbacks }}
+                  itemId="combined-vertical-root"
                   metadata={{ frameworkList: "vertical" }}
                 >
                   {renderWithGhosts("vertical", fixtureLists.vertical, String, (itemId) => (
@@ -770,6 +783,7 @@ export function DropSnapNestedDemo() {
                 <h2>Horizontal Row</h2>
                 <Container
                   config={{ animation: defaultAnimations, direction: "row", callbacks: frameworkCallbacks }}
+                  itemId="combined-horizontal-root"
                   locked
                   metadata={{ frameworkList: "horizontal" }}
                 >
@@ -785,6 +799,7 @@ export function DropSnapNestedDemo() {
                 <h2>Horizontal Double Row</h2>
                 <Container
                   config={{ animation: defaultAnimations, direction: "row", callbacks: frameworkCallbacks }}
+                  itemId="combined-double-row-root"
                   metadata={{ frameworkList: "double" }}
                 >
                   {renderWithGhosts("double", fixtureLists.double, String, (itemId) => (
@@ -799,6 +814,7 @@ export function DropSnapNestedDemo() {
                 <h2>Different Sizes</h2>
                 <Container
                   config={{ animation: defaultAnimations, direction: "row", callbacks: frameworkCallbacks }}
+                  itemId="combined-sizes-root"
                   metadata={{ frameworkList: "sizes" }}
                 >
                   {renderWithGhosts("sizes", fixtureLists.sizes, String, (itemId) => {
@@ -819,12 +835,17 @@ export function DropSnapNestedDemo() {
                     animation: defaultAnimations,
                     direction: "row",
                     name: "multi-root",
-                    callbacks: { canDrop: rejectDrop },
+                    callbacks: {
+                      ...frameworkCallbacks,
+                      canDrop: rejectDrop,
+                    },
                   }}
+                  itemId="combined-multi-root"
                   locked
                 >
                   <Container
-                    config={{ animation: defaultAnimations, direction: "column", name: "multi-area-1", callbacks: frameworkCallbacks }}
+                    config={{ animation: defaultAnimations, direction: "column", name: "multi-area-1" }}
+                    itemId="multi-area-1"
                     locked
                     metadata={{ frameworkList: "multi-area-1" }}
                   >
@@ -834,7 +855,8 @@ export function DropSnapNestedDemo() {
                     ))}
                   </Container>
                   <Container
-                    config={{ animation: defaultAnimations, direction: "column", name: "multi-area-2", callbacks: frameworkCallbacks }}
+                    config={{ animation: defaultAnimations, direction: "column", name: "multi-area-2" }}
+                    itemId="multi-area-2"
                     locked
                     metadata={{ frameworkList: "multi-area-2" }}
                   >
@@ -850,13 +872,14 @@ export function DropSnapNestedDemo() {
                 <h2>Nested Container</h2>
                 <Container
                   config={{ direction: "column", callbacks: frameworkCallbacks, ...nestedAnimationConfig }}
+                  itemId="combined-nested-root"
                   locked
                   metadata={{ frameworkList: "nested-outer" }}
                 >
                   {renderWithGhosts("nested-outer", fixtureLists["nested-outer"], String, (id) =>
                     id === "nested-sub-group" ? (
                       <Container
-                        config={{ direction: "column", callbacks: frameworkCallbacks, ...nestedAnimationConfig }}
+                        config={{ direction: "column", ...nestedAnimationConfig }}
                         itemId={id}
                         key={id}
                         locked={lockNestedChild}
@@ -881,6 +904,7 @@ export function DropSnapNestedDemo() {
                 <Container
                   className="stretch-list"
                   config={{ direction: "column", wrap: "nowrap", stretchItems: true, callbacks: frameworkCallbacks, ...nestedAnimationConfig }}
+                  itemId="combined-stretch-root"
                   locked
                   metadata={{ frameworkList: "stretch-outer" }}
                 >
@@ -888,7 +912,7 @@ export function DropSnapNestedDemo() {
                     itemId === "stretch-sub-group" ? (
                       <Container
                         className="stretch-sublist"
-                        config={{ direction: "column", wrap: "nowrap", stretchItems: true, callbacks: frameworkCallbacks, ...nestedAnimationConfig }}
+                        config={{ direction: "column", wrap: "nowrap", stretchItems: true, ...nestedAnimationConfig }}
                         itemId={itemId}
                         key={itemId}
                         metadata={{ frameworkList: "stretch-inner" }}
@@ -914,13 +938,14 @@ export function DropSnapNestedDemo() {
                   <Container
                     className="compact-basic-list"
                     config={{ direction: "column", callbacks: frameworkCallbacks, ...nestedAnimationConfig }}
+                    itemId="combined-compact-root"
                     metadata={{ frameworkList: "compact-outer" }}
                   >
                     {renderWithGhosts("compact-outer", fixtureLists["compact-outer"], String, (itemId) =>
                       itemId === "compact-sub-group" ? (
                         <Container
                           className="compact-nested-list"
-                          config={{ direction: "column", callbacks: frameworkCallbacks, ...nestedAnimationConfig }}
+                          config={{ direction: "column", ...nestedAnimationConfig }}
                           itemId={itemId}
                           key={itemId}
                           metadata={{ frameworkList: "compact-inner" }}
@@ -945,6 +970,7 @@ export function DropSnapNestedDemo() {
                 <h2>Draggable Sub-Containers</h2>
                 <Container
                   config={{ animation: defaultAnimations, direction: "column", callbacks: frameworkCallbacks }}
+                  itemId="combined-draggable-nested-root"
                   locked
                   metadata={{ frameworkList: "drag-outer" }}
                 >
@@ -961,13 +987,14 @@ export function DropSnapNestedDemo() {
                 <h2>Nested Row Groups</h2>
                 <Container
                   config={{ animation: defaultAnimations, direction: "row", callbacks: frameworkCallbacks }}
+                  itemId="combined-nested-row-root"
                   locked
                   metadata={{ frameworkList: "row-outer" }}
                 >
                   {renderWithGhosts("row-outer", fixtureLists["row-outer"], String, (itemId) =>
                     itemId === "row-sub-group" ? (
                       <Container
-                        config={{ animation: defaultAnimations, direction: "row", callbacks: frameworkCallbacks }}
+                        config={{ animation: defaultAnimations, direction: "row" }}
                         itemId={itemId}
                         key={itemId}
                         locked={false}
@@ -992,13 +1019,14 @@ export function DropSnapNestedDemo() {
                 <h2>Layers Panel</h2>
                 <Container
                   config={{ animation: defaultAnimations, direction: "column", callbacks: frameworkCallbacks }}
+                  itemId="combined-layers-root"
                   locked
                   metadata={{ frameworkList: "layers-outer" }}
                 >
                   {renderWithGhosts("layers-outer", fixtureLists["layers-outer"], String, (itemId) =>
                     itemId === "layer-hero" ? (
                       <Container
-                        config={{ animation: defaultAnimations, direction: "column", callbacks: frameworkCallbacks }}
+                        config={{ animation: defaultAnimations, direction: "column" }}
                         itemId={itemId}
                         key={itemId}
                         locked={false}
@@ -1167,19 +1195,23 @@ export function SnapSortComponentsDemo() {
     deleteItem(itemId);
   }, [deleteItem]);
 
-  const handleGhostInsert = useCallback((event) => {
-    const itemId = event.originalItemId;
-    const targetColumnId = event.containerMetadata.columnId;
-    if (typeof itemId !== "string" || typeof targetColumnId !== "string") return;
+  const upsertGhost = useCallback((event) => {
+    const { ghost } = event;
+    const itemId = ghost.originalItemId;
+    const targetColumnId = ghost.location.containerMetadata.columnId;
+    if (
+      ghost.location.type !== "slot" ||
+      typeof targetColumnId !== "string"
+    ) return;
     const sourceItem = findDemoItem(itemId);
     setGhostEntry({
-      event,
-      id: `ghost-${event.ghostItem.id}`,
+      ghost,
+      id: ghost.ghostItemId,
       isGhost: true,
       columnId: targetColumnId,
-      index: event.index,
+      index: ghost.location.index,
       originalItemId: itemId,
-      ghostItem: event.ghostItem,
+      ghostItem: ghost.ghostItem,
       label: sourceItem?.label ?? "",
       detail: sourceItem?.detail ?? "",
     });
@@ -1187,7 +1219,7 @@ export function SnapSortComponentsDemo() {
 
   const handleGhostRemove = useCallback((event) => {
     setGhostEntry((current) =>
-      current?.ghostItem === event.ghostItem ? null : current,
+      current?.ghostItem === event.ghost.ghostItem ? null : current,
     );
   }, []);
 
@@ -1195,15 +1227,15 @@ export function SnapSortComponentsDemo() {
     () => ({
       onItemMove: handleMove,
       onItemRemove: handleRemove,
-      onGhostInsert: handleGhostInsert,
+      onGhostInsert: upsertGhost,
+      onGhostMove: upsertGhost,
       onGhostRemove: handleGhostRemove,
-      createGhost: () => undefined,
     }),
     [
-      handleGhostInsert,
       handleGhostRemove,
       handleMove,
       handleRemove,
+      upsertGhost,
     ],
   );
 
@@ -1254,8 +1286,6 @@ export function SnapSortComponentsDemo() {
   const progressiveCallbacks = useMemo(
     () => ({
       ...progressiveGhostCallbacks,
-      canDrop: hasMatchingDropGroup,
-      getDropPriority: prioritizeIntersectingContainer,
       onItemMove: handleProgressiveMove,
     }),
     [handleProgressiveMove, progressiveGhostCallbacks],
@@ -1403,8 +1433,9 @@ export function SnapSortComponentsDemo() {
                     animation: defaultAnimations,
                     direction: "row",
                     name: "component-kanban-root",
-                    callbacks: { canDrop: rejectDrop },
+                    callbacks: { ...callbacks, canDrop: rejectDrop },
                   }}
+                  itemId="component-kanban-root"
                   locked
                   metadata={{ boardId: "component-kanban" }}
                 >
@@ -1419,8 +1450,8 @@ export function SnapSortComponentsDemo() {
                           drop: snapSortCubicAnimation,
                           move: snapSortCubicAnimation,
                         },
-                        callbacks,
                       }}
+                      itemId={column.id}
                       key={column.id}
                       locked
                       metadata={{ columnId: column.id }}
@@ -1436,7 +1467,7 @@ export function SnapSortComponentsDemo() {
                         entry.isGhost ? (
                           <Ghost
                             className="task-card ghost task-ghost"
-                            event={entry.event}
+                            ghost={entry.ghost}
                             key={entry.id}
                           >
                             <TaskContent label={entry.label} detail={entry.detail} />
@@ -1512,8 +1543,12 @@ export function SnapSortComponentsDemo() {
                 direction: "column",
                 mode: "progressive",
                 name: "progressive-components-root",
-                callbacks: { canDrop: rejectDrop },
+                callbacks: {
+                  ...progressiveCallbacks,
+                  canDrop: rejectDrop,
+                },
               }}
+              itemId="progressive-components-root"
               locked
               metadata={{ boardId: "progressive-components" }}
             >
@@ -1527,6 +1562,7 @@ export function SnapSortComponentsDemo() {
                     name: `progressive-example-${example.id}`,
                     callbacks: { canDrop: rejectDrop },
                   }}
+                  itemId={example.id}
                   key={example.id}
                   locked
                   metadata={{ exampleId: example.id }}
@@ -1539,8 +1575,12 @@ export function SnapSortComponentsDemo() {
                       mode: "progressive",
                       name: `progressive-answer-${example.id}`,
                       animation: { reorder: snapSortCubicAnimation, drop: snapSortCubicAnimation },
-                      callbacks: progressiveCallbacks,
+                      callbacks: {
+                        canDrop: hasMatchingDropGroup,
+                        getDropPriority: prioritizeIntersectingContainer,
+                      },
                     }}
+                    itemId={`${example.id}-answer`}
                     locked
                     metadata={{
                       zone: "answer",
@@ -1567,8 +1607,12 @@ export function SnapSortComponentsDemo() {
                       mode: "progressive",
                       name: `progressive-bank-${example.id}`,
                       animation: { reorder: snapSortCubicAnimation, drop: snapSortCubicAnimation },
-                      callbacks: progressiveCallbacks,
+                      callbacks: {
+                        canDrop: hasMatchingDropGroup,
+                        getDropPriority: prioritizeIntersectingContainer,
+                      },
                     }}
+                    itemId={`${example.id}-bank`}
                     locked
                     metadata={{
                       zone: "bank",
@@ -1735,48 +1779,48 @@ export function SnapSortDuolingoDemo({ embedded = false }) {
     });
   }, []);
 
-  const handleGhostInsert = useCallback((event) => {
-    const itemId = event.originalItemId;
-    const targetZone = event.containerMetadata.zone;
+  const upsertGhost = useCallback((event) => {
+    const { ghost } = event;
+    const itemId = ghost.originalItemId;
+    const targetZone = ghost.location.containerMetadata.zone;
     if (
-      typeof itemId !== "string" ||
+      ghost.location.type !== "slot" ||
       (targetZone !== "answer" && targetZone !== "bank")
     ) {
       return;
     }
     const sourceTile = allTiles.find((tile) => tile.id === itemId);
     setGhostEntry({
-      event,
-      id: `ghost-${event.ghostItem.id}`,
+      ghost,
+      id: ghost.ghostItemId,
       isGhost: true,
       zone: targetZone,
-      index: event.index,
+      index: ghost.location.index,
       originalItemId: itemId,
-      ghostItem: event.ghostItem,
+      ghostItem: ghost.ghostItem,
       text: sourceTile?.text ?? "",
     });
   }, [allTiles]);
 
   const handleGhostRemove = useCallback((event) => {
     setGhostEntry((current) =>
-      current?.ghostItem === event.ghostItem ? null : current,
+      current?.ghostItem === event.ghost.ghostItem ? null : current,
     );
   }, []);
 
   const callbacks = useMemo(
     () => ({
-      getDropPriority: prioritizeIntersectingContainer,
       onItemMove: handleMove,
       onItemRemove: handleRemove,
-      onGhostInsert: handleGhostInsert,
+      onGhostInsert: upsertGhost,
+      onGhostMove: upsertGhost,
       onGhostRemove: handleGhostRemove,
-      createGhost: () => undefined,
     }),
     [
-      handleGhostInsert,
       handleGhostRemove,
       handleMove,
       handleRemove,
+      upsertGhost,
     ],
   );
 
@@ -1875,8 +1919,9 @@ export function SnapSortDuolingoDemo({ embedded = false }) {
                 direction: "column",
                 mode: "progressive",
                 name: "sentence-builder-root",
-                callbacks: { canDrop: rejectDrop },
+                callbacks: { ...callbacks, canDrop: rejectDrop },
               }}
+              itemId="sentence-builder-root"
               locked
               metadata={{ purpose: "sentence-builder" }}
             >
@@ -1891,7 +1936,9 @@ export function SnapSortDuolingoDemo({ embedded = false }) {
                     drop: snapSortCubicAnimation,
                     move: snapSortCubicAnimation,
                   },
-                  callbacks,
+                  callbacks: {
+                    getDropPriority: prioritizeIntersectingContainer,
+                  },
                 }}
                 itemId="sentence-zone-answer"
                 locked
@@ -1900,7 +1947,7 @@ export function SnapSortDuolingoDemo({ embedded = false }) {
               >
                 {renderedTiles("answer").map((entry) =>
                   entry.isGhost ? (
-                    <Ghost className="tile-wrapper ghost tile-ghost" event={entry.event} key={entry.id}>
+                    <Ghost className="tile-wrapper ghost tile-ghost" ghost={entry.ghost} key={entry.id}>
                       <button className="tile selected" tabIndex={-1} type="button">{entry.text}</button>
                     </Ghost>
                   ) : (
@@ -1926,7 +1973,9 @@ export function SnapSortDuolingoDemo({ embedded = false }) {
                     drop: snapSortCubicAnimation,
                     move: snapSortCubicAnimation,
                   },
-                  callbacks,
+                  callbacks: {
+                    getDropPriority: prioritizeIntersectingContainer,
+                  },
                 }}
                 itemId="sentence-zone-bank"
                 locked
@@ -1935,7 +1984,7 @@ export function SnapSortDuolingoDemo({ embedded = false }) {
               >
                 {renderedTiles("bank").map((entry) =>
                   entry.isGhost ? (
-                    <Ghost className="tile-wrapper ghost tile-ghost" event={entry.event} key={entry.id}>
+                    <Ghost className="tile-wrapper ghost tile-ghost" ghost={entry.ghost} key={entry.id}>
                       <button className="tile" tabIndex={-1} type="button">{entry.text}</button>
                     </Ghost>
                   ) : (
@@ -2153,13 +2202,14 @@ export function SnapSortInsertionDemo() {
             mode: "insertion",
             name: "insertion-board-root",
             callbacks: {
-              ...ghostCallbacks,
+              ...callbacks,
               canDrop: rejectDrop,
               onDragStart: (event) => {
                 if (duplicateMode) event.session.dragVisual = "preview";
               },
             },
           }}
+          itemId="insertion-board-root"
           locked
           metadata={{
             boardId: "insertion-demo",
@@ -2174,8 +2224,8 @@ export function SnapSortInsertionDemo() {
                 direction: "column",
                 mode: "insertion",
                 name: `insertion-${column.id}`,
-                callbacks,
               }}
+              itemId={column.id}
               key={column.id}
               locked
               metadata={{

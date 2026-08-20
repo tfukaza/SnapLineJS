@@ -89,8 +89,8 @@
             "Add source spacer",
             "onGhostInsert",
             "root",
-            "source",
-            "When the item visual needs to preserve a vacated layout slot, the lifecycle asks that item's direct source to insert a role: source flow Ghost. Flow mode can instead reserve the slot with its independent target spacer.",
+            "root",
+            'When the item visual needs to preserve a vacated layout slot, the lifecycle dispatches onGhostInsert to the root for a GhostState with type: "source-spacer". Its location.container identifies the item\'s direct source. Flow mode can instead reserve the slot with its independent type: "target-spacer" ghost.',
             {
               rowKind: "short",
               branch: 'dragVisual = "item" · source spacer when required',
@@ -99,10 +99,10 @@
           message(
             "1.3b",
             "Update source spacer state",
-            "inside flushMutation",
-            "source",
+            "inside root adapter commit",
+            "root",
             "app",
-            "The source callback synchronously adds the source-role spacer to framework-owned state.",
+            "The root callback can synchronously pass the event to reduceRenderTree, replacing the application-owned RenderTree with one that includes the source spacer at its payload location.",
           ),
           message(
             "1.3c",
@@ -119,7 +119,7 @@
             "ghostItem.element",
             "dom",
             "ghost",
-            "Rendering binds the new DOM element to the passive source-role Ghost item.",
+            "Rendering binds the new DOM element to the ghost's temporary Item identity.",
           ),
           message(
             "1.3e",
@@ -133,10 +133,10 @@
           message(
             "1.3f",
             "Transaction complete",
-            "flushMutation returns",
+            "adapter commit returns",
             "app",
             "root",
-            "The source's synchronous transaction returns after its spacer DOM and binding are ready.",
+            "The root adapter transaction returns after the source spacer DOM and binding are ready.",
             { kind: "return" },
           ),
           message(
@@ -153,16 +153,16 @@
             "onGhostInsert",
             "root",
             "root",
-            "The root receives one role: pointer marker Ghost for the complete ordered drag run. It is visual-only and never becomes application data.",
+            'The root receives one GhostState with type: "pointer-preview" for the complete ordered drag run. It is transient render state, never persistent application data.',
             { rowKind: "loop", branch: 'dragVisual = "preview"' },
           ),
           message(
             "1.4b",
             "Update preview state",
-            "inside flushMutation",
+            "inside root adapter commit",
             "root",
             "app",
-            "The root callback synchronously adds the pointer preview to framework-owned ghost state.",
+            "The root callback can synchronously pass the event to reduceRenderTree, adding the pointer preview to the root node's keyed entries.",
           ),
           message(
             "1.4c",
@@ -179,7 +179,7 @@
             "ghostItem.element",
             "dom",
             "ghost",
-            "Rendering binds the preview DOM element to the pointer-role Ghost item.",
+            "Rendering binds the preview DOM element to the ghost's temporary Item identity.",
           ),
           message(
             "1.4e",
@@ -193,7 +193,7 @@
           message(
             "1.4f",
             "Transaction complete",
-            "flushMutation returns",
+            "adapter commit returns",
             "app",
             "root",
             "The root's synchronous preview transaction returns to the session.",
@@ -213,8 +213,8 @@
             "Add placement feedback",
             "onGhostInsert",
             "root",
-            "target",
-            "Independently of dragVisual, flow mode may insert role: target spacer Ghosts and insertion mode may insert a role: target marker. Swap mode uses item-hover callbacks instead of a target Ghost.",
+            "root",
+            'Independently of dragVisual, flow mode may insert GhostState values with type: "target-spacer", while insertion mode may insert one with type: "insertion-marker". The payload location identifies the prospective target. Swap mode uses item-hover callbacks instead.',
             {
               branch: "Independent placement feedback · when ghost-based",
             },
@@ -222,10 +222,10 @@
           message(
             "1.6b",
             "Update feedback state",
-            "inside flushMutation",
-            "target",
+            "inside root adapter commit",
+            "root",
             "app",
-            "The current placement owner synchronously adds the target-role feedback to framework state.",
+            "The root callback can synchronously pass the event to reduceRenderTree, adding the ghost to the keyed entries at its payload location.",
             { rowKind: "short" },
           ),
           message(
@@ -243,7 +243,7 @@
             "ghostItem.element",
             "dom",
             "ghost",
-            "Rendering binds the placement-feedback DOM element to its target-role Ghost item.",
+            "Rendering binds the placement-feedback DOM element to its temporary Item identity.",
           ),
           message(
             "1.6e",
@@ -257,10 +257,10 @@
           message(
             "1.6f",
             "Transaction complete",
-            "flushMutation returns",
+            "adapter commit returns",
             "app",
             "root",
-            "The placement owner's synchronous transaction returns to the session.",
+            "The root adapter transaction returns to the session.",
             { kind: "return" },
           ),
         ],
@@ -284,35 +284,35 @@
             "canDrop · getDropPriority · onDragItem*",
             "root",
             "target",
-            "The session directly invokes policy callbacks on candidate owners and hover callbacks on the hovered item's direct owner. These callbacks are not wrapped by flushMutation.",
+            "The session directly invokes policy callbacks on candidate owners and hover callbacks on the hovered item's direct owner. These callbacks are outside the root adapter commit.",
           ),
           message(
             "2.3a",
-            "Remove placement ghost",
-            "onGhostRemove",
+            "Relocate placement ghost",
+            "onGhostMove",
             "root",
-            "source",
-            "When ghost-based placement feedback leaves an owner, the session asks that previous owner to remove the target-role Ghost. The previous owner is shown in the Source/current owner lane. Swap's hover feedback skips this branch.",
+            "root",
+            "When placement feedback changes slot or owner, the root receives one onGhostMove with the same ghostItemId plus from and to payload locations. Swap's hover feedback skips this branch.",
             {
               rowKind: "short",
-              branch: "If placement feedback leaves an owner · first",
+              branch: "If placement feedback changes location",
             },
           ),
           message(
             "2.3b",
-            "Remove ghost state",
-            "inside flushMutation",
-            "source",
+            "Replace ghost state",
+            "inside root adapter commit",
+            "root",
             "app",
-            "The previous owner's callback removes the ghost from framework state.",
+            "The root callback can pass the event to the public immutable reduceRenderTree helper, which relocates the same keyed ghost across the whole RenderTree.",
           ),
           message(
             "2.3c",
-            "Commit ghost removal",
+            "Commit relocated ghost",
             "framework commit",
             "app",
             "dom",
-            "The framework synchronously removes the old ghost rendering from the DOM.",
+            "The framework synchronously reconciles the same keyed ghost into its new slot or owner.",
             { rowKind: "short" },
           ),
           message(
@@ -321,75 +321,22 @@
             "pre-paint",
             "dom",
             "app",
-            "The old ghost DOM is gone before the framework transaction returns; layout and paint are still pending.",
+            "The relocated ghost DOM and binding are ready before the framework transaction returns; layout and paint are still pending.",
             { kind: "return" },
           ),
           message(
             "2.3e",
             "Transaction complete",
-            "flushMutation returns",
+            "adapter commit returns",
             "app",
             "root",
-            "Control returns to the session after the old ghost DOM has been removed.",
-            { kind: "return" },
-          ),
-          message(
-            "2.4a",
-            "Add placement ghost",
-            "onGhostInsert",
-            "root",
-            "target",
-            "The session asks the new target container to insert the target-role flow spacer or insertion marker at the prospective index. This placement feedback is independent of what follows the pointer.",
-            { branch: "If ghost feedback enters a new target · then" },
-          ),
-          message(
-            "2.4b",
-            "Add ghost state",
-            "inside flushMutation",
-            "target",
-            "app",
-            "The target's callback adds the ghost to its framework-owned state.",
-            { rowKind: "short" },
-          ),
-          message(
-            "2.4c",
-            "Commit ghost DOM",
-            "framework commit",
-            "app",
-            "dom",
-            "The framework synchronously renders the ghost in the new target.",
-            { rowKind: "short" },
-          ),
-          message(
-            "2.4d",
-            "Rebind ghost element",
-            "ghostItem.element",
-            "dom",
-            "ghost",
-            "The target rendering binds its DOM element to the existing Ghost item.",
-          ),
-          message(
-            "2.4e",
-            "DOM commit complete",
-            "pre-paint",
-            "dom",
-            "app",
-            "The new target DOM and ghost binding are ready before the framework transaction returns.",
-            { kind: "return" },
-          ),
-          message(
-            "2.4f",
-            "Transaction complete",
-            "flushMutation returns",
-            "app",
-            "root",
-            "Control returns to the session after the target ghost DOM is ready.",
+            "Control returns to the session after the relocated ghost DOM is ready.",
             { kind: "return" },
           ),
           message(
             "2.5",
             "Report target change",
-            "root.flushMutation(onDropTargetChange)",
+            "root.adapter.commit(onDropTargetChange)",
             "root",
             "root",
             "After ghost relocation, the session dispatches onDropTargetChange on the tree root inside the root's synchronous transaction boundary. The notification does not itself imply a DOM write.",
@@ -398,7 +345,7 @@
           message(
             "2.5r",
             "Notification complete",
-            "flushMutation returns",
+            "adapter commit returns",
             "root",
             "root",
             "The root transaction returns before the next pointer update proceeds. No DOM route is shown because the notification need not mutate rendered state.",
@@ -415,17 +362,17 @@
             "Remove temporary ghost",
             "onGhostRemove",
             "root",
-            "target",
-            "Before committing persistent data, the session removes each active placement Ghost, pointer preview, or source spacer through that Ghost's owner. This route shows one receiver-local transaction and may repeat for other owners.",
-            { branch: "First transaction · repeat per ghost owner" },
+            "root",
+            "Before committing persistent data, the session dispatches onGhostRemove to the root for each active placement ghost, pointer preview, or source spacer. Each payload identifies the ghost's last location.",
+            { branch: "First transaction · repeat per ghost" },
           ),
           message(
             "3.1b",
             "Remove temporary state",
-            "inside flushMutation",
-            "target",
+            "inside root adapter commit",
+            "root",
             "app",
-            "The receiving owner removes that temporary Ghost from framework state.",
+            "The root callback can pass the event to reduceRenderTree to remove that temporary Ghost from its keyed entries.",
             { rowKind: "short" },
           ),
           message(
@@ -449,10 +396,10 @@
           message(
             "3.1e",
             "Transaction complete",
-            "flushMutation returns",
+            "adapter commit returns",
             "app",
             "root",
-            "The Ghost owner's removal transaction returns before the persistent item commit begins.",
+            "The root adapter transaction returns before the persistent item commit begins.",
             { kind: "return" },
           ),
           message(
@@ -460,17 +407,17 @@
             "Commit move",
             "onItemMove · fallback onItemInsert",
             "root",
-            "target",
-            "The direct destination receives one semantic onItemMove callback. If it has no onItemMove, SnapSort invokes that destination's onItemInsert fallback instead.",
+            "root",
+            "The root receives one semantic onItemMove callback. If the root has no onItemMove, SnapSort invokes its root-level onItemInsert fallback instead; the payload identifies the direct destination.",
             { branch: "Second transaction · normal commit" },
           ),
           message(
             "3.2b",
             "Update both collections",
-            "inside flushMutation",
-            "target",
+            "inside root adapter commit",
+            "root",
             "app",
-            "The destination callback updates the source and destination framework collections as one move. The source receives no onItemRemove callback.",
+            "An onItemMove callback can pass the event to reduceRenderTree to update the source and destination in one immutable transaction. An onItemInsert fallback must materialize its application value itself. The source receives no onItemRemove callback.",
             { rowKind: "short" },
           ),
           message(
@@ -494,7 +441,7 @@
           message(
             "3.2e",
             "Transaction complete",
-            "flushMutation returns",
+            "adapter commit returns",
             "app",
             "root",
             "SnapSort resumes only after the moved item DOM has committed.",
@@ -505,17 +452,17 @@
             "Commit swap",
             "onItemSwap",
             "root",
-            "source",
-            "The dragged item's pre-swap direct source receives one atomic onItemSwap callback describing both participants.",
+            "root",
+            "The root receives one atomic onItemSwap callback. The event's a and b locations describe both participants in their direct, pre-swap slots.",
             { rowKind: "short", branch: "Second transaction · swap commit" },
           ),
           message(
             "3.3b",
             "Update both participants",
-            "inside flushMutation",
-            "source",
+            "inside root adapter commit",
+            "root",
             "app",
-            "The source-owned callback updates both swap participants in framework state.",
+            "The root callback can pass the event to reduceRenderTree to update both swap participants in framework state.",
           ),
           message(
             "3.3c",
@@ -538,7 +485,7 @@
           message(
             "3.3e",
             "Transaction complete",
-            "flushMutation returns",
+            "adapter commit returns",
             "app",
             "root",
             "SnapSort resumes after the swapped DOM has committed.",
@@ -556,12 +503,12 @@
             "onDragItemLeave",
             "root",
             "target",
-            "If an item remains hovered, the session directly invokes onDragItemLeave on that item's direct owner. This is not wrapped by flushMutation.",
+            "If an item remains hovered, the session directly invokes onDragItemLeave on that item's direct owner outside the adapter commit.",
           ),
           message(
             "4.2",
             "End session",
-            "root.flushMutation(onDragEnd)",
+            "root.adapter.commit(onDragEnd)",
             "root",
             "root",
             "After ghost cleanup and the chosen commit path, the session invokes onDragEnd on the root inside the root's transaction boundary. The notification does not itself imply a DOM write.",
@@ -570,7 +517,7 @@
           message(
             "4.2r",
             "End callback complete",
-            "flushMutation returns",
+            "adapter commit returns",
             "root",
             "root",
             "The onDragEnd transaction returns before final layout measurement. No DOM route is shown because the notification need not mutate rendered state.",
@@ -606,7 +553,7 @@
       },
       {
         id: "remove",
-        title: "5 · Actual item removal",
+        title: "5 · Core-command item removal",
         messages: [
           message(
             "5.1a",
@@ -614,7 +561,7 @@
             "container.removeItem(id)",
             "app",
             "source",
-            "Application code asks the item's current direct owner to remove it. This path has session: null.",
+            "Application code asks the item's current direct owner to remove it. This core-command path has session: null and produces onItemRemove. A framework-owned deletion that starts by removing the RenderTree entry does not echo through this path; unmount releases the owned core Item.",
             { branch: "Programmatic · session: null" },
           ),
           message(
@@ -622,17 +569,16 @@
             "Remove owned item",
             "onItemRemove",
             "source",
-            "source",
-            "The current owner detaches the item from SnapSort bookkeeping and invokes its own onItemRemove callback inside flushMutation.",
-            { rowKind: "loop" },
+            "root",
+            "The current owner detaches the item from SnapSort bookkeeping, then dispatches onItemRemove to the root inside the root adapter commit. event.container identifies that direct owner.",
           ),
           message(
             "5.1c",
             "Remove item state",
-            "inside flushMutation",
-            "source",
+            "inside root adapter commit",
+            "root",
             "app",
-            "The callback deletes the item from framework state.",
+            "The root callback can pass the event to reduceRenderTree to delete the item from framework state.",
           ),
           message(
             "5.1d",
@@ -649,16 +595,16 @@
             "pre-paint",
             "dom",
             "app",
-            "The item DOM is removed before the receiver's framework transaction returns.",
+            "The item DOM is removed before the root's framework transaction returns.",
             { kind: "return" },
           ),
           message(
             "5.1f",
             "Transaction complete",
-            "flushMutation returns",
+            "adapter commit returns",
             "app",
             "source",
-            "The owner regains control after framework state and DOM are committed.",
+            "The root adapter commit returns control to the owner after framework state and DOM are committed.",
             { kind: "return" },
           ),
           message(
@@ -700,11 +646,11 @@
           ),
           message(
             "1.3a",
-            "Create source spacer",
-            "createGhost",
+            "Allocate source spacer",
+            'GhostState.type = "source-spacer"',
             "root",
             "source",
-            "When the item visual needs to preserve a vacated layout slot, the lifecycle invokes createGhost on that item's direct source for a role: source flow Ghost. Flow mode can instead reserve the slot with its target spacer.",
+            'When the item visual needs to preserve a vacated layout slot, the lifecycle allocates an Item-backed GhostState with type: "source-spacer". Flow mode can instead reserve the slot with type: "target-spacer".',
             {
               rowKind: "short",
               branch: 'dragVisual = "item" · source spacer when required',
@@ -712,11 +658,11 @@
           ),
           message(
             "1.3b",
-            "Return spacer element",
-            "HTMLElement",
+            "Construct Vanilla element",
+            "createVanillaAdapter({ createGhostElement })",
             "source",
             "root",
-            "The source's createGhost callback returns the spacer DOM element.",
+            "The Vanilla adapter constructs a spacer element. Framework adapters wait for onGhostInsert so application state can render Ghost.",
             { kind: "return", rowKind: "short" },
           ),
           message(
@@ -725,7 +671,7 @@
             "ghostItem.element",
             "root",
             "ghost",
-            "SnapSort binds the returned HTMLElement to the passive source-role Ghost item.",
+            "SnapSort binds the Vanilla element, or the synchronously rendered framework Ghost element, to the temporary Item identity.",
             { rowKind: "short" },
           ),
           message(
@@ -733,24 +679,24 @@
             "Add source spacer",
             "onGhostInsert",
             "root",
-            "source",
-            "The lifecycle directly invokes onGhostInsert on the source that owns the spacer.",
+            "root",
+            "The lifecycle dispatches onGhostInsert to the root. event.ghost.location.container identifies the source that owns the spacer.",
             { rowKind: "short" },
           ),
           message(
             "1.3e",
             "Add source spacer DOM",
             "insertBefore",
-            "source",
+            "root",
             "dom",
-            "The default Vanilla callback inserts the source spacer directly into the DOM.",
+            "The default Vanilla adapter callback inserts the source spacer directly into the DOM at the payload location.",
           ),
           message(
             "1.3f",
             "DOM call complete",
             "insertBefore returned",
             "dom",
-            "source",
+            "root",
             "The synchronous DOM API has returned. This does not mean layout or paint has completed.",
             { kind: "return" },
           ),
@@ -764,20 +710,20 @@
           ),
           message(
             "1.4a",
-            "Create pointer preview",
-            "createGhost",
+            "Allocate pointer preview",
+            'GhostState.type = "pointer-preview"',
             "root",
             "root",
-            "The root creates one role: pointer marker Ghost for the complete ordered drag run. It is visual-only and never becomes application data.",
+            'The root allocates one GhostState with type: "pointer-preview" for the complete ordered drag run. It is transient render state, never persistent application data.',
             { rowKind: "loop", branch: 'dragVisual = "preview"' },
           ),
           message(
             "1.4b",
-            "Return preview element",
-            "HTMLElement",
+            "Construct Vanilla element",
+            "createVanillaAdapter({ createGhostElement })",
             "root",
             "root",
-            "The root's createGhost callback returns the preview DOM element.",
+            "The Vanilla adapter constructs the preview element. Framework applications render it after onGhostInsert.",
             { kind: "return", rowKind: "loop" },
           ),
           message(
@@ -786,7 +732,7 @@
             "ghostItem.element",
             "root",
             "ghost",
-            "SnapSort binds the returned HTMLElement to the pointer-role Ghost item.",
+            "SnapSort binds the returned HTMLElement to the pointer-preview's temporary Item identity.",
             { rowKind: "short" },
           ),
           message(
@@ -795,7 +741,7 @@
             "onGhostInsert",
             "root",
             "root",
-            "The lifecycle directly invokes onGhostInsert on the root that owns the pointer preview.",
+            "The lifecycle invokes onGhostInsert through the root adapter on the root that owns the pointer preview.",
             { rowKind: "loop" },
           ),
           message(
@@ -826,22 +772,22 @@
           ),
           message(
             "1.6a",
-            "Create placement feedback",
-            "createGhost",
+            "Allocate placement feedback",
+            "GhostState.type",
             "root",
             "target",
-            "Independently of dragVisual, flow mode may create role: target spacer Ghosts and insertion mode may create a role: target marker. Swap mode uses item-hover callbacks instead.",
+            'Independently of dragVisual, flow mode may allocate GhostState values with type: "target-spacer", while insertion mode may allocate one with type: "insertion-marker". Swap mode uses item-hover callbacks instead.',
             {
               branch: "Independent placement feedback · when ghost-based",
             },
           ),
           message(
             "1.6b",
-            "Return feedback element",
-            "HTMLElement",
+            "Construct Vanilla element",
+            "createVanillaAdapter({ createGhostElement })",
             "target",
             "root",
-            "The current placement owner's createGhost callback returns the feedback DOM element.",
+            "The Vanilla adapter constructs feedback DOM. Framework applications render the ghost from their application-owned RenderTree state.",
             { kind: "return", rowKind: "short" },
           ),
           message(
@@ -850,7 +796,7 @@
             "ghostItem.element",
             "root",
             "ghost",
-            "SnapSort binds the returned element to the target-role Ghost item.",
+            "SnapSort binds the returned element to the ghost's temporary Item identity.",
             { rowKind: "short" },
           ),
           message(
@@ -858,23 +804,23 @@
             "Add placement feedback",
             "onGhostInsert",
             "root",
-            "target",
-            "The lifecycle directly invokes onGhostInsert on the target that owns the placement feedback.",
+            "root",
+            "The lifecycle dispatches onGhostInsert to the root. event.ghost.location.container identifies the target that owns the placement feedback.",
           ),
           message(
             "1.6e",
             "Add feedback DOM",
             "insertBefore",
-            "target",
+            "root",
             "dom",
-            "The default Vanilla callback inserts the flow spacer or insertion marker into the target DOM.",
+            "The default Vanilla adapter callback inserts the flow spacer or insertion marker into the target DOM identified by the payload.",
           ),
           message(
             "1.6f",
             "DOM call complete",
             "insertBefore returned",
             "dom",
-            "target",
+            "root",
             "The synchronous feedback DOM insertion has returned. Layout and paint may still be pending.",
             { kind: "return" },
           ),
@@ -903,57 +849,31 @@
           ),
           message(
             "2.3a",
-            "Remove placement ghost",
-            "onGhostRemove",
+            "Relocate placement ghost",
+            "onGhostMove",
             "root",
-            "source",
-            "When ghost-based placement feedback leaves an owner, the session directly invokes onGhostRemove on that previous owner. Swap's hover feedback skips this branch.",
+            "root",
+            "When ghost-based placement feedback changes slot or owner, the root receives one onGhostMove with the same ghostItemId plus its from and to payload locations. Swap's hover feedback skips this branch.",
             {
               rowKind: "short",
-              branch: "If placement feedback leaves an owner · first",
+              branch: "If placement feedback changes location",
             },
           ),
           message(
             "2.3b",
-            "Remove ghost DOM",
-            "element.remove()",
-            "source",
+            "Move ghost DOM",
+            "insertBefore",
+            "root",
             "dom",
-            "The default Vanilla callback removes the old ghost element from the DOM.",
+            "The default Vanilla adapter callback moves the existing ghost element to the payload's new slot. Framework applications can pass the same event to reduceRenderTree.",
           ),
           message(
             "2.3c",
             "DOM call complete",
-            "remove() returned",
-            "dom",
-            "source",
-            "The synchronous DOM removal call has returned. Layout and paint may still be pending.",
-            { kind: "return" },
-          ),
-          message(
-            "2.4a",
-            "Add placement ghost",
-            "onGhostInsert",
-            "root",
-            "target",
-            "The session directly invokes onGhostInsert on the new target for a target-role flow spacer or insertion marker. This feedback is independent of what follows the pointer.",
-            { branch: "If ghost feedback enters a new target · then" },
-          ),
-          message(
-            "2.4b",
-            "Add ghost DOM",
-            "insertBefore",
-            "target",
-            "dom",
-            "The default Vanilla callback inserts the ghost element into the new target's DOM.",
-          ),
-          message(
-            "2.4c",
-            "DOM call complete",
             "insertBefore returned",
             "dom",
-            "target",
-            "The synchronous DOM insertion call has returned. The existing passive Ghost remains bound to the moved element.",
+            "root",
+            "The synchronous relocation has returned. Layout and paint may still be pending.",
             { kind: "return" },
           ),
           message(
@@ -962,7 +882,7 @@
             "onDropTargetChange",
             "root",
             "root",
-            "After relocation, the session directly invokes onDropTargetChange on the root. The notification does not itself imply a DOM write.",
+            "After relocation, the session dispatches onDropTargetChange on the root through the root adapter commit. The notification does not itself imply a DOM write.",
             { rowKind: "loop" },
           ),
         ],
@@ -976,24 +896,24 @@
             "Remove temporary ghost",
             "onGhostRemove",
             "root",
-            "target",
-            "Before committing persistent data, the session removes each active placement Ghost, pointer preview, or source spacer through that Ghost's owner. This route shows one removal and may repeat for other owners.",
-            { branch: "First · repeat per ghost owner" },
+            "root",
+            "Before committing persistent data, the session dispatches onGhostRemove to the root for each active placement Ghost, pointer preview, or source spacer. Each payload identifies the Ghost's last location.",
+            { branch: "First · repeat per ghost" },
           ),
           message(
             "3.1b",
             "Remove temporary DOM",
             "element.remove()",
-            "target",
+            "root",
             "dom",
-            "The default Vanilla callback removes that temporary Ghost DOM.",
+            "The default Vanilla adapter callback removes that temporary Ghost DOM.",
           ),
           message(
             "3.1c",
             "DOM call complete",
             "remove() returned",
             "dom",
-            "target",
+            "root",
             "The synchronous DOM removal call has returned; layout and paint are not part of this return.",
             { kind: "return" },
           ),
@@ -1002,24 +922,24 @@
             "Commit move",
             "onItemMove · fallback onItemInsert",
             "root",
-            "target",
-            "The destination receives onItemMove, or its onItemInsert fallback. The source receives no onItemRemove callback.",
+            "root",
+            "The root receives onItemMove, or its root-level onItemInsert fallback. The payload identifies the direct destination, and the source receives no onItemRemove callback.",
             { branch: "Then · normal commit" },
           ),
           message(
             "3.2b",
             "Move item DOM",
             "insertBefore",
-            "target",
+            "root",
             "dom",
-            "The Vanilla callback moves the existing item DOM into its final position.",
+            "The default Vanilla adapter callback moves the existing item DOM into the final position identified by the payload.",
           ),
           message(
             "3.2c",
             "DOM call complete",
             "insertBefore returned",
             "dom",
-            "target",
+            "root",
             "The synchronous DOM move has returned with the node in its final tree position.",
             { kind: "return" },
           ),
@@ -1028,24 +948,24 @@
             "Commit swap",
             "onItemSwap",
             "root",
-            "source",
-            "The pre-swap source receives onItemSwap when that atomic callback is present. Core's destination-owned move fallback is a separate path and is not shown here.",
+            "root",
+            "The root receives one atomic onItemSwap callback. The event's a and b locations identify both participants in their direct, pre-swap slots.",
             { rowKind: "short", branch: "Or · swap commit" },
           ),
           message(
             "3.3b",
             "Swap item DOM",
             "consumer callback",
-            "source",
+            "root",
             "dom",
-            "The Vanilla consumer applies the atomic swap. Without onItemSwap, core instead takes two destination-owned move paths.",
+            "The default Vanilla adapter callback applies the atomic swap to both item DOM positions.",
           ),
           message(
             "3.3c",
             "DOM callback complete",
             "consumer callback returned",
             "dom",
-            "source",
+            "root",
             "Control returns after the consumer's synchronous DOM work. This return does not represent layout or paint completion.",
             { kind: "return" },
           ),
@@ -1069,7 +989,7 @@
             "onDragEnd",
             "root",
             "root",
-            "After cleanup and commit, the session directly invokes onDragEnd on the root. The notification does not itself imply a DOM write.",
+            "After cleanup and commit, the session dispatches onDragEnd on the root through the root adapter commit. The notification does not itself imply a DOM write.",
             { rowKind: "loop" },
           ),
           message(
@@ -1102,7 +1022,7 @@
       },
       {
         id: "remove",
-        title: "5 · Actual item removal",
+        title: "5 · Core-command item removal",
         messages: [
           message(
             "5.1a",
@@ -1118,24 +1038,23 @@
             "Remove owned item",
             "onItemRemove",
             "source",
-            "source",
-            "The current owner detaches the item and directly invokes its own onItemRemove callback.",
-            { rowKind: "loop" },
+            "root",
+            "The current owner detaches the item, then dispatches onItemRemove to the root. event.container identifies that direct owner.",
           ),
           message(
             "5.1c",
             "Remove item DOM",
             "element.remove()",
-            "source",
+            "root",
             "dom",
-            "The default Vanilla callback removes the item DOM.",
+            "The default Vanilla adapter callback removes the item DOM identified by the payload.",
           ),
           message(
             "5.1d",
             "DOM call complete",
             "remove() returned",
             "dom",
-            "source",
+            "root",
             "The synchronous DOM removal call has returned. Layout and paint may still be pending.",
             { kind: "return" },
           ),
@@ -1191,7 +1110,7 @@
     if (route.kind !== "sync") return [];
 
     const matches = route.code?.match(
-      /\b(?:on[A-Z][A-Za-z0-9]*|canDrop|getDropPriority|createGhost|flushMutation)\*?/g,
+      /\b(?:on[A-Z][A-Za-z0-9]*|canDrop|getDropPriority|adapter)\*?/g,
     );
     return [...new Set(matches ?? [])];
   }
@@ -1250,7 +1169,8 @@
               <div
                 class:has-branch={route.branch}
                 class:is-short={route.rowKind === "short"}
-                class:is-loop={route.rowKind === "loop" || route.from === route.to}
+                class:is-loop={route.rowKind === "loop" ||
+                  route.from === route.to}
                 class="message-row"
                 data-step={route.step}
                 data-from={route.from}
@@ -1258,7 +1178,9 @@
                 data-kind={route.kind}
               >
                 {#if route.branch}
-                  <span class="branch-label" aria-hidden="true">{route.branch}</span>
+                  <span class="branch-label" aria-hidden="true"
+                    >{route.branch}</span
+                  >
                 {/if}
 
                 {#if route.from === route.to}
@@ -1277,7 +1199,8 @@
                         {#if callbacks.length > 0}
                           <span class="callback-title">
                             {#each callbacks as callback, index}
-                              {#if index > 0}<span aria-hidden="true">/</span>{/if}
+                              {#if index > 0}<span aria-hidden="true">/</span
+                                >{/if}
                               <a href={callbackHref()}>{callback}</a>
                             {/each}
                           </span>
@@ -1287,20 +1210,32 @@
                       </strong>
                       <span class="detail">{route.detail}</span>
                     </div>
-                    <svg class="self-route" viewBox="0 0 64 44" preserveAspectRatio="xMinYMin meet" aria-hidden="true">
+                    <svg
+                      class="self-route"
+                      viewBox="0 0 64 44"
+                      preserveAspectRatio="xMinYMin meet"
+                      aria-hidden="true"
+                    >
                       <path
                         d="M 0 6 H 44 A 10 10 0 0 1 54 16 V 24 A 10 10 0 0 1 44 34 H 0"
                         class:return-line={route.kind === "return"}
                         class="uml-line"
                       ></path>
                     </svg>
-                    <svg class="self-head-svg" viewBox="0 0 12 12" aria-hidden="true">
+                    <svg
+                      class="self-head-svg"
+                      viewBox="0 0 12 12"
+                      aria-hidden="true"
+                    >
                       {#if route.kind === "sync"}
-                        <path d="M 11 1 L 1 6 L 11 11 Z" class="filled-head"></path>
+                        <path d="M 11 1 L 1 6 L 11 11 Z" class="filled-head"
+                        ></path>
                       {:else if route.kind === "async"}
-                        <path d="M 11 1 L 1 6 L 11 11 Z" class="open-head"></path>
+                        <path d="M 11 1 L 1 6 L 11 11 Z" class="open-head"
+                        ></path>
                       {:else}
-                        <path d="M 11 1 L 1 6 L 11 11" class="return-head"></path>
+                        <path d="M 11 1 L 1 6 L 11 11" class="return-head"
+                        ></path>
                       {/if}
                     </svg>
                   </div>
@@ -1321,7 +1256,8 @@
                         {#if callbacks.length > 0}
                           <span class="callback-title">
                             {#each callbacks as callback, index}
-                              {#if index > 0}<span aria-hidden="true">/</span>{/if}
+                              {#if index > 0}<span aria-hidden="true">/</span
+                                >{/if}
                               <a href={callbackHref()}>{callback}</a>
                             {/each}
                           </span>
@@ -1331,7 +1267,12 @@
                       </strong>
                       <span class="detail">{route.detail}</span>
                     </div>
-                    <svg class="route-svg" viewBox="0 0 100 20" preserveAspectRatio="none" aria-hidden="true">
+                    <svg
+                      class="route-svg"
+                      viewBox="0 0 100 20"
+                      preserveAspectRatio="none"
+                      aria-hidden="true"
+                    >
                       <line
                         x1={reverse ? "100" : "0"}
                         y1="10"
@@ -1349,17 +1290,23 @@
                     >
                       {#if route.kind === "sync"}
                         <path
-                          d={reverse ? "M 11 1 L 1 6 L 11 11 Z" : "M 1 1 L 11 6 L 1 11 Z"}
+                          d={reverse
+                            ? "M 11 1 L 1 6 L 11 11 Z"
+                            : "M 1 1 L 11 6 L 1 11 Z"}
                           class="filled-head"
                         ></path>
                       {:else if route.kind === "async"}
                         <path
-                          d={reverse ? "M 11 1 L 1 6 L 11 11 Z" : "M 1 1 L 11 6 L 1 11 Z"}
+                          d={reverse
+                            ? "M 11 1 L 1 6 L 11 11 Z"
+                            : "M 1 1 L 11 6 L 1 11 Z"}
                           class="open-head"
                         ></path>
                       {:else}
                         <path
-                          d={reverse ? "M 11 1 L 1 6 L 11 11" : "M 1 1 L 11 6 L 1 11"}
+                          d={reverse
+                            ? "M 11 1 L 1 6 L 11 11"
+                            : "M 1 1 L 11 6 L 1 11"}
                           class="return-head"
                         ></path>
                       {/if}
@@ -1546,11 +1493,7 @@
     top: 0.1rem;
     left: 0.55rem;
     z-index: 4;
-    color: color-mix(
-      in srgb,
-      var(--color-background-dark) 75%,
-      transparent
-    );
+    color: color-mix(in srgb, var(--color-background-dark) 75%, transparent);
     font-family: "Geist", sans-serif;
     font-size: var(--diagram-type-context);
     font-weight: 500;
@@ -1821,11 +1764,7 @@
     max-width: 38rem;
     margin: 0 auto;
     padding: 0 var(--size-24) var(--size-24);
-    color: color-mix(
-      in srgb,
-      var(--color-background-dark) 72%,
-      transparent
-    );
+    color: color-mix(in srgb, var(--color-background-dark) 72%, transparent);
     font-size: 0.8rem;
     line-height: 1.5;
     user-select: text;

@@ -1,12 +1,18 @@
 <script lang="ts">
     import { Engine } from "@snap-engine/asset-base/svelte";
-    import { Container, Item } from "@snap-engine/snapsort/svelte";
-    import { defaultAnimations } from "@snap-engine/snapsort";
+    import { Container, Ghost, Item } from "@snap-engine/snapsort/svelte";
+    import {
+        createRenderEntries,
+        createRenderEntry,
+        createRenderTree,
+        defaultAnimations,
+        reduceRenderTree,
+        type ContainerCallbacks,
+    } from "@snap-engine/snapsort";
     import { rejectDrop } from "@snap-engine/snapsort/callbacks";
     import type { Engine as EngineClass } from "@snap-engine/core";
-    import type { ItemMoveEvent } from "@snap-engine/snapsort";
+    import { renderTreeCallbacks } from "../snapsort-render-tree";
 
-    let engineComponent: Engine | null = null;
     let engineInstance: EngineClass | null = $state(null);
     let debugMode = $state(false);
 
@@ -70,76 +76,73 @@
         debugMode = enabled;
     }
 
-    let verticalItems = $state([1, 2, 3, 4]);
-    let horizontalItems = $state([1, 2, 3, 4]);
-    let doubleRowItems = $state(Array.from({ length: 28 }, (_, i) => i + 1));
-    let sizedItems = $state([
+    type SizedItem = { label: string; width: number };
+    type Area = "area1" | "area2";
+    type AreaEntry =
+        | { kind: "area"; area: Area }
+        | { kind: "item"; label: string };
+
+    let verticalTree = $state.raw(createRenderTree(createRenderEntries([1, 2, 3, 4], (n) => `vertical-${n}`)));
+    let horizontalTree = $state.raw(createRenderTree(createRenderEntries([1, 2, 3, 4], (n) => `horizontal-${n}`)));
+    let doubleRowTree = $state.raw(createRenderTree(createRenderEntries(Array.from({ length: 28 }, (_, i) => i + 1), (n) => `double-row-${n}`)));
+    let sizedTree = $state.raw(createRenderTree(createRenderEntries<SizedItem>([
         { label: "Small", width: 60 },
         { label: "Medium", width: 100 },
         { label: "Large", width: 140 },
         { label: "Tall", width: 60 },
         { label: "Short", width: 30 },
-    ]);
-    let areaItems = $state({
-        area1: ["Item A", "Item B", "Item C"],
-        area2: ["Item X", "Item Y", "Item Z"],
-    });
-    const areaZones = ["area1", "area2"] as const;
-    let rowAreaItems = $state({
-        area1: ["Item A", "Item B", "Item C"],
-        area2: ["Item X", "Item Y", "Item Z"],
-    });
-    const rowAreaZones = ["area1", "area2"] as const;
+    ], (entry) => entry.label)));
 
-    function reorder<T>(items: T[], itemId: string, index: number, id: (item: T) => string) {
-        const moved = items.find((item) => id(item) === itemId);
-        if (moved === undefined) return items;
-        const next = items.filter((item) => id(item) !== itemId);
-        next.splice(Math.max(0, Math.min(index, next.length)), 0, moved);
-        return next;
+    function createAreaTree(prefix: string) {
+        const areas: readonly [Area, readonly string[]][] = [
+            ["area1", ["Item A", "Item B", "Item C"]],
+            ["area2", ["Item X", "Item Y", "Item Z"]],
+        ];
+        return createRenderTree<AreaEntry>(areas.map(([area, labels]) =>
+            createRenderEntry(
+                { kind: "area", area },
+                `${prefix}-${area}`,
+                createRenderTree(labels.map((label) =>
+                    createRenderEntry<AreaEntry>({ kind: "item", label }, label),
+                )),
+            ),
+        ));
     }
 
-    function handleFlatMove(event: ItemMoveEvent) {
-        const list = event.to.containerMetadata.list;
-        if (list === "vertical") verticalItems = reorder(verticalItems, event.itemId, event.to.index, (n) => `vertical-${n}`);
-        if (list === "horizontal") horizontalItems = reorder(horizontalItems, event.itemId, event.to.index, (n) => `horizontal-${n}`);
-        if (list === "double") doubleRowItems = reorder(doubleRowItems, event.itemId, event.to.index, (n) => `double-row-${n}`);
-        if (list === "sizes") sizedItems = reorder(sizedItems, event.itemId, event.to.index, (entry) => entry.label);
-    }
+    let areaTree = $state.raw(createAreaTree("multi"));
+    let rowAreaTree = $state.raw(createAreaTree("multi-row"));
 
-    function moveAreaItem(event: ItemMoveEvent, row: boolean) {
-        const target = event.to.containerMetadata.area;
-        if (target !== "area1" && target !== "area2") return;
-        const lists = row ? rowAreaItems : areaItems;
-        const moved = [...lists.area1, ...lists.area2].find((label) => label === event.itemId);
-        if (!moved) return;
-        const next = {
-            area1: lists.area1.filter((label) => label !== event.itemId),
-            area2: lists.area2.filter((label) => label !== event.itemId),
-        };
-        next[target].splice(Math.max(0, Math.min(event.to.index, next[target].length)), 0, moved);
-        if (row) rowAreaItems = next;
-        else areaItems = next;
-    }
+    const verticalCallbacks = renderTreeCallbacks((event) => verticalTree = reduceRenderTree(verticalTree, event));
+    const horizontalCallbacks = renderTreeCallbacks((event) => horizontalTree = reduceRenderTree(horizontalTree, event));
+    const doubleRowCallbacks = renderTreeCallbacks((event) => doubleRowTree = reduceRenderTree(doubleRowTree, event));
+    const sizedCallbacks = renderTreeCallbacks((event) => sizedTree = reduceRenderTree(sizedTree, event));
+    const areaCallbacks = {
+        ...renderTreeCallbacks((event) => areaTree = reduceRenderTree(areaTree, event)),
+        canDrop: rejectDrop,
+    } satisfies ContainerCallbacks;
+    const rowAreaCallbacks = {
+        ...renderTreeCallbacks((event) => rowAreaTree = reduceRenderTree(rowAreaTree, event)),
+        canDrop: rejectDrop,
+    } satisfies ContainerCallbacks;
 </script>
 
 <div class="page-layout">
 <div class="engine-area">
-<Engine id="drag-drop-demo-canvas" debug={debugMode} bind:this={engineComponent} bind:engine={engineInstance}>
+<Engine id="drag-drop-demo-canvas" debug={debugMode} bind:engine={engineInstance}>
 <div class="gallery">
     <!-- Vertical Column -->
     <div class="demo-box">
         <h3>Vertical Column</h3>
         <div class="container-wrapper">
             <Container
-                config={{ animation: defaultAnimations, direction: "column", callbacks: { onItemMove: handleFlatMove } }}
-                metadata={{ list: "vertical" }}
-                items={verticalItems}
-                getItemId={(n) => `vertical-${n}`}
+                itemId="drag-drop-vertical-root"
+                config={{ animation: defaultAnimations, direction: "column", callbacks: verticalCallbacks }}
             >
-                {#snippet entry(n)}
-                    <Item itemId={`vertical-${n}`} className="demo-item"><p>Item {n}</p></Item>
-                {/snippet}
+                {#each verticalTree.entries as entry (entry.itemId)}
+                    {#if entry.isGhost}<Ghost ghost={entry.ghost} />
+                    {:else if entry.childTree}<Container itemId={entry.itemId} />
+                    {:else}<Item itemId={entry.itemId} className="demo-item"><p>Item {entry.value}</p></Item>{/if}
+                {/each}
             </Container>
         </div>
     </div>
@@ -149,14 +152,14 @@
         <h3>Horizontal Row</h3>
         <div class="container-wrapper" style="min-height: 60px;">
             <Container
-                config={{ animation: defaultAnimations, direction: "row", callbacks: { onItemMove: handleFlatMove } }}
-                metadata={{ list: "horizontal" }}
-                items={horizontalItems}
-                getItemId={(n) => `horizontal-${n}`}
+                itemId="drag-drop-horizontal-root"
+                config={{ animation: defaultAnimations, direction: "row", callbacks: horizontalCallbacks }}
             >
-                {#snippet entry(n)}
-                    <Item itemId={`horizontal-${n}`} className="demo-item"><p>Item {n}</p></Item>
-                {/snippet}
+                {#each horizontalTree.entries as entry (entry.itemId)}
+                    {#if entry.isGhost}<Ghost ghost={entry.ghost} />
+                    {:else if entry.childTree}<Container itemId={entry.itemId} />
+                    {:else}<Item itemId={entry.itemId} className="demo-item"><p>Item {entry.value}</p></Item>{/if}
+                {/each}
             </Container>
         </div>
     </div>
@@ -166,14 +169,14 @@
         <h3>Horizontal Double Row</h3>
         <div class="container-wrapper">
             <Container
-                config={{ animation: defaultAnimations, direction: "row", callbacks: { onItemMove: handleFlatMove } }}
-                metadata={{ list: "double" }}
-                items={doubleRowItems}
-                getItemId={(n) => `double-row-${n}`}
+                itemId="drag-drop-double-row-root"
+                config={{ animation: defaultAnimations, direction: "row", callbacks: doubleRowCallbacks }}
             >
-                {#snippet entry(n)}
-                    <Item itemId={`double-row-${n}`} className="demo-item"><p>Item {n}</p></Item>
-                {/snippet}
+                {#each doubleRowTree.entries as entry (entry.itemId)}
+                    {#if entry.isGhost}<Ghost ghost={entry.ghost} />
+                    {:else if entry.childTree}<Container itemId={entry.itemId} />
+                    {:else}<Item itemId={entry.itemId} className="demo-item"><p>Item {entry.value}</p></Item>{/if}
+                {/each}
             </Container>
         </div>
     </div>
@@ -183,16 +186,16 @@
         <h3>Different Sizes</h3>
         <div class="container-wrapper">
             <Container
-                config={{ animation: defaultAnimations, direction: "row", callbacks: { onItemMove: handleFlatMove } }}
-                metadata={{ list: "sizes" }}
-                items={sizedItems}
-                getItemId={(entry) => entry.label}
+                itemId="drag-drop-sizes-root"
+                config={{ animation: defaultAnimations, direction: "row", callbacks: sizedCallbacks }}
             >
-                {#snippet entry(entry)}
-                    <Item itemId={entry.label} className="demo-item">
-                        <p style="width: {entry.width}px;">{entry.label}</p>
-                    </Item>
-                {/snippet}
+                {#each sizedTree.entries as entry (entry.itemId)}
+                    {#if entry.isGhost}<Ghost ghost={entry.ghost} />
+                    {:else if entry.childTree}<Container itemId={entry.itemId} />
+                    {:else}<Item itemId={entry.itemId} className="demo-item">
+                        <p style="width: {entry.value.width}px;">{entry.value.label}</p>
+                    </Item>{/if}
+                {/each}
             </Container>
         </div>
     </div>
@@ -202,31 +205,33 @@
         <h3>Multiple Drop Areas</h3>
         <div class="areas-wrapper">
             <Container
+                itemId="drag-drop-multi-root"
                 config={{
                     animation: defaultAnimations,
                     direction: "row",
                     name: "multi-root",
-                    callbacks: { canDrop: rejectDrop },
+                    callbacks: areaCallbacks,
                 }}
                 locked={true}
-                items={areaZones}
-                getItemId={(zone) => `multi-${zone}`}
             >
-                {#snippet entry(zone)}
+                {#each areaTree.entries as entry (entry.itemId)}
+                    {#if entry.isGhost}<Ghost ghost={entry.ghost} />
+                    {:else if entry.childTree && entry.value.kind === "area"}
                     <Container
-                        itemId={`multi-${zone}`}
-                        config={{ animation: defaultAnimations, direction: "column", name: `multi-${zone}`, callbacks: { onItemMove: (event) => moveAreaItem(event, false) } }}
-                        metadata={{ area: zone }}
+                        itemId={entry.itemId}
+                        config={{ animation: defaultAnimations, direction: "column", name: entry.itemId }}
+                        metadata={{ area: entry.value.area }}
                         locked={true}
-                        items={areaItems[zone]}
-                        getItemId={(label) => label}
                     >
-                        {#snippet before()}<h4>{zone === "area1" ? "Area 1" : "Area 2"}</h4>{/snippet}
-                        {#snippet entry(label)}
-                            <Item itemId={label} className="demo-item"><p>{label}</p></Item>
-                        {/snippet}
+                        <h4>{entry.value.area === "area1" ? "Area 1" : "Area 2"}</h4>
+                        {#each entry.childTree.entries as child (child.itemId)}
+                            {#if child.isGhost}<Ghost ghost={child.ghost} />
+                            {:else if child.childTree}<Container itemId={child.itemId} />
+                            {:else if child.value.kind === "item"}<Item itemId={child.itemId} className="demo-item"><p>{child.value.label}</p></Item>{/if}
+                        {/each}
                     </Container>
-                {/snippet}
+                    {:else}<Item itemId={entry.itemId}>{entry.itemId}</Item>{/if}
+                {/each}
             </Container>
         </div>
     </div>
@@ -236,31 +241,33 @@
         <h3>Multiple Drop Areas (Row)</h3>
         <div class="areas-wrapper-row">
             <Container
+                itemId="drag-drop-multi-row-root"
                 config={{
                     animation: defaultAnimations,
                     direction: "column",
                     name: "multi-row-root",
-                    callbacks: { canDrop: rejectDrop },
+                    callbacks: rowAreaCallbacks,
                 }}
                 locked={true}
-                items={rowAreaZones}
-                getItemId={(zone) => `multi-row-${zone}`}
             >
-                {#snippet entry(zone)}
+                {#each rowAreaTree.entries as entry (entry.itemId)}
+                    {#if entry.isGhost}<Ghost ghost={entry.ghost} />
+                    {:else if entry.childTree && entry.value.kind === "area"}
                     <Container
-                        itemId={`multi-row-${zone}`}
-                        config={{ animation: defaultAnimations, direction: "row", name: `multi-row-${zone}`, callbacks: { onItemMove: (event) => moveAreaItem(event, true) } }}
-                        metadata={{ area: zone }}
+                        itemId={entry.itemId}
+                        config={{ animation: defaultAnimations, direction: "row", name: entry.itemId }}
+                        metadata={{ area: entry.value.area }}
                         locked={true}
-                        items={rowAreaItems[zone]}
-                        getItemId={(label) => label}
                     >
-                        {#snippet before()}<h4>{zone === "area1" ? "Area 1" : "Area 2"}</h4>{/snippet}
-                        {#snippet entry(label)}
-                            <Item itemId={label} className="demo-item"><p>{label}</p></Item>
-                        {/snippet}
+                        <h4>{entry.value.area === "area1" ? "Area 1" : "Area 2"}</h4>
+                        {#each entry.childTree.entries as child (child.itemId)}
+                            {#if child.isGhost}<Ghost ghost={child.ghost} />
+                            {:else if child.childTree}<Container itemId={child.itemId} />
+                            {:else if child.value.kind === "item"}<Item itemId={child.itemId} className="demo-item"><p>{child.value.label}</p></Item>{/if}
+                        {/each}
                     </Container>
-                {/snippet}
+                    {:else}<Item itemId={entry.itemId}>{entry.itemId}</Item>{/if}
+                {/each}
             </Container>
         </div>
     </div>

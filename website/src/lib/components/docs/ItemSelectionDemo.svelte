@@ -1,16 +1,31 @@
 <script lang="ts">
   import { Engine } from "@snap-engine/asset-base/svelte";
-  import { defaultAnimations, type ItemMoveEvent } from "@snap-engine/snapsort";
-  import { Container, Item } from "@snap-engine/snapsort/svelte";
+  import {
+    createRenderEntries,
+    createRenderTree,
+    defaultAnimations,
+    reduceRenderTree,
+    type ContainerCallbacks,
+    type GhostLifecycleEvent,
+    type ItemMoveEvent,
+  } from "@snap-engine/snapsort";
+  import { Container, Ghost, Item } from "@snap-engine/snapsort/svelte";
 
   type Task = { id: string; label: string };
 
-  let tasks = $state<Task[]>([
-    { id: "alpha", label: "Alpha" },
-    { id: "beta", label: "Beta" },
-    { id: "gamma", label: "Gamma" },
-    { id: "delta", label: "Delta" },
-  ]);
+  let tasks = $state.raw(
+    createRenderTree(
+      createRenderEntries<Task>(
+        [
+          { id: "alpha", label: "Alpha" },
+          { id: "beta", label: "Beta" },
+          { id: "gamma", label: "Gamma" },
+          { id: "delta", label: "Delta" },
+        ],
+        (task) => task.id,
+      ),
+    ),
+  );
   let selectedIds = $state(new Set<string>(["alpha", "beta"]));
   let status = $state("Alpha and Beta are selected. Drag either to move both.");
 
@@ -29,15 +44,24 @@
   }
 
   function onItemMove(event: ItemMoveEvent) {
-    const movedIds = new Set(event.itemIds.map(String));
-    const moving = tasks.filter((task) => movedIds.has(task.id));
-    if (moving.length === 0) return;
-
-    const next = tasks.filter((task) => !movedIds.has(task.id));
-    next.splice(Math.min(event.to.index, next.length), 0, ...moving);
-    tasks = next;
-    status = `Moved ${moving.map((task) => task.label).join(" and ")}`;
+    const movedIds = new Set(event.itemIds);
+    const moving = tasks.entries.filter(
+      (entry) => !entry.isGhost && movedIds.has(entry.itemId),
+    );
+    tasks = reduceRenderTree(tasks, event);
+    status = `Moved ${moving.map((entry) => !entry.isGhost && entry.value.label).filter(Boolean).join(" and ")}`;
   }
+
+  function onGhostMove(event: GhostLifecycleEvent) {
+    tasks = reduceRenderTree(tasks, event);
+  }
+
+  const callbacks = {
+    onItemMove,
+    onGhostInsert: onGhostMove,
+    onGhostMove,
+    onGhostRemove: onGhostMove,
+  } satisfies ContainerCallbacks;
 </script>
 
 <div class="item-selection-demo">
@@ -45,25 +69,29 @@
 
   <Engine id="item-example-selection">
     <Container
+      itemId="item-example-selection-root"
       className="selection-list"
-      items={tasks}
-      config={{ animation: defaultAnimations, callbacks: { onItemMove } }}
+      config={{ animation: defaultAnimations, callbacks }}
     >
-      {#snippet entry(task)}
-        <Item
-          itemId={task.id}
-          selected={selectedIds.has(task.id)}
-          className={`selection-card${selectedIds.has(task.id) ? " is-selected" : ""}`}
-          role="button"
-          tabindex={0}
-          aria-pressed={selectedIds.has(task.id)}
-          onclick={() => toggleSelected(task.id)}
-          onkeydown={(event) => handleKeydown(event, task.id)}
-        >
-          <span>{task.label}</span>
-          <span>{selectedIds.has(task.id) ? "Selected" : "Click to select"}</span>
-        </Item>
-      {/snippet}
+      {#each tasks.entries as entry (entry.itemId)}
+        {#if entry.isGhost}
+          <Ghost ghost={entry.ghost} />
+        {:else}
+          <Item
+            itemId={entry.itemId}
+            selected={selectedIds.has(entry.itemId)}
+            className={`selection-card${selectedIds.has(entry.itemId) ? " is-selected" : ""}`}
+            role="button"
+            tabindex={0}
+            aria-pressed={selectedIds.has(entry.itemId)}
+            onclick={() => toggleSelected(entry.itemId)}
+            onkeydown={(event) => handleKeydown(event, entry.itemId)}
+          >
+            <span>{entry.value.label}</span>
+            <span>{selectedIds.has(entry.itemId) ? "Selected" : "Click to select"}</span>
+          </Item>
+        {/if}
+      {/each}
     </Container>
   </Engine>
 </div>

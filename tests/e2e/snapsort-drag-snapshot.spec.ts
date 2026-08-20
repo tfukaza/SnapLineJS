@@ -75,8 +75,13 @@ test("built-in modes choose composable drag visual defaults that can be overridd
   } as const satisfies Record<SortMode, DragVisual>;
 
   for (const mode of Object.keys(expected) as SortMode[]) {
-    const root = new SnapSortContainer(engine, null, { mode });
-    const item = new SnapSortItem(engine, root);
+    const root = new SnapSortContainer(engine, null, {
+      itemId: `drag-visual-${mode}-root`,
+      mode,
+    });
+    const item = new SnapSortItem(engine, root, {
+      itemId: `drag-visual-${mode}-item`,
+    });
     const source = {
       container: root,
       containerMetadata: root.metadata,
@@ -95,7 +100,10 @@ test("built-in modes choose composable drag visual defaults that can be overridd
     );
     installDragSession(root, session);
     const handle = root.dragSession!;
-    const nested = new SnapSortContainer(engine, root, { mode });
+    const nested = new SnapSortContainer(engine, root, {
+      itemId: `drag-visual-${mode}-nested`,
+      mode,
+    });
 
     expect(handle).toBe(session.handle);
     expect(nested.dragSession).toBeNull();
@@ -186,13 +194,14 @@ test("DragSession.handoff transfers a pending multi-item run without destroying 
       const engine = existing.engine;
       const host = document.createElement("div");
       document.body.append(host);
-      const root = new Container(engine, null, { mode: "euclidean" });
+      const root = new Container(engine, null, {
+        itemId: "handoff-root",
+        mode: "euclidean",
+      });
       root.element = host;
-      root.itemId = "handoff-root";
 
       const mount = (id: string) => {
-        const item = new Item(engine, null);
-        item.itemId = id;
+        const item = new Item(engine, null, { itemId: id });
         const element = document.createElement("div");
         element.dataset.testHandoffItem = id;
         host.append(element);
@@ -204,7 +213,7 @@ test("DragSession.handoff transfers a pending multi-item run without destroying 
       const replacements = [mount("replacement-a"), mount("replacement-b")];
       root.captureDragSnapshotTree();
 
-      const sources = origins.map((item: any, index: number) => ({
+      const sources = origins.map((_item: any, index: number) => ({
         container: root,
         containerMetadata: root.metadata,
         index,
@@ -344,8 +353,10 @@ test("DragSession.handoff rejects invalid runs and pointer-transfer failures ato
         const host = document.createElement("div");
         document.body.append(host);
         hosts.push(host);
-        const root = new Container(engine, null, { mode: "euclidean" });
-        root.itemId = id;
+        const root = new Container(engine, null, {
+          itemId: id,
+          mode: "euclidean",
+        });
         root.element = host;
         roots.push(root);
         return { host, root };
@@ -356,8 +367,7 @@ test("DragSession.handoff rejects invalid runs and pointer-transfer failures ato
         id: string,
         connected = true,
       ) => {
-        const item = new Item(engine, null);
-        item.itemId = id;
+        const item = new Item(engine, null, { itemId: id });
         const element = document.createElement("div");
         if (connected) host.append(element);
         item.element = element;
@@ -573,14 +583,21 @@ test("container animations are opt-in and expose the standard preset", () => {
     },
   };
 
-  const immediate = new SnapSortContainer(engine, null);
+  const immediate = new SnapSortContainer(engine, null, {
+    itemId: "animation-immediate-root",
+  });
   const animated = new SnapSortContainer(engine, null, {
+    itemId: "animation-enabled-root",
     animation: defaultAnimations,
   });
   const partiallyDisabled = new SnapSortContainer(engine, null, {
+    itemId: "animation-partially-disabled-root",
     animation: { reorder: null, drop: defaultAnimations.drop },
   });
-  const disabled = new SnapSortContainer(engine, null, { animation: null });
+  const disabled = new SnapSortContainer(engine, null, {
+    itemId: "animation-disabled-root",
+    animation: null,
+  });
 
   expect(immediate.config.animation).toBeUndefined();
   expect(immediate.reorderAnimationConfig(immediate)).toBeNull();
@@ -619,9 +636,10 @@ test("item drag snapshots freeze a shallow copy of current metadata", () => {
       unsubscribeGlobalCursorEvent: () => {},
     },
   };
-  const item = new SnapSortItem(engine as never, null);
+  const item = new SnapSortItem(engine as never, null, {
+    itemId: "metadata-item",
+  });
   const original = { version: 1 };
-  item.itemId = "metadata-item";
   item.metadata = original;
 
   const snapshot = item.captureDragSnapshotTree();
@@ -633,7 +651,7 @@ test("item drag snapshots freeze a shallow copy of current metadata", () => {
   expect(item.metadata.version).toBe(2);
 });
 
-test("framework container ownership never inherits Vanilla DOM callbacks", () => {
+test("custom adapters never inherit Vanilla DOM callbacks", () => {
   let nextId = 0;
   const engine = {
     global: {
@@ -649,28 +667,32 @@ test("framework container ownership never inherits Vanilla DOM callbacks", () =>
   };
   const onItemMove = () => {};
 
-  const vanilla = new SnapSortContainer(engine, null);
+  const vanilla = new SnapSortContainer(engine, null, {
+    itemId: "ownership-vanilla-root",
+  });
   const framework = new SnapSortContainer(engine, null, {
-    domOwnership: "framework",
+    itemId: "ownership-framework-root",
+    adapter: { callbacks: {}, commit: (mutation) => mutation() },
     callbacks: { onItemMove },
   });
   const frameworkWithoutMutation = new SnapSortContainer(engine, null, {
-    domOwnership: "framework",
+    itemId: "ownership-framework-without-mutation-root",
+    adapter: { callbacks: {}, commit: (mutation) => mutation() },
   });
 
-  expect(vanilla.callbacks?.onItemInsert).toBeDefined();
-  expect(vanilla.callbacks?.onGhostInsert).toBeDefined();
-  expect(framework.callbacks?.onItemMove).toBe(onItemMove);
-  expect(framework.callbacks?.onItemInsert).toBeUndefined();
-  expect(framework.callbacks?.onItemRemove).toBeUndefined();
-  expect(framework.callbacks?.createGhost).toBeUndefined();
-  expect(framework.callbacks?.onGhostInsert).toBeUndefined();
-  expect(framework.callbacks?.onGhostRemove).toBeUndefined();
+  expect(vanilla.adapter.callbacks.onItemInsert).toBeDefined();
+  expect(vanilla.adapter.callbacks.onGhostInsert).toBeDefined();
+  expect(framework.callbacks.onItemMove).toBe(onItemMove);
+  expect(framework.callbacks.onItemInsert).toBeUndefined();
+  expect(framework.callbacks.onItemRemove).toBeUndefined();
+  expect(framework.callbacks.onGhostInsert).toBeUndefined();
+  expect(framework.callbacks.onGhostMove).toBeUndefined();
+  expect(framework.callbacks.onGhostRemove).toBeUndefined();
   expect(() => assertCanFireItemMove(frameworkWithoutMutation)).toThrow(
-    /framework-owned container.*callbacks\.onItemMove/,
+    /requires callbacks\.onItemMove or callbacks\.onItemInsert/,
   );
   expect(() => assertCanFireItemSwap(framework)).toThrow(
-    /framework-owned container.*callbacks\.onItemSwap/,
+    /requires callbacks\.onItemSwap/,
   );
   expect(() => assertCanFireItemSwap(vanilla)).not.toThrow();
 });
@@ -702,7 +724,8 @@ test("visual geometry invalidations coalesce at the root container", async () =>
     },
   };
   const root = new SnapSortContainer(engine, null, {
-    domOwnership: "framework",
+    itemId: "visual-geometry-root",
+    adapter: { callbacks: {}, commit: (mutation) => mutation() },
     callbacks: {
       onVisualGeometryInvalidated: (event) => {
         events.push(event);
@@ -713,7 +736,7 @@ test("visual geometry invalidations coalesce at the root container", async () =>
     },
   });
   const child = new SnapSortContainer(engine, root, {
-    domOwnership: "framework",
+    itemId: "visual-geometry-child",
   });
   const first = { isGhost: false } as never;
   const second = { isGhost: false } as never;
@@ -836,7 +859,7 @@ type SelfInsertProbeState = {
 
 type MockSnapSortItem = {
   id: string;
-  resolvedItemId: string;
+  itemId: string;
   metadata: Record<string, unknown>;
   direction: "row" | "column";
   mainAxisAlign: "start";
@@ -954,7 +977,7 @@ async function installSnapsortTrace(page: Page) {
       return originalRemove.call(this);
     };
 
-    new MutationObserver((mutations) => {
+    const mutationObserver = new MutationObserver((mutations) => {
       for (const mutation of mutations) {
         if (shouldTrace(mutation.target)) {
           trace.mutations.push({
@@ -965,12 +988,24 @@ async function installSnapsortTrace(page: Page) {
           });
         }
       }
-    }).observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ["class", "style", "data-engine-id"],
-      childList: true,
-      subtree: true,
     });
+
+    const observeDocument = () => {
+      const documentElement = document.documentElement;
+      if (!documentElement) return;
+      mutationObserver.observe(documentElement, {
+        attributes: true,
+        attributeFilter: ["class", "style", "data-engine-id"],
+        childList: true,
+        subtree: true,
+      });
+    };
+    if (document.documentElement) observeDocument();
+    else {
+      document.addEventListener("DOMContentLoaded", observeDocument, {
+        once: true,
+      });
+    }
   });
 }
 
@@ -1022,7 +1057,7 @@ function itemSnapshot<T>(
 ): ItemSnapshot<T> {
   return {
     value,
-    key: String(value),
+    itemId: String(value),
     metadata: {},
     direction,
     mainAxisAlign: "start",
@@ -1037,7 +1072,7 @@ function itemSnapshot<T>(
 
 type SnapshotFixture<T> = Omit<
   ItemSnapshot<T>,
-  | "key"
+  | "itemId"
   | "metadata"
   | "mainAxisAlign"
   | "layoutModel"
@@ -1045,7 +1080,7 @@ type SnapshotFixture<T> = Omit<
   | "stretchItems"
   | "children"
 > & {
-  key?: string;
+  itemId?: string;
   metadata?: ItemSnapshot<T>["metadata"];
   mainAxisAlign?: ItemSnapshot<T>["mainAxisAlign"];
   layoutModel?: ItemSnapshot<T>["layoutModel"];
@@ -1057,7 +1092,7 @@ type SnapshotFixture<T> = Omit<
 function snapshotFixture<T>(fixture: SnapshotFixture<T>): ItemSnapshot<T> {
   return {
     ...fixture,
-    key: fixture.key ?? String(fixture.value),
+    itemId: fixture.itemId ?? String(fixture.value),
     metadata: fixture.metadata ?? {},
     mainAxisAlign: fixture.mainAxisAlign ?? "start",
     layoutModel: fixture.layoutModel ?? "flow",
@@ -1076,7 +1111,7 @@ function mockSnapSortItem(
   const box = layoutBox(rect);
   const item: MockSnapSortItem = {
     id,
-    resolvedItemId: id,
+    itemId: id,
     metadata: {},
     direction,
     mainAxisAlign: "start",
@@ -1478,13 +1513,26 @@ test("drop policy events preserve every source in a multi-item drag", () => {
         index: 0,
       },
     ],
+    activeSources: [
+      {
+        container: source,
+        containerMetadata: source.metadata,
+        index: 0,
+      },
+      {
+        container: companionSource,
+        containerMetadata: companionSource.metadata,
+        index: 0,
+      },
+    ],
     itemSet: new Set([dragged, companion]),
+    snapshotItemSet: new Set([dragged, companion]),
     pointer: { x: 20, y: 20 },
   };
 
   determineInsertionDropTarget(dragged as any, root as any, session as any);
 
-  expect(event?.items.map((item) => item.resolvedItemId)).toEqual([
+  expect(event?.items.map((item) => item.itemId)).toEqual([
     "dragged",
     "companion",
   ]);
@@ -1586,7 +1634,7 @@ test("swap collects every hovered container before applying priority", () => {
     const item = new BaseObject(engine as never) as BaseObject &
       Record<string, any>;
     const box = layoutBox(rect);
-    item.resolvedItemId = itemId;
+    item.itemId = itemId;
     item.metadata = {};
     item.direction = "column";
     item.mainAxisAlign = "start";
@@ -1856,11 +1904,11 @@ test("insertion placement maps a downward same-container gap to the live index",
 
   expect(target?.container).toBe(container);
   expect(target?.index).toBe(3);
-  expect(target?.ghostRect).toEqual({
-    x: 0,
-    y: 138.5,
-    width: 120,
-    height: 3,
+  expect(target?.insertion).toMatchObject({
+    gap: { orientation: "horizontal", x: 0, y: 140, length: 120 },
+    previous: { item: itemB },
+    next: { item: itemC },
+    isCurrentPlacement: false,
   });
 });
 
@@ -1891,23 +1939,74 @@ test.describe("SnapSort insertion marker strategy", () => {
       const rect = element.getBoundingClientRect();
       return {
         position: style.position,
-        inlineHeight: (element as HTMLElement).style.height,
+        inlineHeight: element.style.height,
+        computedHeight: style.height,
         borderTopWidth: style.borderTopWidth,
         rectHeight: rect.height,
       };
     });
     expect(markerState.position).toBe("absolute");
-    expect(markerState.inlineHeight).toBe("0px");
-    expect(parseFloat(markerState.borderTopWidth)).toBeGreaterThan(0);
-    expect(markerState.rectHeight).toBeLessThanOrEqual(
-      parseFloat(markerState.borderTopWidth) + 2,
-    );
+    expect(markerState.inlineHeight).toBe("3px");
+    expect(markerState.computedHeight).toBe("3px");
+    expect(markerState.borderTopWidth).toBe("0px");
+    expect(markerState.rectHeight).toBeCloseTo(3, 1);
 
     const secondDuring = await itemRect(secondCard);
     expect(Math.abs(secondDuring.x - secondBefore.x)).toBeLessThan(1);
     expect(Math.abs(secondDuring.y - secondBefore.y)).toBeLessThan(1);
 
     await page.mouse.up();
+  });
+
+  test("moves one stable marker between both outer edges of the current item", async ({
+    page,
+  }) => {
+    await page.goto("/snapsort-insertion", { waitUntil: "networkidle" });
+
+    const firstList = page.locator(".insertion-list").first();
+    const cards = firstList.locator(".insertion-card");
+    const dragged = cards.nth(1);
+    const beforeOrder = await cards.locator("strong").allTextContents();
+    const firstBefore = await itemRect(cards.first());
+    const draggedBefore = await itemRect(dragged);
+    const thirdBefore = await itemRect(cards.nth(2));
+    const start = center(draggedBefore);
+
+    await page.mouse.move(start.x, start.y);
+    await page.mouse.down();
+    await page.mouse.move(start.x, draggedBefore.y + 4);
+    await page.waitForTimeout(120);
+
+    const marker = page.locator('[data-snapsort-ghost="insertion"]');
+    await expect(marker).toHaveCount(1);
+    const leadingRect = await itemRect(marker);
+    await marker.evaluate((element) => {
+      element.setAttribute("data-test-marker-identity", "stable");
+    });
+
+    await page.mouse.move(start.x, draggedBefore.y + draggedBefore.height - 4);
+    await page.waitForTimeout(120);
+
+    await expect(marker).toHaveCount(1);
+    await expect(
+      page.locator('[data-test-marker-identity="stable"]'),
+    ).toHaveCount(1);
+    const trailingRect = await itemRect(marker);
+    expect(trailingRect.y - leadingRect.y).toBeGreaterThan(
+      draggedBefore.height / 2,
+    );
+
+    for (const [current, before] of [
+      [await itemRect(cards.first()), firstBefore],
+      [await itemRect(cards.nth(2)), thirdBefore],
+    ]) {
+      expect(Math.abs(current.x - before.x)).toBeLessThan(1);
+      expect(Math.abs(current.y - before.y)).toBeLessThan(1);
+    }
+
+    await page.mouse.up();
+    await expect(marker).toHaveCount(0);
+    await expect(cards.locator("strong")).toHaveText(beforeOrder);
   });
 });
 
@@ -1948,11 +2047,11 @@ test("insertion placement maps an upward same-container gap to the live index", 
 
   expect(target?.container).toBe(container);
   expect(target?.index).toBe(1);
-  expect(target?.ghostRect).toEqual({
-    x: 0,
-    y: 42.5,
-    width: 120,
-    height: 3,
+  expect(target?.insertion).toMatchObject({
+    gap: { orientation: "horizontal", x: 0, y: 44, length: 120 },
+    previous: { item: itemA },
+    next: { item: itemB },
+    isCurrentPlacement: false,
   });
 });
 
@@ -1987,11 +2086,11 @@ test("insertion placement keeps the top boundary reachable when dragging the fir
 
   expect(target?.container).toBe(container);
   expect(target?.index).toBe(1);
-  expect(target?.ghostRect).toEqual({
-    x: 0,
-    y: -1.5,
-    width: 120,
-    height: 3,
+  expect(target?.insertion).toMatchObject({
+    gap: { orientation: "horizontal", x: 0, y: 0, length: 120 },
+    previous: null,
+    next: { item: dragged },
+    isCurrentPlacement: true,
   });
 });
 
@@ -2026,11 +2125,11 @@ test("insertion placement keeps the bottom boundary reachable when dragging the 
 
   expect(target?.container).toBe(container);
   expect(target?.index).toBe(3);
-  expect(target?.ghostRect).toEqual({
-    x: 0,
-    y: 134.5,
-    width: 120,
-    height: 3,
+  expect(target?.insertion).toMatchObject({
+    gap: { orientation: "horizontal", x: 0, y: 136, length: 120 },
+    previous: { item: dragged },
+    next: null,
+    isCurrentPlacement: true,
   });
 });
 
@@ -2075,60 +2174,12 @@ test("insertion placement spans the container content box on the marker cross ax
   const target = determineInsertionDropTarget(dragged as any, container as any);
 
   expect(target?.container).toBe(container);
-  expect(target?.ghostRect?.x).toBe(32);
-  expect(target?.ghostRect?.width).toBe(184);
-});
-
-test("insertion placement uses the destination marker rectangle callback", () => {
-  const itemA = mockSnapSortItem("a", {
-    x: 34,
-    y: 40,
-    width: 120,
-    height: 40,
+  expect(target?.insertion?.gap).toEqual({
+    orientation: "horizontal",
+    x: 32,
+    y: 132,
+    length: 184,
   });
-  const dragged = mockSnapSortItem("dragged", {
-    x: 34,
-    y: 88,
-    width: 120,
-    height: 40,
-  });
-  const itemB = mockSnapSortItem("b", {
-    x: 34,
-    y: 136,
-    width: 120,
-    height: 40,
-  });
-  const container = mockSnapSortContainer(
-    "container",
-    { x: 10, y: 20, width: 220, height: 180 },
-    [itemA, dragged, itemB],
-    "column",
-  );
-  container.callbacks = {
-    getInsertionMarkerRect: ({ defaultRect }: any) => ({
-      ...defaultRect,
-      x: defaultRect.x + 18,
-      width: defaultRect.width - 24,
-    }),
-  };
-  dragged.worldTransform = { x: 34, y: 112, scaleX: 1, scaleY: 1 };
-
-  const target = determineInsertionDropTarget(dragged as any, container as any);
-
-  expect(target?.ghostRect?.x).toBe(28);
-  expect(target?.ghostRect?.width).toBe(196);
-
-  container.callbacks = {
-    getInsertionMarkerRect: () => ({
-      x: 0,
-      y: 0,
-      width: -1,
-      height: 3,
-    }),
-  };
-  expect(() =>
-    determineInsertionDropTarget(dragged as any, container as any),
-  ).toThrow(/getInsertionMarkerRect/);
 });
 
 test("insertion placement shows a centered marker for an empty row container", () => {
@@ -2150,11 +2201,11 @@ test("insertion placement shows a centered marker for an empty row container", (
 
   expect(target?.container).toBe(container);
   expect(target?.index).toBe(0);
-  expect(target?.ghostRect).toEqual({
-    x: 108.5,
-    y: 20,
-    width: 3,
-    height: 80,
+  expect(target?.insertion).toEqual({
+    gap: { orientation: "vertical", x: 110, y: 20, length: 80 },
+    previous: null,
+    next: null,
+    isCurrentPlacement: false,
   });
 });
 
@@ -2356,103 +2407,84 @@ test("places append ghost on the short second row in a wrapped row layout", () =
   expect(appendGhost!.y).toBe(container.children[6].box.y);
 });
 
-test("reproduces same-container row drag where final ghost centers collapse", () => {
-  const container = snapshotFixture<string>({
-    value: "answer",
-    direction: "row",
-    mainAxisAlign: "start",
-    locked: false,
-    box: layoutBox(
-      { x: 0, y: 0, width: 488, height: 128 },
-      {},
-      {
-        top: 14,
-        right: 14,
-        bottom: 14,
-        left: 14,
-      },
-    ),
-    children: [
-      ["彼", 53.6, 47.8, 14, 14],
-      ["の", 53.6, 47.8, 71.6, 14],
-      ["経歴", 71.2, 47.8, 129.2, 14],
-      ["を", 53.6, 47.8, 204.4, 14],
-      ["会社", 71.2, 47.8, 262, 14],
-      ["に", 53.6, 47.8, 337.2, 14],
-      ["問い合わせ", 124, 47.8, 14, 65.8],
-      ["た", 53.6, 47.8, 142, 65.8],
-    ].map(([value, width, height, x, y]) => ({
-      value: value as string,
-      direction: "column" as const,
-      mainAxisAlign: "start" as const,
-      locked: false,
-      box: layoutBox({
-        x: x as number,
-        y: y as number,
-        width: width as number,
-        height: height as number,
-      }),
-      children: [],
-    })),
+test("scores a wrapped-row destination by its canonical insertion gap-line center", () => {
+  const items = [
+    mockSnapSortItem("彼", { x: 14, y: 14, width: 53.6, height: 47.8 }),
+    mockSnapSortItem("の", { x: 71.6, y: 14, width: 53.6, height: 47.8 }),
+    mockSnapSortItem("経歴", {
+      x: 129.2,
+      y: 14,
+      width: 71.2,
+      height: 47.8,
+    }),
+    mockSnapSortItem("を", {
+      x: 204.4,
+      y: 14,
+      width: 53.6,
+      height: 47.8,
+    }),
+    mockSnapSortItem("会社", {
+      x: 262,
+      y: 14,
+      width: 71.2,
+      height: 47.8,
+    }),
+    mockSnapSortItem("に", {
+      x: 337.2,
+      y: 14,
+      width: 53.6,
+      height: 47.8,
+    }),
+    mockSnapSortItem("問い合わせ", {
+      x: 14,
+      y: 65.8,
+      width: 124,
+      height: 47.8,
+    }),
+    mockSnapSortItem("た", {
+      x: 142,
+      y: 65.8,
+      width: 53.6,
+      height: 47.8,
+    }),
+  ];
+  const container = mockSnapSortContainer(
+    "answer",
+    { x: 0, y: 0, width: 488, height: 128 },
+    items,
+    "row",
+  );
+  const dragged = items[6];
+  const source = {
+    container,
+    containerMetadata: container.metadata,
+    index: 6,
+  };
+  const session = {
+    items: [dragged],
+    sources: [source],
+    activeSources: [source],
+    itemSet: new Set([dragged]),
+    snapshotItemSet: new Set([dragged]),
+    pointer: { x: 235.6, y: 89.7 },
+  };
+
+  // @ts-expect-error The fixture implements the resolver surface without Item's private fields.
+  const target = determineInsertionDropTarget(dragged, container, session);
+
+  expect(target?.container).toBe(container);
+  expect(target?.index).toBe(8);
+  expect(target?.insertion).toMatchObject({
+    gap: {
+      orientation: "vertical",
+      x: 195.6,
+      y: 65.8,
+      length: 47.8,
+    },
+    previous: { item: items[7] },
+    next: null,
+    isCurrentPlacement: false,
   });
-  const dragged = container.children[6];
-  const origin = contentBoxOrigin(container.box);
-  const beforeLower = virtualInsertionPosition(
-    container,
-    dragged,
-    origin.x,
-    origin.y,
-    6,
-    dragged.box.width,
-    dragged.box.height,
-  );
-  const afterLower = virtualInsertionPosition(
-    container,
-    dragged,
-    origin.x,
-    origin.y,
-    7,
-    dragged.box.width,
-    dragged.box.height,
-  );
-
-  expect(beforeLower).toEqual(afterLower);
-
-  const dragCenter = { x: 235.6, y: 89.7 };
-  const collapsedLowerGhostCenter = {
-    x: afterLower!.x + dragged.box.width / 2,
-    y: afterLower!.y + dragged.box.height / 2,
-  };
-  const topRowCandidateCenter = {
-    x: container.children[3].box.x + dragged.box.width / 2,
-    y: container.children[3].box.y + dragged.box.height / 2,
-  };
-  const frozenBoundaryAfterLastLowerRowItem = {
-    x: container.children[7].box.x + container.children[7].box.width,
-    y: container.children[7].box.y + dragged.box.height / 2,
-  };
-
-  const collapsedGhostDistance = Math.hypot(
-    collapsedLowerGhostCenter.x - dragCenter.x,
-    collapsedLowerGhostCenter.y - dragCenter.y,
-  );
-  const topRowDistance = Math.hypot(
-    topRowCandidateCenter.x - dragCenter.x,
-    topRowCandidateCenter.y - dragCenter.y,
-  );
-  const frozenBoundaryDistance = Math.hypot(
-    frozenBoundaryAfterLastLowerRowItem.x - dragCenter.x,
-    frozenBoundaryAfterLastLowerRowItem.y - dragCenter.y,
-  );
-
-  expect(
-    topRowDistance,
-    "current final-ghost-center scoring can prefer a top-row slot",
-  ).toBeLessThan(collapsedGhostDistance);
-  expect(
-    frozenBoundaryDistance,
-    "the lower-row visual insertion boundary is still the closer target",
-  ).toBeLessThan(topRowDistance);
 });
 
 function horizontalDoubleRowLayoutCases(): LayoutCase[] {
@@ -3164,17 +3196,20 @@ async function nestedContainerSelfInsertProbe(
       const childIndex = outer.itemOrderedList.indexOf(child);
       const insertEvents: SelfInsertProbeState["insertEvents"] = [];
       const originalInsert = outer.callbacks.onItemInsert;
-      outer.config.callbacks.onItemInsert = (event: any) => {
-        insertEvents.push({
-          index: event.index,
-          selfBefore: event.beforeElement === event.item.element,
-          beforeText: normalizeText(event.beforeElement),
-        });
-        originalInsert?.(event);
+      outer.callbacks = {
+        ...outer.callbacks,
+        onItemInsert: (event: any) => {
+          insertEvents.push({
+            index: event.index,
+            selfBefore: event.beforeElement === event.item.element,
+            beforeText: normalizeText(event.beforeElement),
+          });
+          originalInsert?.(event);
+        },
       };
 
       outer.insertItemAt(outer, child, childIndex);
-      outer.config.callbacks.onItemInsert = originalInsert;
+      outer.callbacks = { ...outer.callbacks, onItemInsert: originalInsert };
 
       return {
         found: true,
@@ -4160,8 +4195,6 @@ test.describe("Snapsort drag-start snapshot layout", () => {
       // prediction, not a mid-animation frame.
       await page.waitForTimeout(350);
 
-      const texts = (element: Element) =>
-        element.textContent?.trim().replace(/\s+/g, " ") ?? "";
       const prediction = await verticalColumn.evaluate((box, dragged) => {
         const out: Record<string, { x: number; y: number }> = {};
         for (const element of box.querySelectorAll(".snapsort-item")) {
@@ -4914,14 +4947,9 @@ test.describe("Snapsort drag-start snapshot layout", () => {
     ).toBe(1);
   });
 
-  test("does not throw when a leaked dragged item is grabbed again", async ({
+  test("does not throw when a released dragged item is grabbed again", async ({
     page,
-    browserName,
   }, testInfo) => {
-    test.fail(
-      browserName !== "firefox",
-      "Known repro: re-grabbing the leaked item reaches detachItemFromContainer with a null current container. Firefox's release-near-origin timing does not leak the item, so the repro (and the failure) is Blink/WebKit-only.",
-    );
     const consoleMessages: string[] = [];
     const pageErrors: string[] = [];
     page.on("console", (message) => consoleMessages.push(message.text()));
@@ -4932,13 +4960,13 @@ test.describe("Snapsort drag-start snapshot layout", () => {
 
     const nested = await demoBoxByHeading(page, "Nested Container");
     await releaseStartedDragNearOrigin(page, nested, "Item 1.5", "Sub A1", 0.2);
-    const leakedItem = await itemByTextIn(nested, "Item 1.5");
-    const leakedRect = await itemRect(leakedItem);
-    const leakedCenter = center(leakedRect);
+    const releasedItem = await itemByTextIn(nested, "Item 1.5");
+    const releasedRect = await itemRect(releasedItem);
+    const releasedCenter = center(releasedRect);
 
-    await page.mouse.move(leakedCenter.x, leakedCenter.y);
+    await page.mouse.move(releasedCenter.x, releasedCenter.y);
     await page.mouse.down();
-    await page.mouse.move(leakedCenter.x + 20, leakedCenter.y + 20, {
+    await page.mouse.move(releasedCenter.x + 20, releasedCenter.y + 20, {
       steps: 10,
     });
     await page.waitForTimeout(100);
@@ -4946,7 +4974,7 @@ test.describe("Snapsort drag-start snapshot layout", () => {
     await page.waitForTimeout(200);
 
     const state = await nestedSnapSortLifecycleState(page);
-    await writeJson(testInfo.outputPath("leaked-item-regrab-repro.json"), {
+    await writeJson(testInfo.outputPath("released-item-regrab.json"), {
       state,
       pageErrors,
       consoleErrors: consoleMessages.filter((message) =>
@@ -6296,10 +6324,10 @@ test.describe("Snapsort drag-start snapshot layout", () => {
     await page.waitForTimeout(900);
 
     const card = page
-      .locator(".task-card:not(.ghost)")
+      .locator(".task-card:not(.snapsort-ghost)")
       .filter({ hasText: "Profile fields" });
     const target = page
-      .locator(".task-card:not(.ghost)")
+      .locator(".task-card:not(.snapsort-ghost)")
       .filter({ hasText: "Board polish" });
     const start = center(await itemRect(card.locator(".task-drag-handle")));
     const targetRect = await itemRect(target);
@@ -6333,7 +6361,7 @@ test.describe("Snapsort drag-start snapshot layout", () => {
           const sample = () => {
             const card = [
               ...document.querySelectorAll<HTMLElement>(
-                ".task-card:not(.ghost)",
+                ".task-card:not(.snapsort-ghost)",
               ),
             ].find((element) =>
               element.textContent?.includes("Profile fields"),

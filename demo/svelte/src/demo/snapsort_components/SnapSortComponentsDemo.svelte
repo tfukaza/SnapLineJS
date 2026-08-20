@@ -4,16 +4,24 @@
   import ItemApiFixture from "./ItemApiFixture.svelte";
   import { Container, Ghost, Handle, Item } from "@snap-engine/snapsort/svelte";
   import {
+    createRenderEntry,
+    createRenderTree,
+    reduceRenderTree,
+  } from "@snap-engine/snapsort";
+  import {
     prioritizeIntersectingContainer,
     rejectDrop,
   } from "@snap-engine/snapsort/callbacks";
   import type {
     CanDropEvent,
     Container as SortContainer,
-    GhostInsertEvent,
-    ItemMoveEvent,
-    ItemRemoveEvent,
+    ContainerCallbacks,
+    GhostState,
+    RenderEntry,
+    RenderTree,
+    RenderTreeEvent,
   } from "@snap-engine/snapsort";
+  import { renderTreeCallbacks } from "../snapsort-render-tree";
 
   type DemoItem = {
     id: string;
@@ -25,7 +33,6 @@
     id: string;
     title: string;
     items: DemoItem[];
-    container?: SortContainer;
   };
 
   type ProgressiveTile = {
@@ -40,7 +47,28 @@
     bankTiles: ProgressiveTile[];
   };
   type ProgressiveZone = "answer" | "bank";
-  const progressiveZones: ProgressiveZone[] = ["answer", "bank"];
+
+  type BoardValue =
+    | ({ kind: "item" } & DemoItem)
+    | {
+        kind: "column";
+        id: string;
+        title: string;
+        container: SortContainer | null;
+      };
+  type ProgressiveValue =
+    | { kind: "example"; id: string; prompt: string }
+    | { kind: "zone"; id: string; exampleId: string; zone: ProgressiveZone }
+    | ({ kind: "tile" } & ProgressiveTile);
+  type OrdinaryBoardEntry = Exclude<RenderEntry<BoardValue>, { isGhost: true }>;
+
+  function isBoardColumn(entry: RenderEntry<BoardValue>): entry is OrdinaryBoardEntry {
+    return (
+      !entry.isGhost &&
+      entry.value.kind === "column" &&
+      entry.childTree !== null
+    );
+  }
 
   function hasMatchingDropGroup(event: CanDropEvent): boolean {
     const sourceGroup = event.source?.containerMetadata.dropGroup;
@@ -81,7 +109,7 @@
       };
   const showItemApiFixture = new URLSearchParams(window.location.search).get("itemApi") === "1";
 
-  let progressiveExamples: ProgressiveExample[] = $state([
+  const initialProgressiveExamples: ProgressiveExample[] = [
     {
       id: "morning-brief",
       prompt: "Build the sentence: The product designer rewrote the onboarding checklist.",
@@ -126,40 +154,75 @@
         { id: "wide-tiles-bank-without-overflowing", text: "without overflowing" },
       ],
     },
-  ]);
+  ];
+
+  function createBoardTree(): RenderTree<BoardValue> {
+    return createRenderTree(
+      initialColumns.map((column) =>
+        createRenderEntry<BoardValue>(
+          {
+            kind: "column",
+            id: column.id,
+            title: column.title,
+            container: null,
+          },
+          column.id,
+          createRenderTree(
+            column.items.map((item) =>
+              createRenderEntry<BoardValue>({ kind: "item", ...item }, item.id),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  function createProgressiveTree(): RenderTree<ProgressiveValue> {
+    return createRenderTree(
+      initialProgressiveExamples.map((example) =>
+        createRenderEntry<ProgressiveValue>(
+          { kind: "example", id: example.id, prompt: example.prompt },
+          example.id,
+          createRenderTree(
+            (["answer", "bank"] as const).map((zone) =>
+              createRenderEntry<ProgressiveValue>(
+                {
+                  kind: "zone",
+                  id: `${example.id}-${zone}`,
+                  exampleId: example.id,
+                  zone,
+                },
+                `${example.id}-${zone}`,
+                createRenderTree(
+                  example[zone === "answer" ? "answerTiles" : "bankTiles"].map(
+                    (tile) =>
+                      createRenderEntry<ProgressiveValue>(
+                        { kind: "tile", ...tile },
+                        tile.id,
+                      ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 
   let nextItemNumber = $state(7);
-  let columns = $state<DemoColumn[]>(structuredClone(initialColumns));
+  let board = $state.raw(createBoardTree());
+  let progressiveTree = $state.raw(createProgressiveTree());
   let boardVersion = $state(0);
   let itemCount = $derived(
-    columns.reduce((total, column) => total + column.items.length, 0),
+    board.entries.reduce(
+      (total, entry) =>
+        total + (!entry.isGhost && entry.childTree
+          ? entry.childTree.entries.filter((child) => !child.isGhost).length
+          : 0),
+      0,
+    ),
   );
-
-  function cloneInitialColumns() {
-    return structuredClone(initialColumns);
-  }
-
-  function handleProgressiveMove(event: ItemMoveEvent) {
-    const exampleId = event.to.containerMetadata.exampleId;
-    const targetZone = event.to.containerMetadata.zone;
-    if (
-      typeof exampleId !== "string" ||
-      (targetZone !== "answer" && targetZone !== "bank")
-    ) return;
-
-    progressiveExamples = progressiveExamples.map((example) => {
-      if (example.id !== exampleId) return example;
-      const moved = [...example.answerTiles, ...example.bankTiles].find(
-        (tile) => tile.id === event.itemId,
-      );
-      if (!moved) return example;
-      const answerTiles = example.answerTiles.filter((tile) => tile.id !== event.itemId);
-      const bankTiles = example.bankTiles.filter((tile) => tile.id !== event.itemId);
-      const target = targetZone === "answer" ? answerTiles : bankTiles;
-      target.splice(Math.max(0, Math.min(event.to.index, target.length)), 0, moved);
-      return { ...example, answerTiles, bankTiles };
-    });
-  }
 
   function createItem(): DemoItem {
     const itemNumber = nextItemNumber++;
@@ -171,66 +234,77 @@
   }
 
   function addItem() {
-    columns = columns.map((column, index) =>
-      index === 0
-        ? { ...column, items: [...column.items, createItem()] }
-        : column,
-    );
+    const item = createItem();
+    board = {
+      ...board,
+      entries: board.entries.map((entry, index) =>
+        index === 0 && !entry.isGhost && entry.childTree
+          ? {
+              ...entry,
+              childTree: {
+                ...entry.childTree,
+                entries: [
+                  ...entry.childTree.entries,
+                  createRenderEntry<BoardValue>(
+                    { kind: "item", ...item },
+                    item.id,
+                  ),
+                ],
+              },
+            }
+          : entry,
+      ),
+    };
   }
 
   function deleteItem(itemId: string) {
-    columns = columns.map((column) => ({
-      ...column,
-      items: column.items.filter((item) => item.id !== itemId),
-    }));
+    board = {
+      ...board,
+      entries: board.entries.map((entry) =>
+        !entry.isGhost && entry.childTree
+          ? {
+              ...entry,
+              childTree: {
+                ...entry.childTree,
+                entries: entry.childTree.entries.filter(
+                  (item) => item.itemId !== itemId,
+                ),
+              },
+            }
+          : entry,
+      ),
+    };
   }
 
   function moveItemAcrossColumns(itemId: string, direction: -1 | 1) {
+    const columns = board.entries.filter(isBoardColumn);
     const sourceColumnIndex = columns.findIndex((column) =>
-      column.items.some((item) => item.id === itemId),
+      column.childTree?.entries.some(
+        (item) => !item.isGhost && item.itemId === itemId,
+      ),
     );
-    if (sourceColumnIndex === -1) return;
-
     const targetColumnIndex = sourceColumnIndex + direction;
-    if (targetColumnIndex < 0 || targetColumnIndex >= columns.length) return;
+    if (
+      sourceColumnIndex === -1 ||
+      targetColumnIndex < 0 ||
+      targetColumnIndex >= columns.length
+    ) return;
 
-    const sourceItemIndex = columns[sourceColumnIndex].items.findIndex(
-      (item) => item.id === itemId,
+    const sourceColumn = columns[sourceColumnIndex];
+    const targetColumn = columns[targetColumnIndex];
+    if (!sourceColumn.childTree || !targetColumn.childTree) return;
+    const sourceItemIndex = sourceColumn.childTree.entries.findIndex(
+      (item) => !item.isGhost && item.itemId === itemId,
     );
     if (sourceItemIndex === -1) return;
-
-    const sourceContainer = columns[sourceColumnIndex].container;
-    const targetContainer = columns[targetColumnIndex].container;
-    if (!sourceContainer || !targetContainer) return;
-
     const destinationIndex = Math.min(
       sourceItemIndex,
-      columns[targetColumnIndex].items.length,
+      targetColumn.childTree.entries.length,
     );
-    const movedBySnapSort = sourceContainer.moveItem(
-      itemId,
-      targetContainer,
-      destinationIndex,
-    );
-    if (movedBySnapSort) return;
-
-    const movedItem = columns[sourceColumnIndex].items[sourceItemIndex];
-    columns = columns.map((column, columnIndex) => {
-      if (columnIndex === sourceColumnIndex) {
-        return {
-          ...column,
-          items: column.items.filter((item) => item.id !== itemId),
-        };
-      }
-
-      if (columnIndex === targetColumnIndex) {
-        const nextItems = column.items.slice();
-        nextItems.splice(destinationIndex, 0, movedItem);
-        return { ...column, items: nextItems };
-      }
-
-      return column;
-    });
+    const sourceContainer = sourceColumn.value.container;
+    const targetContainer = targetColumn.value.container;
+    if (!sourceContainer || !targetContainer) return;
+    sourceContainer.moveItem(itemId, targetContainer, destinationIndex);
   }
 
   $effect(() => {
@@ -245,68 +319,60 @@
 
   function resetItems() {
     nextItemNumber = 7;
-    columns = cloneInitialColumns();
+    board = createBoardTree();
     boardVersion += 1;
   }
 
   function findDemoItem(itemId: string | undefined) {
     if (!itemId) return null;
-    for (const column of columns) {
-      const item = column.items.find((candidate) => candidate.id === itemId);
-      if (item) return item;
+    for (const column of board.entries) {
+      if (column.isGhost || !column.childTree) continue;
+      const entry = column.childTree.entries.find(
+        (candidate) => !candidate.isGhost && candidate.itemId === itemId,
+      );
+      if (entry && !entry.isGhost && entry.value.kind === "item") {
+        const { id, label, detail } = entry.value;
+        return { id, label, detail };
+      }
     }
     return null;
   }
 
-  /** Ghost snippet content: looks up the dragged item's label/detail via its itemId. */
-  function ghostItemContent(event: GhostInsertEvent): DemoItem | null {
-    const itemId = event.originalItemId;
-    return typeof itemId === "string" ? findDemoItem(itemId) : null;
+  function ghostItemContent(ghost: GhostState): DemoItem | null {
+    return findDemoItem(ghost.originalItemId);
   }
 
-  function handleSnapSortDomMove(event: ItemMoveEvent) {
-    const itemId = event.itemId;
-    if (typeof itemId !== "string") return;
-    const targetColumnId = event.to.containerMetadata.columnId;
-    if (typeof targetColumnId !== "string") return;
-
-    let movedItem: DemoItem | null = null;
-    const withoutMovedItem = columns.map((column) => {
-      const sourceIndex = column.items.findIndex((item) => item.id === itemId);
-      if (sourceIndex === -1) return column;
-
-      const nextItems = column.items.slice();
-      const [item] = nextItems.splice(sourceIndex, 1);
-      movedItem = item;
-      return { ...column, items: nextItems };
-    });
-
-    if (!movedItem) {
-      const label = event.itemMetadata.label;
-      const detail = event.itemMetadata.detail;
-      if (typeof label !== "string" || typeof detail !== "string") return;
-      movedItem = { id: itemId, label, detail };
-    }
-
-    columns = withoutMovedItem.map((column) => {
-      if (column.id !== targetColumnId) return column;
-
-      const nextItems = column.items.slice();
-      const destinationIndex = Math.max(
-        0,
-        Math.min(event.to.index, nextItems.length),
-      );
-      nextItems.splice(destinationIndex, 0, movedItem);
-      return { ...column, items: nextItems };
-    });
+  function columnIndex(itemId: string): number {
+    return board.entries
+      .filter(
+        (entry) =>
+          !entry.isGhost &&
+          entry.value.kind === "column" &&
+          entry.childTree !== null,
+      )
+      .findIndex((entry) => entry.itemId === itemId);
   }
 
-  function handleSnapSortDomRemove(event: ItemRemoveEvent) {
-    const itemId = event.itemId;
-    if (typeof itemId !== "string") return;
-
-    deleteItem(itemId);
+  function columnCount(): number {
+    return board.entries.filter(
+      (entry) => !entry.isGhost && entry.value.kind === "column",
+    ).length;
   }
+
+  function applyBoardEvent(event: RenderTreeEvent) {
+    board = reduceRenderTree(board, event);
+  }
+
+  const boardCallbacks = {
+    ...renderTreeCallbacks(applyBoardEvent),
+    canDrop: rejectDrop,
+  } satisfies ContainerCallbacks;
+  const progressiveCallbacks = {
+    ...renderTreeCallbacks(
+      (event) => (progressiveTree = reduceRenderTree(progressiveTree, event)),
+    ),
+    canDrop: rejectDrop,
+  } satisfies ContainerCallbacks;
 
   function stopControlEvent(event: Event) {
     event.stopPropagation();
@@ -376,22 +442,25 @@
           <Engine id="snapsort-components-demo-canvas">
             <div class="board-frame">
               <Container
+                itemId="component-kanban-root"
                 className="board"
                 config={{
                   direction: "row",
                   name: "component-kanban-root",
-                  callbacks: { canDrop: rejectDrop },
+                  callbacks: boardCallbacks,
                 }}
                 locked={true}
                 metadata={{ boardId: "component-kanban" }}
-                items={columns}
-                getItemId={(column) => column.id}
               >
-                {#snippet entry(column)}
+                {#each board.entries as entry (entry.itemId)}
+                  {#if entry.isGhost}
+                    <Ghost ghost={entry.ghost} />
+                  {:else if entry.childTree && entry.value.kind === "column"}
+                    {@const column = entry.value}
                   <Container
-                    itemId={column.id}
-                    className={column.id === "backlog" ? "list-panel array-list" : "list-panel"}
+                    itemId={entry.itemId}
                     bind:container={column.container}
+                    className={column.id === "backlog" ? "list-panel array-list" : "list-panel"}
                     config={{
                       direction: "column",
                       name: `component-${column.id}`,
@@ -400,66 +469,65 @@
                         drop: snapSortCubicAnimation,
                         move: snapSortCubicAnimation,
                       },
-                      callbacks: {
-                        onItemMove: handleSnapSortDomMove,
-                        onItemRemove: handleSnapSortDomRemove,
-                      },
                     }}
                     locked={true}
                     metadata={{ columnId: column.id }}
-                    items={column.items}
-                    getItemId={(item) => item.id}
                   >
-                    {#snippet before()}
-                      <div class="list-header">
-                        <h2>{column.title}</h2>
-                        <span>{column.items.length}</span>
-                      </div>
-                    {/snippet}
-                    {#snippet entry(entry)}
-                      <Item itemId={entry.id} className="task-card" metadata={{ label: entry.label, detail: entry.detail }}>
+                    <div class="list-header">
+                      <h2>{column.title}</h2>
+                      <span>{entry.childTree.entries.filter((child) => !child.isGhost).length}</span>
+                    </div>
+                    {#each entry.childTree.entries as child (child.itemId)}
+                      {#if child.isGhost}
+                        <Ghost ghost={child.ghost}>
+                          <div class="task-content">
+                            <div class="task-main">
+                              <strong>{ghostItemContent(child.ghost)?.label ?? ""}</strong>
+                              <span>{ghostItemContent(child.ghost)?.detail ?? ""}</span>
+                            </div>
+                          </div>
+                        </Ghost>
+                      {:else if child.childTree}
+                        <Container itemId={child.itemId} />
+                      {:else if child.value.kind === "item"}
+                        {@const item = child.value}
+                      <Item itemId={child.itemId} className="task-card" metadata={{ label: item.label, detail: item.detail }}>
                         <div class="task-content">
                           <Handle className="task-drag-handle">
                             <span class="material-symbols-outlined" aria-hidden="true">drag_indicator</span>
                           </Handle>
                           <div class="task-main">
-                            <strong>{entry.label}</strong>
-                            <span>{entry.detail}</span>
+                            <strong>{item.label}</strong>
+                            <span>{item.detail}</span>
                           </div>
                           <div class="card-actions">
                             <button
                               class="icon-button"
-                              aria-label={`Delete ${entry.label}`}
-                              use:controlButton={() => deleteItem(entry.id)}
+                              aria-label={`Delete ${item.label}`}
+                              use:controlButton={() => deleteItem(item.id)}
                             ><span class="material-symbols-outlined" aria-hidden="true">delete</span></button>
                             <button
                               class="icon-button"
-                              aria-label={`Move ${entry.label} left`}
-                              disabled={columns.findIndex((candidate) => candidate.id === column.id) === 0}
-                              use:controlButton={() => moveItemAcrossColumns(entry.id, -1)}
+                              aria-label={`Move ${item.label} left`}
+                              disabled={columnIndex(column.id) === 0}
+                              use:controlButton={() => moveItemAcrossColumns(item.id, -1)}
                             ><span class="material-symbols-outlined" aria-hidden="true">arrow_left_alt</span></button>
                             <button
                               class="icon-button"
-                              aria-label={`Move ${entry.label} right`}
-                              disabled={columns.findIndex((candidate) => candidate.id === column.id) === columns.length - 1}
-                              use:controlButton={() => moveItemAcrossColumns(entry.id, 1)}
+                              aria-label={`Move ${item.label} right`}
+                              disabled={columnIndex(column.id) === columnCount() - 1}
+                              use:controlButton={() => moveItemAcrossColumns(item.id, 1)}
                             ><span class="material-symbols-outlined" aria-hidden="true">arrow_right_alt</span></button>
                           </div>
                         </div>
                       </Item>
-                    {/snippet}
-                    {#snippet ghost(event)}
-                      <Ghost {event}>
-                        <div class="task-content">
-                          <div class="task-main">
-                            <strong>{ghostItemContent(event)?.label ?? ""}</strong>
-                            <span>{ghostItemContent(event)?.detail ?? ""}</span>
-                          </div>
-                        </div>
-                      </Ghost>
-                    {/snippet}
+                      {/if}
+                    {/each}
                   </Container>
-                {/snippet}
+                  {:else}
+                    <Item itemId={entry.itemId}><span></span></Item>
+                  {/if}
+                {/each}
               </Container>
             </div>
           </Engine>
@@ -477,49 +545,51 @@
 
       <Engine id="snapsort-progressive-components-demo-canvas">
         <Container
+          itemId="progressive-components-root"
           className="progressive-root"
           config={{
             mode: "progressive",
             direction: "column",
             name: "progressive-components-root",
-            callbacks: { canDrop: rejectDrop },
+            callbacks: progressiveCallbacks,
           }}
           locked={true}
           metadata={{ boardId: "progressive-components" }}
-          items={progressiveExamples}
-          getItemId={(example) => example.id}
         >
-          {#snippet entry(example)}
-            <Container
-              itemId={example.id}
-              className="progressive-example"
-              config={{
-                mode: "progressive",
-                direction: "column",
-                name: `progressive-example-${example.id}`,
-                callbacks: { canDrop: rejectDrop },
-              }}
-              locked={true}
-              metadata={{ exampleId: example.id }}
-              items={progressiveZones}
-              getItemId={(zone) => `${example.id}-${zone}`}
-            >
-              {#snippet before()}
+          {#each progressiveTree.entries as entry (entry.itemId)}
+            {#if entry.isGhost}
+              <Ghost ghost={entry.ghost} />
+            {:else if entry.childTree && entry.value.kind === "example"}
+              {@const example = entry.value}
+              <Container
+                itemId={entry.itemId}
+                className="progressive-example"
+                config={{
+                  mode: "progressive",
+                  direction: "column",
+                  name: `progressive-example-${example.id}`,
+                  callbacks: { canDrop: rejectDrop },
+                }}
+                locked={true}
+                metadata={{ exampleId: example.id }}
+              >
                 <div class="progressive-prompt">
                   <span>{example.prompt}</span>
                 </div>
-              {/snippet}
-
-              {#snippet entry(zone)}
-                {#if zone === "answer"}
+                {#each entry.childTree.entries as zoneEntry (zoneEntry.itemId)}
+                  {#if zoneEntry.isGhost}
+                    <Ghost ghost={zoneEntry.ghost} />
+                  {:else if zoneEntry.childTree && zoneEntry.value.kind === "zone"}
+                    {@const zone = zoneEntry.value}
                   <Container
-                    itemId={`${example.id}-answer`}
-                    className="sentence-answer-line"
+                    itemId={zoneEntry.itemId}
+                    className={zone.zone === "answer"
+                      ? "sentence-answer-line"
+                      : "sentence-bank-line"}
                     config={{
                       mode: "progressive",
                       direction: "row",
-                      name: `progressive-answer-${example.id}`,
-                      gap: 8,
+                      name: `progressive-${zone.zone}-${example.id}`,
                       animation: {
                         reorder: snapSortCubicAnimation,
                         drop: snapSortCubicAnimation,
@@ -527,62 +597,40 @@
                       callbacks: {
                         canDrop: hasMatchingDropGroup,
                         getDropPriority: prioritizeIntersectingContainer,
-                        onItemMove: handleProgressiveMove,
                       },
                     }}
                     locked={true}
                     metadata={{
-                      zone: "answer",
+                      zone: zone.zone,
                       exampleId: example.id,
                       dropGroup: `progressive-${example.id}`,
                     }}
-                    items={example.answerTiles}
-                    getItemId={(tile) => tile.id}
                   >
-                    {#snippet entry(tile)}
-                      <Item itemId={tile.id} className="sentence-tile-wrapper">
-                        <button type="button" class="sentence-tile">{tile.text}</button>
-                      </Item>
-                    {/snippet}
+                    {#each zoneEntry.childTree.entries as tileEntry (tileEntry.itemId)}
+                      {#if tileEntry.isGhost}
+                        <Ghost ghost={tileEntry.ghost} />
+                      {:else if tileEntry.childTree}
+                        <Container itemId={tileEntry.itemId} />
+                      {:else if tileEntry.value.kind === "tile"}
+                        <Item itemId={tileEntry.itemId} className="sentence-tile-wrapper">
+                          <button
+                            type="button"
+                            class:muted={zone.zone === "bank"}
+                            class="sentence-tile"
+                          >{tileEntry.value.text}</button>
+                        </Item>
+                      {/if}
+                    {/each}
                   </Container>
-                {:else}
-                  <Container
-                    itemId={`${example.id}-bank`}
-                    className="sentence-bank-line"
-                    config={{
-                      mode: "progressive",
-                      direction: "row",
-                      name: `progressive-bank-${example.id}`,
-                      gap: 8,
-                      animation: {
-                        reorder: snapSortCubicAnimation,
-                        drop: snapSortCubicAnimation,
-                      },
-                      callbacks: {
-                        canDrop: hasMatchingDropGroup,
-                        getDropPriority: prioritizeIntersectingContainer,
-                        onItemMove: handleProgressiveMove,
-                      },
-                    }}
-                    locked={true}
-                    metadata={{
-                      zone: "bank",
-                      exampleId: example.id,
-                      dropGroup: `progressive-${example.id}`,
-                    }}
-                    items={example.bankTiles}
-                    getItemId={(tile) => tile.id}
-                  >
-                    {#snippet entry(tile)}
-                      <Item itemId={tile.id} className="sentence-tile-wrapper">
-                        <button type="button" class="sentence-tile muted">{tile.text}</button>
-                      </Item>
-                    {/snippet}
-                  </Container>
-                {/if}
-              {/snippet}
-            </Container>
-          {/snippet}
+                  {:else}
+                    <Item itemId={zoneEntry.itemId}><span></span></Item>
+                  {/if}
+                {/each}
+              </Container>
+            {:else}
+              <Item itemId={entry.itemId}><span></span></Item>
+            {/if}
+          {/each}
         </Container>
       </Engine>
     </section>

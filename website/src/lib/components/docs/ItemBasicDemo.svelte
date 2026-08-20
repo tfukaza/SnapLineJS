@@ -1,25 +1,45 @@
 <script lang="ts">
   import { Engine } from "@snap-engine/asset-base/svelte";
-  import { defaultAnimations, type ItemMoveEvent } from "@snap-engine/snapsort";
-  import { Container, Item } from "@snap-engine/snapsort/svelte";
+  import {
+    createRenderEntries,
+    createRenderTree,
+    defaultAnimations,
+    reduceRenderTree,
+    type ContainerCallbacks,
+    type GhostLifecycleEvent,
+    type ItemMoveEvent,
+  } from "@snap-engine/snapsort";
+  import { Container, Ghost, Item } from "@snap-engine/snapsort/svelte";
 
   type Task = { id: string; label: string };
 
-  let tasks = $state<Task[]>([
-    { id: "outline", label: "Outline the article" },
-    { id: "draft", label: "Write the first draft" },
-    { id: "review", label: "Review the copy" },
-  ]);
+  let tasks = $state.raw(
+    createRenderTree(
+      createRenderEntries<Task>(
+        [
+          { id: "outline", label: "Outline the article" },
+          { id: "draft", label: "Write the first draft" },
+          { id: "review", label: "Review the copy" },
+        ],
+        (task) => task.id,
+      ),
+    ),
+  );
 
   function onItemMove(event: ItemMoveEvent) {
-    const itemId = String(event.itemId);
-    const task = tasks.find((entry) => entry.id === itemId);
-    if (!task) return;
-
-    const next = tasks.filter((entry) => entry.id !== itemId);
-    next.splice(Math.min(event.to.index, next.length), 0, task);
-    tasks = next;
+    tasks = reduceRenderTree(tasks, event);
   }
+
+  function onGhostMove(event: GhostLifecycleEvent) {
+    tasks = reduceRenderTree(tasks, event);
+  }
+
+  const callbacks = {
+    onItemMove,
+    onGhostInsert: onGhostMove,
+    onGhostMove,
+    onGhostRemove: onGhostMove,
+  } satisfies ContainerCallbacks;
 </script>
 
 <div class="item-basic-demo">
@@ -27,15 +47,19 @@
 
   <Engine id="item-example-basic">
     <Container
+      itemId="item-example-basic-root"
       className="item-demo-list"
-      items={tasks}
-      config={{ animation: defaultAnimations, callbacks: { onItemMove } }}
+      config={{ animation: defaultAnimations, callbacks }}
     >
-      {#snippet entry(task)}
-        <Item itemId={task.id} className="item-demo-card">
-          {task.label}
-        </Item>
-      {/snippet}
+      {#each tasks.entries as entry (entry.itemId)}
+        {#if entry.isGhost}
+          <Ghost ghost={entry.ghost} />
+        {:else}
+          <Item itemId={entry.itemId} className="item-demo-card">
+            {entry.value.label}
+          </Item>
+        {/if}
+      {/each}
     </Container>
   </Engine>
 </div>

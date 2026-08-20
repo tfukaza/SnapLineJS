@@ -1,44 +1,75 @@
 <script lang="ts">
   import { Engine } from "@snap-engine/asset-base/svelte";
   import {
+    createRenderEntries,
+    createRenderTree,
     defaultAnimations,
+    reduceRenderTree,
+    type ContainerCallbacks,
     type DragStartEvent,
+    type GhostLifecycleEvent,
     type ItemMoveEvent,
   } from "@snap-engine/snapsort";
-  import { Container, Handle, Item } from "@snap-engine/snapsort/svelte";
+  import { Container, Ghost, Handle, Item } from "@snap-engine/snapsort/svelte";
 
   type Task = { id: string; label: string; complete: boolean };
 
-  let tasks = $state<Task[]>([
-    { id: "plan", label: "Plan release", complete: false },
-    { id: "test", label: "Run checks", complete: false },
-    { id: "ship", label: "Ship update", complete: true },
-  ]);
+  let tasks = $state.raw(
+    createRenderTree(
+      createRenderEntries<Task>(
+        [
+          { id: "plan", label: "Plan release", complete: false },
+          { id: "test", label: "Run checks", complete: false },
+          { id: "ship", label: "Ship update", complete: true },
+        ],
+        (task) => task.id,
+      ),
+    ),
+  );
   let status = $state("Drag with the grip; the Done buttons remain interactive.");
 
   function onDragStart(event: DragStartEvent) {
-    const task = tasks.find((entry) => entry.id === String(event.itemId));
-    status = `Dragging ${task?.label ?? String(event.itemId)} from its handle`;
+    const task = tasks.entries.find(
+      (entry) => !entry.isGhost && entry.itemId === event.itemId,
+    );
+    const label = task && !task.isGhost ? task.value.label : event.itemId;
+    status = `Dragging ${label} from its handle`;
   }
 
   function onItemMove(event: ItemMoveEvent) {
-    const itemId = String(event.itemId);
-    const task = tasks.find((entry) => entry.id === itemId);
-    if (!task) return;
+    const task = tasks.entries.find(
+      (entry) => !entry.isGhost && entry.itemId === event.itemId,
+    );
+    tasks = reduceRenderTree(tasks, event);
+    if (task && !task.isGhost) status = `Moved ${task.value.label}`;
+  }
 
-    const next = tasks.filter((entry) => entry.id !== itemId);
-    next.splice(Math.min(event.to.index, next.length), 0, task);
-    tasks = next;
-    status = `Moved ${task.label}`;
+  function onGhostMove(event: GhostLifecycleEvent) {
+    tasks = reduceRenderTree(tasks, event);
   }
 
   function toggleComplete(id: string) {
-    tasks = tasks.map((task) =>
-      task.id === id ? { ...task, complete: !task.complete } : task,
-    );
-    const task = tasks.find((entry) => entry.id === id);
-    if (task) status = `${task.label} marked ${task.complete ? "done" : "not done"}`;
+    let updated: Task | undefined;
+    tasks = {
+      ...tasks,
+      entries: tasks.entries.map((entry) => {
+        if (entry.isGhost || entry.itemId !== id) return entry;
+        updated = { ...entry.value, complete: !entry.value.complete };
+        return { ...entry, value: updated };
+      }),
+    };
+    if (updated) {
+      status = `${updated.label} marked ${updated.complete ? "done" : "not done"}`;
+    }
   }
+
+  const callbacks = {
+    onDragStart,
+    onItemMove,
+    onGhostInsert: onGhostMove,
+    onGhostMove,
+    onGhostRemove: onGhostMove,
+  } satisfies ContainerCallbacks;
 </script>
 
 <div class="item-handle-demo">
@@ -46,27 +77,28 @@
 
   <Engine id="item-example-handle">
     <Container
+      itemId="item-example-handle-root"
       className="handle-list"
-      items={tasks}
-      config={{
-        animation: defaultAnimations,
-        callbacks: { onDragStart, onItemMove },
-      }}
+      config={{ animation: defaultAnimations, callbacks }}
     >
-      {#snippet entry(task)}
-        <Item
-          itemId={task.id}
-          className={`handle-card${task.complete ? " is-complete" : ""}`}
-        >
-          <Handle className="drag-grip" aria-label={`Drag ${task.label}`}>
-            <span aria-hidden="true">⋮⋮</span>
-          </Handle>
-          <span class="task-label">{task.label}</span>
-          <button type="button" onclick={() => toggleComplete(task.id)}>
-            {task.complete ? "Undo" : "Done"}
-          </button>
-        </Item>
-      {/snippet}
+      {#each tasks.entries as entry (entry.itemId)}
+        {#if entry.isGhost}
+          <Ghost ghost={entry.ghost} />
+        {:else}
+          <Item
+            itemId={entry.itemId}
+            className={`handle-card${entry.value.complete ? " is-complete" : ""}`}
+          >
+            <Handle className="drag-grip" aria-label={`Drag ${entry.value.label}`}>
+              <span aria-hidden="true">⋮⋮</span>
+            </Handle>
+            <span class="task-label">{entry.value.label}</span>
+            <button type="button" onclick={() => toggleComplete(entry.itemId)}>
+              {entry.value.complete ? "Undo" : "Done"}
+            </button>
+          </Item>
+        {/if}
+      {/each}
     </Container>
   </Engine>
 </div>

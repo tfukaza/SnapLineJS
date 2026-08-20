@@ -3,10 +3,20 @@ import { JSDOM } from "jsdom";
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { determineSwapDropTarget } from "../../assets/snapsort/src/algorithm";
-import { Container } from "../../assets/snapsort/src/container";
+import { createVanillaAdapter } from "../../assets/snapsort/src/adapter";
+import {
+  Container,
+  type ContainerOptions,
+} from "../../assets/snapsort/src/container";
 import { builtinStrategies } from "../../assets/snapsort/src/drag/drop-strategy";
 import { DragSessionController as DragSession } from "../../assets/snapsort/src/drag/session";
 import { installDragSession } from "../../assets/snapsort/src/drag/session-store";
+import {
+  removePointerPreview,
+  startPointerPreview,
+  updatePointerPreview,
+} from "../../assets/snapsort/src/drag/pointer-preview";
+import { buildGhostSlotLocation } from "../../assets/snapsort/src/event-builders";
 import type { DropPriorityEvent } from "../../assets/snapsort/src/events";
 import { Item } from "../../assets/snapsort/src/item";
 import { readVisualRect } from "../../assets/snapsort/src/internal/visual-rect";
@@ -28,6 +38,8 @@ interface StateHarness {
   global: any;
   cleanup(): void;
 }
+
+type TestContainerOptions = Omit<ContainerOptions, "itemId">;
 
 function createStateHarness(): StateHarness {
   const dom = new JSDOM("<!doctype html><html><body></body></html>");
@@ -145,10 +157,9 @@ function bindElement(
 function mountRoot(
   harness: StateHarness,
   id = "root",
-  config: ConstructorParameters<typeof Container>[2] = {},
+  config: TestContainerOptions = {},
 ): Container {
-  const root = new Container(harness.engine, null, config);
-  root.itemId = id;
+  const root = new Container(harness.engine, null, { ...config, itemId: id });
   const element = harness.document.createElement("div");
   setRect(element, { x: 0, y: 0, width: 600, height: 600 });
   harness.document.body.append(element);
@@ -161,10 +172,12 @@ function mountContainer(
   parent: Container,
   id: string,
   rect = { x: 0, y: 0, width: 240, height: 240 },
-  config: ConstructorParameters<typeof Container>[2] = {},
+  config: TestContainerOptions = {},
 ): Container {
-  const container = new Container(harness.engine, null, config);
-  container.itemId = id;
+  const container = new Container(harness.engine, parent, {
+    ...config,
+    itemId: id,
+  });
   bindElement(harness, container, parent.element!, id, rect);
   parent.attachItem(container);
   return container;
@@ -176,8 +189,7 @@ function mountItem(
   id: string,
   rect = { x: 0, y: 0, width: 40, height: 40 },
 ): Item {
-  const item = new Item(harness.engine, null);
-  item.itemId = id;
+  const item = new Item(harness.engine, null, { itemId: id });
   bindElement(harness, item, parent.element!, id, rect);
   parent.attachItem(item);
   return item;
@@ -339,9 +351,16 @@ test("Container exposes live non-ghost children and logical tree depth", () => {
     const section = mountContainer(harness, root, "section");
     const nested = mountContainer(harness, section, "nested");
     const leaf = mountItem(harness, nested, "leaf");
-    const ghost = new Item(harness.engine, null, true);
-    ghost.itemId = "leaf";
-    bindElement(harness, ghost, nested.element!, "ghost:leaf");
+    const session = makeSession(root, leaf);
+    const ghost = leaf.createGhostItem(session, {
+      type: "target-spacer",
+      location: buildGhostSlotLocation(nested, 0),
+      rect: { x: 0, y: 0, width: 40, height: 40 },
+    });
+    const nestedElement = nested.element;
+    if (!nestedElement)
+      throw new Error("Expected the nested Container to be mounted.");
+    bindElement(harness, ghost, nestedElement, "ghost:leaf");
     placeItemAt(nested, ghost, 0);
 
     expect(root.depth).toBe(0);
@@ -395,22 +414,24 @@ test("reconciliation preserves an elementless framework ghost's logical slot", (
   const harness = createStateHarness();
   try {
     const root = mountRoot(harness, "root", {
-      domOwnership: "framework",
+      adapter: { callbacks: {}, commit: (mutation) => mutation() },
       callbacks: {
-        flushMutation(mutation) {
-          mutation();
-        },
         onGhostInsert() {},
+        onGhostMove() {},
         onGhostRemove() {},
       },
     });
     const first = mountItem(harness, root, "first");
     const second = mountItem(harness, root, "second");
     const session = makeSession(root, first);
-    const ghost = first.createGhostItem(session, "flow", root, null, "target")!;
+    const ghost = first.createGhostItem(session, {
+      type: "target-spacer",
+      location: buildGhostSlotLocation(root, 1),
+      rect: { x: 0, y: 0, width: 40, height: 40 },
+    });
 
     expect(ghost.element).toBeNull();
-    root.insertGhostAt(first, root, ghost, 1, null, session, "flow");
+    root.insertGhost(ghost);
 
     expect(root.itemOrderedList).toEqual([first, ghost, second]);
     expect(root.itemList).toEqual([first, second]);
@@ -426,7 +447,7 @@ test("reconciliation preserves an elementless framework ghost's logical slot", (
   }
 });
 
-test("attachItem reparents across roots without leaving stale state", () => {
+test("attachItem rejects cross-root reparenting without changing either tree", () => {
   const harness = createStateHarness();
   try {
     const firstRoot = mountRoot(harness, "first-root");
@@ -434,21 +455,239 @@ test("attachItem reparents across roots without leaving stale state", () => {
     const subtree = mountContainer(harness, firstRoot, "subtree");
     const leaf = mountItem(harness, subtree, "leaf");
 
-    secondRoot.element!.append(subtree.element!);
-    secondRoot.attachItem(subtree);
+    expect(() => secondRoot.attachItem(subtree)).toThrow(
+      "Items cannot move between independent roots",
+    );
 
-    expect(firstRoot.itemList).toEqual([]);
-    expect(firstRoot.itemOrderedList).toEqual([]);
-    expect(firstRoot.children).toEqual([]);
-    expect(secondRoot.itemList).toEqual([subtree]);
-    expect(secondRoot.children).toEqual([subtree]);
-    expect(subtree.parent).toBe(secondRoot);
-    expect(subtree.rootContainer).toBe(secondRoot);
+    expect(firstRoot.itemList).toEqual([subtree]);
+    expect(firstRoot.itemOrderedList).toEqual([subtree]);
+    expect(firstRoot.children).toEqual([subtree]);
+    expect(secondRoot.itemList).toEqual([]);
+    expect(secondRoot.children).toEqual([]);
+    expect(subtree.parent).toBe(firstRoot);
+    expect(subtree.rootContainer).toBe(firstRoot);
     expect(subtree.depth).toBe(1);
-    expect(leaf.rootContainer).toBe(secondRoot);
+    expect(leaf.rootContainer).toBe(firstRoot);
     expect(leaf.depth).toBe(2);
     expectOrderedChildren(firstRoot);
     expectOrderedChildren(secondRoot);
+  } finally {
+    harness.cleanup();
+  }
+});
+
+test("itemId is required, non-empty, and immutable", () => {
+  const harness = createStateHarness();
+  try {
+    expect(() => new Item(harness.engine, null, { itemId: "" })).toThrow(
+      "itemId must be a non-empty string",
+    );
+    expect(() => new Container(harness.engine, null, { itemId: "" })).toThrow(
+      "itemId must be a non-empty string",
+    );
+
+    const item = new Item(harness.engine, null, { itemId: "stable-item" });
+    expect(item.itemId).toBe("stable-item");
+    expect(Reflect.set(item, "itemId", "changed-item")).toBe(false);
+    expect(item.itemId).toBe("stable-item");
+  } finally {
+    harness.cleanup();
+  }
+});
+
+test("itemId uniqueness is scoped to one independent root", () => {
+  const harness = createStateHarness();
+  try {
+    const firstRoot = mountRoot(harness, "shared-id");
+    const conflictingItem = new Item(harness.engine, null, {
+      itemId: "shared-id",
+    });
+    expect(() => placeItemAt(firstRoot, conflictingItem, 0)).toThrow(
+      'itemId "shared-id" must be unique within one root tree',
+    );
+
+    const secondRoot = mountRoot(harness, "shared-id");
+    const firstItem = mountItem(harness, firstRoot, "reusable-item-id");
+    const secondItem = mountItem(harness, secondRoot, "reusable-item-id");
+    expect(firstItem.itemId).toBe(secondItem.itemId);
+    expect(firstItem.rootContainer).toBe(firstRoot);
+    expect(secondItem.rootContainer).toBe(secondRoot);
+  } finally {
+    harness.cleanup();
+  }
+});
+
+test("ghost identity is fresh, stable, and read-only", () => {
+  const harness = createStateHarness();
+  try {
+    const root = mountRoot(harness);
+    const item = mountItem(harness, root, "source");
+    const session = makeSession(root, item);
+    const ghost = item.createGhostItem(session, {
+      type: "target-spacer",
+      location: buildGhostSlotLocation(root, 0),
+      rect: { x: 0, y: 0, width: 40, height: 40 },
+    });
+    const ghostId = ghost.itemId;
+
+    expect(ghostId).not.toBe(item.itemId);
+    expect(ghost.ghostState?.ghostItemId).toBe(ghostId);
+    expect(Reflect.set(ghost, "itemId", "replacement")).toBe(false);
+    expect(ghost.itemId).toBe(ghostId);
+  } finally {
+    harness.cleanup();
+  }
+});
+
+test("ghost insert, relocation, and removal preserve one identity and one commit each", async () => {
+  const harness = createStateHarness();
+  try {
+    const operations: string[] = [];
+    const ghostIds: string[] = [];
+    let commits = 0;
+    const record = (
+      operation: string,
+      event: { ghost: { ghostItemId: string } },
+    ) => {
+      operations.push(operation);
+      ghostIds.push(event.ghost.ghostItemId);
+    };
+    const vanilla = createVanillaAdapter();
+    const adapter = {
+      callbacks: {
+        onGhostInsert(
+          event: Parameters<
+            NonNullable<typeof vanilla.callbacks.onGhostInsert>
+          >[0],
+        ) {
+          record("insert", event);
+          vanilla.callbacks.onGhostInsert?.(event);
+        },
+        onGhostMove(
+          event: Parameters<
+            NonNullable<typeof vanilla.callbacks.onGhostMove>
+          >[0],
+        ) {
+          record("move", event);
+          vanilla.callbacks.onGhostMove?.(event);
+        },
+        onGhostRemove(
+          event: Parameters<
+            NonNullable<typeof vanilla.callbacks.onGhostRemove>
+          >[0],
+        ) {
+          record("remove", event);
+          vanilla.callbacks.onGhostRemove?.(event);
+        },
+      },
+      commit(mutation: () => void) {
+        commits += 1;
+        mutation();
+      },
+    };
+    const root = mountRoot(harness, "root", {
+      adapter,
+    });
+    const destination = mountContainer(harness, root, "destination");
+    const item = mountItem(harness, root, "source");
+    const session = makeSession(root, item);
+    session.dropEffect = "none";
+    root.readDragSnapshotTree();
+    root.captureDragSnapshotTree();
+
+    await session.strategy.lifecycle.syncPlacement(session, {
+      container: root,
+      index: 0,
+      insertion: null,
+    });
+    const ghost = session.flowGhostRun[0];
+    await session.strategy.lifecycle.syncPlacement(session, {
+      container: destination,
+      index: 0,
+      insertion: null,
+    });
+    await drainFrames(harness.global);
+    await session.strategy.lifecycle.clearPlacement(session);
+
+    expect(operations).toEqual(["insert", "move", "remove"]);
+    expect(new Set(ghostIds)).toEqual(new Set([ghost.itemId]));
+    expect(commits).toBe(3);
+    expect(ghost.parent).toBeNull();
+  } finally {
+    harness.cleanup();
+  }
+});
+
+test("pointer preview motion reuses one mount without structural commits", async () => {
+  const harness = createStateHarness();
+  try {
+    let commits = 0;
+    let inserts = 0;
+    let removals = 0;
+    const root = mountRoot(harness, "root", {
+      adapter: {
+        callbacks: {},
+        commit(mutation) {
+          commits += 1;
+          mutation();
+        },
+      },
+    });
+    root.callbacks = {
+      onGhostInsert(event) {
+        const rootElement = root.element;
+        if (!rootElement) throw new Error("Test root is not mounted.");
+        inserts += 1;
+        bindElement(
+          harness,
+          event.ghost.ghostItem,
+          rootElement,
+          event.ghost.ghostItemId,
+        );
+      },
+      onGhostRemove(event) {
+        removals += 1;
+        event.ghost.ghostItem.element?.remove();
+      },
+    };
+    const item = mountItem(harness, root, "source");
+    const session = makeSession(root, item);
+    root.readDragSnapshotTree();
+    root.captureDragSnapshotTree();
+    session.dragVisualStart.set(item, { x: 0, y: 0 });
+
+    await startPointerPreview(session);
+    updatePointerPreview(session);
+    updatePointerPreview(session);
+    updatePointerPreview(session);
+    await removePointerPreview(session);
+
+    expect(inserts).toBe(1);
+    expect(removals).toBe(1);
+    expect(commits).toBe(2);
+  } finally {
+    harness.cleanup();
+  }
+});
+
+test("framework adapters must commit synchronously and exactly once", () => {
+  const harness = createStateHarness();
+  try {
+    const skipped = mountRoot(harness, "skipped", {
+      adapter: { callbacks: {}, commit() {} },
+    });
+    expect(() => skipped.commitMutation(() => {})).toThrow("synchronously");
+
+    const repeated = mountRoot(harness, "repeated", {
+      adapter: {
+        callbacks: {},
+        commit(mutation) {
+          mutation();
+          mutation();
+        },
+      },
+    });
+    expect(() => repeated.commitMutation(() => {})).toThrow("exactly once");
   } finally {
     harness.cleanup();
   }
@@ -603,50 +842,28 @@ test("framework replacement reconciles the committed Item object and order", () 
   try {
     let replacement: Item | null = null;
     const root = mountRoot(harness, "root", {
-      domOwnership: "framework",
+      adapter: { callbacks: {}, commit: (mutation) => mutation() },
       callbacks: {
-        flushMutation(mutation) {
-          mutation();
-        },
-      },
-    });
-    const source = mountContainer(harness, root, "source", undefined, {
-      domOwnership: "framework",
-      callbacks: {
-        flushMutation(mutation) {
-          mutation();
-        },
-      },
-    });
-    const destination = mountContainer(
-      harness,
-      root,
-      "destination",
-      undefined,
-      {
-        domOwnership: "framework",
-        callbacks: {
-          flushMutation(mutation) {
-            mutation();
-          },
-          onItemMove(event) {
-            event.item.element?.remove();
-            event.item.destroy(false);
+        onItemMove(event) {
+          event.item.element?.remove();
+          event.item.destroy(false);
 
-            replacement = new Item(harness.engine, event.to.container);
-            replacement.itemId = event.itemId;
-            const element = harness.document.createElement("div");
-            element.dataset.testItem = "replacement";
-            setRect(element, { x: 0, y: 0, width: 40, height: 40 });
-            event.to.container.element?.insertBefore(
-              element,
-              event.beforeElement,
-            );
-            replacement.element = element;
-          },
+          replacement = new Item(harness.engine, event.to.container, {
+            itemId: event.itemId,
+          });
+          const element = harness.document.createElement("div");
+          element.dataset.testItem = "replacement";
+          setRect(element, { x: 0, y: 0, width: 40, height: 40 });
+          event.to.container.element?.insertBefore(
+            element,
+            event.beforeElement,
+          );
+          replacement.element = element;
         },
       },
-    );
+    });
+    const source = mountContainer(harness, root, "source");
+    const destination = mountContainer(harness, root, "destination");
     const moved = mountItem(harness, source, "moved");
 
     source.moveItemToContainer(destination, moved, 0, null);
@@ -659,13 +876,13 @@ test("framework replacement reconciles the committed Item object and order", () 
     expect(replacement!.rootContainer).toBe(root);
     expect(replacement!.depth).toBe(2);
     expect(source.numberOfItems).toBe(0);
-    expect(root.findItemByKey("moved")).toBe(replacement);
+    expect(root.findItemById("moved")).toBe(replacement);
   } finally {
     harness.cleanup();
   }
 });
 
-test("swap lifecycle reconciles same-container Vanilla fallback order", async () => {
+test("swap lifecycle reconciles same-container Vanilla adapter order", async () => {
   const harness = createStateHarness();
   try {
     const insertedIds: string[] = [];
@@ -688,11 +905,15 @@ test("swap lifecycle reconciles same-container Vanilla fallback order", async ()
 
     installDragSession(root, session);
     session.status = "dropping";
-    session.strategy.lifecycle.moveGhost(session, root, 1, null);
+    session.strategy.lifecycle.syncPlacement(session, {
+      container: root,
+      index: 1,
+      insertion: null,
+    });
     session.strategy.lifecycle.drop(session);
     await drainFrames(harness.global);
 
-    expect(insertedIds).toEqual(["first", "second"]);
+    expect(insertedIds).toEqual([]);
     expect(root.itemOrderedList).toEqual([second, first, third]);
     expect(root.itemList).toEqual([second, first, third]);
     expect(
@@ -714,16 +935,14 @@ test("swap lifecycle reconciles framework-owned replacement Items", async () => 
     let firstReplacement: Item | null = null;
     let secondReplacement: Item | null = null;
     let swapCount = 0;
-    const flushMutation = (mutation: () => void) => mutation();
+    const adapter = {
+      callbacks: {},
+      commit: (mutation: () => void) => mutation(),
+    };
     const root = mountRoot(harness, "root", {
-      domOwnership: "framework",
+      adapter,
       mode: "swap",
-      callbacks: { flushMutation },
-    });
-    const source = mountContainer(harness, root, "source", undefined, {
-      domOwnership: "framework",
       callbacks: {
-        flushMutation,
         onItemSwap(event) {
           swapCount += 1;
           event.a.item.element?.remove();
@@ -731,8 +950,9 @@ test("swap lifecycle reconciles framework-owned replacement Items", async () => 
           event.a.item.destroy(false);
           event.b.item.destroy(false);
 
-          firstReplacement = new Item(harness.engine, event.b.container);
-          firstReplacement.itemId = event.a.itemId;
+          firstReplacement = new Item(harness.engine, event.b.container, {
+            itemId: event.a.itemId,
+          });
           bindElement(
             harness,
             firstReplacement,
@@ -740,8 +960,9 @@ test("swap lifecycle reconciles framework-owned replacement Items", async () => 
             "first-replacement",
           );
 
-          secondReplacement = new Item(harness.engine, event.a.container);
-          secondReplacement.itemId = event.b.itemId;
+          secondReplacement = new Item(harness.engine, event.a.container, {
+            itemId: event.b.itemId,
+          });
           bindElement(
             harness,
             secondReplacement,
@@ -751,23 +972,19 @@ test("swap lifecycle reconciles framework-owned replacement Items", async () => 
         },
       },
     });
-    const destination = mountContainer(
-      harness,
-      root,
-      "destination",
-      undefined,
-      {
-        domOwnership: "framework",
-        callbacks: { flushMutation },
-      },
-    );
+    const source = mountContainer(harness, root, "source");
+    const destination = mountContainer(harness, root, "destination");
     const first = mountItem(harness, source, "first");
     const second = mountItem(harness, destination, "second");
     const session = makeSession(root, first, 4, "swap");
 
     installDragSession(root, session);
     session.status = "dropping";
-    session.strategy.lifecycle.moveGhost(session, destination, 0, null);
+    session.strategy.lifecycle.syncPlacement(session, {
+      container: destination,
+      index: 0,
+      insertion: null,
+    });
     session.strategy.lifecycle.drop(session);
     await drainFrames(harness.global);
 
@@ -782,8 +999,8 @@ test("swap lifecycle reconciles framework-owned replacement Items", async () => 
     expect(firstReplacement!.rootContainer).toBe(root);
     expect(secondReplacement!.depth).toBe(2);
     expect(firstReplacement!.depth).toBe(2);
-    expect(root.findItemByKey("first")).toBe(firstReplacement);
-    expect(root.findItemByKey("second")).toBe(secondReplacement);
+    expect(root.findItemById("first")).toBe(firstReplacement);
+    expect(root.findItemById("second")).toBe(secondReplacement);
     expect(first.parent).toBeNull();
     expect(second.parent).toBeNull();
     expectOrderedChildren(source);

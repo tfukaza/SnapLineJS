@@ -1,42 +1,70 @@
 <script lang="ts">
   import { Engine } from "@snap-engine/asset-base/svelte";
-  import { defaultAnimations, type ItemMoveEvent } from "@snap-engine/snapsort";
+  import {
+    createRenderEntries,
+    createRenderTree,
+    defaultAnimations,
+    reduceRenderTree,
+    type ContainerCallbacks,
+    type GhostLifecycleEvent,
+    type ItemMoveEvent,
+  } from "@snap-engine/snapsort";
   import { Container, Ghost, Item } from "@snap-engine/snapsort/svelte";
 
-  let notes = $state([
-    { id: "first", label: "First note" },
-    { id: "second", label: "Second note" },
-    { id: "third", label: "Third note" },
-  ]);
+  type Note = { id: string; label: string };
+
+  let notes = $state.raw(
+    createRenderTree(
+      createRenderEntries<Note>(
+        [
+          { id: "first", label: "First note" },
+          { id: "second", label: "Second note" },
+          { id: "third", label: "Third note" },
+        ],
+        (note) => note.id,
+      ),
+    ),
+  );
 
   function onItemMove(event: ItemMoveEvent) {
-    const note = notes.find((entry) => entry.id === event.itemId);
-    if (!note) return;
-    const next = notes.filter((entry) => entry.id !== event.itemId);
-    next.splice(Math.min(event.to.index, next.length), 0, note);
-    notes = next;
+    notes = reduceRenderTree(notes, event);
   }
+
+  function onGhostMove(event: GhostLifecycleEvent) {
+    notes = reduceRenderTree(notes, event);
+  }
+
+  const callbacks = {
+    onItemMove,
+    onGhostInsert: onGhostMove,
+    onGhostMove,
+    onGhostRemove: onGhostMove,
+  } satisfies ContainerCallbacks;
 </script>
 
 <Engine id="container-property-ghost">
   <Container
+    itemId="container-property-ghost-root"
     className="ghost-list"
-    items={notes}
-    config={{ animation: defaultAnimations, callbacks: { onItemMove } }}
+    config={{ animation: defaultAnimations, callbacks }}
   >
-    {#snippet entry(note)}
-      <Item itemId={note.id} className="ghost-item">{note.label}</Item>
-    {/snippet}
-
-    {#snippet ghost(event)}
-      <Ghost {event} className="custom-ghost">
-        {#if event.kind === "marker"}
-          {event.role === "pointer" ? "Dragging" : "Insert here"}
-        {:else}
-          Drop {String(event.originalItemId)} here
-        {/if}
-      </Ghost>
-    {/snippet}
+    {#each notes.entries as entry (entry.itemId)}
+      {#if entry.isGhost}
+        <Ghost ghost={entry.ghost} className="custom-ghost">
+          {#if entry.ghost.type === "pointer-preview"}
+            Dragging
+          {:else if entry.ghost.type === "insertion-marker"}
+            Insert here
+          {:else}
+            Drop {entry.ghost.original.itemId} here
+          {/if}
+        </Ghost>
+      {:else}
+        <Item itemId={entry.itemId} className="ghost-item">
+          {entry.value.label}
+        </Item>
+      {/if}
+    {/each}
   </Container>
 </Engine>
 

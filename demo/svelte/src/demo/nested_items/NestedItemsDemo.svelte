@@ -1,11 +1,16 @@
 <script lang="ts">
     import { Engine } from "@snap-engine/asset-base/svelte";
-    import { Container, Item } from "@snap-engine/snapsort/svelte";
-    import { defaultAnimations } from "@snap-engine/snapsort";
+    import { Container, Ghost, Item } from "@snap-engine/snapsort/svelte";
+    import {
+        createRenderEntry,
+        createRenderTree,
+        defaultAnimations,
+        reduceRenderTree,
+        type RenderTree,
+    } from "@snap-engine/snapsort";
     import type { Engine as EngineClass } from "@snap-engine/core";
-    import type { ItemMoveEvent } from "@snap-engine/snapsort";
+    import { renderTreeCallbacks } from "../snapsort-render-tree";
 
-    let engineComponent: Engine | null = null;
     let engineInstance: EngineClass | null = $state(null);
     let debugMode = $state(true);
 
@@ -70,173 +75,87 @@
         debugMode = enabled;
     }
 
-    let flatItems = $state(["Item A", "Item B", "Item C", "Item D"]);
+    function stringTree(values: readonly string[]): RenderTree<string> {
+        return createRenderTree(values.map((value) => createRenderEntry(value, value)));
+    }
 
-    type NestedGroupEntry = { kind: "item"; label: string } | { kind: "group" };
-    let nestedGroupEntries: NestedGroupEntry[] = $state([
-        { kind: "item", label: "Item 1" },
-        { kind: "item", label: "Item 1.5" },
-        { kind: "group" },
-        { kind: "item", label: "Item 2" },
-        { kind: "item", label: "Item 3" },
-    ]);
-    let nestedGroupChildren = $state(["Sub A1", "Sub A2", "Sub A3"]);
-
-    type DragNestedEntry = { kind: "group"; id: string; labels: string[] } | { kind: "item"; label: string };
-    let dragNestedEntries: DragNestedEntry[] = $state([
-        { kind: "group", id: "group-1", labels: ["Group 1 - A", "Group 1 - B"] },
-        { kind: "group", id: "group-2", labels: ["Group 2 - A", "Group 2 - B", "Group 2 - C"] },
-        { kind: "item", label: "Loose Item" },
-    ]);
-
-    let rowItems = $state(["R1", "R2", "R3", "R4"]);
-
-    type NestedRowEntry = { kind: "item"; label: string } | { kind: "group" };
-    let nestedRowEntries: NestedRowEntry[] = $state([
-        { kind: "item", label: "R1" },
-        { kind: "group" },
-        { kind: "item", label: "R2" },
-        { kind: "item", label: "R3" },
-    ]);
-    let nestedRowChildren = $state(["S1", "S2", "S3"]);
-
-    let wrapRowItems = $state(Array.from({ length: 12 }, (_, i) => `W${i + 1}`));
-
-    type LayerEntry =
+    type GroupValue = { kind: "item"; label: string } | { kind: "group"; label: string };
+    type LayerValue =
         | { kind: "leaf"; id: string; icon: string; name: string }
-        | { kind: "group"; id: string; label: string; children: { icon: string; name: string }[] };
-    let layerEntries: LayerEntry[] = $state([
-        { kind: "leaf", id: "header", icon: "◻", name: "Header" },
-        {
-            kind: "group",
-            id: "hero-section",
-            label: "Hero Section",
-            children: [
-                { icon: "○", name: "Avatar" },
-                { icon: "T", name: "Title" },
-                { icon: "T", name: "Subtitle" },
-            ],
-        },
-        { kind: "leaf", id: "card-grid", icon: "◻", name: "Card Grid" },
-        { kind: "leaf", id: "footer", icon: "◻", name: "Footer" },
-    ]);
+        | { kind: "group"; id: string; label: string };
 
-    type FrameworkList = {
-        id: string;
-        getItems: () => unknown[];
-        setItems: (items: unknown[]) => void;
-        getItemId: (item: unknown) => string;
-        prepareItem?: (item: unknown, itemId: string) => unknown | undefined;
-    };
+    let flatTree = $state.raw(stringTree(["Item A", "Item B", "Item C", "Item D"]));
+    let nestedGroupTree = $state.raw(createRenderTree<GroupValue>([
+        createRenderEntry({ kind: "item", label: "Item 1" }, "Item 1"),
+        createRenderEntry({ kind: "item", label: "Item 1.5" }, "Item 1.5"),
+        createRenderEntry(
+            { kind: "group", label: "Nested group" },
+            "nested-sub-group",
+            createRenderTree(["Sub A1", "Sub A2", "Sub A3"].map((label) =>
+                createRenderEntry<GroupValue>({ kind: "item", label }, label),
+            )),
+        ),
+        createRenderEntry({ kind: "item", label: "Item 2" }, "Item 2"),
+        createRenderEntry({ kind: "item", label: "Item 3" }, "Item 3"),
+    ]));
+    let dragNestedTree = $state.raw(createRenderTree<GroupValue>([
+        createRenderEntry(
+            { kind: "group", label: "Group 1" },
+            "group-1",
+            createRenderTree(["Group 1 - A", "Group 1 - B"].map((label) =>
+                createRenderEntry<GroupValue>({ kind: "item", label }, label),
+            )),
+        ),
+        createRenderEntry(
+            { kind: "group", label: "Group 2" },
+            "group-2",
+            createRenderTree(["Group 2 - A", "Group 2 - B", "Group 2 - C"].map((label) =>
+                createRenderEntry<GroupValue>({ kind: "item", label }, label),
+            )),
+        ),
+        createRenderEntry({ kind: "item", label: "Loose Item" }, "Loose Item"),
+    ]));
+    let rowTree = $state.raw(stringTree(["R1", "R2", "R3", "R4"]));
+    let nestedRowTree = $state.raw(createRenderTree<GroupValue>([
+        createRenderEntry({ kind: "item", label: "R1" }, "R1"),
+        createRenderEntry(
+            { kind: "group", label: "Nested row" },
+            "nested-row-sub-group",
+            createRenderTree(["S1", "S2", "S3"].map((label) =>
+                createRenderEntry<GroupValue>({ kind: "item", label }, label),
+            )),
+        ),
+        createRenderEntry({ kind: "item", label: "R2" }, "R2"),
+        createRenderEntry({ kind: "item", label: "R3" }, "R3"),
+    ]));
+    let wrapTree = $state.raw(stringTree(Array.from({ length: 12 }, (_, i) => `W${i + 1}`)));
+    let layerTree = $state.raw(createRenderTree<LayerValue>([
+        createRenderEntry({ kind: "leaf", id: "header", icon: "◻", name: "Header" }, "header"),
+        createRenderEntry(
+            { kind: "group", id: "hero-section", label: "Hero Section" },
+            "hero-section",
+            createRenderTree([
+                { id: "Avatar", icon: "○", name: "Avatar" },
+                { id: "Title", icon: "T", name: "Title" },
+                { id: "Subtitle", icon: "T", name: "Subtitle" },
+            ].map((value) => createRenderEntry<LayerValue>({ kind: "leaf", ...value }, value.id))),
+        ),
+        createRenderEntry({ kind: "leaf", id: "card-grid", icon: "◻", name: "Card Grid" }, "card-grid"),
+        createRenderEntry({ kind: "leaf", id: "footer", icon: "◻", name: "Footer" }, "footer"),
+    ]));
 
-    function list<T>(
-        id: string,
-        getItems: () => T[],
-        setItems: (items: T[]) => void,
-        getItemId: (item: T) => string,
-        prepareItem?: (item: unknown, itemId: string) => T | undefined,
-    ): FrameworkList {
-        return {
-            id,
-            getItems,
-            setItems: (items) => setItems(items as T[]),
-            getItemId: (item) => getItemId(item as T),
-            prepareItem,
-        };
-    }
-
-    function moveItem(event: ItemMoveEvent, lists: FrameworkList[]) {
-        const targetId = event.to.containerMetadata.frameworkList;
-        const target = lists.find((candidate) => candidate.id === targetId) ??
-            (lists.length === 1 ? lists[0] : undefined);
-        if (!target) return;
-
-        const movedIds = event.itemIds.map(String);
-        const movedSet = new Set(movedIds);
-        const preparedItems: unknown[] = [];
-        for (const itemId of movedIds) {
-            let moved: unknown;
-            for (const source of lists) {
-                moved = source.getItems().find((item) => source.getItemId(item) === itemId);
-                if (moved !== undefined) break;
-            }
-            if (moved === undefined) continue;
-            const prepared = target.prepareItem ? target.prepareItem(moved, itemId) : moved;
-            if (prepared === undefined) return;
-            preparedItems.push(prepared);
-        }
-        if (preparedItems.length === 0) return;
-        for (const source of lists) {
-            const current = source.getItems();
-            if (!current.some((item) => movedSet.has(source.getItemId(item)))) continue;
-            source.setItems(current.filter((item) => !movedSet.has(source.getItemId(item))));
-        }
-        const next = target.getItems().filter((item) => !movedSet.has(target.getItemId(item)));
-        const index = Math.max(0, Math.min(event.to.index, next.length));
-        next.splice(index, 0, ...preparedItems);
-        target.setItems(next);
-    }
-
-    function handleFlatMove(event: ItemMoveEvent) {
-        moveItem(event, [list("flat", () => flatItems, (items) => flatItems = items, String)]);
-    }
-
-    function handleNestedMove(event: ItemMoveEvent) {
-        moveItem(event, [
-            list("nested-outer", () => nestedGroupEntries, (items) => nestedGroupEntries = items, (item) => item.kind === "item" ? item.label : "nested-sub-group", (item) => typeof item === "string" ? { kind: "item", label: item } : item as NestedGroupEntry),
-            list("nested-inner", () => nestedGroupChildren, (items) => nestedGroupChildren = items, String, (item) => typeof item === "string" ? item : (item as NestedGroupEntry).kind === "item" ? (item as { kind: "item"; label: string }).label : undefined),
-        ]);
-    }
-
-    function setDragChildren(groupId: string, labels: string[]) {
-        dragNestedEntries = dragNestedEntries.map((entry) =>
-            entry.kind === "group" && entry.id === groupId ? { ...entry, labels } : entry,
-        );
-    }
-
-    function handleDragNestedMove(event: ItemMoveEvent) {
-        moveItem(event, [
-            list("drag-outer", () => dragNestedEntries, (items) => dragNestedEntries = items, (item) => item.kind === "group" ? item.id : item.label, (item) => typeof item === "string" ? { kind: "item", label: item } : item as DragNestedEntry),
-            ...dragNestedEntries.filter((entry) => entry.kind === "group").map((entry) =>
-                list(`drag-${entry.id}`, () => entry.labels, (items) => setDragChildren(entry.id, items), String, (item) => typeof item === "string" ? item : (item as DragNestedEntry).kind === "item" ? (item as { kind: "item"; label: string }).label : undefined),
-            ),
-        ]);
-    }
-
-    function handleRowMove(event: ItemMoveEvent) {
-        moveItem(event, [list("row", () => rowItems, (items) => rowItems = items, String)]);
-    }
-
-    function handleNestedRowMove(event: ItemMoveEvent) {
-        moveItem(event, [
-            list("nested-row-outer", () => nestedRowEntries, (items) => nestedRowEntries = items, (item) => item.kind === "item" ? item.label : "nested-row-sub-group", (item) => typeof item === "string" ? { kind: "item", label: item } : item as NestedRowEntry),
-            list("nested-row-inner", () => nestedRowChildren, (items) => nestedRowChildren = items, String, (item) => typeof item === "string" ? item : (item as NestedRowEntry).kind === "item" ? (item as { kind: "item"; label: string }).label : undefined),
-        ]);
-    }
-
-    function handleWrapMove(event: ItemMoveEvent) {
-        moveItem(event, [list("wrap", () => wrapRowItems, (items) => wrapRowItems = items, String)]);
-    }
-
-    function setLayerChildren(groupId: string, children: { icon: string; name: string }[]) {
-        layerEntries = layerEntries.map((entry) =>
-            entry.kind === "group" && entry.id === groupId ? { ...entry, children } : entry,
-        );
-    }
-
-    function handleLayerMove(event: ItemMoveEvent) {
-        moveItem(event, [
-            list("layers-outer", () => layerEntries, (items) => layerEntries = items, (item) => item.id, (item, itemId) => "kind" in (item as object) ? item as LayerEntry : { kind: "leaf", id: itemId, ...(item as { icon: string; name: string }) }),
-            ...layerEntries.filter((entry) => entry.kind === "group").map((entry) =>
-                list(`layers-${entry.id}`, () => entry.children, (items) => setLayerChildren(entry.id, items), (item) => item.name, (item) => "kind" in (item as object) ? (item as LayerEntry).kind === "leaf" ? { icon: (item as Extract<LayerEntry, { kind: "leaf" }>).icon, name: (item as Extract<LayerEntry, { kind: "leaf" }>).name } : undefined : item as { icon: string; name: string }),
-            ),
-        ]);
-    }
+    const flatCallbacks = renderTreeCallbacks((event) => flatTree = reduceRenderTree(flatTree, event));
+    const nestedGroupCallbacks = renderTreeCallbacks((event) => nestedGroupTree = reduceRenderTree(nestedGroupTree, event));
+    const dragNestedCallbacks = renderTreeCallbacks((event) => dragNestedTree = reduceRenderTree(dragNestedTree, event));
+    const rowCallbacks = renderTreeCallbacks((event) => rowTree = reduceRenderTree(rowTree, event));
+    const nestedRowCallbacks = renderTreeCallbacks((event) => nestedRowTree = reduceRenderTree(nestedRowTree, event));
+    const wrapCallbacks = renderTreeCallbacks((event) => wrapTree = reduceRenderTree(wrapTree, event));
+    const layerCallbacks = renderTreeCallbacks((event) => layerTree = reduceRenderTree(layerTree, event));
 </script>
 
 <div class="page-layout">
 <div class="engine-area">
-<Engine id="nested-items-demo-canvas" debug={debugMode} bind:this={engineComponent} bind:engine={engineInstance}>
+<Engine id="nested-items-demo-canvas" debug={debugMode} bind:engine={engineInstance}>
 <div class="demos-layout">
 
     <!-- Demo 1: Flat list -->
@@ -247,15 +166,17 @@
         </div>
         <div class="demo-body">
             <Container
-                config={{ animation: defaultAnimations, direction: "column", callbacks: { onItemMove: handleFlatMove } }}
+                itemId="nested-items-flat-root"
+                config={{ animation: defaultAnimations, direction: "column", callbacks: flatCallbacks }}
                 metadata={{ frameworkList: "flat" }}
                 locked={true}
-                items={flatItems}
-                getItemId={(label) => label}
             >
-                {#snippet entry(label)}
-                    <Item itemId={label} className="demo-item"><p>{label}</p></Item>
-                {/snippet}
+                {#each flatTree.entries as entry (entry.itemId)}
+                    {#if entry.isGhost}<Ghost ghost={entry.ghost} />
+                    {:else if entry.childTree}<Container itemId={entry.itemId} />
+                    {:else}<Item itemId={entry.itemId} className="demo-item"><p>{entry.value}</p></Item>
+                    {/if}
+                {/each}
             </Container>
         </div>
     </div>
@@ -268,30 +189,32 @@
         </div>
         <div class="demo-body">
             <Container
-                config={{ animation: defaultAnimations, direction: "column", callbacks: { onItemMove: handleNestedMove } }}
+                itemId="nested-items-column-root"
+                config={{ animation: defaultAnimations, direction: "column", callbacks: nestedGroupCallbacks }}
                 metadata={{ frameworkList: "nested-outer" }}
                 locked={true}
-                items={nestedGroupEntries}
-                getItemId={(e) => (e.kind === "item" ? e.label : "nested-sub-group")}
             >
-                {#snippet entry(e)}
-                    {#if e.kind === "item"}
-                        <Item itemId={e.label} className="demo-item"><p>{e.label}</p></Item>
-                    {:else}
+                {#each nestedGroupTree.entries as entry (entry.itemId)}
+                    {#if entry.isGhost}
+                        <Ghost ghost={entry.ghost} />
+                    {:else if entry.childTree}
                         <Container
-                            itemId="nested-sub-group"
-                            config={{ animation: defaultAnimations, direction: "column", callbacks: { onItemMove: handleNestedMove } }}
+                            itemId={entry.itemId}
+                            config={{ animation: defaultAnimations, direction: "column" }}
                             metadata={{ frameworkList: "nested-inner" }}
                             locked={false}
-                            items={nestedGroupChildren}
-                            getItemId={(label) => label}
                         >
-                            {#snippet entry(label)}
-                                <Item itemId={label} className="demo-item sub-item"><p>{label}</p></Item>
-                            {/snippet}
+                            {#each entry.childTree.entries as child (child.itemId)}
+                                {#if child.isGhost}<Ghost ghost={child.ghost} />
+                                {:else if child.childTree}<Container itemId={child.itemId} />
+                                {:else}<Item itemId={child.itemId} className="demo-item sub-item"><p>{child.value.label}</p></Item>
+                                {/if}
+                            {/each}
                         </Container>
+                    {:else}
+                        <Item itemId={entry.itemId} className="demo-item"><p>{entry.value.label}</p></Item>
                     {/if}
-                {/snippet}
+                {/each}
             </Container>
         </div>
     </div>
@@ -304,30 +227,32 @@
         </div>
         <div class="demo-body">
             <Container
-                config={{ animation: defaultAnimations, direction: "column", callbacks: { onItemMove: handleDragNestedMove } }}
+                itemId="nested-items-draggable-root"
+                config={{ animation: defaultAnimations, direction: "column", callbacks: dragNestedCallbacks }}
                 metadata={{ frameworkList: "drag-outer" }}
                 locked={true}
-                items={dragNestedEntries}
-                getItemId={(e) => (e.kind === "group" ? e.id : e.label)}
             >
-                {#snippet entry(e)}
-                    {#if e.kind === "group"}
+                {#each dragNestedTree.entries as entry (entry.itemId)}
+                    {#if entry.isGhost}
+                        <Ghost ghost={entry.ghost} />
+                    {:else if entry.childTree}
                         <Container
-                            itemId={e.id}
-                            config={{ animation: defaultAnimations, direction: "column", callbacks: { onItemMove: handleDragNestedMove } }}
-                            metadata={{ frameworkList: `drag-${e.id}` }}
+                            itemId={entry.itemId}
+                            config={{ animation: defaultAnimations, direction: "column" }}
+                            metadata={{ frameworkList: `drag-${entry.itemId}` }}
                             locked={false}
-                            items={e.labels}
-                            getItemId={(label) => label}
                         >
-                            {#snippet entry(label)}
-                                <Item itemId={label} className="demo-item sub-item"><p>{label}</p></Item>
-                            {/snippet}
+                            {#each entry.childTree.entries as child (child.itemId)}
+                                {#if child.isGhost}<Ghost ghost={child.ghost} />
+                                {:else if child.childTree}<Container itemId={child.itemId} />
+                                {:else}<Item itemId={child.itemId} className="demo-item sub-item"><p>{child.value.label}</p></Item>
+                                {/if}
+                            {/each}
                         </Container>
                     {:else}
-                        <Item itemId={e.label} className="demo-item"><p>{e.label}</p></Item>
+                        <Item itemId={entry.itemId} className="demo-item"><p>{entry.value.label}</p></Item>
                     {/if}
-                {/snippet}
+                {/each}
             </Container>
         </div>
     </div>
@@ -340,15 +265,17 @@
         </div>
         <div class="demo-body">
             <Container
-                config={{ animation: defaultAnimations, direction: "row", callbacks: { onItemMove: handleRowMove } }}
+                itemId="nested-items-row-root"
+                config={{ animation: defaultAnimations, direction: "row", callbacks: rowCallbacks }}
                 metadata={{ frameworkList: "row" }}
                 locked={true}
-                items={rowItems}
-                getItemId={(label) => label}
             >
-                {#snippet entry(label)}
-                    <Item itemId={label} className="demo-item row-item"><p>{label}</p></Item>
-                {/snippet}
+                {#each rowTree.entries as entry (entry.itemId)}
+                    {#if entry.isGhost}<Ghost ghost={entry.ghost} />
+                    {:else if entry.childTree}<Container itemId={entry.itemId} />
+                    {:else}<Item itemId={entry.itemId} className="demo-item row-item"><p>{entry.value}</p></Item>
+                    {/if}
+                {/each}
             </Container>
         </div>
     </div>
@@ -361,30 +288,32 @@
         </div>
         <div class="demo-body">
             <Container
-                config={{ animation: defaultAnimations, direction: "row", callbacks: { onItemMove: handleNestedRowMove } }}
+                itemId="nested-items-nested-row-root"
+                config={{ animation: defaultAnimations, direction: "row", callbacks: nestedRowCallbacks }}
                 metadata={{ frameworkList: "nested-row-outer" }}
                 locked={true}
-                items={nestedRowEntries}
-                getItemId={(e) => (e.kind === "item" ? e.label : "nested-row-sub-group")}
             >
-                {#snippet entry(e)}
-                    {#if e.kind === "item"}
-                        <Item itemId={e.label} className="demo-item row-item"><p>{e.label}</p></Item>
-                    {:else}
+                {#each nestedRowTree.entries as entry (entry.itemId)}
+                    {#if entry.isGhost}
+                        <Ghost ghost={entry.ghost} />
+                    {:else if entry.childTree}
                         <Container
-                            itemId="nested-row-sub-group"
-                            config={{ animation: defaultAnimations, direction: "row", callbacks: { onItemMove: handleNestedRowMove } }}
+                            itemId={entry.itemId}
+                            config={{ animation: defaultAnimations, direction: "row" }}
                             metadata={{ frameworkList: "nested-row-inner" }}
                             locked={false}
-                            items={nestedRowChildren}
-                            getItemId={(label) => label}
                         >
-                            {#snippet entry(label)}
-                                <Item itemId={label} className="demo-item row-item sub-item"><p>{label}</p></Item>
-                            {/snippet}
+                            {#each entry.childTree.entries as child (child.itemId)}
+                                {#if child.isGhost}<Ghost ghost={child.ghost} />
+                                {:else if child.childTree}<Container itemId={child.itemId} />
+                                {:else}<Item itemId={child.itemId} className="demo-item row-item sub-item"><p>{child.value.label}</p></Item>
+                                {/if}
+                            {/each}
                         </Container>
+                    {:else}
+                        <Item itemId={entry.itemId} className="demo-item row-item"><p>{entry.value.label}</p></Item>
                     {/if}
-                {/snippet}
+                {/each}
             </Container>
         </div>
     </div>
@@ -397,15 +326,17 @@
         </div>
         <div class="demo-body">
             <Container
-                config={{ animation: defaultAnimations, direction: "row", callbacks: { onItemMove: handleWrapMove } }}
+                itemId="nested-items-wrap-root"
+                config={{ animation: defaultAnimations, direction: "row", callbacks: wrapCallbacks }}
                 metadata={{ frameworkList: "wrap" }}
                 locked={true}
-                items={wrapRowItems}
-                getItemId={(label) => label}
             >
-                {#snippet entry(label)}
-                    <Item itemId={label} className="demo-item row-item"><p>{label}</p></Item>
-                {/snippet}
+                {#each wrapTree.entries as entry (entry.itemId)}
+                    {#if entry.isGhost}<Ghost ghost={entry.ghost} />
+                    {:else if entry.childTree}<Container itemId={entry.itemId} />
+                    {:else}<Item itemId={entry.itemId} className="demo-item row-item"><p>{entry.value}</p></Item>
+                    {/if}
+                {/each}
             </Container>
         </div>
     </div>
@@ -418,41 +349,46 @@
         </div>
         <div class="layers-panel">
             <Container
-                config={{ animation: defaultAnimations, direction: "column", callbacks: { onItemMove: handleLayerMove } }}
+                itemId="nested-items-layers-root"
+                config={{ animation: defaultAnimations, direction: "column", callbacks: layerCallbacks }}
                 metadata={{ frameworkList: "layers-outer" }}
                 locked={true}
-                items={layerEntries}
-                getItemId={(e) => e.id}
             >
-                {#snippet entry(e)}
-                    {#if e.kind === "leaf"}
-                        <Item itemId={e.id} className="layer-item">
+                {#each layerTree.entries as entry (entry.itemId)}
+                    {#if entry.isGhost}
+                        <Ghost ghost={entry.ghost} />
+                    {:else if entry.childTree && entry.value.kind === "group"}
+                        <Container
+                            itemId={entry.itemId}
+                            config={{ animation: defaultAnimations, direction: "column" }}
+                            metadata={{ frameworkList: `layers-${entry.value.id}` }}
+                            locked={false}
+                        >
+                            <div class="group-label">{entry.value.label}</div>
+                            {#each entry.childTree.entries as child (child.itemId)}
+                                {#if child.isGhost}
+                                    <Ghost ghost={child.ghost} />
+                                {:else if child.childTree}
+                                    <Container itemId={child.itemId} />
+                                {:else if child.value.kind === "leaf"}
+                                    <Item itemId={child.itemId} className="layer-item">
+                                        <div class="layer-row">
+                                            <span class="layer-icon">{child.value.icon}</span>
+                                            <span class="layer-name">{child.value.name}</span>
+                                        </div>
+                                    </Item>
+                                {/if}
+                            {/each}
+                        </Container>
+                    {:else if entry.value.kind === "leaf"}
+                        <Item itemId={entry.itemId} className="layer-item">
                             <div class="layer-row">
-                                <span class="layer-icon">{e.icon}</span>
-                                <span class="layer-name">{e.name}</span>
+                                <span class="layer-icon">{entry.value.icon}</span>
+                                <span class="layer-name">{entry.value.name}</span>
                             </div>
                         </Item>
-                    {:else}
-                        <Container
-                            itemId={e.id}
-                            config={{ animation: defaultAnimations, direction: "column", callbacks: { onItemMove: handleLayerMove } }}
-                            metadata={{ frameworkList: `layers-${e.id}` }}
-                            locked={false}
-                            items={e.children}
-                            getItemId={(child) => child.name}
-                        >
-                            {#snippet before()}<div class="group-label">{e.label}</div>{/snippet}
-                            {#snippet entry(child)}
-                                <Item itemId={child.name} className="layer-item">
-                                    <div class="layer-row">
-                                        <span class="layer-icon">{child.icon}</span>
-                                        <span class="layer-name">{child.name}</span>
-                                    </div>
-                                </Item>
-                            {/snippet}
-                        </Container>
                     {/if}
-                {/snippet}
+                {/each}
             </Container>
         </div>
     </div>

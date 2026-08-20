@@ -47,6 +47,7 @@
     "test:camera-control-react": "playwright test -c tests/e2e/camera-control-react.playwright.config.ts",
     "test:asset-base-react": "playwright test -c tests/e2e/asset-base-react.playwright.config.ts",
     "test:snapline-ut": "playwright test tests/ut/snapline-*.spec.ts --project=chromium",
+    "test:snapsort-ut": "playwright test tests/ut/snapsort-*.spec.ts --project=chromium",
     "test:snapline": "playwright test -c tests/e2e/snapline.playwright.config.ts",
     "test:snapline-edges": "playwright test -c tests/e2e/snapline-edges.playwright.config.ts",
     "test:snapline-overlay": "playwright test -c tests/e2e/snapline-overlay.playwright.config.ts",
@@ -71,7 +72,7 @@
     "check:website": "npm run check --prefix website",
     "check:adapters": "FRAMEWORK=test svelte-check --tsconfig assets/asset-base/tsconfig.json && FRAMEWORK=test svelte-check --tsconfig assets/snapsort/tsconfig.json && FRAMEWORK=test svelte-check --tsconfig assets/snapline/tsconfig.json",
     "typecheck": "tsc --noEmit",
-    "ci": "npm run validate:packages && npm run check:snapsort-api && npm run typecheck && npm run lint && npm run check:adapters && npm run check:website && npm run build",
+    "ci": "npm run validate:packages && npm run check:snapsort-api && npm run test:snapsort-ut && npm run typecheck && npm run lint && npm run check:adapters && npm run check:website && npm run build",
     "prepublishOnly": "npm run lint",
     "wdio": "wdio run ./wdio.conf.ts"
   },

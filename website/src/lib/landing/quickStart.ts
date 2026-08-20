@@ -20,33 +20,50 @@ export const sampleLanguages: Record<Framework, string> = {
 const svelteSample = [
   '<script lang="ts">',
   '  import { Engine } from "@snap-engine/asset-base/svelte";',
-  '  import { Container, Item } from "@snap-engine/snapsort/svelte";',
-  '  import type { ItemMoveEvent } from "@snap-engine/snapsort";',
+  '  import { Container, Ghost, Item } from "@snap-engine/snapsort/svelte";',
+  "  import {",
+  "    createRenderEntries,",
+  "    createRenderTree,",
+  "    reduceRenderTree,",
+  "    type ContainerCallbacks,",
+  "    type GhostLifecycleEvent,",
+  "    type ItemMoveEvent,",
+  '  } from "@snap-engine/snapsort";',
   "",
-  "  let tasks = $state([",
-  '    { id: "design", label: "Design" },',
-  '    { id: "build", label: "Build" },',
-  '    { id: "ship", label: "Ship" },',
-  "  ]);",
+  "  let tasks = $state.raw(",
+  "    createRenderTree(createRenderEntries([",
+  '      { id: "design", label: "Design" },',
+  '      { id: "build", label: "Build" },',
+  '      { id: "ship", label: "Ship" },',
+  "    ], (task) => task.id)),",
+  "  );",
   "",
   "  function onItemMove(event: ItemMoveEvent) {",
-  "    const task = tasks.find((entry) => entry.id === event.itemId);",
-  "    if (!task) return;",
-  "",
-  "    const next = tasks.filter((entry) => entry.id !== event.itemId);",
-  "    next.splice(event.to.index, 0, task);",
-  "    tasks = next;",
+  "    tasks = reduceRenderTree(tasks, event);",
   "  }",
+  "  function onGhostMove(event: GhostLifecycleEvent) {",
+  "    tasks = reduceRenderTree(tasks, event);",
+  "  }",
+  "  const callbacks = {",
+  "    onItemMove,",
+  "    onGhostInsert: onGhostMove,",
+  "    onGhostMove,",
+  "    onGhostRemove: onGhostMove,",
+  "  } satisfies ContainerCallbacks;",
   "</" + "script>",
   "",
   '<Engine id="quick-start">',
   "  <Container",
-  '    config={{ callbacks: { onItemMove } }}',
-  "    items={tasks}",
+  '    itemId="quick-start-root"',
+  "    config={{ callbacks }}",
   "  >",
-  "    {#snippet entry(task)}",
-  "      <Item itemId={task.id}>{task.label}</Item>",
-  "    {/snippet}",
+  "    {#each tasks.entries as entry (entry.itemId)}",
+  "      {#if entry.isGhost}",
+  "        <Ghost ghost={entry.ghost} />",
+  "      {:else}",
+  "        <Item itemId={entry.itemId}>{entry.value.label}</Item>",
+  "      {/if}",
+  "    {/each}",
   "  </Container>",
   "</Engine>",
 ].join("\n");
@@ -78,7 +95,7 @@ export function QuickStart() {
   // Ghost previews need onGhostInsert / onGhostRemove — see the setup guide.
   return (
     <Engine id="quick-start">
-      <Container config={{ callbacks: { onItemMove } }}>
+      <Container itemId="quick-start-root" config={{ callbacks: { onItemMove } }}>
         {tasks.map((task) => (
           <Item key={task.id} itemId={task.id}>{task.label}</Item>
         ))}
@@ -98,12 +115,13 @@ const engine = new Engine();
 engine.setCollisionEngine(new CollisionEngine());
 engine.assignDom(root);
 
-const container = new Container(engine, null);
+const container = new Container(engine, null, { itemId: "quick-start-root" });
 container.element = list;
 
 for (const element of list.querySelectorAll("[data-item-id]")) {
-  const item = new Item(engine, container);
-  item.itemId = element.dataset.itemId;
+  const itemId = element.dataset.itemId;
+  if (!itemId) throw new Error("Missing data-item-id");
+  const item = new Item(engine, container, { itemId });
   item.element = element;
 }`;
 

@@ -25,17 +25,35 @@ their bindings from `@snap-engine/snapsort/svelte` or
 - `DragVisual` - `"item"`, `"preview"`, or `"none"` pointer representation
 - `DropEffect` - `"move"` or `"none"` persistent mutation choice
 - `defaultAnimations` - opt-in 100ms reorder, drop, and programmatic-move animation preset
-- Event types: `ItemInsertEvent`, `ItemRemoveEvent`, `ItemMoveEvent`, `ItemSwapEvent`, `GhostCreateEvent`, `GhostInsertEvent`, `GhostRemoveEvent`, `DragStartEvent`, `DragEndEvent`, `DropTargetChangeEvent`, `CanDropEvent`, `DropPriorityEvent`, `InsertionMarkerRectEvent`, `ItemHitboxEvent`, `VisualGeometryInvalidationEvent`, `DragLocation`
+- Event types: `ItemInsertEvent`, `ItemRemoveEvent`, `ItemMoveEvent`, `ItemSwapEvent`, `GhostCreateEvent`, `GhostInsertEvent`, `GhostMoveEvent`, `GhostRemoveEvent`, `DragStartEvent`, `DragEndEvent`, `DropTargetChangeEvent`, `CanDropEvent`, `DropPriorityEvent`, `ItemHitboxEvent`, `VisualGeometryInvalidationEvent`, `DragLocation`
+- Ghost and insertion render state: `GhostState`, `InsertionMarkerState`, `InsertionGapSegment`, and `InsertionMarkerNeighbor`
+- Framework render state: `RenderEntry`, `RenderTree`, `RenderTreeEvent`, `createRenderEntry`, `createRenderEntries`, `createRenderTree`, and `reduceRenderTree`
+- Insertion presentation: `InsertionMarkerRectOptions`, `ContainerLocalRect`, `insertionMarkerRect`, `toContainerLocalRect`, and `stockInsertionMarkerRectOptions`
+- `createVanillaAdapter` and `CreateVanillaAdapterOptions`
 - `ContainerCallbacks`, `ContainerConfig`, `SortMode`
 
 ```ts
 import { Container, defaultAnimations, Item } from "@snap-engine/snapsort";
 
 const container = new Container(engine, parent, {
+  itemId: "tasks-root",
   mode: "insertion",
   animation: defaultAnimations,
 });
+
+const item = new Item(engine, container, { itemId: "task-1" });
 ```
+
+`itemId` is required when every ordinary `Item` and `Container` is created. It
+is a non-empty, construction-only application identity: changing an identity
+means creating a replacement object. IDs are unique across one independent
+SnapSort root, including nested containers and live ghosts; separate roots may
+reuse the same IDs.
+
+RenderTree reducers use that identity to locate nested logical trees. The root
+component itself must stay mounted for the lifetime of its RenderTree state.
+If the root is destroyed, discard that state and create a fresh RenderTree for
+the replacement root.
 
 ## Drop eligibility and priority
 
@@ -75,20 +93,22 @@ drop eligibility and priority.
 
 ## Callback Routing
 
-Callbacks belong to individual containers; they do not bubble or inherit from
-the root. The root receives session-wide callbacks such as `onDragStart`,
-`onDropTargetChange`, and `onDragEnd`. Candidate destinations receive
-`canDrop`/`getDropPriority`, a normal move commits through the direct
-destination's `onItemMove` (or `onItemInsert` fallback), and a swap commits
-through the dragged item's direct, pre-swap source `onItemSwap`.
+Structural and root-lifecycle callbacks resolve once on the independent root:
+`onItemInsert`, `onItemRemove`, `onItemMove`, `onItemSwap`, the three ghost
+callbacks, `onDragStart`, `onDropTargetChange`, `onDragEnd`, and
+`onVisualGeometryInvalidated`. Event fields identify the semantic source,
+destination, or ghost owner. If a root structural callback is absent, SnapSort
+uses the root adapter. Descendants cannot configure root-dispatched callbacks.
 
-Ghost callbacks follow the container currently owning the ghost. Item hover is
+Drop policy, item hitbox geometry, and hover callbacks stay local to the
+Container they describe and do not bubble or inherit. Item hover is
 semantically separate from slot changes: hit-testing is scoped to the resolved
-target container, then dispatched on the direct owner of the hovered item.
-That owner can customize a candidate's rectangle/circle through
-`getItemHitbox`; insertion destinations can return a complete world-space
-marker rectangle from `getInsertionMarkerRect`. Both are synchronous geometry
-calculations outside `flushMutation`.
+target Container, then dispatched on the direct owner of the hovered item.
+That owner can customize its rectangle/circle through `getItemHitbox`.
+Insertion targeting has no presentation callback: core owns the canonical gap,
+adjacent-item data, and current-placement flag, then exposes them as
+`InsertionMarkerState` through the ordinary ghost lifecycle. Rendering that
+state stays on the adapter side of the commit boundary.
 
 Item `metadata` is read-only application data (`ItemMetadata`), not behavior
 configuration. Applications may replace it; SnapSort shallow-copies and freezes
@@ -102,9 +122,71 @@ imperative `moveItem` (when placement changes) and `removeItem` APIs set
 `event.session` to `null` and do not create a drag lifecycle. A same-placement
 `moveItem` request emits no mutation callback.
 
-Mutation callbacks run through `flushMutation` on the same container that
-receives the callback. `flushMutation` is an adapter integration boundary, not
-a lifecycle event; the Svelte and React bindings supply it automatically.
+Structural callback commands run through the root's `SnapSortAdapter.commit`
+boundary. The Svelte and React bindings use it to publish framework state and
+DOM synchronously; the Vanilla adapter performs the corresponding DOM command.
+
+These callbacks describe transitions initiated by SnapSort. An application's
+own Add or Delete command updates its collection directly; framework
+mount/unmount then reconciles the matching core object without sending a
+second insert/remove event back into the state that already made the decision.
+
+## Framework-owned render state
+
+`RenderTree` is an optional immutable scaffold for one independent SnapSort
+root. Its `entries` contain ordinary application values and transient ghosts
+in render order. Every ordinary entry has one required `itemId`; a non-null
+`childTree` means that entry renders as a nested `Container`, while a null
+`childTree` means it renders as an `Item`. The nested Container is itself the
+sortable Item and must not be wrapped in another Item. Keep an empty child tree
+mounted when it should remain a valid drop destination.
+
+`reduceRenderTree` routes nested Containers by their required `itemId` and
+applies SnapSort-originated item moves, swaps, removals, and all three ghost
+lifecycle events across the complete tree. It intentionally excludes
+`ItemInsertEvent`, because a core Item cannot manufacture an application value.
+Application-owned insertions create an entry directly; copy/backfill and
+destination-specific conversion remain application policy. Projects with a
+different state shape can skip this helper and implement the explicit
+callbacks themselves.
+
+```ts
+import {
+  createRenderEntries,
+  createRenderTree,
+  reduceRenderTree,
+  type ContainerCallbacks,
+  type RenderTreeEvent,
+} from "@snap-engine/snapsort";
+
+let tasks = $state.raw(
+  createRenderTree(createRenderEntries(initialTasks, (task) => task.id)),
+);
+
+const applyRenderEvent = (event: RenderTreeEvent) => {
+  tasks = reduceRenderTree(tasks, event);
+};
+
+const callbacks = {
+  onItemMove: applyRenderEvent,
+  onItemRemove: applyRenderEvent,
+  onItemSwap: applyRenderEvent,
+  onGhostInsert: applyRenderEvent,
+  onGhostMove: applyRenderEvent,
+  onGhostRemove: applyRenderEvent,
+} satisfies ContainerCallbacks;
+```
+
+Svelte uses `$state.raw(...)` here because each update replaces the immutable
+root, while ghost state contains engine-owned object identities that should not
+be deep-proxied. React stores the same value in ordinary component state.
+Rendering still uses direct children and the framework's keyed loop; there is
+no hidden ghost outlet or adapter-owned collection.
+
+Application-specific destination meaning remains outside SnapSort. For
+drop-to-delete, set `session.dropEffect = "none"` while the trash destination
+is active so no ordinary move commits, then inspect `onDragEnd.destination`
+and remove the application value yourself.
 
 ## Placement and drag visuals
 
@@ -140,10 +222,95 @@ pending or active, or call `handoff(replacements)` while pending. Lifecycle
 methods, placement strategies, target state, ghosts, and animation bookkeeping
 remain internal.
 
-A preview is one root-owned `Ghost` with `kind: "marker"` and
-`role: "pointer"`. It can coexist with insertion's destination-owned marker,
-which has `role: "target"`. The preview represents the complete ordered drag
-run and never becomes application data.
+After a handoff, the public `items` and `sources` still describe the original
+gesture participants and their frozen source snapshot. Internally, SnapSort
+tracks the replacement run and its mounted locations as the active sources.
+The handoff therefore retargets pointer ownership and future mutation without
+rewriting the gesture's original resolution snapshot.
+
+A preview is one root-owned `GhostState` with `type: "pointer-preview"` and an
+overlay location. It can coexist with insertion's destination-owned
+`"insertion-marker"`, which has a slot location. Each ghost has its own
+generated `ghostItemId`; `originalItemId` identifies the application Item it
+represents. The preview represents the complete ordered drag run and never
+becomes application data.
+
+## Insertion targeting and marker presentation
+
+Insertion mode ranks zero-thickness gaps between retained items rather than
+ranking ghost rectangles or item centers. Each candidate is scored by the
+Euclidean distance from the pointer to the center of its gap segment. If two
+candidates have the same center and score, distance to their adjacent item
+rectangles breaks the tie; stable tree traversal order breaks any remaining
+tie. There is no depth preference. A nested destination becomes easier to
+select when its actual Container layout is physically inset, because its gap
+center moves with that layout. Painted indentation that leaves the Container
+box unchanged does not affect targeting.
+
+For wrapped rows or columns, a gap's cross-axis span is the measured band of
+the selected visual line. A boundary that wraps uses the next line's leading
+edge and band; an append boundary uses the previous line's trailing edge and
+band. This keeps marker state aligned with the same measured geometry used to
+rank the destination.
+
+An insertion marker is ordinary immutable ghost render state. In addition to
+its identity and slot `location`, `InsertionMarkerState` provides the canonical
+world-space `gap`, frozen `previous` and `next` neighbor records, and
+`isCurrentPlacement`. The last field tells a renderer that committing the
+candidate would preserve the dragged run's present placement. A marker can
+change geometry or that flag while its container and index stay unchanged;
+SnapSort reports that presentation update through `onGhostMove`. It does not
+multiplex presentation changes into `onDropTargetChange`.
+
+Framework components can turn the state into a positioned line by supplying
+all presentation values explicitly:
+
+```svelte
+{#if entry.isGhost}
+  <Ghost
+    ghost={entry.ghost}
+    insertionMarker={{ thickness: 3, startInset: 8, endInset: 8 }}
+  />
+{:else}
+  <Item itemId={entry.itemId}>{entry.value.title}</Item>
+{/if}
+```
+
+The framework-neutral helper takes the same explicit contract:
+
+```ts
+const rect = insertionMarkerRect(marker, {
+  thickness: 3,
+  startInset: 8,
+  endInset: 8,
+});
+```
+
+`insertionMarkerRect` expands the zero-thickness world-space gap around its
+centerline, applies the two along-line insets, and returns coordinates from the
+destination Container's padding-box outer edge. It accounts for the
+Container's border and live scroll position; it does not subtract padding.
+All three options are required, finite, and non-negative. If the insets total
+more than `marker.gap.length`, the helper throws instead of clamping or
+inventing a fallback. `toContainerLocalRect(worldRect, container)` exposes the
+same world-to-local projection for arbitrary overlay geometry and requires a
+mounted destination.
+
+The published `stockInsertionMarkerRectOptions` value is the built-in renderer
+contract `{ thickness: 3, startInset: 0, endInset: 0 }`; it is not an implicit
+default of `insertionMarkerRect`. Vanilla can either select its own explicit
+presentation or intentionally use that named stock contract by omitting the
+option:
+
+```ts
+const adapter = createVanillaAdapter({
+  insertionMarker: { thickness: 3, startInset: 8, endInset: 8 },
+});
+```
+
+Svelte and React `Ghost` components also expose `insertionMarker`. Passing it
+at the render site makes theme-specific marker thickness and insets visible in
+application code instead of hiding those choices in targeting policy.
 
 ## Copy from move primitives
 
@@ -247,8 +414,8 @@ former `disableFlip` option has been removed; `animation: null` and per-channel
 
 The 0.5 API is intentionally synchronous and mode-based. Mutation events no
 longer contain a `phase`, `ContainerCallbacks.awaitMutation` and the React
-`useSnapSortAwaitMutation` helper are removed, and `flushMutation` is the only
-framework mutation boundary. Custom `ContainerConfig.strategy` injection and
+`useSnapSortAwaitMutation` helper are removed, and `SnapSortAdapter.commit` is
+the framework mutation boundary. Custom `ContainerConfig.strategy` injection and
 the root exports `SortStrategy`, `DropTargetStrategy`, and
 `DragLifecycleStrategy` are also removed; select a built-in behavior through
 `ContainerConfig.mode` and the exported `SortMode` type.
@@ -262,19 +429,19 @@ never fight over the same DOM nodes. The contract:
 1. **The framework owns the DOM tree.** Core never inserts, removes, or
    reparents an element the framework rendered. All structural intent flows
    through `ContainerCallbacks` (`onItemMove`, `onItemInsert`, `onItemRemove`,
-   `onGhostInsert`, `onGhostRemove`), which carry everything an adapter needs
-   (`index`, `beforeElement`, `ghostRect`, metadata). The default callback
-   implementations in `mutation.ts` are the "vanilla JS adapter" — legitimate
-   defaults when no framework owns the DOM, not a parallel mutation path.
+   `onGhostInsert`, `onGhostMove`, `onGhostRemove`), which carry everything an
+   adapter needs as immutable item or ghost render state. Direct DOM mutation
+   exists only behind `createVanillaAdapter`; framework bindings never inherit
+   it as a parallel mutation path.
 2. **Core writes only non-structural properties on the dragged element** —
    `transform`, `position`/`z-index` styles. Every framework tolerates that;
    none diffs inline styles it didn't set.
 3. **Framework mutations commit synchronously.** Core runs structural
-   callbacks inside `flushMutation(mutation)`. React and Svelte adapters
+   commands inside `SnapSortAdapter.commit(mutation)`. React and Svelte adapters
    provide this transaction automatically, committing state and DOM before
    core performs its final geometry read and writes the inverse FLIP transform.
-4. **After `flushMutation`, the framework's DOM is the truth.** Core resolves
-   elements lazily from item identity (`findItemByKey`), revalidates them with
+4. **After `commit`, the framework's DOM is the truth.** Core resolves
+   elements lazily from item identity (`findItemById`), revalidates them with
    `isConnected`, and verifies placement. It never silently repairs adapter
    output, since that would mask an integration bug.
 

@@ -33,29 +33,25 @@ async function overrideInsertionDragVisual(
       if (!root) throw new Error("Could not find the insertion board root.");
 
       const state = globalThis as typeof globalThis & {
-        __snapsortInsertionGhostEvents?: Array<{
-          kind: string;
-          role: string;
-        }>;
+        __snapsortInsertionGhostEvents?: Array<{ type: string }>;
       };
       state.__snapsortInsertionGhostEvents = [];
-      for (const container of containers.filter(
-        (candidate: any) => candidate.rootContainer === root,
-      )) {
-        const originalGhostInsert = container.config.callbacks.onGhostInsert;
-        container.config.callbacks.onGhostInsert = (event: any) => {
+      const originalCallbacks = root.callbacks;
+      const originalGhostInsert = originalCallbacks.onGhostInsert;
+      const originalDragStart = originalCallbacks.onDragStart;
+      root.callbacks = {
+        ...originalCallbacks,
+        onGhostInsert: (event: any) => {
           state.__snapsortInsertionGhostEvents?.push({
-            kind: event.kind,
-            role: event.role,
+            type: event.ghost.type,
           });
           originalGhostInsert?.(event);
-        };
-      }
-      const originalDragStart = root.config.callbacks.onDragStart;
-      root.config.callbacks.onDragStart = (event: any) => {
-        const result = originalDragStart?.(event);
-        event.session.dragVisual = dragVisual;
-        return result;
+        },
+        onDragStart: (event: any) => {
+          const result = originalDragStart?.(event);
+          if (result === false) return false;
+          event.session.dragVisual = dragVisual;
+        },
       };
     },
     { coreImportPath, dragVisual },
@@ -148,8 +144,14 @@ test.describe("SnapSort insertion move-and-backfill recipe", () => {
           page.locator('[data-snapsort-ghost="insertion"]'),
         ).toHaveCount(1);
         await expect(
-          page.locator('[data-snapsort-ghost-entry="marker"]'),
-        ).toHaveCount(2);
+          page.locator('[data-snapsort-ghost-entry="pointer-preview"]'),
+        ).toHaveCount(1);
+        await expect(
+          page.locator('[data-snapsort-ghost-entry="insertion-marker"]'),
+        ).toHaveCount(1);
+        await expect(page.locator("[data-snapsort-ghost-entry]")).toHaveCount(
+          2,
+        );
 
         const liveOriginal = project.locator(
           `[data-snapsort-item-id="${originalId}"]`,
@@ -314,13 +316,13 @@ test.describe("SnapSort insertion move-and-backfill recipe", () => {
       Math.hypot(draggedCenter.x - start.x, draggedCenter.y - start.y),
     ).toBeGreaterThan(40);
     await expect(
-      project.locator('[data-snapsort-ghost-entry="flow"]'),
+      project.locator('[data-snapsort-ghost-entry="source-spacer"]'),
     ).toHaveCount(1);
     const targetMarker = source.locator('[data-snapsort-ghost="insertion"]');
     await expect(targetMarker).toHaveCount(1);
     await expect(targetMarker).toHaveAttribute(
       "data-snapsort-ghost-entry",
-      "marker",
+      "insertion-marker",
     );
     await expect(page.locator('[data-snapsort-ghost="pointer"]')).toHaveCount(
       0,
@@ -329,14 +331,11 @@ test.describe("SnapSort insertion move-and-backfill recipe", () => {
       () =>
         (
           globalThis as typeof globalThis & {
-            __snapsortInsertionGhostEvents?: Array<{
-              kind: string;
-              role: string;
-            }>;
+            __snapsortInsertionGhostEvents?: Array<{ type: string }>;
           }
         ).__snapsortInsertionGhostEvents ?? [],
     );
-    expect(ghostEvents).toContainEqual({ kind: "flow", role: "source" });
+    expect(ghostEvents).toContainEqual({ type: "source-spacer" });
 
     await page.mouse.up();
     await page.waitForTimeout(250);

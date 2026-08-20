@@ -1,13 +1,20 @@
 <script lang="ts">
   import { Engine } from "@snap-engine/asset-base/svelte";
   import { Container, Ghost, Item } from "@snap-engine/snapsort/svelte";
-  import { defaultAnimations } from "@snap-engine/snapsort";
-  import { rejectDrop } from "@snap-engine/snapsort/callbacks";
-  import type {
-    Container as SortContainer,
-    DragStartEvent,
-    ItemMoveEvent,
+  import {
+    createRenderEntry,
+    createRenderTree,
+    defaultAnimations,
+    reduceRenderTree,
+    type ContainerCallbacks,
+    type ItemMoveEvent,
+    type RenderEntry,
+    type RenderTree,
+    type RenderTreeEvent,
   } from "@snap-engine/snapsort";
+  import { rejectDrop } from "@snap-engine/snapsort/callbacks";
+  import type { DragStartEvent } from "@snap-engine/snapsort";
+  import { renderTreeCallbacks } from "../snapsort-render-tree";
 
   type DemoItem = {
     id: string;
@@ -20,8 +27,11 @@
     id: string;
     title: string;
     items: DemoItem[];
-    container?: SortContainer;
   };
+
+  type BoardValue =
+    | DemoItem
+    | { id: string; kind: "column"; title: string };
 
   const initialColumns: DemoColumn[] = [
     {
@@ -51,44 +61,91 @@
   ];
 
   let nextId = $state(8);
-  let columns = $state<DemoColumn[]>(structuredClone(initialColumns));
+  function createBoard(): RenderTree<BoardValue> {
+    return createRenderTree(
+      initialColumns.map((column) =>
+        createRenderEntry<BoardValue>(
+          { id: column.id, kind: "column", title: column.title },
+          column.id,
+          createRenderTree(
+            column.items.map((item) =>
+              createRenderEntry<BoardValue>({ ...item }, item.id),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  let board = $state.raw(createBoard());
   // Duplicate mode stays entirely in application state: the ordinary move
   // sends the original stable ID to the destination and backfills its source
   // with a fresh ID in the same synchronous callback.
   let duplicateMode = $state(false);
   const itemCount = $derived(
-    columns.reduce((total, column) => total + column.items.length, 0),
+    board.entries.reduce(
+      (total, entry) =>
+        total + (!entry.isGhost && entry.childTree
+          ? entry.childTree.entries.filter((child) => !child.isGhost).length
+          : 0),
+      0,
+    ),
   );
 
   function reset() {
     nextId = 8;
-    columns = structuredClone(initialColumns);
+    board = createBoard();
   }
 
   function addItem() {
     const id = `task-${nextId++}`;
-    columns = columns.map((column, index) =>
-      index === 0
-        ? {
-            ...column,
-            items: [
-              ...column.items,
-              {
-                id,
-                kind: "file",
-                title: `new-file-${id.replace("task-", "")}.md`,
-                detail: "1 KB",
-              },
-            ],
-          }
-        : column,
-    );
+    board = updateColumn(board, "today", (entries) => [
+      ...entries,
+      createRenderEntry<BoardValue>(
+        {
+          id,
+          kind: "file",
+          title: `new-file-${id.replace("task-", "")}.md`,
+          detail: "1 KB",
+        },
+        id,
+      ),
+    ]);
   }
 
-  function findItemById(itemId: string): DemoItem | null {
-    for (const column of columns) {
-      const item = column.items.find((candidate) => candidate.id === itemId);
-      if (item) return item;
+  function updateColumn(
+    tree: RenderTree<BoardValue>,
+    columnId: string,
+    update: (
+      entries: readonly RenderEntry<BoardValue>[],
+    ) => readonly RenderEntry<BoardValue>[],
+  ): RenderTree<BoardValue> {
+    return {
+      ...tree,
+      entries: tree.entries.map((entry) =>
+        !entry.isGhost && entry.itemId === columnId && entry.childTree
+          ? {
+              ...entry,
+              childTree: {
+                ...entry.childTree,
+                entries: update(entry.childTree.entries),
+              },
+            }
+          : entry,
+      ),
+    };
+  }
+
+  function findEntry(
+    tree: RenderTree<BoardValue>,
+    itemId: string,
+  ): Exclude<RenderEntry<BoardValue>, { isGhost: true }> | null {
+    for (const column of tree.entries) {
+      if (column.isGhost || !column.childTree) continue;
+      const item = column.childTree.entries.find(
+        (candidate) => !candidate.isGhost && candidate.itemId === itemId,
+      );
+      if (item && !item.isGhost) return item;
     }
     return null;
   }
@@ -100,60 +157,57 @@
   }
 
   function handleMove(event: ItemMoveEvent) {
-    const itemId = event.itemId;
-    const targetColumnId = event.to.containerMetadata.columnId;
-    const sourceColumnId = event.from.containerMetadata.columnId;
-    if (
-      typeof itemId !== "string" ||
-      typeof targetColumnId !== "string" ||
-      typeof sourceColumnId !== "string"
-    ) {
+    const before = board;
+    const original = findEntry(before, event.itemId);
+    board = reduceRenderTree(board, event);
+    if (!duplicateMode || !original || original.value.kind === "column") return;
+
+    const sourceColumnId = event.from.container.itemId;
+    const targetColumnId = event.to.container.itemId;
+    const replacementId = `task-${nextId++}`;
+    const replacement = createRenderEntry<BoardValue>(
+      { ...original.value, id: replacementId },
+      replacementId,
+    );
+
+    if (sourceColumnId !== targetColumnId) {
+      board = updateColumn(board, sourceColumnId, (entries) => {
+        const next = [...entries];
+        next.splice(Math.min(event.from.index, next.length), 0, replacement);
+        return next;
+      });
       return;
     }
 
-    const original = findItemById(itemId);
-    if (!original) return;
-
-    const replacement = duplicateMode
-      ? { ...original, id: `task-${nextId++}` }
-      : null;
-    const base = columns.map((column) => ({
-      ...column,
-      items: column.items.filter((item) => item.id !== itemId),
-    }));
-
-    columns = base.map((column) => {
-      const nextItems = column.items.slice();
-
-      if (sourceColumnId === targetColumnId && column.id === sourceColumnId) {
-        const combined: DemoItem[] = [];
-        for (let index = 0; index <= nextItems.length; index += 1) {
-          if (replacement && index === event.from.index) {
-            combined.push(replacement);
-          }
-          if (index === event.to.index) combined.push(original);
-          if (index < nextItems.length) combined.push(nextItems[index]);
-        }
-        return { ...column, items: combined };
-      }
-
-      if (replacement && column.id === sourceColumnId) {
-        nextItems.splice(
-          Math.max(0, Math.min(event.from.index, nextItems.length)),
-          0,
-          replacement,
-        );
-      }
-      if (column.id === targetColumnId) {
-        nextItems.splice(
-          Math.max(0, Math.min(event.to.index, nextItems.length)),
-          0,
-          original,
-        );
-      }
-      return { ...column, items: nextItems };
-    });
+    const sourceBefore = before.entries.find(
+      (entry) =>
+        !entry.isGhost &&
+        entry.itemId === sourceColumnId &&
+        entry.childTree,
+    );
+    if (!sourceBefore || sourceBefore.isGhost || !sourceBefore.childTree) return;
+    const base = sourceBefore.childTree.entries.filter(
+      (entry) => entry.isGhost || entry.itemId !== event.itemId,
+    );
+    const combined: RenderEntry<BoardValue>[] = [];
+    for (let index = 0; index <= base.length; index += 1) {
+      if (index === event.from.index) combined.push(replacement);
+      if (index === event.to.index) combined.push(original);
+      if (index < base.length) combined.push(base[index]);
+    }
+    board = updateColumn(board, sourceColumnId, () => combined);
   }
+
+  function applyBoardEvent(event: RenderTreeEvent) {
+    if ("froms" in event) handleMove(event);
+    else board = reduceRenderTree(board, event);
+  }
+
+  const callbacks = {
+    ...renderTreeCallbacks(applyBoardEvent),
+    canDrop: rejectDrop,
+    onDragStart: handleDragStart,
+  } satisfies ContainerCallbacks;
 </script>
 
 <svelte:head>
@@ -188,89 +242,91 @@
 
   <Engine id="snapsort-insertion-demo-canvas">
     <Container
+      itemId="insertion-board-root"
       className="insertion-board"
       config={{
         animation: defaultAnimations,
         mode: "insertion",
         direction: "row",
         name: "insertion-board-root",
-        callbacks: {
-          canDrop: rejectDrop,
-          onDragStart: handleDragStart,
-        },
+        callbacks,
       }}
       locked={true}
       metadata={{ boardId: "insertion-demo" }}
-      items={columns}
-      getItemId={(column) => column.id}
     >
-      {#snippet ghost(event)}
-        <Ghost {event} className="insertion-pointer-ghost">
-          {#if event.role === "pointer"}
+      {#each board.entries as entry (entry.itemId)}
+        {#if entry.isGhost}
+        <Ghost ghost={entry.ghost} className="insertion-pointer-ghost">
+          {#if entry.ghost.type === "pointer-preview"}
             <span
               class="material-symbols-outlined file-icon"
-              class:folder-icon={event.originalMetadata.kind === "folder"}
+              class:folder-icon={entry.ghost.originalMetadata.kind === "folder"}
               aria-hidden="true"
-            >{event.originalMetadata.kind === "folder"
+            >{entry.ghost.originalMetadata.kind === "folder"
                 ? "folder"
                 : "description"}</span
             >
             <div class="card-copy">
-              <strong>{String(event.originalMetadata.title ?? "Dragging")}</strong>
-              <span>{String(event.originalMetadata.detail ?? "")}</span>
+              <strong>{String(entry.ghost.originalMetadata.title ?? "Dragging")}</strong>
+              <span>{String(entry.ghost.originalMetadata.detail ?? "")}</span>
             </div>
           {/if}
         </Ghost>
-      {/snippet}
-      {#snippet entry(column)}
+        {:else if entry.childTree && entry.value.kind === "column"}
         <Container
-          itemId={column.id}
+          itemId={entry.itemId}
           className="insertion-list"
-          bind:container={column.container}
           config={{
             animation: defaultAnimations,
             mode: "insertion",
             direction: "column",
-            name: `insertion-${column.id}`,
-            callbacks: {
-              onItemMove: handleMove,
-            },
+            name: `insertion-${entry.itemId}`,
           }}
           locked={true}
-          metadata={{ columnId: column.id }}
-          items={column.items}
-          getItemId={(item) => item.id}
+          metadata={{ columnId: entry.itemId }}
         >
-          {#snippet before()}
-            <div class="list-header">
-              <h2>{column.title}</h2>
-              <span>{column.items.length}</span>
-            </div>
-          {/snippet}
+          <div class="list-header">
+            <h2>{entry.value.title}</h2>
+            <span>{entry.childTree.entries.filter((child) => !child.isGhost).length}</span>
+          </div>
 
-          {#snippet entry(item)}
+          {#each entry.childTree.entries as child (child.itemId)}
+            {#if child.isGhost}
+              <Ghost
+                ghost={child.ghost}
+                className={child.ghost.type === "pointer-preview"
+                  ? "insertion-pointer-ghost"
+                  : ""}
+              />
+            {:else if child.childTree}
+              <Container itemId={child.itemId} />
+            {:else if child.value.kind !== "column"}
             <Item
-              itemId={item.id}
+              itemId={child.itemId}
               className="insertion-card"
               metadata={{
-                kind: item.kind,
-                title: item.title,
-                detail: item.detail,
+                kind: child.value.kind,
+                title: child.value.title,
+                detail: child.value.detail,
               }}
             >
               <span
                 class="material-symbols-outlined file-icon"
-                class:folder-icon={item.kind === "folder"}
+                class:folder-icon={child.value.kind === "folder"}
                 aria-hidden="true"
-              >{item.kind === "folder" ? "folder" : "description"}</span>
+              >{child.value.kind === "folder" ? "folder" : "description"}</span>
               <div class="card-copy">
-                <strong>{item.title}</strong>
-                <span>{item.detail}</span>
+                <strong>{child.value.title}</strong>
+                <span>{child.value.detail}</span>
               </div>
             </Item>
-          {/snippet}
+            {/if}
+          {/each}
         </Container>
-      {/snippet}
+        {:else}
+          <Item itemId={entry.itemId}>{entry.itemId}</Item>
+        {/if}
+      {/each}
     </Container>
   </Engine>
 </div>

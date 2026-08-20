@@ -43,7 +43,7 @@ async function readGhost(
   page: Page,
 ): Promise<{ top: number; height: number } | null> {
   return page.evaluate(() => {
-    const el = document.querySelector(".ghost") as HTMLElement | null;
+    const el = document.querySelector(".snapsort-ghost") as HTMLElement | null;
     if (!el) return null;
     const r = el.getBoundingClientRect();
     return { top: r.top, height: r.height };

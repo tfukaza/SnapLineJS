@@ -37,15 +37,20 @@ async function setGhostRemoveAvailable(page: Page, available: boolean) {
       if (!container) throw new Error("Could not find the Vertical Column.");
 
       const testState = globalThis as typeof globalThis & {
-        __snapsortGhostRemove?: (...args: any[]) => void;
+        __snapsortGhostRemoveCallbacks?: Record<string, any>;
       };
       if (!available) {
-        testState.__snapsortGhostRemove =
-          container.config.callbacks?.onGhostRemove;
-        container.config.callbacks.onGhostRemove = undefined;
+        testState.__snapsortGhostRemoveCallbacks = container.callbacks;
+        container.callbacks = {
+          ...container.callbacks,
+          onGhostRemove: undefined,
+        };
       } else {
-        container.config.callbacks.onGhostRemove =
-          testState.__snapsortGhostRemove;
+        const callbacks = testState.__snapsortGhostRemoveCallbacks;
+        if (!callbacks) {
+          throw new Error("No Vertical Column callbacks were saved.");
+        }
+        container.callbacks = callbacks;
       }
     },
     { coreImportPath, available },
@@ -72,57 +77,60 @@ async function setItemMoveFailure(page: Page, enabled: boolean) {
 
       const testState = globalThis as typeof globalThis & {
         __snapsortItemMoveFailure?: {
-          config: Record<string, any>;
+          container: { callbacks: Record<string, any> };
           descriptor: PropertyDescriptor;
           callbacks: Record<string, any>;
-          original?: (...args: any[]) => void;
         };
       };
       if (enabled) {
-        const config = container.config as Record<string, any>;
-        const descriptor = Object.getOwnPropertyDescriptor(config, "callbacks");
-        if (!descriptor) throw new Error("Container has no callbacks config.");
-        const state = {
-          config,
-          descriptor,
-          callbacks: config.callbacks as Record<string, any>,
-          original: config.callbacks?.onItemMove as
-            | ((...args: any[]) => void)
-            | undefined,
-        };
-        if (!state.original) {
+        const callbacks = container.callbacks as Record<string, any>;
+        const descriptor = Object.getOwnPropertyDescriptor(
+          Object.getPrototypeOf(container),
+          "callbacks",
+        );
+        if (!descriptor?.get || !descriptor.set) {
+          throw new Error("Container has no controlled callbacks property.");
+        }
+        if (!callbacks.onItemMove) {
           throw new Error("Vertical Column has no onItemMove.");
         }
-        const wrap = (callbacks: Record<string, any>) => {
-          state.original = callbacks.onItemMove;
+        const state = {
+          container,
+          descriptor,
+          callbacks,
+        };
+        const wrap = (next: Record<string, any>) => {
+          const original = next.onItemMove as
+            | ((...args: any[]) => void)
+            | undefined;
+          if (!original) {
+            throw new Error("Vertical Column has no onItemMove.");
+          }
+          state.callbacks = next;
           return {
-            ...callbacks,
+            ...next,
             onItemMove: (...args: any[]) => {
-              state.original?.(...args);
+              original(...args);
               throw new Error("intentional scheduled onItemMove failure");
             },
           };
         };
-        state.callbacks = wrap(state.callbacks);
-        Object.defineProperty(config, "callbacks", {
+        descriptor.set.call(container, wrap(callbacks));
+        Object.defineProperty(container, "callbacks", {
           configurable: true,
           enumerable: descriptor.enumerable,
-          get: () => state.callbacks,
-          set: (callbacks: Record<string, any>) => {
-            state.callbacks = wrap(callbacks);
+          get: () => descriptor.get?.call(container),
+          set: (next: Record<string, any>) => {
+            descriptor.set?.call(container, wrap(next));
           },
         });
         testState.__snapsortItemMoveFailure = state;
       } else {
         const state = testState.__snapsortItemMoveFailure;
         if (!state) return;
-        Object.defineProperty(state.config, "callbacks", {
-          ...state.descriptor,
-          value: {
-            ...state.callbacks,
-            onItemMove: state.original,
-          },
-        });
+        Reflect.deleteProperty(state.container, "callbacks");
+        state.descriptor.set?.call(state.container, state.callbacks);
+        delete testState.__snapsortItemMoveFailure;
       }
     },
     { coreImportPath, enabled },

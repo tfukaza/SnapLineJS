@@ -2,10 +2,17 @@
   import ClientDemoFrame from "$lib/components/ClientDemoFrame.svelte";
   import { Engine } from "@snap-engine/asset-base/svelte";
   import type { Engine as SnapEngine } from "@snap-engine/core";
-  import { Container, Handle, Item } from "@snap-engine/snapsort/svelte";
-  import { defaultAnimations, type ItemMoveEvent } from "@snap-engine/snapsort";
+  import { Container, Ghost, Handle, Item } from "@snap-engine/snapsort/svelte";
+  import {
+    createRenderEntries,
+    createRenderTree,
+    defaultAnimations,
+    reduceRenderTree,
+    type ContainerCallbacks,
+    type GhostLifecycleEvent,
+    type ItemMoveEvent,
+  } from "@snap-engine/snapsort";
   import SnapSortContextBoundary from "../SnapSortContextBoundary.svelte";
-  import { moveEntries } from "./listState";
 
   let {
     debugLayout,
@@ -17,21 +24,69 @@
 
   const title = "SnapSort";
   const gripDots = Array.from({ length: 6 }, (_, i) => i);
-  let titleChars = $state(title.split("").map((char, i) => ({
-    char,
-    id: `snapsort-letter-${i}`,
-  })));
+  let titleChars = $state.raw(
+    createRenderTree(
+      createRenderEntries(
+        title.split("").map((char, i) => ({
+          char,
+          id: `snapsort-letter-${i}`,
+        })),
+        (entry) => entry.id,
+      ),
+    ),
+  );
 
   type HeroStackEntry = "title" | "copy" | "cta";
-  let heroStackEntries: HeroStackEntry[] = $state(["title", "copy", "cta"]);
+  let heroStackEntries = $state.raw(
+    createRenderTree(
+      createRenderEntries<HeroStackEntry>(
+        ["title", "copy", "cta"],
+        (kind) => kind,
+      ),
+    ),
+  );
+  const heroStackOrder = $derived(
+    heroStackEntries.entries
+      .filter((entry) => !entry.isGhost)
+      .map((entry) => entry.itemId)
+      .join(","),
+  );
+  const titleOrder = $derived(
+    titleChars.entries
+      .filter((entry) => !entry.isGhost)
+      .map((entry) => entry.itemId)
+      .join(","),
+  );
 
   function handleHeroStackMove(event: ItemMoveEvent) {
-    heroStackEntries = moveEntries(heroStackEntries, event, (kind) => kind);
+    heroStackEntries = reduceRenderTree(heroStackEntries, event);
   }
 
   function handleTitleMove(event: ItemMoveEvent) {
-    titleChars = moveEntries(titleChars, event, (entry) => entry.id);
+    titleChars = reduceRenderTree(titleChars, event);
   }
+
+  function handleHeroStackGhost(event: GhostLifecycleEvent) {
+    heroStackEntries = reduceRenderTree(heroStackEntries, event);
+  }
+
+  function handleTitleGhost(event: GhostLifecycleEvent) {
+    titleChars = reduceRenderTree(titleChars, event);
+  }
+
+  const heroStackCallbacks = {
+    onItemMove: handleHeroStackMove,
+    onGhostInsert: handleHeroStackGhost,
+    onGhostMove: handleHeroStackGhost,
+    onGhostRemove: handleHeroStackGhost,
+  } satisfies ContainerCallbacks;
+
+  const titleCallbacks = {
+    onItemMove: handleTitleMove,
+    onGhostInsert: handleTitleGhost,
+    onGhostMove: handleTitleGhost,
+    onGhostRemove: handleTitleGhost,
+  } satisfies ContainerCallbacks;
 </script>
 
 <section id="landing">
@@ -75,21 +130,22 @@
       <div class="hero-frame">
         <div class="hero-slot slot">
           <Container
+            itemId="snapsort-hero-stack-root"
             className="hero-stack"
             config={{
               animation: defaultAnimations,
               direction: "column",
-              callbacks: { onItemMove: handleHeroStackMove },
+              callbacks: heroStackCallbacks,
             }}
-            items={heroStackEntries}
-            getItemId={(kind) => kind}
             data-snapsort-demo="hero-stack"
             data-list-id="snapsort-hero-content"
-            data-order={heroStackEntries.join(",")}
+            data-order={heroStackOrder}
           >
-            {#snippet entry(kind)}
-              {#if kind === "title"}
-                <Item itemId={kind} className="hero-stack-item hero-title-item">
+            {#each heroStackEntries.entries as entry (entry.itemId)}
+              {#if entry.isGhost}
+                <Ghost ghost={entry.ghost} />
+              {:else if entry.value === "title"}
+                <Item itemId={entry.itemId} className="hero-stack-item hero-title-item">
                   <div class="hero-row card">
                     <Handle className="hero-row-handle">
                       <span class="hero-row-grip" aria-hidden="true">
@@ -101,22 +157,24 @@
                     <div class="title-section" aria-hidden="true">
                       <SnapSortContextBoundary>
                         <Container
+                          itemId="snapsort-title-root"
                           config={{
                             animation: defaultAnimations,
                             direction: "row",
-                            callbacks: { onItemMove: handleTitleMove },
+                            callbacks: titleCallbacks,
                           }}
-                          items={titleChars}
-                          getItemId={(t) => t.id}
                           data-snapsort-demo="hero-title"
                           data-list-id="snapsort-title"
-                          data-order={titleChars.map((entry) => entry.id).join(",")}
+                          data-order={titleOrder}
                         >
-                          {#snippet entry(t)}
-                            <Item itemId={t.id} style="padding: 0; width: auto;">
-                              <span id={t.id} class="letter-shell">
+                          {#each titleChars.entries as titleEntry (titleEntry.itemId)}
+                            {#if titleEntry.isGhost}
+                              <Ghost ghost={titleEntry.ghost} />
+                            {:else}
+                            <Item itemId={titleEntry.itemId} style="padding: 0; width: auto;">
+                              <span id={titleEntry.itemId} class="letter-shell">
                                 <span class="title-glyph title-text pixel-font">
-                                  {t.char === " " ? "\u00A0" : t.char}
+                                  {titleEntry.value.char === " " ? "\u00A0" : titleEntry.value.char}
                                 </span>
                                 <span class="letter-grip" aria-hidden="true">
                                   {#each gripDots as dot (dot)}
@@ -125,14 +183,15 @@
                                 </span>
                               </span>
                             </Item>
-                          {/snippet}
+                            {/if}
+                          {/each}
                         </Container>
                       </SnapSortContextBoundary>
                     </div>
                   </div>
                 </Item>
-              {:else if kind === "copy"}
-                <Item itemId={kind} className="hero-stack-item hero-copy-item">
+              {:else if entry.value === "copy"}
+                <Item itemId={entry.itemId} className="hero-stack-item hero-copy-item">
                   <div class="hero-row card">
                     <Handle className="hero-row-handle">
                       <span class="hero-row-grip" aria-hidden="true">
@@ -148,7 +207,7 @@
                   </div>
                 </Item>
               {:else}
-                <Item itemId={kind} className="hero-stack-item hero-cta-item">
+                <Item itemId={entry.itemId} className="hero-stack-item hero-cta-item">
                   <div class="hero-row hero-row-final card">
                     <Handle className="hero-row-handle">
                       <span class="hero-row-grip" aria-hidden="true">
@@ -164,7 +223,7 @@
                   </div>
                 </Item>
               {/if}
-            {/snippet}
+            {/each}
           </Container>
         </div>
       </div>

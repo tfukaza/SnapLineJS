@@ -2,94 +2,155 @@
   import { Engine } from "@snap-engine/asset-base/svelte";
   import type {
     Container as SnapSortContainer,
+    ContainerCallbacks,
+    GhostLifecycleEvent,
     ItemMoveEvent,
   } from "@snap-engine/snapsort";
-  import { defaultAnimations } from "@snap-engine/snapsort";
+  import {
+    createRenderEntry,
+    createRenderTree,
+    defaultAnimations,
+    reduceRenderTree,
+  } from "@snap-engine/snapsort";
   import { rejectDrop } from "@snap-engine/snapsort/callbacks";
-  import { Container, Item } from "@snap-engine/snapsort/svelte";
+  import { Container, Ghost, Item } from "@snap-engine/snapsort/svelte";
 
-  type Card = { id: string; label: string };
+  type Card = { kind: "card"; id: string; label: string };
   type Column = {
+    kind: "column";
     id: "backlog" | "done";
     label: string;
     container?: SnapSortContainer;
   };
+  type BoardValue = Card | Column;
 
-  let columns = $state<Column[]>([
-    { id: "backlog", label: "Backlog" },
-    { id: "done", label: "Done" },
-  ]);
-  let backlog = $state<Card[]>([
-    { id: "draft", label: "Draft copy" },
-    { id: "review", label: "Review changes" },
-  ]);
-  let done = $state<Card[]>([]);
+  const backlogColumn: Column = {
+    kind: "column",
+    id: "backlog",
+    label: "Backlog",
+  };
+  const doneColumn: Column = { kind: "column", id: "done", label: "Done" };
+  const cardEntry = (id: string, label: string) =>
+    createRenderEntry<BoardValue>({ kind: "card", id, label }, id);
+  let board = $state.raw(
+    createRenderTree<BoardValue>([
+      createRenderEntry(
+        backlogColumn,
+        backlogColumn.id,
+        createRenderTree([
+          cardEntry("draft", "Draft copy"),
+          cardEntry("review", "Review changes"),
+        ]),
+      ),
+      createRenderEntry(doneColumn, doneColumn.id, createRenderTree()),
+    ]),
+  );
   let lastMove = $state("No moves yet");
 
   function onItemMove(event: ItemMoveEvent) {
-    const card = [...backlog, ...done].find((entry) => entry.id === event.itemId);
-    const destinationColumn = columns.find(
-      (column) => column.container === event.to.container,
+    const card = board.entries
+      .filter((entry) => !entry.isGhost && entry.childTree)
+      .flatMap((entry) =>
+        entry.isGhost || !entry.childTree ? [] : entry.childTree.entries,
+      )
+      .find((entry) => !entry.isGhost && entry.itemId === event.itemId);
+    const destinationColumn = board.entries.find(
+      (entry) =>
+        !entry.isGhost && entry.itemId === event.to.container.itemId,
     );
-    if (!card || !destinationColumn) return;
-
-    backlog = backlog.filter((entry) => entry.id !== event.itemId);
-    done = done.filter((entry) => entry.id !== event.itemId);
-    const destination = destinationColumn.id === "done" ? done : backlog;
-    destination.splice(Math.min(event.to.index, destination.length), 0, card);
-    if (destinationColumn.id === "done") done = destination;
-    else backlog = destination;
-    lastMove = `${card.label} moved to ${destinationColumn.label}`;
+    board = reduceRenderTree(board, event);
+    if (
+      card &&
+      !card.isGhost &&
+      destinationColumn &&
+      !destinationColumn.isGhost
+    ) {
+      lastMove = `${card.value.label} moved to ${destinationColumn.value.label}`;
+    }
   }
 
-  function moveCard(id: string, source: Column) {
-    const destination = columns.find((column) => column !== source);
-    if (!source.container || !destination?.container) return;
+  function onGhostMove(event: GhostLifecycleEvent) {
+    board = reduceRenderTree(board, event);
+  }
+
+  function moveCard(id: string, source: BoardValue) {
+    if (source.kind !== "column") return;
+    const destination = board.entries.find(
+      (entry) =>
+        !entry.isGhost &&
+        entry.value.kind === "column" &&
+        entry.value !== source,
+    );
+    if (
+      !source.container ||
+      !destination ||
+      destination.isGhost ||
+      destination.value.kind !== "column" ||
+      !destination.value.container
+    ) {
+      return;
+    }
     source.container.moveItem(
       id,
-      destination.container,
-      destination.container.numberOfItems,
+      destination.value.container,
+      destination.value.container.numberOfItems,
     );
   }
+
+  const callbacks = {
+    onItemMove,
+    onGhostInsert: onGhostMove,
+    onGhostMove,
+    onGhostRemove: onGhostMove,
+    canDrop: rejectDrop,
+  } satisfies ContainerCallbacks;
 </script>
 
 <Engine id="container-property-metadata">
   <Container
+    itemId="container-property-metadata-root"
     className="metadata-board"
-    config={{ animation: defaultAnimations, direction: "row", callbacks: { canDrop: rejectDrop } }}
+    config={{ animation: defaultAnimations, direction: "row", callbacks }}
     locked={true}
-    items={columns}
-    getItemId={(column) => column.id}
     aria-label="Task board"
   >
-    {#snippet entry(column)}
+    {#each board.entries as entry (entry.itemId)}
+      {#if entry.isGhost}
+        <Ghost ghost={entry.ghost} />
+      {:else if entry.childTree && entry.value.kind === "column"}
       <Container
-        bind:container={column.container}
-        itemId={column.id}
+        bind:container={entry.value.container}
+        itemId={entry.itemId}
         className="metadata-list"
         locked={true}
-        items={column.id === "backlog" ? backlog : done}
-        metadata={{ label: column.label }}
-        config={{ animation: defaultAnimations, callbacks: { onItemMove } }}
+        metadata={{ label: entry.value.label }}
+        config={{ animation: defaultAnimations }}
       >
-        {#snippet before()}
-          <h4>{column.label}</h4>
-        {/snippet}
-        {#snippet entry(card)}
-          <Item itemId={card.id} className="metadata-item">
-            <span>{card.label}</span>
-            <button
-              type="button"
-              aria-label={`Move ${card.label} to ${column.id === "backlog" ? "Done" : "Backlog"}`}
-              onpointerdown={(event) => event.stopPropagation()}
-              onclick={() => moveCard(card.id, column)}
-            >
-              {column.id === "backlog" ? "Move →" : "← Move"}
-            </button>
-          </Item>
-        {/snippet}
+        <h4>{entry.value.label}</h4>
+        {#each entry.childTree.entries as child (child.itemId)}
+          {#if child.isGhost}
+            <Ghost ghost={child.ghost} />
+          {:else if child.childTree}
+            <Container itemId={child.itemId} />
+          {:else if child.value.kind === "card"}
+            <Item itemId={child.itemId} className="metadata-item">
+              <span>{child.value.label}</span>
+              <button
+                type="button"
+                aria-label={`Move ${child.value.label} to ${entry.value.id === "backlog" ? "Done" : "Backlog"}`}
+                onpointerdown={(event) => event.stopPropagation()}
+                onclick={() => moveCard(child.itemId, entry.value)}
+              >
+                {entry.value.id === "backlog" ? "Move →" : "← Move"}
+              </button>
+            </Item>
+          {/if}
+        {/each}
       </Container>
-    {/snippet}
+      {:else}
+        <Item itemId={entry.itemId}>{entry.value.label}</Item>
+      {/if}
+    {/each}
   </Container>
   <p class="move-status" aria-live="polite">{lastMove}</p>
 </Engine>

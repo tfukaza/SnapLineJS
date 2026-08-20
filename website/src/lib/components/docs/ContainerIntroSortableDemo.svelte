@@ -1,30 +1,54 @@
 <script lang="ts">
   import { Engine } from "@snap-engine/asset-base/svelte";
-  import { defaultAnimations, type ItemMoveEvent } from "@snap-engine/snapsort";
-  import { Container, Item } from "@snap-engine/snapsort/svelte";
+  import {
+    createRenderEntries,
+    createRenderTree,
+    defaultAnimations,
+    reduceRenderTree,
+    type ContainerCallbacks,
+    type GhostLifecycleEvent,
+    type ItemMoveEvent,
+  } from "@snap-engine/snapsort";
+  import { Container, Ghost, Item } from "@snap-engine/snapsort/svelte";
 
   type Task = { id: string; label: string };
 
-  let todos: Task[] = $state([
-    { id: "buy-milk", label: "Buy milk" },
-    { id: "walk-dog", label: "Walk the dog" },
-  ]);
+  let todos = $state.raw(
+    createRenderTree(
+      createRenderEntries<Task>(
+        [
+          { id: "buy-milk", label: "Buy milk" },
+          { id: "walk-dog", label: "Walk the dog" },
+        ],
+        (todo) => todo.id,
+      ),
+    ),
+  );
 
   function onItemMove(event: ItemMoveEvent) {
-    const todo = todos.find((entry) => entry.id === event.itemId);
-    if (!todo) return;
-
-    const next = todos.filter((entry) => entry.id !== event.itemId);
-    const index = Math.max(0, Math.min(event.to.index, next.length));
-    next.splice(index, 0, todo);
-    todos = next;
+    todos = reduceRenderTree(todos, event);
   }
+
+  function onGhostMove(event: GhostLifecycleEvent) {
+    todos = reduceRenderTree(todos, event);
+  }
+
+  const callbacks = {
+    onItemMove,
+    onGhostInsert: onGhostMove,
+    onGhostMove,
+    onGhostRemove: onGhostMove,
+  } satisfies ContainerCallbacks;
 </script>
 
 <Engine id="container-intro-sortable">
-  <Container config={{ animation: defaultAnimations, callbacks: { onItemMove } }} items={todos}>
-    {#snippet entry(todo)}
-      <Item itemId={todo.id}>{todo.label}</Item>
-    {/snippet}
+  <Container itemId="container-intro-sortable-root" config={{ animation: defaultAnimations, callbacks }}>
+    {#each todos.entries as entry (entry.itemId)}
+      {#if entry.isGhost}
+        <Ghost ghost={entry.ghost} />
+      {:else}
+        <Item itemId={entry.itemId}>{entry.value.label}</Item>
+      {/if}
+    {/each}
   </Container>
 </Engine>

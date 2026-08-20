@@ -41,12 +41,16 @@ async function overrideDragVisual(
       if (!container) {
         throw new Error(`Could not find SnapSort container ${selector}.`);
       }
-      const original = container.config.callbacks.onDragStart;
-      container.config.callbacks.onDragStart = (event: any) => {
-        const result = original?.(event);
-        if (result === false) return false;
-        event.session.dragVisual = dragVisual;
-        return result;
+      const callbacks = container.callbacks;
+      const original = callbacks.onDragStart;
+      container.callbacks = {
+        ...callbacks,
+        onDragStart: (event: any) => {
+          const result = original?.(event);
+          if (result === false) return false;
+          event.session.dragVisual = dragVisual;
+          return result;
+        },
       };
     },
     { coreImportPath, selector, dragVisual },
@@ -208,7 +212,7 @@ test.describe("SnapSort gallery — new drag primitives", () => {
           maxPaletteTargetGhosts,
           await palette.evaluate(
             (el) =>
-              el.querySelectorAll('[data-snapsort-ghost-entry="flow"]').length,
+              el.querySelectorAll('[data-snapsort-ghost-entry$="-spacer"]').length,
           ),
         );
         sawPointerPreview ||=
@@ -476,7 +480,7 @@ test.describe("SnapSort gallery — new drag primitives", () => {
         beforeDrop: async () => {
           await expect(tileA1).toHaveCSS("position", "absolute");
           await expect(
-            grid.locator('[data-snapsort-ghost-entry="flow"]'),
+            grid.locator('[data-snapsort-ghost-entry$="-spacer"]'),
           ).toHaveCount(1);
           await expect(
             page.locator('[data-snapsort-ghost="pointer"]'),

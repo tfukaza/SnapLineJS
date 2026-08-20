@@ -2,29 +2,35 @@
   import ClientDemoFrame from "$lib/components/ClientDemoFrame.svelte";
   import { Engine } from "@snap-engine/asset-base/svelte";
   import type { Engine as SnapEngine } from "@snap-engine/core";
-  import { Container, Handle, Item } from "@snap-engine/snapsort/svelte";
-  import type {
+  import { Container, Ghost, Handle, Item } from "@snap-engine/snapsort/svelte";
+  import {
+    createRenderEntries,
+    createRenderEntry,
+    createRenderTree,
+    defaultAnimations,
+    reduceRenderTree,
+    type ContainerCallbacks,
     Container as ContainerType,
-    ItemMoveEvent,
+    type RenderTree,
+    type RenderTreeEvent,
   } from "@snap-engine/snapsort";
-  import { defaultAnimations } from "@snap-engine/snapsort";
   import { rejectDrop } from "@snap-engine/snapsort/callbacks";
   import CustomizableShowcase from "./CustomizableShowcase.svelte";
-  import { moveEntries, moveEntriesAcrossLists } from "./listState";
 
   type MultiContainerItem = {
+    kind: "item";
     id: string;
     label: string;
   };
 
   type MultiContainerColumn = {
+    kind: "column";
     id: string;
     title: string;
     direction: "left" | "right";
-    items: MultiContainerItem[];
     container?: ContainerType;
   };
-
+  type MultiContainerValue = MultiContainerItem | MultiContainerColumn;
 
   let {
     debugLayout,
@@ -36,14 +42,14 @@
 
   let sidewaysSolved = $state(false);
 
-  let sortableItems = $state([
-    "Drag any",
-    "item up",
-    "or down",
-    "and drop",
-    "them in",
-    "place",
-  ]);
+  let sortableItems = $state.raw(
+    createRenderTree(
+      createRenderEntries(
+        ["Drag any", "item up", "or down", "and drop", "them in", "place"],
+        (label) => label,
+      ),
+    ),
+  );
   const skeletonDemoTitles = [
     "Sortable list",
     "Sideways list",
@@ -54,21 +60,42 @@
   ];
   const logoSliceCount = 6;
   const logoSliceWidth = 30;
-  let sidewaysItems = $state([3, 0, 5, 1, 4, 2].map((slice) => ({
-    id: `typescript-slice-${slice}`,
-    slice,
-    x: `${slice * -logoSliceWidth}px`,
-  })));
+  let sidewaysItems = $state.raw(
+    createRenderTree(
+      createRenderEntries(
+        [3, 0, 5, 1, 4, 2].map((slice) => ({
+          id: `typescript-slice-${slice}`,
+          slice,
+          x: `${slice * -logoSliceWidth}px`,
+        })),
+        (item) => item.id,
+      ),
+    ),
+  );
 
-  function handleSortableMove(event: ItemMoveEvent) {
-    sortableItems = moveEntries(sortableItems, event, (label) => label);
+  function ordinaryValues<T>(tree: RenderTree<T>): T[] {
+    return tree.entries.flatMap((entry) =>
+      entry.isGhost ? [] : [entry.value],
+    );
   }
 
-  function handleSidewaysMove(event: ItemMoveEvent) {
-    sidewaysItems = moveEntries(sidewaysItems, event, (item) => item.id);
+  function entryOrder<T>(tree: RenderTree<T>): string {
+    return tree.entries
+      .filter((entry) => !entry.isGhost)
+      .map((entry) => entry.itemId)
+      .join(",");
+  }
+
+  function handleSortableEvent(event: RenderTreeEvent) {
+    sortableItems = reduceRenderTree(sortableItems, event);
+  }
+
+  function handleSidewaysEvent(event: RenderTreeEvent) {
+    sidewaysItems = reduceRenderTree(sidewaysItems, event);
+    const items = ordinaryValues(sidewaysItems);
     sidewaysSolved =
-      sidewaysItems.length === logoSliceCount &&
-      sidewaysItems.every((item, index) => item.slice === index);
+      items.length === logoSliceCount &&
+      items.every((item, index) => item.slice === index);
   }
   const nestedItems = ["Item 1", "Item 2", "Item 3"];
   const nestedChildren = ["Item 4", "Item 5", "Item 6"];
@@ -85,10 +112,28 @@
     ...nestedItems.map((label): NestedEntry => ({ kind: "item", id: label, label })),
     { kind: "group", id: "nested-group" },
   ];
-  let nestedLists = $state({
-    root: nestedEntries,
-    child: nestedChildren.map((label): NestedEntry => ({ kind: "item", id: label, label })),
-  });
+  let nestedLists = $state.raw(
+    createRenderTree(
+      nestedEntries.map((entry) =>
+        createRenderEntry(
+          entry,
+          entry.id,
+          entry.kind === "group"
+            ? createRenderTree(
+                createRenderEntries<NestedEntry>(
+                  nestedChildren.map((label) => ({
+                    kind: "item",
+                    id: label,
+                    label,
+                  })),
+                  (child) => child.id,
+                ),
+              )
+            : null,
+        ),
+      ),
+    ),
+  );
 
   type InsertEntry =
     | { kind: "item"; id: string; label: string }
@@ -98,153 +143,148 @@
     { kind: "group", id: "insert-group" },
     ...insertItems.slice(1).map((label): InsertEntry => ({ kind: "item", id: label, label })),
   ];
-  let insertLists = $state({
-    root: insertEntries,
-    child: insertNestedItems.map((label): InsertEntry => ({ kind: "item", id: label, label })),
-  });
-  let multiRowItems = $state([
-    "This",
-    "demo",
-    "has",
-    "a",
-    "slightly",
-    "different",
-    "algorithm",
-    "optimized",
-    "for",
-    "reordering",
-    "words",
-    "in",
-    "a",
-    "sentence",
-  ].map((label, index) => ({
-    id: `multi-row-${index}`,
-    label,
-  })));
-  let multiContainers: MultiContainerColumn[] = $state([
-    {
-      id: "left",
-      title: "Left",
-      direction: "right",
-      items: [
-        { id: "mc-spec", label: "Spec" },
-        { id: "mc-mockup", label: "Mockup" },
-        { id: "mc-build", label: "Build" },
-      ],
-    },
-    {
-      id: "right",
-      title: "Right",
-      direction: "left",
-      items: [
-        { id: "mc-review", label: "Review" },
-        { id: "mc-ship", label: "Ship" },
-      ],
-    },
-  ]);
+  let insertLists = $state.raw(
+    createRenderTree(
+      insertEntries.map((entry) =>
+        createRenderEntry(
+          entry,
+          entry.id,
+          entry.kind === "group"
+            ? createRenderTree(
+                createRenderEntries<InsertEntry>(
+                  insertNestedItems.map((label) => ({
+                    kind: "item",
+                    id: label,
+                    label,
+                  })),
+                  (child) => child.id,
+                ),
+              )
+            : null,
+        ),
+      ),
+    ),
+  );
+  let multiRowItems = $state.raw(
+    createRenderTree(
+      createRenderEntries(
+        [
+          "This", "demo", "has", "a", "slightly", "different", "algorithm",
+          "optimized", "for", "reordering", "words", "in", "a", "sentence",
+        ].map((label, index) => ({ id: `multi-row-${index}`, label })),
+        (item) => item.id,
+      ),
+    ),
+  );
 
-  function handleNestedMove(event: ItemMoveEvent) {
-    const targetListId = event.to.containerMetadata.listId;
-    if (targetListId !== "root" && targetListId !== "child") return;
-    nestedLists = moveEntriesAcrossLists(
-      nestedLists,
-      event,
-      targetListId,
-      (entry: NestedEntry) => entry.id,
-    );
+  const multiContainerItemEntry = (id: string, label: string) =>
+    createRenderEntry<MultiContainerValue>({ kind: "item", id, label }, id);
+  let multiContainers = $state.raw(
+    createRenderTree<MultiContainerValue>([
+      createRenderEntry(
+        { kind: "column", id: "left", title: "Left", direction: "right" },
+        "left",
+        createRenderTree([
+          multiContainerItemEntry("mc-spec", "Spec"),
+          multiContainerItemEntry("mc-mockup", "Mockup"),
+          multiContainerItemEntry("mc-build", "Build"),
+        ]),
+      ),
+      createRenderEntry(
+        { kind: "column", id: "right", title: "Right", direction: "left" },
+        "right",
+        createRenderTree([
+          multiContainerItemEntry("mc-review", "Review"),
+          multiContainerItemEntry("mc-ship", "Ship"),
+        ]),
+      ),
+    ]),
+  );
+
+  function handleNestedEvent(event: RenderTreeEvent) {
+    nestedLists = reduceRenderTree(nestedLists, event);
   }
 
-  function handleInsertMove(event: ItemMoveEvent) {
-    const targetListId = event.to.containerMetadata.listId;
-    if (targetListId !== "root" && targetListId !== "child") return;
-    insertLists = moveEntriesAcrossLists(
-      insertLists,
-      event,
-      targetListId,
-      (entry: InsertEntry) => entry.id,
-    );
+  function handleInsertEvent(event: RenderTreeEvent) {
+    insertLists = reduceRenderTree(insertLists, event);
   }
 
-  function handleMultiRowMove(event: ItemMoveEvent) {
-    multiRowItems = moveEntries(multiRowItems, event, (item) => item.id);
+  function handleMultiRowEvent(event: RenderTreeEvent) {
+    multiRowItems = reduceRenderTree(multiRowItems, event);
   }
 
-  function moveMultiContainerState(itemId: string, targetColumnId: string, targetIndex: number) {
-    let movedItem: MultiContainerItem | null = null;
-    const withoutMovedItem = multiContainers.map((column) => {
-      const sourceIndex = column.items.findIndex((item) => item.id === itemId);
-      if (sourceIndex === -1) return column;
-
-      const nextItems = column.items.slice();
-      const [item] = nextItems.splice(sourceIndex, 1);
-      movedItem = item;
-      return { ...column, items: nextItems };
-    });
-
-    if (!movedItem) return;
-    const itemToMove = movedItem;
-
-    multiContainers = withoutMovedItem.map((column) => {
-      if (column.id !== targetColumnId) return column;
-
-      const nextItems = column.items.slice();
-      const destinationIndex = Math.max(0, Math.min(targetIndex, nextItems.length));
-      nextItems.splice(destinationIndex, 0, itemToMove);
-      return { ...column, items: nextItems };
-    });
-  }
-
-  function handleMultiContainerMove(event: ItemMoveEvent) {
-    const targetColumnId = event.to.containerMetadata.columnId;
-    if (typeof targetColumnId !== "string") return;
-
-    const ids = (event.itemIds.length > 0 ? event.itemIds : [event.itemId]).map(String);
-    const idsToMove = new Set(ids);
-    const itemsById = new Map(
-      multiContainers.flatMap((column) => column.items.map((item) => [item.id, item] as const)),
-    );
-    const movedItems = ids.flatMap((id) => {
-      const item = itemsById.get(id);
-      return item ? [item] : [];
-    });
-    if (movedItems.length === 0) return;
-
-    const withoutMovedItems = multiContainers.map((column) => ({
-      ...column,
-      items: column.items.filter((item) => !idsToMove.has(item.id)),
-    }));
-    multiContainers = withoutMovedItems.map((column) => {
-      if (column.id !== targetColumnId) return column;
-      const items = column.items.slice();
-      const destinationIndex = Math.max(0, Math.min(event.to.index, items.length));
-      items.splice(destinationIndex, 0, ...movedItems);
-      return { ...column, items };
-    });
+  function handleMultiContainerEvent(event: RenderTreeEvent) {
+    multiContainers = reduceRenderTree(multiContainers, event);
   }
 
   function moveItemToOppositeColumn(itemId: string) {
-    const sourceColumnIndex = multiContainers.findIndex((column) =>
-      column.items.some((item) => item.id === itemId),
+    const columns = multiContainers.entries.filter(
+      (entry) =>
+        !entry.isGhost &&
+        entry.value.kind === "column" &&
+        entry.childTree !== null,
+    );
+    const sourceColumnIndex = columns.findIndex((column) =>
+      !column.isGhost &&
+      column.childTree?.entries.some(
+        (entry) => !entry.isGhost && entry.itemId === itemId,
+      ),
     );
     if (sourceColumnIndex === -1) return;
 
     const targetColumnIndex = sourceColumnIndex === 0 ? 1 : 0;
-    const sourceColumn = multiContainers[sourceColumnIndex];
-    const targetColumn = multiContainers[targetColumnIndex];
-    const sourceItemIndex = sourceColumn.items.findIndex((item) => item.id === itemId);
-    const destinationIndex = Math.min(sourceItemIndex, targetColumn.items.length);
-
-    if (sourceColumn.container && targetColumn.container) {
-      const movedBySnapSort = sourceColumn.container.moveItem(
-        itemId,
-        targetColumn.container,
-        destinationIndex,
-      );
-      if (movedBySnapSort) return;
+    const sourceColumn = columns[sourceColumnIndex];
+    const targetColumn = columns[targetColumnIndex];
+    if (
+      !sourceColumn ||
+      sourceColumn.isGhost ||
+      sourceColumn.value.kind !== "column" ||
+      !sourceColumn.childTree ||
+      !targetColumn ||
+      targetColumn.isGhost ||
+      targetColumn.value.kind !== "column" ||
+      !targetColumn.childTree
+    ) {
+      return;
     }
+    const sourceItemIndex = sourceColumn.childTree.entries.findIndex(
+      (entry) => !entry.isGhost && entry.itemId === itemId,
+    );
+    const targetLength = targetColumn.childTree.entries.filter(
+      (entry) => !entry.isGhost,
+    ).length;
+    const destinationIndex = Math.min(sourceItemIndex, targetLength);
+    const sourceContainer = sourceColumn.value.container;
+    const targetContainer = targetColumn.value.container;
+    if (!sourceContainer || !targetContainer) return;
 
-    moveMultiContainerState(itemId, targetColumn.id, destinationIndex);
+    sourceContainer.moveItem(
+      itemId,
+      targetContainer,
+      destinationIndex,
+    );
   }
+
+  function structuralCallbacks(
+    handler: (event: RenderTreeEvent) => void,
+  ): ContainerCallbacks {
+    return {
+      onItemMove: handler,
+      onGhostInsert: handler,
+      onGhostMove: handler,
+      onGhostRemove: handler,
+    };
+  }
+
+  const sortableCallbacks = structuralCallbacks(handleSortableEvent);
+  const sidewaysCallbacks = structuralCallbacks(handleSidewaysEvent);
+  const nestedCallbacks = structuralCallbacks(handleNestedEvent);
+  const insertCallbacks = structuralCallbacks(handleInsertEvent);
+  const multiRowCallbacks = structuralCallbacks(handleMultiRowEvent);
+  const multiContainerCallbacks = {
+    ...structuralCallbacks(handleMultiContainerEvent),
+    canDrop: rejectDrop,
+  } satisfies ContainerCallbacks;
 
 </script>
 
@@ -266,7 +306,7 @@
             <div class="core-demo-surface card core-demo-skeleton">
               {#if index === 0}
                 <div class="basic-list sortable-list">
-                  {#each sortableItems as label}
+                  {#each ordinaryValues(sortableItems) as label}
                     <div class="basic-row card-content">
                       <span>{label}</span>
                     </div>
@@ -274,7 +314,7 @@
                 </div>
               {:else if index === 1}
                 <div class="sideways-list solved">
-                  {#each sidewaysItems as item}
+                  {#each ordinaryValues(sidewaysItems) as item}
                     <div class="snapsort-item">
                       <div
                         class="logo-slice"
@@ -301,7 +341,7 @@
                 </div>
               {:else if index === 4}
                 <div class="multi-row-list">
-                  {#each multiRowItems as item}
+                  {#each ordinaryValues(multiRowItems) as item}
                     <div class="basic-token">
                       <span>{item.label}</span>
                     </div>
@@ -309,15 +349,19 @@
                 </div>
               {:else if index === 5}
                 <div class="multi-container-board">
-                  {#each multiContainers as column}
-                    <div class="basic-column card">
-                      <h4>{column.title}</h4>
-                      {#each column.items as item}
-                        <div class="basic-row compact-row multi-container-row">
-                          <span>{item.label}</span>
-                        </div>
-                      {/each}
-                    </div>
+                  {#each multiContainers.entries as columnEntry}
+                    {#if !columnEntry.isGhost && columnEntry.childTree && columnEntry.value.kind === "column"}
+                      <div class="basic-column card">
+                        <h4>{columnEntry.value.title}</h4>
+                        {#each columnEntry.childTree.entries as itemEntry}
+                          {#if !itemEntry.isGhost && itemEntry.value.kind === "item"}
+                            <div class="basic-row compact-row multi-container-row">
+                              <span>{itemEntry.value.label}</span>
+                            </div>
+                          {/if}
+                        {/each}
+                      </div>
+                    {/if}
                   {/each}
                 </div>
               {/if}
@@ -348,7 +392,7 @@
                             <div class="customizable-mockup-title">Default</div>
                             <div class="customizable-mockup-card shallow">
                               <div class="customizable-mini-list">
-                                {#each sortableItems.slice(0, 4) as label}
+                                {#each ordinaryValues(sortableItems).slice(0, 4) as label}
                                   <div class="snapsort-item">
                                     <div class="customizable-mini-row">
                                       <span class="customizable-mini-handle" aria-hidden="true">
@@ -417,25 +461,28 @@
         <h3>Sortable list</h3>
         <div class="core-demo-surface card">
           <Container
+            itemId="core-sortable-root"
             className="basic-list sortable-list"
             config={{
               animation: defaultAnimations,
               direction: "column",
-              callbacks: { onItemMove: handleSortableMove },
+              callbacks: sortableCallbacks,
             }}
-            items={sortableItems}
-            getItemId={(label) => label}
             data-snapsort-demo="sortable"
             data-list-id="core-sortable"
-            data-order={sortableItems.join(",")}
+            data-order={entryOrder(sortableItems)}
           >
-            {#snippet entry(label)}
-              <Item itemId={label}>
+            {#each sortableItems.entries as entry (entry.itemId)}
+              {#if entry.isGhost}
+                <Ghost ghost={entry.ghost} />
+              {:else}
+              <Item itemId={entry.itemId}>
                 <div class="basic-row card-content">
-                  <span>{label}</span>
+                  <span>{entry.value}</span>
                 </div>
               </Item>
-            {/snippet}
+              {/if}
+            {/each}
           </Container>
         </div>
       </article>
@@ -444,29 +491,32 @@
         <h3>Sideways list</h3>
         <div class="core-demo-surface sideways-demo-surface card">
           <Container
+            itemId="core-sideways-root"
             className={`sideways-list ${sidewaysSolved ? "solved" : ""}`}
             config={{
               animation: defaultAnimations,
               direction: "row",
               mainAxisAlign: "center",
-              callbacks: { onItemMove: handleSidewaysMove },
+              callbacks: sidewaysCallbacks,
             }}
-            items={sidewaysItems}
-            getItemId={(item) => item.id}
             data-snapsort-demo="sideways"
             data-list-id="core-sideways"
-            data-order={sidewaysItems.map((item) => item.id).join(",")}
+            data-order={entryOrder(sidewaysItems)}
           >
-            {#snippet entry(item)}
-              <Item itemId={item.id}>
+            {#each sidewaysItems.entries as entry (entry.itemId)}
+              {#if entry.isGhost}
+                <Ghost ghost={entry.ghost} />
+              {:else}
+              <Item itemId={entry.itemId}>
                 <div
                   class="logo-slice"
-                  data-slice={item.slice}
-                  aria-label="TypeScript logo slice {item.slice + 1} of {logoSliceCount}"
-                  style={`--slice-x: ${item.x};`}
+                  data-slice={entry.value.slice}
+                  aria-label="TypeScript logo slice {entry.value.slice + 1} of {logoSliceCount}"
+                  style={`--slice-x: ${entry.value.x};`}
                 ></div>
               </Item>
-            {/snippet}
+              {/if}
+            {/each}
           </Container>
         </div>
       </article>
@@ -475,72 +525,72 @@
         <h3>Nested list</h3>
         <div class="core-demo-surface card">
           <Container
+            itemId="core-nested-root"
             className="basic-list bounded-demo-list"
             metadata={{ listId: "root" }}
             config={{
               animation: defaultAnimations,
               direction: "column",
-              callbacks: { onItemMove: handleNestedMove },
+              callbacks: nestedCallbacks,
             }}
-            items={nestedLists.root}
-            getItemId={(entry) => entry.id}
             data-snapsort-demo="nested"
             data-list-id="core-nested-root"
-            data-order={nestedLists.root.map((entry) => entry.id).join(",")}
+            data-order={entryOrder(nestedLists)}
           >
-            {#snippet entry(e)}
-              {#if e.kind === "item"}
-                <Item itemId={e.id}>
-                  <div class="basic-row handle-row">
-                    <Handle className="demo-row-handle">
-                      <span class="demo-grip" aria-hidden="true">
-                        <i></i><i></i><i></i><i></i>
-                      </span>
-                    </Handle>
-                    <span>{e.label}</span>
-                  </div>
-                </Item>
-              {:else}
+            {#each nestedLists.entries as entry (entry.itemId)}
+              {#if entry.isGhost}
+                <Ghost ghost={entry.ghost} />
+              {:else if entry.childTree && entry.value.kind === "group"}
                 <Container
                   className="nested-list bounded-demo-list card shallow"
                   metadata={{ listId: "child" }}
                   config={{
                     animation: defaultAnimations,
                     direction: "column",
-                    callbacks: { onItemMove: handleNestedMove },
                   }}
                   locked={false}
-                  itemId="nested-group"
-                  items={nestedLists.child}
-                  getItemId={(entry) => entry.id}
+                  itemId={entry.itemId}
                   data-snapsort-demo="nested"
                   data-list-id="core-nested-child"
-                  data-order={nestedLists.child.map((entry) => entry.id).join(",")}
+                  data-order={entryOrder(entry.childTree)}
                 >
-                  {#snippet before()}
-                    <Handle className="demo-container-handle">
-                      <span class="demo-grip" aria-hidden="true">
-                        <i></i><i></i><i></i><i></i>
-                      </span>
-                    </Handle>
-                  {/snippet}
-                  {#snippet entry(child)}
-                    {#if child.kind === "item"}
-                      <Item itemId={child.id}>
+                  <Handle className="demo-container-handle">
+                    <span class="demo-grip" aria-hidden="true">
+                      <i></i><i></i><i></i><i></i>
+                    </span>
+                  </Handle>
+                  {#each entry.childTree.entries as child (child.itemId)}
+                    {#if child.isGhost}
+                      <Ghost ghost={child.ghost} />
+                    {:else if child.childTree}
+                      <Container itemId={child.itemId} />
+                    {:else if child.value.kind === "item"}
+                      <Item itemId={child.itemId}>
                         <div class="basic-row nested-row handle-row">
                           <Handle className="demo-row-handle">
                             <span class="demo-grip" aria-hidden="true">
                               <i></i><i></i><i></i><i></i>
                             </span>
                           </Handle>
-                          <span>{child.label}</span>
+                          <span>{child.value.label}</span>
                         </div>
                       </Item>
                     {/if}
-                  {/snippet}
+                  {/each}
                 </Container>
+              {:else if entry.value.kind === "item"}
+                <Item itemId={entry.itemId}>
+                  <div class="basic-row handle-row">
+                    <Handle className="demo-row-handle">
+                      <span class="demo-grip" aria-hidden="true">
+                        <i></i><i></i><i></i><i></i>
+                      </span>
+                    </Handle>
+                    <span>{entry.value.label}</span>
+                  </div>
+                </Item>
               {/if}
-            {/snippet}
+            {/each}
           </Container>
         </div>
       </article>
@@ -549,33 +599,23 @@
         <h3>Insert mode</h3>
         <div class="core-demo-surface card">
           <Container
+            itemId="core-insert-root"
             className="basic-list insertion-list bounded-demo-list"
             metadata={{ listId: "root" }}
             config={{
               animation: defaultAnimations,
               direction: "column",
               mode: "insertion",
-              callbacks: { onItemMove: handleInsertMove },
+              callbacks: insertCallbacks,
             }}
-            items={insertLists.root}
-            getItemId={(entry) => entry.id}
             data-snapsort-demo="insert"
             data-list-id="core-insert-root"
-            data-order={insertLists.root.map((entry) => entry.id).join(",")}
+            data-order={entryOrder(insertLists)}
           >
-            {#snippet entry(e)}
-              {#if e.kind === "item"}
-                <Item itemId={e.id}>
-                  <div class="basic-row handle-row">
-                    <Handle className="demo-row-handle">
-                      <span class="demo-grip" aria-hidden="true">
-                        <i></i><i></i><i></i><i></i>
-                      </span>
-                    </Handle>
-                    <span>{e.label}</span>
-                  </div>
-                </Item>
-              {:else}
+            {#each insertLists.entries as entry (entry.itemId)}
+              {#if entry.isGhost}
+                <Ghost ghost={entry.ghost} />
+              {:else if entry.childTree && entry.value.kind === "group"}
                 <Container
                   className="nested-list nested-insertion-list insertion-list bounded-demo-list card shallow"
                   metadata={{ listId: "child" }}
@@ -583,40 +623,50 @@
                     animation: defaultAnimations,
                     direction: "column",
                     mode: "insertion",
-                    callbacks: { onItemMove: handleInsertMove },
                   }}
                   locked={false}
-                  itemId="insert-group"
-                  items={insertLists.child}
-                  getItemId={(entry) => entry.id}
+                  itemId={entry.itemId}
                   data-snapsort-demo="insert"
                   data-list-id="core-insert-child"
-                  data-order={insertLists.child.map((entry) => entry.id).join(",")}
+                  data-order={entryOrder(entry.childTree)}
                 >
-                  {#snippet before()}
-                    <Handle className="demo-container-handle">
-                      <span class="demo-grip" aria-hidden="true">
-                        <i></i><i></i><i></i><i></i>
-                      </span>
-                    </Handle>
-                  {/snippet}
-                  {#snippet entry(child)}
-                    {#if child.kind === "item"}
-                      <Item itemId={child.id}>
+                  <Handle className="demo-container-handle">
+                    <span class="demo-grip" aria-hidden="true">
+                      <i></i><i></i><i></i><i></i>
+                    </span>
+                  </Handle>
+                  {#each entry.childTree.entries as child (child.itemId)}
+                    {#if child.isGhost}
+                      <Ghost ghost={child.ghost} />
+                    {:else if child.childTree}
+                      <Container itemId={child.itemId} />
+                    {:else if child.value.kind === "item"}
+                      <Item itemId={child.itemId}>
                         <div class="basic-row nested-row handle-row">
                           <Handle className="demo-row-handle">
                             <span class="demo-grip" aria-hidden="true">
                               <i></i><i></i><i></i><i></i>
                             </span>
                           </Handle>
-                          <span>{child.label}</span>
+                          <span>{child.value.label}</span>
                         </div>
                       </Item>
                     {/if}
-                  {/snippet}
+                  {/each}
                 </Container>
+              {:else if entry.value.kind === "item"}
+                <Item itemId={entry.itemId}>
+                  <div class="basic-row handle-row">
+                    <Handle className="demo-row-handle">
+                      <span class="demo-grip" aria-hidden="true">
+                        <i></i><i></i><i></i><i></i>
+                      </span>
+                    </Handle>
+                    <span>{entry.value.label}</span>
+                  </div>
+                </Item>
               {/if}
-            {/snippet}
+            {/each}
           </Container>
         </div>
       </article>
@@ -625,26 +675,29 @@
         <h3>Multiple rows</h3>
         <div class="core-demo-surface card">
           <Container
+            itemId="core-multi-row-root"
             className="multi-row-list"
             config={{
               animation: defaultAnimations,
               direction: "row",
               mode: "progressive",
-              callbacks: { onItemMove: handleMultiRowMove },
+              callbacks: multiRowCallbacks,
             }}
-            items={multiRowItems}
-            getItemId={(item) => item.id}
             data-snapsort-demo="multi-row"
             data-list-id="core-multi-row"
-            data-order={multiRowItems.map((item) => item.id).join(",")}
+            data-order={entryOrder(multiRowItems)}
           >
-            {#snippet entry(item)}
-              <Item itemId={item.id}>
+            {#each multiRowItems.entries as entry (entry.itemId)}
+              {#if entry.isGhost}
+                <Ghost ghost={entry.ghost} />
+              {:else}
+              <Item itemId={entry.itemId}>
                 <div class="basic-token">
-                  <span>{item.label}</span>
+                  <span>{entry.value.label}</span>
                 </div>
               </Item>
-            {/snippet}
+              {/if}
+            {/each}
           </Container>
         </div>
       </article>
@@ -653,57 +706,59 @@
         <h3>Multiple containers</h3>
         <div class="core-demo-surface multi-container-surface">
           <Container
+            itemId="core-multi-container-root"
             className="multi-container-board"
             config={{
               animation: defaultAnimations,
               direction: "row",
               name: "core-multi-root",
-              callbacks: { canDrop: rejectDrop },
+              callbacks: multiContainerCallbacks,
             }}
             locked={true}
-            items={multiContainers}
-            getItemId={(column) => column.id}
             data-snapsort-demo="multi-container"
             data-list-id="core-multi-root"
-            data-order={multiContainers.map((column) => column.id).join(",")}
+            data-order={entryOrder(multiContainers)}
           >
-            {#snippet entry(column)}
+            {#each multiContainers.entries as entry (entry.itemId)}
+              {#if entry.isGhost}
+                <Ghost ghost={entry.ghost} />
+              {:else if entry.childTree && entry.value.kind === "column"}
               <Container
                 className="basic-column card"
-                bind:container={column.container}
-                itemId={column.id}
-                metadata={{ columnId: column.id }}
+                bind:container={entry.value.container}
+                itemId={entry.itemId}
+                metadata={{ columnId: entry.itemId }}
                 config={{
                   animation: defaultAnimations,
                   direction: "column",
-                  name: column.id,
-                  callbacks: { onItemMove: handleMultiContainerMove },
+                  name: entry.itemId,
                 }}
                 locked={true}
-                items={column.items}
-                getItemId={(item) => item.id}
                 data-snapsort-demo="multi-container"
-                data-list-id={`core-multi-${column.id}`}
-                data-order={column.items.map((item) => item.id).join(",")}
+                data-list-id={`core-multi-${entry.itemId}`}
+                data-order={entryOrder(entry.childTree)}
               >
-                {#snippet before()}
-                  <h4>{column.title}</h4>
-                {/snippet}
-                {#snippet entry(item)}
-                  <Item itemId={item.id}>
+                <h4>{entry.value.title}</h4>
+                {#each entry.childTree.entries as child (child.itemId)}
+                  {#if child.isGhost}
+                    <Ghost ghost={child.ghost} />
+                  {:else if child.childTree}
+                    <Container itemId={child.itemId} />
+                  {:else if child.value.kind === "item"}
+                  <Item itemId={child.itemId}>
                     <div class="basic-row compact-row multi-container-row">
-                      <span>{item.label}</span>
+                      <span>{child.value.label}</span>
                       <button
                         class="column-move-button"
                         type="button"
-                        aria-label="Move {item.label} to the other column"
+                        aria-label="Move {child.value.label} to the other column"
                         onpointerdown={(event) => event.stopPropagation()}
                         onclick={(event) => {
                           event.stopPropagation();
-                          moveItemToOppositeColumn(item.id);
+                          moveItemToOppositeColumn(child.itemId);
                         }}
                       >
-                        {#if column.direction === "right"}
+                        {#if entry.value.direction === "right"}
                           &rarr;
                         {:else}
                           &larr;
@@ -711,9 +766,13 @@
                       </button>
                     </div>
                   </Item>
-                {/snippet}
+                  {/if}
+                {/each}
               </Container>
-            {/snippet}
+              {:else}
+                <Item itemId={entry.itemId}>{entry.value.kind}</Item>
+              {/if}
+            {/each}
           </Container>
         </div>
       </article>

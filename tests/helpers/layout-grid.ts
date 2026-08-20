@@ -50,7 +50,7 @@ export function makeBox(init: BoxInit): DomProperty {
   } as DomProperty;
 }
 
-let nextKey = 0;
+let nextItemId = 0;
 
 export function makeItemSnapshot(
   value: string,
@@ -59,7 +59,7 @@ export function makeItemSnapshot(
 ): ItemSnapshot<string> {
   return {
     value,
-    key: `key-${nextKey++}`,
+    itemId: `item-${nextItemId++}`,
     metadata: {},
     direction: "column",
     mainAxisAlign: "start",
@@ -82,7 +82,7 @@ export function makeContainerSnapshot(
 ): ItemSnapshot<string> {
   return {
     value: "container",
-    key: `key-${nextKey++}`,
+    itemId: `container-${nextItemId++}`,
     metadata: {},
     direction,
     mainAxisAlign,

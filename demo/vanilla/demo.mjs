@@ -149,6 +149,7 @@ function buildBoard() {
   rootContainer = createContainer(
     boardElement,
     null,
+    "vanilla-kanban-root",
     {
       direction: "row",
       name: "vanilla-kanban-root",
@@ -191,6 +192,7 @@ function createColumn(column) {
   const columnObject = createContainer(
     columnElement,
     rootContainer,
+    `column:${column.id}`,
     {
       direction: "column",
       name: `vanilla-${column.id}`,
@@ -210,8 +212,8 @@ function createColumn(column) {
   }
 }
 
-function createContainer(element, parent, config, metadata) {
-  const container = new Container(engine, parent, config);
+function createContainer(element, parent, itemId, config, metadata) {
+  const container = new Container(engine, parent, { ...config, itemId });
   container.locked = true;
   container.metadata = metadata;
   container.element = element;
@@ -238,6 +240,7 @@ function buildFileTree() {
   fileTreeRootContainer = createInsertionContainer(
     fileTreeElement,
     null,
+    "vanilla-file-tree-root",
     {
       direction: "column",
       name: "vanilla-file-tree-root",
@@ -255,10 +258,18 @@ function buildFileTree() {
   }
 }
 
-function createInsertionContainer(element, parent, config, metadata, locked) {
+function createInsertionContainer(
+  element,
+  parent,
+  itemId,
+  config,
+  metadata,
+  locked,
+) {
   const container = new Container(fileTreeEngine, parent, {
     ...config,
     mode: "insertion",
+    itemId,
   });
   container.locked = locked;
   container.metadata = metadata;
@@ -291,6 +302,7 @@ function createFileTreeFolder(node, depth, parentContainer) {
   const folderContainer = createInsertionContainer(
     folderElement,
     parentContainer,
+    node.id,
     {
       direction: "column",
       name: `vanilla-file-tree-${node.id}`,
@@ -300,7 +312,7 @@ function createFileTreeFolder(node, depth, parentContainer) {
         drop: fileTreeAnimation,
       },
     },
-    { itemId: node.id, containerId: node.id },
+    { containerId: node.id },
     false,
   );
 
@@ -316,8 +328,8 @@ function createFileTreeFile(node, depth, parentContainer) {
   itemElement.classList.add("snapsort-item");
   parentContainer.element.append(itemElement);
 
-  const itemObject = new Item(fileTreeEngine, null);
-  itemObject.metadata = { itemId: node.id };
+  const itemObject = new Item(fileTreeEngine, null, { itemId: node.id });
+  itemObject.metadata = { nodeId: node.id };
   itemObject.element = itemElement;
   parentContainer.attachItem(itemObject);
 }
@@ -392,9 +404,8 @@ function createItem(item, container) {
   itemElement.append(content);
   container.element.append(itemElement);
 
-  const itemObject = new Item(engine, null);
-  itemObject.itemId = item.id;
-  itemObject.metadata = { itemId: item.id };
+  const itemObject = new Item(engine, null, { itemId: item.id });
+  itemObject.metadata = { taskId: item.id };
   itemObject.element = itemElement;
   container.attachItem(itemObject);
   itemObjects.set(item.id, itemObject);

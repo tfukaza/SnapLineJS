@@ -74,7 +74,7 @@ async function reorderDirectItems(
   await page.mouse.move(start.x + 7, start.y + 7);
 
   const ghost = container.locator(
-    ':scope > [data-snapsort-ghost-entry="flow"]',
+    ':scope > [data-snapsort-ghost-entry$="-spacer"]',
   );
   await expect(ghost).toHaveCount(1);
 
@@ -138,7 +138,7 @@ test.describe("SnapSort landing repeated-drag ownership", () => {
     await expect(items).toHaveCount(16);
 
     const ghost = grid.locator(
-      ':scope > [data-snapsort-ghost-entry="flow"]',
+      ':scope > [data-snapsort-ghost-entry$="-spacer"]',
     );
     let expected = await directItemKeys(grid);
 
@@ -162,7 +162,9 @@ test.describe("SnapSort landing repeated-drag ownership", () => {
       await page.mouse.down();
       if (drag === 0) {
         await page.waitForTimeout(60);
-        await expect(source.locator(".hero-synth-button.is-active")).toHaveCount(0);
+        await expect(
+          source.locator(".hero-synth-button.is-active"),
+        ).toHaveCount(0);
       }
       await page.mouse.move(start.x + 8, start.y + 8);
       await page.mouse.move(end.x, end.y, { steps: 12 });
@@ -178,7 +180,7 @@ test.describe("SnapSort landing repeated-drag ownership", () => {
           for (const child of element.children) {
             if (
               child instanceof HTMLElement &&
-              child.dataset.snapsortGhostEntry === "flow"
+              child.dataset.snapsortGhostEntry === "target-spacer"
             ) {
               return index;
             }

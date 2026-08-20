@@ -85,7 +85,7 @@ test.describe("layout resolution plans", () => {
       filter: { excludeSnapshots: new Set([excluded]) },
       diagnostics: {
         onSnapshotVisit: (snapshot) =>
-          visits.set(snapshot.key, (visits.get(snapshot.key) ?? 0) + 1),
+          visits.set(snapshot.itemId, (visits.get(snapshot.itemId) ?? 0) + 1),
       },
     });
 
@@ -103,8 +103,8 @@ test.describe("layout resolution plans", () => {
     }
 
     expect([...visits.values()]).toEqual([1, 1, 1, 1, 1, 1]);
-    expect(visits.has(excluded.key)).toBe(false);
-    expect(visits.has(excludedChild.key)).toBe(false);
+    expect(visits.has(excluded.itemId)).toBe(false);
+    expect(visits.has(excludedChild.itemId)).toBe(false);
     expect(Object.isFrozen(plan.containerPlan(root))).toBe(true);
     expect(Object.isFrozen(plan.containerPlan(root).eligibleChildren)).toBe(
       true,

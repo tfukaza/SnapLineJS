@@ -1,14 +1,24 @@
 <script lang="ts">
-  import { Container } from "@snap-engine/snapsort/svelte";
-  import type {
-    CanDropEvent,
-    ContainerCallbacks,
-    ItemMoveEvent,
+  import { Container, Ghost } from "@snap-engine/snapsort/svelte";
+  import {
+    createRenderEntry,
+    createRenderTree,
+    reduceRenderTree,
+    type CanDropEvent,
+    type ContainerCallbacks,
+    type GhostLifecycleEvent,
+    type ItemMoveEvent,
+    type RenderEntry,
+    type RenderTree,
   } from "@snap-engine/snapsort";
   import FileExplorerNode from "./FileExplorerNode.svelte";
   import type { FileExplorerNodeData } from "./FileExplorerNode.svelte";
 
-  const initialTree: FileExplorerNodeData[] = [
+  type FileExplorerNodeInput = FileExplorerNodeData & {
+    children?: FileExplorerNodeInput[];
+  };
+
+  const initialTree: FileExplorerNodeInput[] = [
     {
       id: "website-tree-src",
       name: "src",
@@ -46,117 +56,88 @@
     timing_function: "cubic-bezier(0.2, 0, 0, 1)",
   };
 
-  let tree = $state<FileExplorerNodeData[]>(structuredClone(initialTree));
+  function createFileTree(
+    nodes: readonly FileExplorerNodeInput[],
+  ): RenderTree<FileExplorerNodeData> {
+    return createRenderTree(
+      nodes.map(({ children, ...node }) =>
+        createRenderEntry(
+          node,
+          node.id,
+          node.kind === "folder" ? createFileTree(children ?? []) : null,
+        ),
+      ),
+    );
+  }
+
+  let tree = $state.raw(createFileTree(initialTree));
   let selectedIds = $state<Set<string>>(new Set());
   let lastClickedId: string | null = null;
 
-  function cloneNode(node: FileExplorerNodeData): FileExplorerNodeData {
-    return {
-      ...node,
-      children: node.children?.map(cloneNode),
-    };
-  }
-
-  function extractNode(
-    nodes: FileExplorerNodeData[],
+  function findEntry(
+    current: RenderTree<FileExplorerNodeData>,
     nodeId: string,
-  ): { nodes: FileExplorerNodeData[]; node: FileExplorerNodeData | null } {
-    let removed: FileExplorerNodeData | null = null;
-    const nextNodes: FileExplorerNodeData[] = [];
-
-    for (const node of nodes) {
-      if (node.id === nodeId) {
-        removed = cloneNode(node);
-        continue;
-      }
-
-      if (node.children) {
-        const result = extractNode(node.children, nodeId);
-        if (result.node) {
-          removed = result.node;
-          nextNodes.push({ ...node, children: result.nodes });
-          continue;
-        }
-      }
-
-      nextNodes.push(cloneNode(node));
-    }
-
-    return { nodes: nextNodes, node: removed };
-  }
-
-  function containsNode(node: FileExplorerNodeData, nodeId: string): boolean {
-    if (node.id === nodeId) return true;
-    return node.children?.some((child) => containsNode(child, nodeId)) ?? false;
-  }
-
-  function findNode(
-    nodes: FileExplorerNodeData[],
-    nodeId: string,
-  ): FileExplorerNodeData | null {
-    for (const node of nodes) {
-      if (node.id === nodeId) return node;
-      const found = node.children ? findNode(node.children, nodeId) : null;
+  ): Extract<RenderEntry<FileExplorerNodeData>, { isGhost: false }> | null {
+    for (const entry of current.entries) {
+      if (entry.isGhost) continue;
+      if (entry.itemId === nodeId) return entry;
+      const found = entry.childTree
+        ? findEntry(entry.childTree, nodeId)
+        : null;
       if (found) return found;
     }
     return null;
   }
 
-  function insertNode(
-    nodes: FileExplorerNodeData[],
-    containerId: string,
-    index: number,
-    nodeToInsert: FileExplorerNodeData,
-  ): FileExplorerNodeData[] {
-    if (containerId === "root") {
-      const nextNodes = nodes.map(cloneNode);
-      nextNodes.splice(Math.max(0, Math.min(index, nextNodes.length)), 0, nodeToInsert);
-      return nextNodes;
-    }
-
-    return nodes.map((node) => {
-      if (node.id === containerId) {
-        const children = node.children?.map(cloneNode) ?? [];
-        children.splice(Math.max(0, Math.min(index, children.length)), 0, nodeToInsert);
-        return { ...node, open: true, children };
-      }
-
-      return {
-        ...node,
-        children: node.children
-          ? insertNode(node.children, containerId, index, nodeToInsert)
-          : undefined,
-      };
-    });
+  function containsEntry(
+    entry: Extract<RenderEntry<FileExplorerNodeData>, { isGhost: false }>,
+    nodeId: string,
+  ): boolean {
+    return (
+      entry.itemId === nodeId ||
+      (entry.childTree ? findEntry(entry.childTree, nodeId) !== null : false)
+    );
   }
 
-  function toggleNodeOpen(
-    nodes: FileExplorerNodeData[],
+  function updateNode(
+    current: RenderTree<FileExplorerNodeData>,
     nodeId: string,
-  ): FileExplorerNodeData[] {
-    return nodes.map((node) => {
-      if (node.id === nodeId && node.kind === "folder") {
-        return { ...node, open: node.open === false };
-      }
-
-      return {
-        ...node,
-        children: node.children ? toggleNodeOpen(node.children, nodeId) : undefined,
-      };
+  ): RenderTree<FileExplorerNodeData> {
+    let changed = false;
+    const entries = current.entries.map((entry) => {
+      if (entry.isGhost) return entry;
+      const childTree = entry.childTree
+        ? updateNode(entry.childTree, nodeId)
+        : null;
+      const value =
+        entry.itemId === nodeId && entry.value.kind === "folder"
+          ? { ...entry.value, open: entry.value.open === false }
+          : entry.value;
+      if (childTree === entry.childTree && value === entry.value) return entry;
+      changed = true;
+      return { ...entry, childTree, value };
     });
+    return changed ? { entries } : current;
   }
 
   function toggleFolderOpen(nodeId: string) {
-    tree = toggleNodeOpen(tree, nodeId);
+    tree = updateNode(tree, nodeId);
   }
 
   /** Visible node ids in on-screen order (collapsed folders' children excluded), for shift-click range selection. */
-  function flattenVisibleIds(nodes: FileExplorerNodeData[]): string[] {
+  function flattenVisibleIds(
+    current: RenderTree<FileExplorerNodeData>,
+  ): string[] {
     const ids: string[] = [];
-    for (const node of nodes) {
-      ids.push(node.id);
-      if (node.kind === "folder" && node.open !== false && node.children) {
-        ids.push(...flattenVisibleIds(node.children));
+    for (const entry of current.entries) {
+      if (entry.isGhost) continue;
+      ids.push(entry.itemId);
+      if (
+        entry.value.kind === "folder" &&
+        entry.value.open !== false &&
+        entry.childTree
+      ) {
+        ids.push(...flattenVisibleIds(entry.childTree));
       }
     }
     return ids;
@@ -191,32 +172,12 @@
     lastClickedId = nodeId;
   }
 
-  /**
-   * Multi-item move: `event.items`/`event.itemsMetadata` carry the whole
-   * dragged run (ordered, length 1 for a single-item drag). Extract every
-   * dragged node from wherever it currently lives first, then insert the
-   * whole run as one contiguous block at `event.to.index` — matching how
-   * SnapSort computes that index (post-removal of the moved items).
-   */
   function handleMove(event: ItemMoveEvent) {
-    const containerId = event.to.containerMetadata.containerId;
-    if (typeof containerId !== "string") return;
+    tree = reduceRenderTree(tree, event);
+  }
 
-    let nextTree = tree;
-    const extractedNodes: FileExplorerNodeData[] = [];
-    for (const itemId of event.itemIds) {
-      const extracted = extractNode(nextTree, itemId);
-      if (!extracted.node) continue;
-      nextTree = extracted.nodes;
-      extractedNodes.push(extracted.node);
-    }
-    if (extractedNodes.length === 0) return;
-    if (extractedNodes.some((node) => containsNode(node, containerId))) return;
-
-    extractedNodes.forEach((node, i) => {
-      nextTree = insertNode(nextTree, containerId, event.to.index + i, node);
-    });
-    tree = nextTree;
+  function handleGhost(event: GhostLifecycleEvent) {
+    tree = reduceRenderTree(tree, event);
   }
 
   /** Block dropping a folder into its own descendant (or itself), for every dragged item. */
@@ -225,26 +186,23 @@
     if (typeof containerId !== "string") return true;
 
     for (const itemId of event.itemIds) {
-      const draggedNode = findNode(tree, itemId);
-      if (draggedNode && containsNode(draggedNode, containerId)) return false;
+      const draggedNode = findEntry(tree, itemId);
+      if (draggedNode && containsEntry(draggedNode, containerId)) return false;
     }
     return true;
   }
 
-  const callbacks: ContainerCallbacks = {
-    onItemMove: handleMove,
+  const nestedCallbacks = {
     canDrop: canDropInFolder,
-    getInsertionMarkerRect: ({ containerMetadata, defaultRect }) => {
-      const depth = Number(containerMetadata.insertionDepth ?? 0);
-      const left = 8 + depth * 14;
-      const right = 8;
-      return {
-        ...defaultRect,
-        x: defaultRect.x + left,
-        width: Math.max(0, defaultRect.width - left - right),
-      };
-    },
-  };
+  } satisfies ContainerCallbacks;
+
+  const rootCallbacks = {
+    onItemMove: handleMove,
+    onGhostInsert: handleGhost,
+    onGhostMove: handleGhost,
+    onGhostRemove: handleGhost,
+    ...nestedCallbacks,
+  } satisfies ContainerCallbacks;
 </script>
 
 <div class="file-explorer-card">
@@ -255,12 +213,13 @@
       <span></span>
     </div>
     <Container
+      itemId="website-file-explorer-root"
       className="code-tree"
       config={{
         mode: "insertion",
         direction: "column",
         name: "website-file-explorer-root",
-        callbacks,
+        callbacks: rootCallbacks,
         animation: {
           reorder: fileTreeAnimation,
           drop: fileTreeAnimation,
@@ -269,20 +228,32 @@
       locked={true}
       metadata={{
         containerId: "root",
-        insertionDepth: 0,
       }}
-      items={tree}
-      getItemId={(node) => node.id}
     >
-      {#snippet entry(node)}
-        <FileExplorerNode
-          {node}
-          {callbacks}
-          onToggleFolder={toggleFolderOpen}
-          {selectedIds}
-          onSelectNode={handleSelectNode}
-        />
-      {/snippet}
+      {#each tree.entries as entry (entry.itemId)}
+        {#if entry.isGhost}
+          {#if entry.ghost.type === "insertion-marker"}
+            <Ghost
+              ghost={entry.ghost}
+              insertionMarker={{
+                thickness: 3,
+                startInset: 8,
+                endInset: 8,
+              }}
+            />
+          {:else}
+            <Ghost ghost={entry.ghost} />
+          {/if}
+        {:else}
+          <FileExplorerNode
+            {entry}
+            callbacks={nestedCallbacks}
+            onToggleFolder={toggleFolderOpen}
+            {selectedIds}
+            onSelectNode={handleSelectNode}
+          />
+        {/if}
+      {/each}
     </Container>
   </div>
 </div>
@@ -344,8 +315,8 @@
   }
 
   :global(.snapsort-container.tree-folder) {
-    width: 100%;
-    margin: 0 !important;
+    width: calc(100% - 14px);
+    margin: 0 0 0 14px !important;
     border: 0 !important;
     outline: 0 !important;
     background: transparent;
@@ -376,6 +347,11 @@
     line-height: normal;
     position: relative;
     touch-action: none;
+  }
+
+  :global(.tree-folder > .tree-row) {
+    width: calc(100% + 14px);
+    margin-left: -14px !important;
   }
 
   :global(.snapsort-item.tree-row:hover),

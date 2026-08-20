@@ -5,12 +5,17 @@
     prioritizeIntersectingContainer,
     rejectDrop,
   } from "@snap-engine/snapsort/callbacks";
-  import type {
-    Container as SortContainer,
-    GhostInsertEvent,
-    ItemMoveEvent,
-    ItemRemoveEvent,
+  import {
+    createRenderEntry,
+    createRenderTree,
+    reduceRenderTree,
+    type Container as SortContainer,
+    type ContainerCallbacks,
+    type GhostState,
+    type RenderTree,
+    type RenderTreeEvent,
   } from "@snap-engine/snapsort";
+  import { renderTreeCallbacks } from "../snapsort-render-tree";
 
   type TileZone = "answer" | "bank";
 
@@ -39,11 +44,52 @@
     timing_function: "cubic-bezier(0.2, 0, 0, 1)",
   };
 
-  let answerContainer: SortContainer | undefined = $state();
-  let bankContainer: SortContainer | undefined = $state();
-  let answerTiles: TileData[] = $state([]);
-  let bankTiles: TileData[] = $state(toTileData(exercise.tiles));
-  const tileZones: TileZone[] = ["answer", "bank"];
+  type BoardValue = TileData | { kind: "zone"; zone: TileZone };
+
+  function isZoneValue(
+    value: BoardValue,
+  ): value is Extract<BoardValue, { kind: "zone" }> {
+    return "kind" in value;
+  }
+
+  function createBoard(): RenderTree<BoardValue> {
+    return createRenderTree([
+      createRenderEntry<BoardValue>(
+        { kind: "zone", zone: "answer" },
+        "sentence-zone-answer",
+        createRenderTree(),
+      ),
+      createRenderEntry<BoardValue>(
+        { kind: "zone", zone: "bank" },
+        "sentence-zone-bank",
+        createRenderTree(
+          toTileData(exercise.tiles).map((tile) =>
+            createRenderEntry<BoardValue>(tile, tile.id),
+          ),
+        ),
+      ),
+    ]);
+  }
+
+  let board = $state.raw(createBoard());
+  function tilesIn(zone: TileZone): TileData[] {
+    const zoneEntry = board.entries.find(
+      (entry) =>
+        !entry.isGhost &&
+        isZoneValue(entry.value) &&
+        entry.value.zone === zone,
+    );
+    if (!zoneEntry || zoneEntry.isGhost || !zoneEntry.childTree) return [];
+    return zoneEntry.childTree.entries.flatMap((entry) =>
+      !entry.isGhost && !isZoneValue(entry.value) ? [entry.value] : [],
+    );
+  }
+  let answerTiles = $derived(tilesIn("answer"));
+  let bankTiles = $derived(tilesIn("bank"));
+  let zoneContainers: Record<TileZone, SortContainer | null> = $state({
+    answer: null,
+    bank: null,
+  });
   let result: { correct: boolean; expected: string } | null = $state(null);
   let lookupTarget: string | null = $state(null);
   let tilePointerStart: { x: number; y: number } | null = null;
@@ -57,42 +103,9 @@
     }));
   }
 
-  function containerForZone(zone: TileZone) {
-    return zone === "answer" ? answerContainer : bankContainer;
-  }
-
-  function updateTileZone(tileId: string, targetZone: TileZone, targetIndex: number) {
-    const allTiles = [...answerTiles, ...bankTiles];
-    const movedTile = allTiles.find((tile) => tile.id === tileId);
-    if (!movedTile) return;
-
-    const nextAnswerTiles = answerTiles.filter((tile) => tile.id !== tileId);
-    const nextBankTiles = bankTiles.filter((tile) => tile.id !== tileId);
-    const targetTiles = targetZone === "answer" ? nextAnswerTiles : nextBankTiles;
-    const destinationIndex = Math.max(0, Math.min(targetIndex, targetTiles.length));
-
-    targetTiles.splice(destinationIndex, 0, movedTile);
-    answerTiles = nextAnswerTiles;
-    bankTiles = nextBankTiles;
+  function applyBoardEvent(event: RenderTreeEvent) {
+    board = reduceRenderTree(board, event);
     result = null;
-  }
-
-  function handleSnapSortDomMove(event: ItemMoveEvent) {
-    const itemId = event.itemId;
-    if (typeof itemId !== "string") return;
-
-    const targetZone = event.to.containerMetadata.zone;
-    if (targetZone !== "answer" && targetZone !== "bank") return;
-
-    updateTileZone(itemId, targetZone, event.to.index);
-  }
-
-  function handleSnapSortDomRemove(event: ItemRemoveEvent) {
-    const itemId = event.itemId;
-    if (typeof itemId !== "string") return;
-
-    answerTiles = answerTiles.filter((tile) => tile.id !== itemId);
-    bankTiles = bankTiles.filter((tile) => tile.id !== itemId);
   }
 
   function findTile(tileId: string | undefined) {
@@ -100,26 +113,25 @@
     return [...answerTiles, ...bankTiles].find((tile) => tile.id === tileId) ?? null;
   }
 
-  /** Ghost snippet content for both zones — looks up the dragged tile's text via its itemId. */
-  function ghostTileText(event: GhostInsertEvent): string {
-    const itemId = event.originalItemId;
-    return typeof itemId === "string" ? (findTile(itemId)?.text ?? "") : "";
+  function ghostTileText(ghost: GhostState): string {
+    return findTile(ghost.originalItemId)?.text ?? "";
   }
 
   function moveTileToZone(tile: TileData, targetZone: TileZone) {
-    const sourceZone: TileZone = answerTiles.some((candidate) => candidate.id === tile.id)
+    const sourceZone: TileZone = answerTiles.some(
+      (candidate) => candidate.id === tile.id,
+    )
       ? "answer"
       : "bank";
-    const sourceContainer = containerForZone(sourceZone);
-    const targetContainer = containerForZone(targetZone);
-    const fallbackIndex = targetZone === "answer" ? answerTiles.length : bankTiles.length;
+    const sourceContainer = zoneContainers[sourceZone];
+    const targetContainer = zoneContainers[targetZone];
+    if (!sourceContainer || !targetContainer) return;
 
-    if (sourceContainer && targetContainer) {
-      const movedBySnapSort = sourceContainer.moveItem(tile.id, targetContainer, fallbackIndex);
-      if (movedBySnapSort) return;
-    }
-
-    updateTileZone(tile.id, targetZone, fallbackIndex);
+    sourceContainer.moveItem(
+      tile.id,
+      targetContainer,
+      targetContainer.numberOfItems,
+    );
   }
 
   function handleTileKeydown(event: KeyboardEvent, tile: TileData, targetZone: TileZone) {
@@ -159,10 +171,14 @@
   }
 
   function resetTiles() {
-    answerTiles = [];
-    bankTiles = toTileData(exercise.tiles);
+    board = createBoard();
     result = null;
   }
+
+  const callbacks = {
+    ...renderTreeCallbacks(applyBoardEvent),
+    canDrop: rejectDrop,
+  } satisfies ContainerCallbacks;
 
   function checkAnswer() {
     if (answerTiles.length === 0) return;
@@ -198,28 +214,33 @@
     <div class="snapsort-engine" data-lang="ja">
       <Engine id="sentence-builder-snapsort-demo">
         <Container
+          itemId="sentence-builder-root"
           className="sentence-builder-root"
           config={{
             mode: "progressive",
             direction: "column",
             name: "sentence-builder-root",
-            callbacks: { canDrop: rejectDrop },
+            callbacks,
           }}
           locked={true}
           metadata={{ purpose: "sentence-builder" }}
-          items={tileZones}
-          getItemId={(zone) => `sentence-zone-${zone}`}
         >
-          {#snippet entry(zone)}
-            {#if zone === "answer"}
+          {#each board.entries as entry (entry.itemId)}
+            {#if entry.isGhost}
+              <Ghost ghost={entry.ghost} />
+            {:else if entry.childTree && isZoneValue(entry.value)}
+              {@const zone = entry.value.zone}
               <Container
-                itemId="sentence-zone-answer"
-                className="answer-area answer-box"
-                bind:container={answerContainer}
+                itemId={entry.itemId}
+                bind:container={zoneContainers[zone]}
+                className={zone === "answer"
+                  ? "answer-area answer-box"
+                  : "tile-bank-container tile-bank"}
                 config={{
                   mode: "progressive",
                   direction: "row",
-                  name: "sentence-answer",
+                  mainAxisAlign: zone === "bank" ? "center" : "start",
+                  name: `sentence-${zone}`,
                   animation: {
                     reorder: snapSortAnimation,
                     drop: snapSortAnimation,
@@ -227,94 +248,55 @@
                   },
                   callbacks: {
                     getDropPriority: prioritizeIntersectingContainer,
-                    onItemMove: handleSnapSortDomMove,
-                    onItemRemove: handleSnapSortDomRemove,
                   },
                 }}
                 locked={true}
-                metadata={{ zone: "answer" }}
-                items={answerTiles}
-                getItemId={(tile) => tile.id}
+                metadata={{ zone }}
               >
-                {#snippet before()}
-                  {#if answerTiles.length === 0}
-                    <span class="placeholder">Drag tiles here or click to add</span>
+                {#if zone === "answer" && answerTiles.length === 0}
+                  <span class="placeholder">Drag tiles here or click to add</span>
+                {/if}
+                {#each entry.childTree.entries as child (child.itemId)}
+                  {#if child.isGhost}
+                    <Ghost ghost={child.ghost}>
+                      <button
+                        type="button"
+                        class:selected={zone === "answer"}
+                        class="tile tile-ghost"
+                        tabindex="-1"
+                      >{ghostTileText(child.ghost)}</button>
+                    </Ghost>
+                  {:else if child.childTree}
+                    <Container itemId={child.itemId} />
+                  {:else if !isZoneValue(child.value)}
+                    {@const tile = child.value}
+                    {@const targetZone = zone === "answer" ? "bank" : "answer"}
+                    <Item itemId={child.itemId} className="tile-wrapper">
+                      <button
+                        type="button"
+                        class:selected={zone === "answer"}
+                        class="tile"
+                        onpointerdown={handleTilePointerDown}
+                        onpointermove={handleTilePointerMove}
+                        onclick={(event) =>
+                          handleTileClick(event, () =>
+                            moveTileToZone(tile, targetZone))}
+                        ondblclick={() => openLookup(tile.text)}
+                        onkeydown={(event) =>
+                          handleTileKeydown(event, tile, targetZone)}
+                        aria-label={tile.text}
+                        title={zone === "answer" ? "Click to remove" : "Click to add"}
+                      >
+                        {tile.text}
+                      </button>
+                    </Item>
                   {/if}
-                {/snippet}
-                {#snippet entry(tile)}
-                  <Item itemId={tile.id} className="tile-wrapper">
-                    <button
-                      type="button"
-                      class="tile selected"
-                      onpointerdown={handleTilePointerDown}
-                      onpointermove={handleTilePointerMove}
-                      onclick={(event) => handleTileClick(event, () => moveTileToZone(tile, "bank"))}
-                      ondblclick={() => openLookup(tile.text)}
-                      onkeydown={(event) => handleTileKeydown(event, tile, "bank")}
-                      aria-label={tile.text}
-                      title="Click to remove"
-                    >
-                      {tile.text}
-                    </button>
-                  </Item>
-                {/snippet}
-                {#snippet ghost(event)}
-                  <Ghost {event}>
-                    <button type="button" class="tile tile-ghost selected" tabindex="-1">{ghostTileText(event)}</button>
-                  </Ghost>
-                {/snippet}
+                {/each}
               </Container>
             {:else}
-              <Container
-                itemId="sentence-zone-bank"
-                className="tile-bank-container tile-bank"
-                bind:container={bankContainer}
-                config={{
-                  mode: "progressive",
-                  direction: "row",
-                  mainAxisAlign: "center",
-                  name: "sentence-bank",
-                  animation: {
-                    reorder: snapSortAnimation,
-                    drop: snapSortAnimation,
-                    move: snapSortAnimation,
-                  },
-                  callbacks: {
-                    getDropPriority: prioritizeIntersectingContainer,
-                    onItemMove: handleSnapSortDomMove,
-                    onItemRemove: handleSnapSortDomRemove,
-                  },
-                }}
-                locked={true}
-                metadata={{ zone: "bank" }}
-                items={bankTiles}
-                getItemId={(tile) => tile.id}
-              >
-                {#snippet entry(tile)}
-                  <Item itemId={tile.id} className="tile-wrapper">
-                    <button
-                      type="button"
-                      class="tile"
-                      onpointerdown={handleTilePointerDown}
-                      onpointermove={handleTilePointerMove}
-                      onclick={(event) => handleTileClick(event, () => moveTileToZone(tile, "answer"))}
-                      ondblclick={() => openLookup(tile.text)}
-                      onkeydown={(event) => handleTileKeydown(event, tile, "answer")}
-                      aria-label={tile.text}
-                      title="Click to add"
-                    >
-                      {tile.text}
-                    </button>
-                  </Item>
-                {/snippet}
-                {#snippet ghost(event)}
-                  <Ghost {event}>
-                    <button type="button" class="tile tile-ghost" tabindex="-1">{ghostTileText(event)}</button>
-                  </Ghost>
-                {/snippet}
-              </Container>
+              <Item itemId={entry.itemId}><span></span></Item>
             {/if}
-          {/snippet}
+          {/each}
         </Container>
       </Engine>
     </div>
@@ -474,9 +456,7 @@
   }
 
   /* Hide the placeholder the moment an incoming ghost occupies the answer
-     box — the ghost entry is a sibling, adapter-rendered by Container's
-     items mode, so this is the CSS-native equivalent of the old
-     `ghostEntry?.zone !== "answer"` state check. `:global(...)` must wrap
+     box. `:global(...)` must wrap
      the whole selector here (Svelte rejects it mid-chain), since both
      `.answer-box` (applied dynamically via a prop) and `.placeholder`
      (matched only as this global selector's descendant) need to resolve

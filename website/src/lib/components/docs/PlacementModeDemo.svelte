@@ -2,14 +2,21 @@
   import ClientDemoFrame from "$lib/components/ClientDemoFrame.svelte";
   import { Engine } from "@snap-engine/asset-base/svelte";
   import type {
+    ContainerCallbacks,
     DragItemHoverEvent,
     DragStartEvent,
     DragVisual,
+    GhostLifecycleEvent,
     ItemMoveEvent,
     ItemSwapEvent,
     SortMode,
   } from "@snap-engine/snapsort";
-  import { defaultAnimations } from "@snap-engine/snapsort";
+  import {
+    createRenderEntries,
+    createRenderTree,
+    defaultAnimations,
+    reduceRenderTree,
+  } from "@snap-engine/snapsort";
   import { Container, Ghost, Item } from "@snap-engine/snapsort/svelte";
   import { untrack } from "svelte";
 
@@ -28,44 +35,39 @@
   } = $props();
 
   type DemoItem = { id: string; label: string };
-  let items = $state<DemoItem[]>(
-    untrack(() => comparison)
-      ? [
-          { id: "one", label: "Tiny" },
-          { id: "two", label: "Longest token" },
-          { id: "three", label: "Mid" },
-          { id: "four", label: "Wide label" },
-          { id: "five", label: "Narrow" },
-          { id: "six", label: "Token" },
-        ]
-      : [
-          { id: "one", label: "One" },
-          { id: "two", label: "Two" },
-          { id: "three", label: "Three" },
-          { id: "four", label: "Four" },
-        ],
+  let items = $state.raw(
+    createRenderTree(
+      createRenderEntries<DemoItem>(
+        untrack(() => comparison)
+          ? [
+              { id: "one", label: "Tiny" },
+              { id: "two", label: "Longest token" },
+              { id: "three", label: "Mid" },
+              { id: "four", label: "Wide label" },
+              { id: "five", label: "Narrow" },
+              { id: "six", label: "Token" },
+            ]
+          : [
+              { id: "one", label: "One" },
+              { id: "two", label: "Two" },
+              { id: "three", label: "Three" },
+              { id: "four", label: "Four" },
+            ],
+        (item) => item.id,
+      ),
+    ),
   );
   let hoveredItemId = $state<string | null>(null);
   function handleMove(event: ItemMoveEvent) {
-    const id = String(event.itemId);
-    const item = items.find((entry) => entry.id === id);
-    if (!item) return;
-
-    const next = items.filter((entry) => entry.id !== id);
-    next.splice(Math.min(event.to.index, next.length), 0, item);
-    items = next;
+    items = reduceRenderTree(items, event);
   }
 
   function handleSwap(event: ItemSwapEvent) {
-    const a = String(event.a.itemId);
-    const b = String(event.b.itemId);
-    const aIndex = items.findIndex((item) => item.id === a);
-    const bIndex = items.findIndex((item) => item.id === b);
-    if (aIndex === -1 || bIndex === -1) return;
+    items = reduceRenderTree(items, event);
+  }
 
-    const next = [...items];
-    [next[aIndex], next[bIndex]] = [next[bIndex], next[aIndex]];
-    items = next;
+  function handleGhost(event: GhostLifecycleEvent) {
+    items = reduceRenderTree(items, event);
   }
 
   function highlightTarget(event: DragItemHoverEvent) {
@@ -89,8 +91,11 @@
   const baseCallbacks = {
     onItemMove: handleMove,
     onItemSwap: handleSwap,
+    onGhostInsert: handleGhost,
+    onGhostMove: handleGhost,
+    onGhostRemove: handleGhost,
     onDragStart: configureDragVisual,
-  };
+  } satisfies ContainerCallbacks;
   const callbacks = $derived(
     mode === "swap"
       ? {
@@ -113,26 +118,27 @@
   <ClientDemoFrame className="placement-demo-skeleton">
       <Engine id={`placement-mode-${mode}-${comparison ? "comparison" : "default"}`} {debug}>
       <Container
+        itemId={`placement-${mode}-${comparison ? "comparison" : "default"}-root`}
         className={`placement-demo-list placement-demo-${mode}${comparison ? " placement-demo-comparison" : ""} card`}
         config={{ animation: defaultAnimations, mode, direction, callbacks }}
-        items={items}
       >
-        {#snippet entry(item)}
+        {#each items.entries as entry (entry.itemId)}
+          {#if entry.isGhost}
+            <Ghost ghost={entry.ghost} className="placement-demo-ghost">
+              {#if entry.ghost.type === "pointer-preview"}
+                <span>{String(entry.ghost.original.metadata.label ?? "Dragging")}</span>
+              {/if}
+            </Ghost>
+          {:else}
           <Item
-            itemId={item.id}
-            metadata={{ label: item.label }}
-            className={`placement-demo-item is-${item.id}${mode === "swap" && hoveredItemId === item.id ? " is-targeted" : ""}`}
+            itemId={entry.itemId}
+            metadata={{ label: entry.value.label }}
+            className={`placement-demo-item is-${entry.itemId}${mode === "swap" && hoveredItemId === entry.itemId ? " is-targeted" : ""}`}
           >
-            <span>{item.label}</span>
+            <span>{entry.value.label}</span>
           </Item>
-        {/snippet}
-        {#snippet ghost(event)}
-          <Ghost {event} className="placement-demo-ghost">
-            {#if event.role === "pointer"}
-              <span>{String(event.originalMetadata.label ?? "Dragging")}</span>
-            {/if}
-          </Ghost>
-        {/snippet}
+          {/if}
+        {/each}
       </Container>
     </Engine>
   </ClientDemoFrame>

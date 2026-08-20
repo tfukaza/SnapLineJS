@@ -1,50 +1,80 @@
 <script lang="ts">
   import { Engine } from "@snap-engine/asset-base/svelte";
-  import { defaultAnimations, type ItemMoveEvent } from "@snap-engine/snapsort";
-  import { Container, Item } from "@snap-engine/snapsort/svelte";
+  import {
+    createRenderEntries,
+    createRenderEntry,
+    createRenderTree,
+    defaultAnimations,
+    reduceRenderTree,
+    type ContainerCallbacks,
+    type GhostLifecycleEvent,
+    type ItemMoveEvent,
+  } from "@snap-engine/snapsort";
+  import { Container, Ghost, Item } from "@snap-engine/snapsort/svelte";
 
   let nextId = 3;
-  let tasks = $state([
-    { id: "task-1", label: "Plan" },
-    { id: "task-2", label: "Build" },
-  ]);
+  let tasks = $state.raw(
+    createRenderTree(
+      createRenderEntries(
+        [
+          { id: "task-1", label: "Plan" },
+          { id: "task-2", label: "Build" },
+        ],
+        (task) => task.id,
+      ),
+    ),
+  );
+  const taskCount = $derived(
+    tasks.entries.filter((entry) => !entry.isGhost).length,
+  );
 
   function onItemMove(event: ItemMoveEvent) {
-    const task = tasks.find((entry) => entry.id === event.itemId);
-    if (!task) return;
-    const next = tasks.filter((entry) => entry.id !== event.itemId);
-    next.splice(Math.min(event.to.index, next.length), 0, task);
-    tasks = next;
+    tasks = reduceRenderTree(tasks, event);
+  }
+
+  function onGhostMove(event: GhostLifecycleEvent) {
+    tasks = reduceRenderTree(tasks, event);
   }
 
   function addTask() {
-    tasks = [...tasks, { id: `task-${nextId}`, label: `Task ${nextId}` }];
+    const task = { id: `task-${nextId}`, label: `Task ${nextId}` };
+    tasks = {
+      ...tasks,
+      entries: [...tasks.entries, createRenderEntry(task, task.id)],
+    };
     nextId += 1;
   }
+
+  const callbacks = {
+    onItemMove,
+    onGhostInsert: onGhostMove,
+    onGhostMove,
+    onGhostRemove: onGhostMove,
+  } satisfies ContainerCallbacks;
 </script>
 
 <Engine id="container-property-before-after">
   <Container
+    itemId="container-property-before-after-root"
     className="before-after-list"
-    items={tasks}
-    config={{ animation: defaultAnimations, callbacks: { onItemMove } }}
+    config={{ animation: defaultAnimations, callbacks }}
   >
-    {#snippet before()}
-      <header class="fixed-content before-content">
-        <strong>Today</strong>
-        <span>{tasks.length} tasks</span>
-      </header>
-    {/snippet}
+    <header class="fixed-content before-content">
+      <strong>Today</strong>
+      <span>{taskCount} tasks</span>
+    </header>
 
-    {#snippet entry(task)}
-      <Item itemId={task.id} className="before-after-item">{task.label}</Item>
-    {/snippet}
+    {#each tasks.entries as entry (entry.itemId)}
+      {#if entry.isGhost}
+        <Ghost ghost={entry.ghost} />
+      {:else}
+        <Item itemId={entry.itemId} className="before-after-item">{entry.value.label}</Item>
+      {/if}
+    {/each}
 
-    {#snippet after()}
-      <footer class="fixed-content after-content">
-        <button type="button" onclick={addTask}>Add task</button>
-      </footer>
-    {/snippet}
+    <footer class="fixed-content after-content">
+      <button type="button" onclick={addTask}>Add task</button>
+    </footer>
   </Container>
 </Engine>
 

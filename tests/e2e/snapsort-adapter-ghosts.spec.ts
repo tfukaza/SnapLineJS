@@ -1,9 +1,9 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 
 // This spec asserts on Svelte-adapter-specific implementation details
-// (`data-snapsort-ghost-entry`, a marker that only exists once a container
-// has migrated to the items+snippet API) — it has no React-adapter
-// equivalent yet, so it only runs under the svelte project.
+// (`data-snapsort-ghost-entry`, emitted by the framework-owned Ghost
+// component) — it has no React-adapter equivalent yet, so it only runs under
+// the svelte project.
 test.beforeEach(async ({}, testInfo) => {
   test.skip(
     !testInfo.project.name.startsWith("svelte"),
@@ -40,7 +40,7 @@ async function insertionListByHeading(
   });
 }
 
-test.describe("SnapSort adapter-rendered ghost entries (items mode)", () => {
+test.describe("SnapSort adapter-rendered ghost entries", () => {
   test.beforeEach(async ({ page }) => {
     await page.goto("/?demo=drop_snap_nested", { waitUntil: "networkidle" });
   });
@@ -70,7 +70,9 @@ test.describe("SnapSort adapter-rendered ghost entries (items mode)", () => {
     await page.mouse.move(start.x, target.y + 30);
     await page.waitForTimeout(120);
 
-    const ghostEntries = column.locator('[data-snapsort-ghost-entry="flow"]');
+    const ghostEntries = column.locator(
+      '[data-snapsort-ghost-entry="target-spacer"]',
+    );
     await expect(ghostEntries).toHaveCount(1);
     const ghostBox = await rect(ghostEntries.first());
     expect(Math.abs(ghostBox.width - item1Box.width)).toBeLessThan(2);
@@ -103,7 +105,9 @@ test.describe("SnapSort adapter-rendered ghost entries (items mode)", () => {
     await page.mouse.move(start.x, start.y + 120);
     await page.waitForTimeout(150);
 
-    const ghostEntries = column.locator('[data-snapsort-ghost-entry="flow"]');
+    const ghostEntries = column.locator(
+      '[data-snapsort-ghost-entry="target-spacer"]',
+    );
     await expect(ghostEntries).toHaveCount(2);
 
     // Contiguous: the two ghost entries sit adjacent among the container's
@@ -157,24 +161,33 @@ test.describe("SnapSort adapter-rendered ghost entries (items mode)", () => {
           (candidate: any) => candidate.element === element,
         );
         if (!container) throw new Error("Could not find the Vertical Column.");
-        const originalGhostInsert = container.config.callbacks.onGhostInsert;
+        const originalCallbacks = container.callbacks;
+        const originalGhostInsert = originalCallbacks.onGhostInsert;
+        const originalDragStart = originalCallbacks.onDragStart;
         (
           globalThis as typeof globalThis & {
             __snapsortPointerPreviewItemCounts?: number[];
           }
         ).__snapsortPointerPreviewItemCounts = [];
-        container.config.callbacks.onGhostInsert = (event: any) => {
-          if (event.role === "pointer") {
-            (
-              globalThis as typeof globalThis & {
-                __snapsortPointerPreviewItemCounts: number[];
-              }
-            ).__snapsortPointerPreviewItemCounts.push(event.items.length);
-          }
-          originalGhostInsert?.(event);
-        };
-        container.config.callbacks.onDragStart = (event: any) => {
-          event.session.dragVisual = "preview";
+        container.callbacks = {
+          ...originalCallbacks,
+          onGhostInsert: (event: any) => {
+            if (event.ghost.type === "pointer-preview") {
+              (
+                globalThis as typeof globalThis & {
+                  __snapsortPointerPreviewItemCounts: number[];
+                }
+              ).__snapsortPointerPreviewItemCounts.push(
+                event.ghost.items.length,
+              );
+            }
+            originalGhostInsert?.(event);
+          },
+          onDragStart: (event: any) => {
+            const result = originalDragStart?.(event);
+            if (result === false) return false;
+            event.session.dragVisual = "preview";
+          },
         };
       },
       { coreImportPath },
@@ -192,7 +205,7 @@ test.describe("SnapSort adapter-rendered ghost entries (items mode)", () => {
       1,
     );
     await expect(
-      containerElement.locator('[data-snapsort-ghost-entry="flow"]'),
+      containerElement.locator('[data-snapsort-ghost-entry="target-spacer"]'),
     ).toHaveCount(2);
     await expect(item2).not.toHaveCSS("position", "absolute");
     await expect(item3).not.toHaveCSS("position", "absolute");
@@ -249,7 +262,7 @@ test.describe("SnapSort adapter-rendered ghost entries (items mode)", () => {
 
     await expect(area1.locator("[data-snapsort-ghost-entry]")).toHaveCount(0);
     await expect(
-      area2.locator('[data-snapsort-ghost-entry="flow"]'),
+      area2.locator('[data-snapsort-ghost-entry="target-spacer"]'),
     ).toHaveCount(1);
 
     await page.mouse.up();
@@ -280,7 +293,7 @@ test.describe("SnapSort adapter-rendered ghost entries (items mode)", () => {
 
     await expect(area2.locator("[data-snapsort-ghost-entry]")).toHaveCount(0);
     await expect(
-      area1.locator('[data-snapsort-ghost-entry="flow"]'),
+      area1.locator('[data-snapsort-ghost-entry="target-spacer"]'),
     ).toHaveCount(1);
 
     await page.mouse.up();
@@ -303,7 +316,9 @@ test.describe("SnapSort adapter-rendered ghost entries (items mode)", () => {
     const sourceTarget = center(
       await rect(await itemByText(source, "Item.svelte")),
     );
-    const allMarkers = page.locator('[data-snapsort-ghost-entry="marker"]');
+    const allMarkers = page.locator(
+      '[data-snapsort-ghost-entry="insertion-marker"]',
+    );
 
     await page.mouse.move(start.x, start.y);
     await page.mouse.down();
@@ -318,10 +333,10 @@ test.describe("SnapSort adapter-rendered ghost entries (items mode)", () => {
       const expectedOwner = target === sourceTarget ? source : project;
       const departedOwner = target === sourceTarget ? project : source;
       await expect(
-        expectedOwner.locator('[data-snapsort-ghost-entry="marker"]'),
+        expectedOwner.locator('[data-snapsort-ghost-entry="insertion-marker"]'),
       ).toHaveCount(1);
       await expect(
-        departedOwner.locator('[data-snapsort-ghost-entry="marker"]'),
+        departedOwner.locator('[data-snapsort-ghost-entry="insertion-marker"]'),
       ).toHaveCount(0);
     }
 

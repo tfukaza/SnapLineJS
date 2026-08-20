@@ -1,65 +1,107 @@
 <script lang="ts">
   import { Engine } from "@snap-engine/asset-base/svelte";
-  import { Container, Handle, Item } from "@snap-engine/snapsort/svelte";
-  import { defaultAnimations } from "@snap-engine/snapsort";
-  import type { Container as ContainerType, ItemMoveEvent } from "@snap-engine/snapsort";
+  import { Container, Ghost, Handle, Item } from "@snap-engine/snapsort/svelte";
+  import {
+    createRenderEntry,
+    createRenderTree,
+    defaultAnimations,
+    reduceRenderTree,
+    type Container as SortContainer,
+    type ContainerCallbacks,
+    type ItemMoveEvent,
+    type RenderEntry,
+    type RenderTree,
+    type RenderTreeEvent,
+  } from "@snap-engine/snapsort";
   import { rejectDrop } from "@snap-engine/snapsort/callbacks";
+  import { renderTreeCallbacks } from "../snapsort-render-tree";
 
-  type MultiContainerItem = {
-    id: string;
-    label: string;
-  };
-
-  type MultiContainerColumn = {
-    id: string;
-    title: string;
-    direction: "left" | "right";
-    items: MultiContainerItem[];
-    container?: ContainerType;
+  type SidewaysValue = { id: string; slice: number; x: string };
+  type NestedValue =
+    | { kind: "item"; label: string }
+    | { kind: "group" };
+  type MultiValue =
+    | {
+        kind: "column";
+        id: string;
+        title: string;
+        direction: "left" | "right";
+        container: SortContainer | null;
+      }
+    | { kind: "item"; id: string; label: string };
+  type MultiColumnEntry = Extract<
+    RenderEntry<MultiValue>,
+    { isGhost: false }
+  > & {
+    value: Extract<MultiValue, { kind: "column" }>;
+    childTree: RenderTree<MultiValue>;
   };
 
   const logoSliceCount = 6;
   const logoSliceWidth = 30;
-  let sidewaysItems = $state([3, 0, 5, 1, 4, 2].map((slice) => ({
-    id: `typescript-slice-${slice}`,
-    slice,
-    x: `${slice * -logoSliceWidth}px`,
-  })));
+  let sidewaysTree = $state.raw(
+    createRenderTree(
+      [3, 0, 5, 1, 4, 2].map((slice) => {
+        const value: SidewaysValue = {
+          id: `typescript-slice-${slice}`,
+          slice,
+          x: `${slice * -logoSliceWidth}px`,
+        };
+        return createRenderEntry(value, value.id);
+      }),
+    ),
+  );
   const parentItems = ["Item 1", "Item 2", "Item 3"];
-  let nestedItems = $state(["Item 4", "Item 5", "Item 6"]);
   const gripDots = Array.from({ length: 6 }, (_, index) => index);
 
-  // Heterogeneous: the nested child Container sits as a trailing sibling
-  // among the parent's plain rows -- `entry` renders each position's
-  // Item/Container itself.
-  type NestedEntry = { kind: "item"; label: string } | { kind: "group" };
-  let nestedEntries: NestedEntry[] = $state([
-    ...parentItems.map((label): NestedEntry => ({ kind: "item", label })),
-    { kind: "group" },
-  ]);
+  let nestedTree = $state.raw(
+    createRenderTree<NestedValue>([
+      ...parentItems.map((label) =>
+        createRenderEntry<NestedValue>({ kind: "item", label }, label),
+      ),
+      createRenderEntry<NestedValue>(
+        { kind: "group" },
+        "nested-group",
+        createRenderTree(
+          ["Item 4", "Item 5", "Item 6"].map((label) =>
+            createRenderEntry<NestedValue>({ kind: "item", label }, label),
+          ),
+        ),
+      ),
+    ]),
+  );
 
   let sidewaysSolved = $state(false);
-  let multiContainers: MultiContainerColumn[] = $state([
-    {
-      id: "left",
-      title: "Left",
-      direction: "right",
-      items: [
+  function createColumn(
+    id: string,
+    title: string,
+    direction: "left" | "right",
+    items: readonly { id: string; label: string }[],
+  ) {
+    return createRenderEntry<MultiValue>(
+      { kind: "column", id, title, direction, container: null },
+      id,
+      createRenderTree(
+        items.map((item) =>
+          createRenderEntry<MultiValue>({ kind: "item", ...item }, item.id),
+        ),
+      ),
+    );
+  }
+
+  let multiTree = $state.raw(
+    createRenderTree<MultiValue>([
+      createColumn("left", "Left", "right", [
         { id: "mc-spec", label: "Spec" },
         { id: "mc-mockup", label: "Mockup" },
         { id: "mc-build", label: "Build" },
-      ],
-    },
-    {
-      id: "right",
-      title: "Right",
-      direction: "left",
-      items: [
+      ]),
+      createColumn("right", "Right", "left", [
         { id: "mc-review", label: "Review" },
         { id: "mc-ship", label: "Ship" },
-      ],
-    },
-  ]);
+      ]),
+    ]),
+  );
 
   function updateSidewaysSolved(element: HTMLElement | null | undefined) {
     const order = Array.from(element?.querySelectorAll(".logo-slice") ?? []).map(
@@ -70,119 +112,61 @@
       order.every((slice, index) => slice === index);
   }
 
-  function handleSidewaysMove(event: ItemMoveEvent) {
-    const itemId = event.itemId;
-    const containerElement = event.to.container.element;
-    const sourceIndex = sidewaysItems.findIndex((item) => item.id === itemId);
-    if (sourceIndex === -1) return;
+  function applySidewaysEvent(event: RenderTreeEvent) {
+    sidewaysTree = reduceRenderTree(sidewaysTree, event);
+  }
 
-    const nextItems = sidewaysItems.slice();
-    const [item] = nextItems.splice(sourceIndex, 1);
-    const destinationIndex = Math.max(0, Math.min(event.to.index, nextItems.length));
-    nextItems.splice(destinationIndex, 0, item);
-    sidewaysItems = nextItems;
+  function handleSidewaysMove(event: ItemMoveEvent) {
+    applySidewaysEvent(event);
+    const containerElement = event.to.container.element;
     requestAnimationFrame(() => updateSidewaysSolved(containerElement));
   }
 
-  function moveMultiContainerState(
-    itemId: string,
-    targetColumnId: string,
-    targetIndex: number,
-  ) {
-    let movedItem: MultiContainerItem | null = null;
-    const withoutMovedItem = multiContainers.map((column) => {
-      const sourceIndex = column.items.findIndex((item) => item.id === itemId);
-      if (sourceIndex === -1) return column;
-
-      const nextItems = column.items.slice();
-      const [item] = nextItems.splice(sourceIndex, 1);
-      movedItem = item;
-      return { ...column, items: nextItems };
-    });
-
-    if (!movedItem) return;
-    const itemToMove = movedItem;
-
-    multiContainers = withoutMovedItem.map((column) => {
-      if (column.id !== targetColumnId) return column;
-
-      const nextItems = column.items.slice();
-      const destinationIndex = Math.max(0, Math.min(targetIndex, nextItems.length));
-      nextItems.splice(destinationIndex, 0, itemToMove);
-      return { ...column, items: nextItems };
-    });
-  }
-
-  function handleMultiContainerMove(event: ItemMoveEvent) {
-    const itemId = event.itemId;
-    const targetColumnId = event.to.containerMetadata.columnId;
-    if (typeof itemId !== "string" || typeof targetColumnId !== "string") return;
-
-    moveMultiContainerState(itemId, targetColumnId, event.to.index);
-  }
-
-  function handleNestedMove(event: ItemMoveEvent) {
-    const itemId = event.itemId;
-    const targetList = event.to.containerMetadata.list;
-    if (typeof itemId !== "string" || (targetList !== "outer" && targetList !== "inner")) return;
-
-    let moved: NestedEntry | string | undefined;
-    const outerIndex = nestedEntries.findIndex((entry) =>
-      entry.kind === "item" ? entry.label === itemId : itemId === "nested-group",
-    );
-    if (outerIndex !== -1) {
-      const candidate = nestedEntries[outerIndex];
-      if (targetList === "inner" && candidate.kind === "group") return;
-      moved = candidate;
-      nestedEntries = nestedEntries.filter((_, index) => index !== outerIndex);
-    } else {
-      const innerIndex = nestedItems.indexOf(itemId);
-      if (innerIndex !== -1) {
-        moved = nestedItems[innerIndex];
-        nestedItems = nestedItems.filter((_, index) => index !== innerIndex);
-      }
-    }
-    if (moved === undefined) return;
-
-    if (targetList === "inner") {
-      const label = typeof moved === "string" ? moved : moved.label;
-      const next = nestedItems.filter((label) => label !== itemId);
-      next.splice(Math.max(0, Math.min(event.to.index, next.length)), 0, label);
-      nestedItems = next;
-      return;
-    }
-
-    const entry = typeof moved === "string" ? { kind: "item" as const, label: moved } : moved;
-    const next = nestedEntries.filter((candidate) =>
-      candidate.kind === "item" ? candidate.label !== itemId : itemId !== "nested-group",
-    );
-    next.splice(Math.max(0, Math.min(event.to.index, next.length)), 0, entry);
-    nestedEntries = next;
-  }
-
   function moveItemToOppositeColumn(itemId: string) {
-    const sourceColumnIndex = multiContainers.findIndex((column) =>
-      column.items.some((item) => item.id === itemId),
+    const columns = multiTree.entries.filter(
+      (entry): entry is MultiColumnEntry =>
+        !entry.isGhost &&
+        entry.value.kind === "column" &&
+        entry.childTree !== null,
+    );
+    const sourceColumnIndex = columns.findIndex((column) =>
+      column.childTree?.entries.some(
+        (item) => !item.isGhost && item.itemId === itemId,
+      ),
     );
     if (sourceColumnIndex === -1) return;
 
     const targetColumnIndex = sourceColumnIndex === 0 ? 1 : 0;
-    const sourceColumn = multiContainers[sourceColumnIndex];
-    const targetColumn = multiContainers[targetColumnIndex];
-    const sourceItemIndex = sourceColumn.items.findIndex((item) => item.id === itemId);
-    const destinationIndex = Math.min(sourceItemIndex, targetColumn.items.length);
-
-    if (sourceColumn.container && targetColumn.container) {
-      const movedBySnapSort = sourceColumn.container.moveItem(
-        itemId,
-        targetColumn.container,
-        destinationIndex,
-      );
-      if (movedBySnapSort) return;
-    }
-
-    moveMultiContainerState(itemId, targetColumn.id, destinationIndex);
+    const sourceColumn = columns[sourceColumnIndex];
+    const targetColumn = columns[targetColumnIndex];
+    if (!sourceColumn.childTree || !targetColumn.childTree) return;
+    const sourceItemIndex = sourceColumn.childTree.entries.findIndex(
+      (item) => !item.isGhost && item.itemId === itemId,
+    );
+    if (sourceItemIndex === -1) return;
+    const sourceContainer = sourceColumn.value.container;
+    const targetContainer = targetColumn.value.container;
+    if (!sourceContainer || !targetContainer) return;
+    const destinationIndex = Math.min(
+      sourceItemIndex,
+      targetContainer.numberOfItems,
+    );
+    sourceContainer.moveItem(itemId, targetContainer, destinationIndex);
   }
+
+  const sidewaysCallbacks = {
+    ...renderTreeCallbacks(applySidewaysEvent),
+    onItemMove: handleSidewaysMove,
+  } satisfies ContainerCallbacks;
+  const nestedCallbacks = renderTreeCallbacks(
+    (event) => (nestedTree = reduceRenderTree(nestedTree, event)),
+  );
+  const multiCallbacks = {
+    ...renderTreeCallbacks(
+      (event) => (multiTree = reduceRenderTree(multiTree, event)),
+    ),
+    canDrop: rejectDrop,
+  } satisfies ContainerCallbacks;
 </script>
 
 <div class="snapsort-fixture website-core-demo dev-style">
@@ -201,28 +185,31 @@
           <h2>Sideways list</h2>
           <div class="core-demo-surface sideways-demo-surface card">
             <Container
+              itemId="website-sideways-root"
               className={`sideways-list ${sidewaysSolved ? "solved" : ""}`}
               config={{
                 animation: defaultAnimations,
                 direction: "row",
                 mainAxisAlign: "center",
-                callbacks: {
-                  onItemMove: handleSidewaysMove,
-                },
+                callbacks: sidewaysCallbacks,
               }}
-              items={sidewaysItems}
-              getItemId={(item) => item.id}
             >
-              {#snippet entry(item)}
-                <Item itemId={item.id}>
+              {#each sidewaysTree.entries as entry (entry.itemId)}
+                {#if entry.isGhost}
+                  <Ghost ghost={entry.ghost} />
+                {:else if entry.childTree}
+                  <Container itemId={entry.itemId} />
+                {:else}
+                  <Item itemId={entry.itemId}>
                   <div
                     class="logo-slice"
-                    data-slice={item.slice}
-                    aria-label="TypeScript logo slice {item.slice + 1} of {logoSliceCount}"
-                    style={`--slice-x: ${item.x};`}
+                    data-slice={entry.value.slice}
+                    aria-label="TypeScript logo slice {entry.value.slice + 1} of {logoSliceCount}"
+                    style={`--slice-x: ${entry.value.x};`}
                   ></div>
                 </Item>
-              {/snippet}
+                {/if}
+              {/each}
             </Container>
           </div>
         </article>
@@ -231,15 +218,56 @@
           <h2>Nested list</h2>
           <div class="core-demo-surface card">
             <Container
+              itemId="website-nested-root"
               className="basic-list bounded-demo-list"
-              config={{ animation: defaultAnimations, direction: "column", callbacks: { onItemMove: handleNestedMove } }}
+              config={{
+                animation: defaultAnimations,
+                direction: "column",
+                callbacks: nestedCallbacks,
+              }}
               metadata={{ list: "outer" }}
-              items={nestedEntries}
-              getItemId={(e) => (e.kind === "item" ? e.label : "nested-group")}
             >
-              {#snippet entry(e)}
-                {#if e.kind === "item"}
-                  <Item itemId={e.label}>
+              {#each nestedTree.entries as entry (entry.itemId)}
+                {#if entry.isGhost}
+                  <Ghost ghost={entry.ghost} />
+                {:else if entry.childTree}
+                  <Container
+                    itemId={entry.itemId}
+                    className="nested-list bounded-demo-list card shallow"
+                    config={{ animation: defaultAnimations, direction: "column" }}
+                    metadata={{ list: "inner" }}
+                    locked={false}
+                  >
+                    <Handle className="demo-container-handle">
+                      <span class="demo-grip" aria-hidden="true">
+                        {#each gripDots as dot}
+                          <span data-dot={dot}></span>
+                        {/each}
+                      </span>
+                    </Handle>
+                    {#each entry.childTree.entries as child (child.itemId)}
+                      {#if child.isGhost}
+                        <Ghost ghost={child.ghost} />
+                      {:else if child.childTree}
+                        <Container itemId={child.itemId} />
+                      {:else if child.value.kind === "item"}
+                        <Item itemId={child.itemId}>
+                          <div class="basic-row nested-row handle-row">
+                            <Handle className="demo-row-handle">
+                              <span class="demo-grip" aria-hidden="true">
+                                {#each gripDots as dot}
+                                  <span data-dot={dot}></span>
+                                {/each}
+                              </span>
+                            </Handle>
+                            <span>{child.value.label}</span>
+                          </div>
+                        </Item>
+                      {/if}
+                    {/each}
+                  </Container>
+                {:else if entry.value.kind === "item"}
+                  <Item itemId={entry.itemId}>
                     <div class="basic-row handle-row">
                       <Handle className="demo-row-handle">
                         <span class="demo-grip" aria-hidden="true">
@@ -248,45 +276,11 @@
                           {/each}
                         </span>
                       </Handle>
-                      <span>{e.label}</span>
+                      <span>{entry.value.label}</span>
                     </div>
                   </Item>
-                {:else}
-                  <Container
-                    itemId="nested-group"
-                    className="nested-list bounded-demo-list card shallow"
-                    config={{ animation: defaultAnimations, direction: "column", callbacks: { onItemMove: handleNestedMove } }}
-                    metadata={{ list: "inner" }}
-                    locked={false}
-                    items={nestedItems}
-                    getItemId={(label) => label}
-                  >
-                    {#snippet before()}
-                      <Handle className="demo-container-handle">
-                        <span class="demo-grip" aria-hidden="true">
-                          {#each gripDots as dot}
-                            <span data-dot={dot}></span>
-                          {/each}
-                        </span>
-                      </Handle>
-                    {/snippet}
-                    {#snippet entry(label)}
-                      <Item itemId={label}>
-                        <div class="basic-row nested-row handle-row">
-                          <Handle className="demo-row-handle">
-                            <span class="demo-grip" aria-hidden="true">
-                              {#each gripDots as dot}
-                                <span data-dot={dot}></span>
-                              {/each}
-                            </span>
-                          </Handle>
-                          <span>{label}</span>
-                        </div>
-                      </Item>
-                    {/snippet}
-                  </Container>
                 {/if}
-              {/snippet}
+              {/each}
             </Container>
           </div>
         </article>
@@ -295,55 +289,68 @@
           <h2>Multiple containers</h2>
           <div class="core-demo-surface multi-container-surface">
             <Container
+              itemId="website-multi-root"
               className="multi-container-board"
               config={{
                 animation: defaultAnimations,
                 direction: "row",
                 name: "core-multi-root",
-                callbacks: { canDrop: rejectDrop },
+                callbacks: multiCallbacks,
               }}
               locked={true}
-              items={multiContainers}
-              getItemId={(column) => column.id}
             >
-              {#snippet entry(column)}
+              {#each multiTree.entries as entry (entry.itemId)}
+                {#if entry.isGhost}
+                  <Ghost ghost={entry.ghost} />
+                {:else if entry.childTree && entry.value.kind === "column"}
+                  {@const column = entry.value}
                 <Container
-                  itemId={column.id}
-                  className="basic-column card"
+                  itemId={entry.itemId}
                   bind:container={column.container}
+                  className="basic-column card"
                   metadata={{ columnId: column.id }}
                   config={{
                     animation: defaultAnimations,
                     direction: "column",
                     name: column.id,
-                    callbacks: { onItemMove: handleMultiContainerMove },
                   }}
                   locked={true}
-                  items={column.items}
-                  getItemId={(item) => item.id}
                 >
-                  {#snippet before()}<h3>{column.title}</h3>{/snippet}
-                  {#snippet entry(item)}
-                    <Item itemId={item.id}>
+                  <h3>{column.title}</h3>
+                  {#each entry.childTree.entries as child (child.itemId)}
+                    {#if child.isGhost}
+                      <Ghost ghost={child.ghost} />
+                    {:else if child.childTree}
+                      <Container itemId={child.itemId} />
+                    {:else if child.value.kind === "item"}
+                      <Item itemId={child.itemId}>
                       <div class="basic-row compact-row multi-container-row">
-                        <span>{item.label}</span>
+                        <span>{child.value.label}</span>
                         <button
                           class="column-move-button"
                           type="button"
-                          aria-label="Move {item.label} to the other column"
+                          aria-label="Move {child.value.label} to the other column"
                           onpointerdown={(event) => event.stopPropagation()}
                           onclick={(event) => {
                             event.stopPropagation();
-                            moveItemToOppositeColumn(item.id);
+                            moveItemToOppositeColumn(child.value.id);
                           }}
                         >
                           {column.direction === "right" ? ">" : "<"}
                         </button>
                       </div>
                     </Item>
-                  {/snippet}
+                    {/if}
+                  {/each}
                 </Container>
-              {/snippet}
+                {:else if entry.value.kind === "item"}
+                  <Item itemId={entry.itemId}>
+                    <div class="basic-row compact-row multi-container-row">
+                      <span>{entry.value.label}</span>
+                    </div>
+                  </Item>
+                {/if}
+              {/each}
             </Container>
           </div>
         </article>

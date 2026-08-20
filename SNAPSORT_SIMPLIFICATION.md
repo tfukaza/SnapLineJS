@@ -71,10 +71,11 @@ own decision entry.
 | Publish a read-only `DragSession` handle                                | **Approved** | Keep the observations and controls listed in Phase 7. Hide construction, lifecycle operations, strategies, targeting state, animation maps, and ghost registries.                                                                                                                                                                                           |
 | Keep Item delegates while splitting the class                           | **Approved** | Internal implementation may move, but existing methods remain during Phase 5. Any later removal needs a new per-method review.                                                                                                                                                                                                                              |
 | Rename `ContainerAnimations.clickMove` to `move`                        | **Approved** | `move` is animation configuration, not an event callback, and applies to non-session/programmatic item movement regardless of what triggered it. The current `clickMove` key is unwired; remove it without an alias in the 0.5 cleanup and make `move`, rather than `reorder`, control this path.                                                           |
-| Give every transient ghost a fresh item identity                        | **Approved** | Allocate a new `itemId` for each ghost that is distinct from every application Item and other live ghost in the tree/session. Never copy the source `itemId`; retain `originalItemId` as provenance, use the universal resolved identity as the runtime key, and remove the conditional/prefixed `itemKey` path in Phase 11.                                |
+| Give every transient ghost a fresh item identity                        | **Approved** | Allocate a new `itemId` for each ghost that is distinct from every application Item and other live ghost in the tree/session. Never copy the source `itemId`; retain `originalItemId` as provenance, use the immutable `itemId` directly as the runtime key, and remove the conditional/prefixed `itemKey` path in Phase 11.                                |
 | Rename mounted-Item registration around attachment semantics            | **Proposed** | Prefer `attachItem(item)` for registering an already-rendered object and an internal `placeItemAt(container, item, index)` primitive for indexed tree bookkeeping. Decide whether 0.5 removes `addItem` directly or retains a compatibility alias before implementation; do not literally exchange two ambiguous names.                                     |
 | Move integration machinery out of `ContainerCallbacks`                  | **Blocked**  | A public advanced integration contract is approved in principle. Its exact discriminated shape, ownership scope, transaction model, and renderer responsibilities are decided in Phase 10.                                                                                                                                                                  |
 | Add `onGhostMove` as the semantic ghost-relocation primitive            | **Approved** | Match the item model: insertion means an absent ghost becomes present, movement means one existing ghost changes location, and removal means it ceases to be present. A relocation emits one `onGhostMove` with concrete `from` and `to` locations, never `onGhostRemove` plus `onGhostInsert`; receiver and integration routing are finalized in Phase 10. |
+| Separate insertion targeting from marker presentation                   | **Approved** | Core owns canonical gap segments, center-distance ranking, adjacent-item tie-breaking, and immutable marker state. Renderers choose line thickness and insets through explicit helper options. Presentation geometry never feeds candidate ranking, and the removed destination geometry callback has no alias.                                             |
 | Add or restore `groupID`                                                | **Rejected** | The API was removed. Eligibility remains expressible through explicit metadata and `canDrop`; do not add a second policy mechanism during cleanup.                                                                                                                                                                                                          |
 
 ## Preserved behavioral invariants
@@ -97,6 +98,9 @@ Unless a reviewed phase says otherwise:
 - Public item counts describe application items and exclude transient ghosts.
 - Pointer-only visual motion must not become a persistent application-data
   mutation.
+- A pending handoff may replace the internally active Items and mounted source
+  locations, but it must not rewrite the public original `items`/`sources` or
+  the frozen root snapshot used to resolve the gesture.
 
 ## Audit findings
 
@@ -608,9 +612,9 @@ tree/session, not whether ghosts have independent identity.
 - Pointer preview mounting versus per-frame geometry updates.
 - Location of the single ghost-identity allocator and its collision check
   against application Items and every other live ghost.
-- How the generated identity is protected from reassignment through the public
-  `Item.itemId` setter; a uniqueness guarantee cannot depend on consumers
-  voluntarily leaving a transient ghost's ID unchanged.
+- How the generated identity is protected from reassignment. `Item.itemId` is
+  a required construction-only getter for ordinary objects, and the internal
+  ghost factory allocates its immutable identity itself.
 
 **Research facts to preserve:** React may rerender an updated subtree but
 commits only necessary DOM changes; context updates all consumers of the
@@ -641,9 +645,9 @@ or colliding application ID fails.
 - Move pointer-only geometry updates off structural framework commits.
 - Allocate a fresh, stable `itemId` for every ghost instance and retain the
   source identity only in `originalItemId`.
-- Use the same resolved-identity path for real Items and ghosts; remove the
-  `isGhost` key branch, synthetic key prefix, and now-redundant `itemKey`
-  helper.
+- Use the same immutable `itemId` key path for real Items and ghosts; remove
+  the synthetic key prefix and now-redundant `itemKey` helper. Retain
+  `isGhost` only as the renderer discriminant.
 
 **Provisional implementation scope, finalized by Phase 10:**
 
@@ -687,7 +691,7 @@ or colliding application ID fails.
   target, marker, pointer, or multi-item-run ghost.
 - The collision policy is deterministic even when an application ID resembles
   an engine-generated object counter, and snapshot/animation lookup still
-  rebinds framework-replaced real Items by stable resolved identity.
+  rebinds framework-replaced real Items by stable `itemId`.
 - Create, insert, relocate, and remove events expose the same ghost ID, and the
   approved protection either rejects reassignment or prevents it from changing
   that event identity.
@@ -705,6 +709,64 @@ npx playwright test -c tests/e2e/docs-framework-code.playwright.config.ts
 ```
 
 **Commit:** `refactor(snapsort): unify ghost transactions`
+
+### Approved insertion targeting and renderer geometry
+
+**Status:** Implemented; this contract supersedes the earlier insertion-marker
+geometry callback design.
+
+**Targeting contract:**
+
+- Insertion candidates are canonical zero-thickness gaps between retained
+  items. Rank Euclidean distance from the pointer to the gap center, not
+  distance to an Item or a rendered ghost.
+- When candidates have the same score and exact center, compare distance to
+  their adjacent frozen Item rectangles. Preserve stable tree traversal order
+  for any remaining tie. Do not introduce a depth bonus or an arbitrary pixel
+  bias.
+- Nested inside/outside choice follows real layout geometry. A file-explorer
+  child Container should be physically inset so its gap center moves right;
+  painted indentation over a full-width Container is insufficient.
+- Wrapped rows and columns use the chosen visual line's measured cross-axis
+  band. A wrapping boundary uses the next line's leading edge and band; append
+  uses the previous line's trailing edge and band.
+
+**State and rendering contract:**
+
+- `InsertionMarkerState` carries the canonical world-space `gap`, frozen
+  `previous`/`next` neighbors, `isCurrentPlacement`, ghost identity, and slot
+  location. The framework receives renderer-ready facts without receiving a
+  renderer-chosen rectangle.
+- A gap, neighbor, or `isCurrentPlacement` change at the same
+  container/index emits `onGhostMove`. `onDropTargetChange` remains a semantic
+  destination-location notification and is not overloaded with presentation.
+- `insertionMarkerRect(marker, options)` requires explicit `thickness`,
+  `startInset`, and `endInset` values. All are finite and non-negative; inset
+  totals greater than the canonical gap length throw instead of clamping.
+  The named `stockInsertionMarkerRectOptions` (`3/0/0`) is a built-in renderer
+  contract, not an implicit helper default.
+- `toContainerLocalRect` is the general projection helper for arbitrary
+  world-space overlays. It projects from the destination padding-box outer
+  edge using border widths and live scroll, does not subtract padding, and
+  requires a mounted Container. `insertionMarkerRect` composes this helper.
+- Svelte and React `Ghost` accept the explicit marker options at the render
+  site. `createVanillaAdapter({ insertionMarker: options })` exposes the same
+  choice; omitting it intentionally selects the named stock renderer contract.
+  Marker thickness and insets affect presentation only.
+
+**Acceptance coverage:**
+
+- Flat, empty, nested, same-placement, cross-container, and multi-item gaps.
+- Identical-center adjacent-item tie-breaking and final stable-order ties.
+- Wrapped row/column boundaries, including next-line leading and append
+  trailing bands.
+- Same-location marker moves when geometry or current-placement state changes.
+- Horizontal/vertical rectangle projection with borders, live scroll, and
+  zero/positive insets; invalid numeric input, excessive insets, and unmounted
+  destinations fail explicitly.
+- Vanilla stock/custom rendering and React/Svelte explicit custom rendering.
+
+**Commit:** `feat(snapsort): expose canonical insertion marker state`
 
 ## Final milestone gate
 
