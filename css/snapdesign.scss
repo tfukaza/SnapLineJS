@@ -36,8 +36,8 @@ body {
   --font-code: "Geist Mono", monospace;
 
   --type-page-title: clamp(2.75rem, 6vw, 5rem);
-  --type-section-title: clamp(2rem, 3.5vw, 3.25rem);
-  --type-card-title: clamp(1.5rem, 2.5vw, 2.25rem);
+  --type-section-title: clamp(1.75rem, 3vw, 2.75rem);
+  --type-card-title: clamp(1.3rem, 2vw, 1.85rem);
   --type-lead: clamp(1.125rem, 1.5vw, 1.25rem);
   --type-body: 1rem;
   --type-caption: 0.875rem;
@@ -103,7 +103,7 @@ h1 {
 
 h2 {
   margin-bottom: var(--size-16);
-  font-family: var(--font-display);
+  font-family: var(--font-label);
   font-size: var(--type-section-title);
   line-height: var(--leading-heading);
 }
@@ -112,7 +112,7 @@ h3,
 h4,
 h5,
 h6 {
-  font-family: var(--font-body);
+  font-family: var(--font-label);
   line-height: var(--leading-card);
 }
 
@@ -122,7 +122,7 @@ h3 {
 }
 
 h4 {
-  font-size: 1.25rem;
+  font-size: 1.125rem;
   margin-bottom: var(--size-8);
 }
 
@@ -865,24 +865,19 @@ input[type="range"].large {
 }
 
 .button {
-  --button-color: #fff;
-  --button-highlight-color: hsl(
-    from var(--button-color) calc(h + 10) s calc(l + 20)
-  );
-  --button-shadow-color: hsl(
-    from var(--button-color) calc(h - 10) s calc(l - 20)
-  );
-  color: var(--color-text);
+  --button-color: #ececeb;
+  --button-radius: 8px;
+  color: var(--color-text-muted);
 
   cursor: pointer;
   font-family: inherit;
   font-size: 1rem;
-  font-weight: 500;
+  font-weight: 400;
   line-height: 1.25;
   position: relative;
 
-  border-radius: var(--ui-radius);
   border: none;
+  border-radius: var(--button-radius);
   min-height: 44px;
   padding: 10px var(--size-16);
   display: inline-flex;
@@ -894,150 +889,13 @@ input[type="range"].large {
 
   background: var(--button-color);
   box-shadow:
-    0px 0px 1px 0.5px rgba(1, 11, 38, 0.157) inset,
-    1px 1px 1px 0.5px hsl(from var(--button-highlight-color) h s l / 0.7) inset,
-    -0.5px -0.5px 0.5px 0.5px hsl(from var(--button-shadow-color) h s l / 0.5)
-      inset,
-    1.5px 1.5px 3px -2px rgba(13, 34, 68, 0.538),
-    3px 3px 6px -3px rgba(6, 29, 57, 0.435);
-
-  transition:
-    color 100ms ease-in-out,
-    box-shadow 100ms ease-in-out,
-    transform 100ms ease-in-out;
-
-  &:active:not(:disabled),
-  &.active:not(:disabled),
-  &.is-active:not(:disabled) {
-    transform: translateY(1px);
-  }
-
-  // &::before {
-  //   content: "";
-  //   position: absolute;
-  //   z-index: -2;
-  //   top: calc(-2 * var(--button-border));
-  //   left: calc(-2 * var(--button-border));
-  //   width: calc(100% + 4 * var(--button-border));
-  //   height: calc(100% + 4 * var(--button-border));
-  //   border-radius: calc(var(--ui-radius) + var(--button-border) * 2);
-
-  //   box-shadow:
-  //     calc(var(--button-border) * -0.25) calc(var(--button-border) * -0.25) 1px 0px rgba(24, 18, 53, 0.536) inset,
-  //     0.2px 0.2px calc(var(--button-border) / 2) 0.5px rgba(42, 44, 54, 0.186) inset,
-  //     // 0px 0px 1px 0.2px #17182d8a,
-  //     1px 1px 3px -1px rgba(36, 34, 59, 0.618),
-  //     2px 2px 6px -3px rgba(39, 34, 59, 0.393);
-  //   background: linear-gradient(to bottom right,
-  //       hsl(from var(--button-color) calc(h - 1) calc(s - 1) calc(l + 10)) 0%,
-  //       hsl(from var(--button-color) h calc(s + 1) calc(l + 5)) 15%,
-  //       hsl(from var(--button-color) calc(h + 5) calc(s - 5) calc(l + 5)) 45%,
-  //       hsl(from var(--button-color) h calc(s) calc(l - 5)) 75%,
-  //       hsl(from var(--button-color) calc(h) calc(s + 1) calc(l - 10)) 100%);
-
-  //   transition: all 0.05s ease-in;
-  // }
-
-  &::after {
-    content: "";
-    position: absolute;
-    // z-index: -1;
-    // --highlight-offset: 0.2;
-    // top: calc(var(--highlight-offset) * var(--button-border));
-    // left: calc(var(--highlight-offset) * var(--button-border));
-    // width: calc(100% - 2 * var(--highlight-offset) * var(--button-border));
-    // height: calc(100% - 2 * var(--highlight-offset) * var(--button-border));
-    // border-radius: 3px;
-    top: 0.5px;
-    left: 0.5px;
-    width: calc(100% - 1px);
-    height: calc(100% - 1px);
-    border-radius: calc(var(--ui-radius) - 0.5px);
-    box-sizing: border-box;
-    border-style: inset;
-    border: 1.2px solid rgb(255, 255, 255);
-    mask-image: linear-gradient(
-      to bottom right,
-      rgba(0, 0, 0, 0.9) 0%,
-      rgba(0, 0, 0, 0.8) 8%,
-      rgba(0, 0, 0, 0.6) 10%,
-      rgba(0, 0, 0, 0.5) 25%,
-      rgba(0, 0, 0, 0) 50%
-    );
-    filter: blur(0.2px);
-  }
-
-  &:hover:not(:disabled):not(.active) {
-    color: var(--color-action);
-    box-shadow:
-      0px 0px 1px 0.5px rgba(1, 11, 38, 0.157) inset,
-      1px 1px 1px 0.5px hsl(from var(--button-highlight-color) h s l / 0.7)
-        inset,
-      -0.5px -0.5px 0.5px 0.5px hsl(from var(--button-shadow-color) h s l / 0.5)
-        inset,
-      1px 1px 3px -2px rgba(13, 34, 68, 0.538),
-      2px 2px 6px -3px rgba(6, 29, 57, 0.435);
-    // &::before {
-    //   box-shadow:
-    //     calc(var(--button-border) * -0.5) calc(var(--button-border) * -0.5) 2px 0px rgba(0, 28, 61, 0.411) inset,
-    //     0px 0px calc(var(--button-border)) 0px rgba(49, 34, 59, 0.664) inset,
-    //     0px 0px 0.3px 0.2px #17182d44,
-    //     1px 1px 2px 0.5px rgba(36, 34, 59, 0.448);
-    //   background: linear-gradient(to bottom right,
-    //       hsl(from var(--button-color) calc(h - 1) calc(s - 1) calc(l + 1)) 100%,
-    //       hsl(from var(--button-color) h calc(s + 1) calc(l - 1)) 85%,
-    //       hsl(from var(--button-color) calc(h + 5) calc(s - 5) calc(l + 10)) 45%,
-    //       hsl(from var(--button-color) h calc(s) calc(l - 5)) 25%,
-    //       hsl(from var(--button-color) calc(h) calc(s + 1) calc(l - 10)) 0%);
-    // }
-
-    // &::after {
-    //   box-shadow: 2px 2px 4px -2px rgba(48, 41, 58, 0.5);
-    //   mask-image: linear-gradient(to bottom right,
-    //       rgba(0, 0, 0, 0.3) 5%,
-    //       rgba(0, 0, 0, 0) 20%,
-    //       rgba(0, 0, 0, 0) 70%,
-    //       rgba(0, 0, 0, 0.3) 95%);
-    // }
-  }
-
-  &.active {
-    box-shadow:
-      0px 0px 1px 0.5px rgba(1, 11, 38, 0.157) inset,
-      -1px -1px 1px 0.5px hsl(from var(--button-highlight-color) h s l / 0.7)
-        inset,
-      0.5px 0.5px 0.5px 0.5px hsl(from var(--button-shadow-color) h s l / 0.5)
-        inset,
-      0.5px 0.5px 3px -2px rgba(13, 34, 68, 0.538),
-      1px 1px 6px -3px rgba(6, 29, 57, 0.435);
-    // &::before {
-    //   box-shadow:
-    //     3px 3px 1px 0px rgba(11, 28, 48, 0.456) inset,
-    //     0px 0px 3px 1px rgba(11, 28, 48, 0.385) inset,
-    //     0px 0px 0.3px 0.2px #17182d44;
-    // }
-
-    // &::after {
-    //   border-width: 0px;
-    //   box-shadow: 2px 2px 4px -2px rgba(48, 41, 58, 0.5);
-    // }
-  }
+    2px 2px 3px 0 rgba(30, 28, 27, 0.4),
+    -1px -1px 2px 0 rgba(255, 255, 255, 0.43),
+    0 0 0.5px 0.5px rgba(42, 38, 38, 0.91),
+    1px 1px 1.5px 0 rgba(56, 46, 43, 0.4);
 }
 
 .button {
-  &.primary {
-    --button-color: var(--color-primary);
-    color: #fff;
-
-    &:hover:not(:disabled):not(.active) {
-      color: #fff;
-    }
-
-    &:disabled {
-      cursor: not-allowed;
-    }
-  }
-
   &.small {
     min-height: 36px;
     padding: 6px var(--size-12);
@@ -1045,21 +903,8 @@ input[type="range"].large {
     line-height: 1.25;
   }
 
-  &.secondary {
-    --button-color: var(--color-background);
-  }
-
-  &.quiet {
-    --button-color: transparent;
-    box-shadow: none;
-  }
-
   &:disabled {
-    --button-color: rgb(31 30 41 / 8%);
-
-    background: var(--button-color);
-    box-shadow: none;
-    color: rgb(31 30 41 / 38%);
+    opacity: 0.5;
     cursor: not-allowed;
     pointer-events: none;
   }
@@ -1365,31 +1210,78 @@ table {
 }
 
 /* Progress Bar Styles */
-progress {
+.ascii-progress {
+  position: relative;
   width: 100%;
-  height: var(--size-8);
-  border-radius: var(--ui-radius);
+}
+
+.ascii-progress-native {
+  position: absolute;
+  width: 1px;
+  height: 1px;
   overflow: hidden;
-  appearance: none;
-  border: none;
-  background: var(--color-background-tint);
-  box-shadow:
-    -0.8px -0.8px 2px 0.2px rgba(9, 22, 36, 0.348),
-    0.8px 0.8px 0.4px 0px rgba(255, 255, 255, 0.2),
-    0px 0px 2px 1px rgba(127, 130, 134, 0.18) inset;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
 
-  &::-webkit-progress-bar {
-    background: var(--color-background-tint);
-    border-radius: var(--ui-radius) 0 0 var(--ui-radius);
+.ascii-progress-visual {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  color: var(--color-text);
+  font-family: var(--font-code);
+  font-size: 0.9rem;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.ascii-progress-bracket {
+  color: var(--color-text);
+}
+
+.ascii-progress-cells {
+  display: inline-flex;
+  width: 20ch;
+  overflow: hidden;
+}
+
+.ascii-progress-filled,
+.ascii-progress-scanner {
+  color: var(--color-primary);
+}
+
+.ascii-progress-empty {
+  color: color-mix(in srgb, var(--color-background-dark) 42%, transparent);
+}
+
+.ascii-progress-value {
+  min-width: 4ch;
+  margin-left: var(--size-8);
+  color: var(--color-text-muted);
+  text-align: right;
+}
+
+.ascii-progress-indeterminate {
+  position: relative;
+}
+
+.ascii-progress-scanner {
+  position: absolute;
+  left: -4ch;
+  animation: ascii-progress-scan 1.4s steps(24, end) infinite;
+}
+
+@keyframes ascii-progress-scan {
+  to {
+    transform: translateX(24ch);
   }
+}
 
-  &::-webkit-progress-value {
-    background-color: var(--color-primary);
-    border-radius: var(--ui-radius) 0 0 var(--ui-radius);
-  }
-
-  &::-moz-progress-bar {
-    background-color: var(--color-primary);
-    border-radius: var(--ui-radius) 0 0 var(--ui-radius);
+@media (prefers-reduced-motion: reduce) {
+  .ascii-progress-scanner {
+    left: 8ch;
+    animation: none;
   }
 }

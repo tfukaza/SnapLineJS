@@ -1,5 +1,25 @@
 <script lang="ts">
+  import MaterialControlPanel, {
+    type MaterialControlTarget,
+  } from "$lib/components/MaterialControlPanel.svelte";
+  import MaterialSurface from "$lib/components/MaterialSurface.svelte";
+  import SnapButton from "$lib/components/SnapButton.svelte";
+  import Slider from "$lib/components/Slider.svelte";
+  import Toggle from "$lib/components/Toggle.svelte";
+  import {
+    defaultCreviceFreeMaterialSettings,
+    defaultMaterialSettings,
+    type MaterialSettings,
+  } from "$lib/components/materialSurface";
+
   type ShowcaseStyle = "existing" | "dev";
+  type MaterialTargetId =
+    | "dial"
+    | "button"
+    | "toggle"
+    | "slider"
+    | "raisedCard"
+    | "insetSlot";
 
   let checkboxChecked = $state(false);
   // let radioValue = $state("option1");
@@ -11,7 +31,94 @@
   let progressValue = $state(65);
   let showcaseStyle = $state<ShowcaseStyle>("existing");
   let toggleEnabled = $state(true);
+  const materialTargets = [
+    { id: "dial", label: "Dial" },
+    { id: "button", label: "Button" },
+    { id: "toggle", label: "Toggle" },
+    { id: "slider", label: "Slider" },
+    { id: "raisedCard", label: "Raised Card" },
+    { id: "insetSlot", label: "Inset Slot" },
+  ] satisfies MaterialControlTarget[];
+  const materialDefaultConfigurations: Record<MaterialTargetId, MaterialSettings> = {
+    dial: {
+      lightAngle: 315,
+      ambientBrightness: 0,
+      shadowDistance: 14,
+      shadowBlur: 11.25,
+      shadowStrength: 1,
+      specularIntensity: 0.34,
+      specularPower: 31,
+      rimWidth: 1.75,
+      rimBlur: 0.7,
+      creviceBrightness: 0.41,
+      shadedRim: true,
+      creviceOutline: true,
+    },
+    button: {
+      lightAngle: 325,
+      ambientBrightness: 0,
+      shadowDistance: 5,
+      shadowBlur: 5,
+      shadowStrength: 1,
+      specularIntensity: 0.85,
+      specularPower: 10,
+      rimWidth: 1.25,
+      rimBlur: 0.3,
+      creviceBrightness: 0.53,
+      shadedRim: true,
+      creviceOutline: true,
+    },
+    toggle: {
+      lightAngle: 325,
+      ambientBrightness: 0.1,
+      shadowDistance: 6,
+      shadowBlur: 5,
+      shadowStrength: 1,
+      specularIntensity: 0.85,
+      specularPower: 10,
+      rimWidth: 0.75,
+      rimBlur: 0.75,
+      creviceBrightness: 0,
+      shadedRim: true,
+      creviceOutline: false,
+    },
+    slider: {
+      lightAngle: 325,
+      ambientBrightness: 0.1,
+      shadowDistance: 3.5,
+      shadowBlur: 9,
+      shadowStrength: 1,
+      specularIntensity: 0.85,
+      specularPower: 10,
+      rimWidth: 0.75,
+      rimBlur: 0.5,
+      creviceBrightness: 0,
+      shadedRim: true,
+      creviceOutline: false,
+    },
+    raisedCard: { ...defaultCreviceFreeMaterialSettings },
+    insetSlot: { ...defaultCreviceFreeMaterialSettings },
+  };
+  let materialConfigurations = $state<Record<MaterialTargetId, MaterialSettings>>({
+    dial: { ...materialDefaultConfigurations.dial },
+    button: { ...materialDefaultConfigurations.button },
+    toggle: { ...materialDefaultConfigurations.toggle },
+    slider: { ...materialDefaultConfigurations.slider },
+    raisedCard: { ...materialDefaultConfigurations.raisedCard },
+    insetSlot: { ...materialDefaultConfigurations.insetSlot },
+  });
+  let selectedMaterialTarget = $state<MaterialTargetId>("button");
   let devStyleLoaded = false;
+  const progressCellCount = 20;
+
+  function filledProgressCells(value: number, max = 100) {
+    const ratio = Math.max(0, Math.min(value / max, 1));
+    return Math.round(ratio * progressCellCount);
+  }
+
+  function progressCells(character: string, count: number) {
+    return character.repeat(Math.max(0, count));
+  }
 
   async function setShowcaseStyle(style: ShowcaseStyle) {
     showcaseStyle = style;
@@ -27,187 +134,200 @@
     <section class="showcase-section showcase-header col-12">
       <div class="showcase-hero-copy">
         <h1 class="showcase-title">Snap<br />Design</h1>
-        <p class="large">
-          A working inventory of SnapDesign type, color, cards, controls, and interface states.
+      </div>
+      <div class="hero-specimen">
+        <p class="hero-description">
+          A working inventory of type, color, controls, and interface states.
         </p>
         <div class="style-selector" aria-label="Style">
-          <button
-            class="button small"
-            class:active={showcaseStyle === "existing"}
-            type="button"
+          <SnapButton
+            material={materialConfigurations.button}
+            className={`small ${showcaseStyle === "existing" ? "active" : ""}`}
             onclick={() => setShowcaseStyle("existing")}
           >
             Default
-          </button>
-          <button
-            class="button small"
-            class:active={showcaseStyle === "dev"}
-            type="button"
+          </SnapButton>
+          <SnapButton
+            material={materialConfigurations.button}
+            className={`small ${showcaseStyle === "dev" ? "active" : ""}`}
             onclick={() => setShowcaseStyle("dev")}
           >
             Dev
-          </button>
+          </SnapButton>
         </div>
+        <span class="hero-kicker">Design System</span>
       </div>
     </section>
 
-    <!-- Typography Section -->
-    <section class="showcase-section col-12">
-      <h2>Typography</h2>
-      <article class="type-article prose">
-        <p class="type-page-title">Inside SnapEngine</p>
-        <p>
-          Snap Engine is an interaction layer for building direct,
-          responsive web tools. It coordinates input, layout reads, DOM writes,
-          animation, collision, and debug overlays through a shared frame loop.
-        </p>
+    <!-- Foundations Section -->
+    <section class="showcase-section foundation-section col-12">
+      <div class="foundation-main">
+        <article class="type-article prose">
+          <div class="type-column">
+            <p class="type-group-label">Headings</p>
+            <div class="heading-stack">
+              <h1>Heading 1</h1>
+              <h2>Heading 2</h2>
+              <h3>Heading 3</h3>
+              <h4>Heading 4</h4>
+              <h5>Heading 5</h5>
+              <h6>Heading 6</h6>
+            </div>
 
-        <hr />
+            <hr />
 
-        <h2>A Staged Frame Loop</h2>
-        <p>
-          Work is split into explicit read and write stages. Reads collect
-          geometry, writes update the DOM, and optional systems such as
-          animation and collision run in known places between them.
-        </p>
-        <ul>
-          <li>Input events collect user intent.</li>
-          <li>Read stages measure the current document.</li>
-          <li>Write stages apply DOM and transform updates.</li>
-        </ul>
+            <p class="type-group-label">Paragraph & Quote</p>
+            <p>
+              Body copy should remain calm and readable across documentation,
+              product interfaces, and longer explanations. A second sentence
+              demonstrates the rhythm of a typical paragraph.
+            </p>
+            <blockquote>
+              <p>Useful details should support the interaction, never obscure it.</p>
+              <cite>SnapDesign principle</cite>
+            </blockquote>
 
-        <h3>Objects Own Their Behavior</h3>
-        <p>
-          Engine objects bind input handlers, transforms, DOM elements, and
-          debugging metadata in one place. That keeps interaction code local
-          without forcing each component to manually orchestrate a render loop.
-        </p>
-        <blockquote>
-          The most useful abstraction is the one that keeps a frame predictable.
-        </blockquote>
+            <details>
+              <summary>Details and summary</summary>
+              <p>Expandable content stays available without dominating the page.</p>
+            </details>
+          </div>
 
-        <pre class="display code-display"><code>object.schedule(() => &#123;
-  object.readDom(true, "READ_1");
-&#125;, &#123; stage: "READ_1" &#125;);
+          <div class="type-column">
+            <p class="type-group-label">Inline Elements</p>
+            <p class="inline-elements">
+              <a href="#buttons">Link</a>, <strong>strong</strong>,
+              <em>emphasis</em>, <mark>highlight</mark>,
+              <abbr title="Snap Design System">abbreviation</abbr>,
+              <code>inlineCode()</code>, <kbd>⌘ K</kbd>,
+              <samp>sample output</samp>, <del>deleted</del>,
+              <ins>inserted</ins>, H<sub>2</sub>O, x<sup>2</sup>, and
+              <small>small print</small>.
+            </p>
 
-object.schedule(() => &#123;
-  object.writeTransform();
-&#125;, &#123; stage: "WRITE_1" &#125;);</code></pre>
+            <div class="list-grid">
+              <div>
+                <p class="type-group-label">Unordered List</p>
+                <ul>
+                  <li>Direct interaction</li>
+                  <li>Clear hierarchy</li>
+                  <li>Purposeful motion</li>
+                </ul>
+              </div>
+              <div>
+                <p class="type-group-label">Ordered List</p>
+                <ol>
+                  <li>Read the state</li>
+                  <li>Apply the change</li>
+                  <li>Show feedback</li>
+                </ol>
+              </div>
+            </div>
 
-        <h4>Implementation Note</h4>
-        <p>
-          Inline code such as <code>schedule()</code> should sit comfortably
-          inside body copy without changing the rhythm of the line. Related API
-          notes can point to <a href="#buttons">controls</a> or
-          <a href="#colors">color tokens</a> without feeling louder than the
-          surrounding text.
-        </p>
-        <ol>
-          <li>Capture the current state.</li>
-          <li>Apply the smallest possible mutation.</li>
-          <li>Animate from the old visual state into the new one.</li>
-        </ol>
+            <dl>
+              <dt>Definition term</dt>
+              <dd>A short explanation associated with the term.</dd>
+            </dl>
 
-        <h5>Observation</h5>
-        <p class="mono-sample">
-          Geist Mono is reserved for code, labels, debug output, and compact
-          technical annotations.
-        </p>
-
-
-      </article>
-    </section>
-
-    <!-- Colors Section -->
-    <section class="showcase-section col-12">
-      <h2>Color Palette</h2>
-      <div class="color-grid">
-        <div class="color-swatch primary">
-          <span class="light">Primary</span>
-          <code>#ff753a</code>
-        </div>
-        <div class="color-swatch secondary-1">
-          <span class="light">Secondary 1</span>
-          <code>#f34336</code>
-        </div>
-        <div class="color-swatch accent">
-          <span class="light">Accent</span>
-          <code>#4b403a</code>
-        </div>
-        <div class="color-swatch background">
-          <span>Background</span>
-          <code>#f6f5f4</code>
-        </div>
-        <div class="color-swatch background-tint">
-          <span>Background Tint</span>
-          <code>#e7e3e2</code>
-        </div>
-        <div class="color-swatch text">
-          <span class="light">Text</span>
-          <code>#453e3a</code>
-        </div>
+            <p class="type-group-label">Code Block</p>
+            <pre class="display shiki specimen-code" aria-label="Code display example"><code><span class="line" data-line="1"><span class="code-keyword">const</span> snap = create();</span><span class="line" data-line="2">snap.mount();</span><span class="line" data-line="3"><span class="code-comment">// Ready for input</span></span></code></pre>
+          </div>
+        </article>
       </div>
     </section>
 
-    <!-- Cards, Slots & Displays Section -->
-    <section class="showcase-section col-12">
-      <h2>Cards, Slots & Displays</h2>
-      <div class="card-slot-grid">
-        <div class="card">
-          <h3>Card</h3>
-          <p>A default card with subtle shadows to make it look as if it is a
-            bump on the ground.
-          </p>
-        </div>
-        <div class="slot">
-          <div class="slot-content">
-            <p>Slot Container</p>
-            <span>Inset container for drop zones and recessed UI areas</span>
+    <!-- Color, Cards & Slots Section -->
+    <section class="showcase-section palette-components-section col-12">
+      <aside class="color-aside" id="colors">
+        <h2>Color</h2>
+        <div class="color-grid">
+          <div class="color-swatch background">
+            <span>Gray 01</span>
+            <code>#f6f6f6</code>
+          </div>
+          <div class="color-swatch background-tint">
+            <span>Gray 02</span>
+            <code>#ececeb</code>
+          </div>
+          <div class="color-swatch black">
+            <span class="light">Black</span>
+            <code>#000000</code>
+          </div>
+          <div class="color-swatch primary">
+            <span class="light">Primary</span>
+            <code>#ff5d0f</code>
           </div>
         </div>
-        <div class="display">
-          <div class="display-content">
-            <p>LCD Display</p>
-            <span>ENGINE READY</span>
+      </aside>
+
+      <div class="cards-slots-aside">
+        <h2>Container</h2>
+        <div class="cards-slots-stage">
+          <MaterialSurface depth="raised" shape="rounded" radius={16} material={materialConfigurations.raisedCard} className="specimen-card">
+            <h3>Raised Card</h3>
+            <p>Emphasizes important content with depth. Use it sparingly so the emphasis keeps its meaning.</p>
+          </MaterialSurface>
+          <MaterialSurface depth="recessed" shape="rounded" radius={16} material={materialConfigurations.insetSlot} className="specimen-slot">
+            <div class="slot-content">
+              <h3>Inset Slot</h3>
+              <p>Emphasizes an important drop zone or recessed area. Use it sparingly so it remains distinct.</p>
+            </div>
+          </MaterialSurface>
+          <div class="compact-specimen">
+            <div class="compact-card">
+              <h3>Compact Card</h3>
+              <p>A toned-down card for repeated UI such as list items, rows, and closely grouped controls.</p>
+            </div>
+          </div>
+          <div class="compact-specimen">
+            <div class="compact-slot">
+              <h3>Compact Slot</h3>
+              <p>A toned-down slot for interfaces where drop zones or containers need to repeat.</p>
+            </div>
           </div>
         </div>
       </div>
+    </section>
+
+    <section class="material-panel-section col-12">
+      <MaterialControlPanel
+        targets={materialTargets}
+        defaults={materialDefaultConfigurations}
+        bind:configurations={materialConfigurations}
+        bind:selectedTarget={selectedMaterialTarget}
+      />
     </section>
 
     <!-- Buttons & Form Elements Section -->
-    <section class="showcase-section col-12">
-      <h2>Buttons & Form Elements</h2>
+    <section class="showcase-section elements-section col-12" id="buttons">
+      <h2 class="oversized-section-title">UI<br />Elements</h2>
       <div class="controls-stack">
         <div class="controls-top">
           <div>
             <h3>Buttons</h3>
             <div class="button-row">
-              <button class="button">Default Button</button>
-              <button class="button primary">Primary Button</button>
-              <button class="button active">Active State</button>
-              <button class="button primary" disabled>Disabled</button>
+              <SnapButton material={materialConfigurations.button}>Default Button</SnapButton>
+              <SnapButton material={materialConfigurations.button} className="primary">Primary Button</SnapButton>
+              <SnapButton material={materialConfigurations.button} className="active">Active State</SnapButton>
+              <SnapButton material={materialConfigurations.button} className="primary" disabled>Disabled</SnapButton>
             </div>
           </div>
-          <div>
-            <h3>Toggles</h3>
-            <div class="toggle-demo">
-              <div
-                class="mini-toggle-switch slot"
-                class:enabled={toggleEnabled}
-                onclick={() => (toggleEnabled = !toggleEnabled)}
-                role="switch"
-                aria-checked={toggleEnabled}
-                tabindex="0"
-                onkeydown={(event) => {
-                  if (event.key === "Enter" || event.key === " ") {
-                    event.preventDefault();
-                    toggleEnabled = !toggleEnabled;
-                  }
-                }}
-              >
-                <div class="mini-toggle-knob disk"></div>
+          <div class="toggle-range-card">
+            <div class="toggle-range-half">
+              <h3>Toggles</h3>
+              <div class="toggle-examples">
+                <div class="toggle-demo">
+                  <Toggle bind:checked={toggleEnabled} material={materialConfigurations.toggle} aria-label="Toggle example" />
+                  <span>{toggleEnabled ? "On" : "Off"}</span>
+                </div>
               </div>
-              <span>{toggleEnabled ? "On" : "Off"}</span>
+            </div>
+            <div class="toggle-range-half">
+              <h3>Range</h3>
+              <div class="range-demo">
+                <Slider id="range-default" min={0} max={100} bind:value={rangeValue} material={materialConfigurations.slider} />
+                <span class="range-value">{rangeValue}</span>
+              </div>
             </div>
           </div>
         </div>
@@ -260,19 +380,6 @@ object.schedule(() => &#123;
                 <span></span>
                 Option Three
               </label>
-            </div>
-          </div>
-
-          <div class="form-control-group">
-            <h3>Range Sliders</h3>
-            <div class="form-group">
-              <label for="range-default">Default Range</label>
-              <input id="range-default" type="range" min="0" max="100" bind:value={rangeValue} />
-              <span class="range-value">{rangeValue}</span>
-            </div>
-            <div class="form-group">
-              <label for="range-large">Large Range</label>
-              <input id="range-large" type="range" class="large" min="0" max="100" value="75" />
             </div>
           </div>
 
@@ -352,19 +459,47 @@ object.schedule(() => &#123;
             <h3>Progress Bars</h3>
             <div class="form-group">
               <label for="progress-default">Default Progress ({progressValue}%)</label>
-              <progress id="progress-default" value={progressValue} max="100"></progress>
+              <div class="ascii-progress">
+                <progress
+                  class="ascii-progress-native"
+                  id="progress-default"
+                  value={progressValue}
+                  max="100"
+                ></progress>
+                <span class="ascii-progress-visual" aria-hidden="true">
+                  <span class="ascii-progress-bracket">├</span><span class="ascii-progress-cells"><span class="ascii-progress-filled">{progressCells("■", filledProgressCells(progressValue))}</span><span class="ascii-progress-empty">{progressCells("□", progressCellCount - filledProgressCells(progressValue))}</span></span><span class="ascii-progress-bracket">┤</span>
+                  <span class="ascii-progress-value">{progressValue}%</span>
+                </span>
+              </div>
             </div>
             <div class="form-group">
               <label for="progress-complete">Complete (100%)</label>
-              <progress id="progress-complete" value="100" max="100"></progress>
+              <div class="ascii-progress">
+                <progress
+                  class="ascii-progress-native"
+                  id="progress-complete"
+                  value="100"
+                  max="100"
+                ></progress>
+                <span class="ascii-progress-visual" aria-hidden="true">
+                  <span class="ascii-progress-bracket">├</span><span class="ascii-progress-cells"><span class="ascii-progress-filled">{progressCells("■", progressCellCount)}</span></span><span class="ascii-progress-bracket">┤</span>
+                  <span class="ascii-progress-value">100%</span>
+                </span>
+              </div>
             </div>
             <div class="form-group">
               <label for="progress-indeterminate">Indeterminate</label>
-              <progress id="progress-indeterminate"></progress>
+              <div class="ascii-progress">
+                <progress class="ascii-progress-native" id="progress-indeterminate"></progress>
+                <span class="ascii-progress-visual" aria-hidden="true">
+                  <span class="ascii-progress-bracket">├</span><span class="ascii-progress-cells ascii-progress-indeterminate"><span class="ascii-progress-empty">{progressCells("□", progressCellCount)}</span><span class="ascii-progress-scanner">■■■■</span></span><span class="ascii-progress-bracket">┤</span>
+                  <span class="ascii-progress-value">···</span>
+                </span>
+              </div>
             </div>
             <div class="form-group">
               <label for="progress-adjust">Adjust Progress</label>
-              <input id="progress-adjust" type="range" min="0" max="100" bind:value={progressValue} />
+              <Slider id="progress-adjust" min={0} max={100} bind:value={progressValue} material={materialConfigurations.slider} />
             </div>
           </div>
 
@@ -451,42 +586,81 @@ object.schedule(() => &#123;
 <style lang="scss">
   .css-showcase {
     width: 100%;
-    height: 100%;
+    min-height: 100%;
     position: relative;
     box-sizing: border-box;
-    padding: clamp(var(--size-24), 4vw, var(--size-64));
-    background: #fff;
+    padding: clamp(18px, 3vw, 44px);
+    background: #f6f6f6;
   }
 
   .showcase-header {
-    align-items: center;
+    display: grid;
+    grid-template-columns: minmax(0, 0.85fr) minmax(420px, 1.15fr);
+    align-items: stretch;
     text-align: left;
-    height: 500px;
+    min-height: 496px;
   }
 
   .showcase-hero-copy {
-    grid-column: 1 / span 7;
-    align-self: center;
+    display: flex;
+    align-items: flex-start;
+    padding: clamp(48px, 6vw, 72px);
   }
 
   .showcase-title {
-    font-size: 96px;
-    line-height: 1;
-    margin-bottom: var(--size-24);
+    margin: 0;
+    color: #080808;
+    font-family: "Geist", sans-serif;
+    font-size: clamp(84px, 9vw, 132px);
+    font-weight: 500;
+    letter-spacing: -0.075em;
+    line-height: 0.9;
+  }
+
+  .hero-specimen {
+    position: relative;
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--size-24);
+    margin: 32px;
+    padding: 28px;
+    overflow: hidden;
+    border-radius: 16px;
+    background: #ececeb;
+  }
+
+  .hero-description {
+    width: min(300px, 55%);
+    margin: 0;
+    color: #6b6867;
+    font-size: 0.9rem;
+    line-height: 1.45;
+  }
+
+  .hero-kicker {
+    position: absolute;
+    right: 28px;
+    bottom: 24px;
+    color: var(--color-primary);
+    font-family: "Bitcount Grid Single", monospace;
+    font-size: 18px;
+    text-transform: uppercase;
   }
 
   .style-selector {
     display: flex;
     align-items: center;
     gap: var(--size-8);
-    margin-top: var(--size-16);
   }
 
   .showcase-section {
-    background: var(--color-background-tint);
-    border-radius: 12px;
-    padding: clamp(var(--size-32), 4vw, var(--size-48));
-    margin-bottom: var(--size-48);
+    width: min(1400px, 100%);
+    margin-inline: auto;
+    margin-bottom: 60px;
+    border: 1px solid #d7d7d7;
+    border-radius: 0;
+    background: transparent;
 
     > h2 {
       font-family: "Bitcount Grid Single", monospace;
@@ -494,74 +668,440 @@ object.schedule(() => &#123;
       font-weight: 300;
       color: var(--color-background-dark);
       margin-bottom: var(--size-24);
-      text-transform: lowercase;
     }
   }
 
-  .showcase-section > :where(h2, article, .color-grid, .card-slot-grid, .controls-stack, .ui-elements-grid) {
-    grid-column: 1 / -1;
+  .showcase-section:not(.showcase-header):not(.foundation-section):not(.palette-components-section):not(.elements-section) {
+    display: block;
+  }
+
+  .foundation-section {
+    display: grid;
+    grid-template-columns: 1fr;
+    min-height: 420px;
+  }
+
+  .foundation-main {
+    display: flex;
+    align-items: center;
+    padding: clamp(46px, 6vw, 72px);
   }
 
   .type-article {
-    column-count: 2;
-    column-gap: var(--size-48);
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: clamp(32px, 4vw, 64px);
+    align-items: start;
+    width: 100%;
+    margin: 0;
 
-    .type-page-title,
+    h1,
     h2,
     h3,
     h4,
     h5,
+    h6,
     pre {
       break-inside: avoid;
     }
 
-    .type-page-title {
-      column-span: all;
-      margin-top: 0;
-      margin-bottom: var(--size-24);
-      color: #373738;
-      font-family: var(--font-display);
-      font-size: var(--type-page-title);
-      font-weight: 500;
-      letter-spacing: -0.025em;
-      line-height: var(--leading-display);
-      text-wrap: balance;
+    h1,
+    h2,
+    h3,
+    h4,
+    h5,
+    h6 {
+      font-family: var(--font-label);
+      font-weight: 400;
+      letter-spacing: 0;
+      line-height: 1;
+    }
+
+    h1 {
+      margin-bottom: var(--size-16);
+      font-size: clamp(48px, 5vw, 72px);
+    }
+
+    h2 {
+      font-size: clamp(36px, 4vw, 52px);
+    }
+
+    h3 {
+      font-size: 25px;
+    }
+
+    h4 {
+      font-size: 21px;
+    }
+
+    h5 {
+      font-size: 20px;
+    }
+
+    h6 {
+      font-size: 17px;
     }
   }
 
-  .code-display {
-    white-space: pre-wrap;
-    margin-bottom: var(--size-32);
+  .type-column {
+    min-width: 0;
+
+    > :last-child {
+      margin-bottom: 0;
+    }
   }
 
-  @media (max-width: 900px) {
-    .type-article {
-      column-count: 1;
+  .type-group-label {
+    margin-bottom: 12px !important;
+    color: var(--color-primary);
+    font-family: var(--font-label);
+    font-size: 15px;
+    line-height: 1;
+    text-transform: uppercase;
+  }
+
+  .heading-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+
+    > :where(h1, h2, h3, h4, h5, h6) {
+      margin: 0;
     }
+  }
+
+  .type-column > hr {
+    margin: 32px 0;
+    border: 0;
+    border-top: 1px solid #d7d7d7;
+  }
+
+  .type-column blockquote {
+    margin: 24px 0 28px;
+    padding-left: 20px;
+    border-left: 2px solid var(--color-primary);
+
+    p {
+      margin-bottom: 8px;
+    }
+
+    cite {
+      color: var(--color-text-muted);
+      font-family: var(--font-code);
+      font-size: 12px;
+      font-style: normal;
+    }
+  }
+
+  .type-column details {
+    padding: 14px 0;
+    border-top: 1px solid #d7d7d7;
+    border-bottom: 1px solid #d7d7d7;
+
+    summary {
+      cursor: pointer;
+      font-family: var(--font-label);
+    }
+
+    p {
+      margin: 12px 0 0;
+    }
+  }
+
+  .inline-elements {
+    line-height: 2;
+
+    mark,
+    code,
+    kbd,
+    samp {
+      padding: 2px 5px;
+      border-radius: 3px;
+    }
+
+    mark {
+      background: color-mix(in srgb, var(--color-primary) 28%, white);
+    }
+
+    code,
+    samp {
+      background: #ececeb;
+      font-family: var(--font-code);
+    }
+
+    kbd {
+      color: white;
+      background: #000;
+      font-family: var(--font-code);
+    }
+  }
+
+  .list-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 24px;
+    margin: 28px 0;
+
+    ul,
+    ol {
+      margin: 0;
+      padding-left: 22px;
+    }
+  }
+
+  .type-column dl {
+    display: grid;
+    grid-template-columns: minmax(120px, 0.35fr) minmax(0, 1fr);
+    gap: 12px;
+    margin: 0 0 28px;
+
+    dt {
+      font-family: var(--font-label);
+    }
+
+    dd {
+      margin: 0;
+    }
+  }
+
+  .palette-components-section {
+    display: grid;
+    grid-template-columns: minmax(280px, 0.65fr) minmax(0, 1.35fr);
+    align-items: stretch;
+    gap: 0;
+    min-height: 500px;
+  }
+
+  .color-aside {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    padding: 28px 24px 24px;
+    border-left: 0;
+
+    > h2 {
+      margin: 0 0 16px;
+      padding-left: var(--ui-radius);
+      font-family: "Bitcount Grid Single", monospace;
+      font-size: 28px;
+      font-weight: 400;
+    }
+  }
+
+  .cards-slots-aside {
+    min-width: 0;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    padding: 28px 24px 24px;
+    border-left: 1px solid #d7d7d7;
+
+    > h2 {
+      margin: 0 0 20px;
+      padding-left: var(--ui-radius);
+      font-family: var(--font-label);
+      font-size: 28px;
+      font-weight: 400;
+    }
+
+    .cards-slots-stage {
+      flex: 1;
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: clamp(28px, 3vw, 48px);
+      box-sizing: border-box;
+      min-height: 0;
+      padding: clamp(44px, 5vw, 72px);
+      border-radius: 16px;
+      background: #ececeb;
+    }
+  }
+
+  :global(.specimen-slot) {
+    display: flex;
+    width: 100%;
+    min-height: 0;
+    align-items: stretch;
+  }
+
+  .cards-slots-stage .slot-content {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    width: 100%;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+    padding: clamp(36px, 4vw, 60px);
+  }
+
+  :global(.specimen-card) {
+    --material-content-direction: column;
+    --material-content-gap: 12px;
+    --material-content-padding: clamp(28px, 3vw, 44px);
+    box-sizing: border-box;
+  }
+
+  .cards-slots-stage :global(.specimen-card h3) {
+    padding-left: var(--ui-radius);
+    font-weight: 400;
+  }
+
+  .cards-slots-stage :global(.specimen-slot h3) {
+    padding-left: var(--ui-radius);
+    font-weight: 400;
+  }
+
+  .compact-specimen {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    justify-content: center;
+
+    h3 {
+      margin: 0;
+      padding-left: var(--ui-radius);
+      font-weight: 400;
+    }
+
+    p {
+      margin: 0;
+      color: color-mix(in srgb, #000 58%, transparent);
+      font-size: 0.9rem;
+      line-height: 1.45;
+    }
+  }
+
+  .compact-card {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 16px;
+    min-height: 108px;
+    padding: 20px;
+    box-sizing: border-box;
+    border: 1px solid color-mix(in srgb, #000 24%, transparent);
+    border-radius: 8px;
+    background: #f6f6f6;
+    box-shadow: 0 3px 10px rgb(36 38 39 / 5%);
+  }
+
+  .compact-slot {
+    display: flex;
+    min-height: 108px;
+    flex-direction: column;
+    justify-content: center;
+    gap: 16px;
+    padding: 20px;
+    box-sizing: border-box;
+    border: 1px solid #d7d7d7;
+    border-radius: 8px;
+    color: color-mix(in srgb, #000 52%, transparent);
+  }
+
+  .material-panel-section {
+    display: block;
+    width: 100%;
+    margin: 0 0 60px;
+    border: 0;
+  }
+
+  .material-panel-section > :global(.material-control-panel) {
+    width: 100%;
+    margin: 0;
+    box-sizing: border-box;
   }
 
   .controls-stack {
+    display: contents;
+  }
+
+  .elements-section {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0;
+    align-items: stretch;
+    border: 0;
+  }
+
+  .oversized-section-title {
     display: flex;
-    flex-direction: column;
-    gap: var(--size-48);
+    align-items: center;
+    margin: 0 !important;
+    padding: clamp(50px, 6vw, 74px);
+    color: #080808 !important;
+    font-family: "Geist", sans-serif !important;
+    font-size: clamp(72px, 7.5vw, 116px) !important;
+    font-weight: 500 !important;
+    letter-spacing: -0.07em;
+    line-height: 0.9;
+    grid-row: span 2;
+    min-height: 560px;
+    box-sizing: border-box;
+    border: 1px solid #d7d7d7;
   }
 
   .controls-top {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: var(--size-32);
-    align-items: start;
+    display: contents;
   }
 
   .form-grid {
+    display: contents;
+  }
+
+  .controls-top > div,
+  .form-control-group {
+    margin: 0;
+    min-width: 0;
+    box-sizing: border-box;
+    padding: 24px;
+    border: 0;
+    background: transparent;
+  }
+
+  // Each adjoining tile owns only one side of a shared seam, keeping it 1px.
+  .controls-top > div:first-child,
+  .controls-top > div:last-child {
+    border-top: 1px solid #d7d7d7;
+    border-right: 1px solid #d7d7d7;
+    border-bottom: 1px solid #d7d7d7;
+  }
+
+  .form-control-group:nth-child(1),
+  .form-control-group:nth-child(2),
+  .form-control-group:nth-child(4),
+  .form-control-group:nth-child(5) {
+    border-right: 1px solid #d7d7d7;
+    border-bottom: 1px solid #d7d7d7;
+  }
+
+  .form-control-group:nth-child(3),
+  .form-control-group:nth-child(6) {
+    border-right: 1px solid #d7d7d7;
+    border-bottom: 1px solid #d7d7d7;
+    border-left: 1px solid #d7d7d7;
+  }
+
+  .toggle-range-card {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-    gap: var(--size-48) var(--size-32);
+    grid-template-rows: repeat(2, minmax(0, 1fr));
+    padding: 0 !important;
+  }
+
+  .toggle-range-half {
+    min-width: 0;
+    padding: 16px 24px;
+
+    & + & {
+      border-top: 1px solid #d7d7d7;
+    }
   }
 
   .form-control-group h3,
   .controls-stack h3 {
     margin-bottom: var(--size-16);
+    padding-left: var(--ui-radius);
+    font-weight: 400;
   }
 
   .form-group {
@@ -583,47 +1123,29 @@ object.schedule(() => &#123;
     }
   }
 
-  .mini-toggle-switch {
-    width: 36px;
-    height: 22px;
-    --ui-radius: 999px;
-    position: relative;
-    cursor: pointer;
-    overflow: hidden;
-    transition: background-color 0.3s ease;
-
-    &:hover {
-      background-color: rgba(0, 0, 0, 0.08);
-    }
-
-    &.enabled {
-      background-color: var(--color-primary);
-    }
-
-    &:focus-visible {
-      outline: 2px solid var(--color-primary);
-      outline-offset: 2px;
-    }
+  .toggle-examples {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--size-16);
+    justify-content: center;
+    min-height: 88px;
+    box-sizing: border-box;
+    padding: 16px 24px;
+    border-radius: 16px;
+    background: #ececeb;
   }
 
-  .mini-toggle-knob {
-    width: 16px;
-    height: 16px;
-    --ui-radius: 999px;
-    --card-color: rgb(29, 29, 29);
-    background-color: var(--color-primary);
-    position: absolute;
-    top: 3px;
-    left: 3px;
-    padding: 0;
-    transition:
-      transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275),
-      background-color 0.3s ease;
-  }
-
-  .mini-toggle-switch.enabled .mini-toggle-knob {
-    transform: translateX(14px);
-    background-color: white;
+  .range-demo {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: var(--size-12);
+    min-height: 88px;
+    box-sizing: border-box;
+    padding: 16px 24px;
+    border-radius: 16px;
+    background: #ececeb;
   }
 
   .button-row {
@@ -631,13 +1153,26 @@ object.schedule(() => &#123;
     flex-direction: column;
     gap: var(--size-16);
     align-items: flex-start;
+    justify-content: center;
+    min-height: 180px;
+    box-sizing: border-box;
+    padding: 32px;
+    border-radius: 16px;
+    background: #ececeb;
   }
 
   .color-grid {
+    min-height: 0;
+    flex: 1;
     width: 100%;
+    box-sizing: border-box;
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-    gap: var(--size-24);
+    grid-template-columns: 1fr;
+    grid-template-rows: 46% 27% 15% 12%;
+    gap: 0;
+    overflow: hidden;
+    border: 1px solid #d7d7d7;
+    border-radius: 16px;
   }
 
   @media (max-width: 640px) {
@@ -647,12 +1182,15 @@ object.schedule(() => &#123;
   }
 
   .color-swatch {
-    padding: var(--size-24) var(--size-16);
-    border-radius: var(--ui-radius);
-    text-align: center;
+    min-height: 0;
+    padding: 10px 16px;
+    border-radius: 0;
+    text-align: left;
     display: flex;
-    flex-direction: column;
-    gap: var(--size-8);
+    flex-direction: row;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 12px;
 
     span {
       font-family: var(--font-code);
@@ -661,89 +1199,92 @@ object.schedule(() => &#123;
     }
 
     code {
-      font-size: 1rem;
+      font-size: 0.75rem;
       opacity: 0.8;
     }
 
     &.primary {
-      background-color: var(--color-primary);
-      color: white;
-    }
-    &.secondary-1 {
-      background-color: var(--color-secondary-1);
-      color: white;
-    }
-    &.accent {
-      background-color: var(--color-accent);
+      background-color: #ff5d0f;
       color: white;
     }
     &.background {
-      background-color: var(--color-background);
+      background-color: #f6f6f6;
       color: var(--color-text);
     }
     &.background-tint {
-      background-color: var(--color-background-tint);
+      background-color: #ececeb;
       color: var(--color-text);
     }
-    &.text {
-      background-color: var(--color-text);
+    &.black {
+      background-color: #000;
+      color: white;
+    }
+
+    &.primary code,
+    &.black code {
       color: white;
     }
   }
 
-  .card-slot-grid {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: var(--size-32);
-    align-items: stretch;
+  .showcase-section:not(.showcase-header):not(.foundation-section):not(.elements-section) > h2 {
+    margin: 0;
+    padding: 28px clamp(28px, 4vw, 48px);
   }
 
-  .card-slot-grid .card {
-    padding: var(--size-32);
-  }
+  .specimen-code {
+    min-width: 0;
+    min-height: 180px;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    border: 1px solid
+      color-mix(in srgb, var(--color-background-dark) 22%, transparent);
+    border-radius: var(--ui-radius);
+    background: #050708;
+    box-shadow: none;
 
-  @media (max-width: 800px) {
-    .card-slot-grid {
-      grid-template-columns: 1fr;
-    }
-  }
-
-  .card-slot-grid .slot,
-  .card-slot-grid .display {
-    min-height: 120px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-
-  .card-slot-grid .slot-content {
-    text-align: center;
-    padding: var(--size-16);
-
-    span {
-      font-size: 12px;
-      color: var(--color-background-dark);
-    }
-  }
-
-  .display-content {
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    gap: var(--size-8);
-    min-height: 100%;
-    width: 100%;
-    padding: var(--size-16);
-    text-transform: uppercase;
-
-    p {
-      margin: 0;
-      font-size: 1rem;
+    &::before,
+    &::after {
+      display: none;
     }
 
-    span {
-      opacity: 0.72;
-      font-size: 0.78rem;
+    code {
+      display: block;
+      box-sizing: border-box;
+      padding: var(--size-16) 0;
+      overflow-x: auto;
+      color: #e8e6dc;
+      background: transparent;
+      font-family: var(--font-code);
+      line-height: 1.6;
+      white-space: pre;
+    }
+
+    .line {
+      display: block;
+      min-height: 1.6em;
+      padding-right: var(--size-16);
+    }
+
+    .line::before {
+      content: attr(data-line);
+      display: inline-block;
+      width: 3ch;
+      margin-right: var(--size-16);
+      padding: 0 var(--size-12);
+      border-right: 1px solid rgb(255 255 255 / 14%);
+      color: #777d81;
+      font-variant-numeric: tabular-nums;
+      text-align: right;
+      user-select: none;
+    }
+
+    .code-keyword {
+      color: #ff7a3c;
+    }
+
+    .code-comment {
+      color: #8a9296;
     }
   }
 
@@ -763,6 +1304,7 @@ object.schedule(() => &#123;
     grid-template-columns: minmax(0, 1.45fr) minmax(240px, 0.55fr);
     gap: var(--size-32);
     align-items: start;
+    padding: 0 clamp(28px, 4vw, 48px) clamp(28px, 4vw, 48px);
   }
 
   .ui-example {
@@ -786,6 +1328,102 @@ object.schedule(() => &#123;
   @media (max-width: 900px) {
     .ui-elements-grid {
       grid-template-columns: 1fr;
+    }
+  }
+
+  @media (max-width: 1050px) {
+    .showcase-header,
+    .elements-section {
+      grid-template-columns: 1fr;
+    }
+
+    .showcase-header {
+      min-height: auto;
+    }
+
+    .hero-specimen {
+      min-height: 320px;
+    }
+
+    .foundation-section,
+    .palette-components-section {
+      grid-template-columns: 1fr;
+    }
+
+    .color-aside {
+      border-left: 0;
+    }
+
+    .cards-slots-aside {
+      border-top: 1px solid #d7d7d7;
+      border-left: 0;
+    }
+
+    .color-grid {
+      min-height: 220px;
+      grid-template-columns: repeat(4, 1fr);
+      grid-template-rows: 1fr;
+    }
+
+    .oversized-section-title {
+      min-height: 300px;
+      grid-row: auto;
+    }
+
+    .controls-top > div:first-child,
+    .controls-top > div:last-child,
+    .form-control-group:nth-child(n) {
+      border: 1px solid #d7d7d7;
+      border-top: 0;
+    }
+  }
+
+  @media (max-width: 700px) {
+    .css-showcase {
+      padding: 12px;
+    }
+
+    .showcase-section {
+      margin-bottom: 32px;
+    }
+
+    .showcase-hero-copy,
+    .foundation-main,
+    .oversized-section-title {
+      padding: 32px 24px;
+    }
+
+    .showcase-title,
+    .oversized-section-title {
+      font-size: clamp(64px, 22vw, 96px) !important;
+    }
+
+    .hero-specimen {
+      min-height: 260px;
+      margin: 12px;
+      padding: 20px;
+    }
+
+    .hero-description {
+      display: none;
+    }
+
+    .type-article {
+      grid-template-columns: 1fr;
+    }
+
+    .color-grid {
+      grid-template-columns: 1fr;
+      grid-template-rows: none;
+    }
+
+    .cards-slots-stage {
+      grid-template-columns: 1fr;
+      padding: 28px;
+    }
+
+    .controls-stack {
+      display: contents;
     }
   }
 </style>
