@@ -40,7 +40,7 @@ import {
 function drop(session: DragSession): void {
   const item = session.primaryItem;
   const root = session.root;
-  const draggedItemId = item.resolvedItemId;
+  const draggedItemId = item.itemId;
   const draggedAnimation: {
     first: DOMRect | null;
     last: DOMRect | null;
@@ -94,7 +94,7 @@ function drop(session: DragSession): void {
       dropTarget = resolveDropTarget();
       if (!dropTarget || dropTarget.item === item) return;
       displacedAnimation.item = dropTarget.item;
-      displacedAnimation.itemId = dropTarget.item.resolvedItemId;
+      displacedAnimation.itemId = dropTarget.item.itemId;
       displacedAnimation.first = readVisualRect(dropTarget.item);
     },
     { stage: "READ_1", queueId: `drag-end-swap-read-first-${item.id}` },
@@ -138,7 +138,7 @@ function drop(session: DragSession): void {
         const aContainer = aLocation.container;
         const aIndex = aLocation.index;
         displacedAnimation.config = animationConfigFor(aContainer, "reorder");
-        if (displacedAnimation.itemId !== targetItem.resolvedItemId) {
+        if (displacedAnimation.itemId !== targetItem.itemId) {
           displacedAnimation.item = null;
           displacedAnimation.itemId = null;
           displacedAnimation.first = null;
@@ -210,7 +210,7 @@ function drop(session: DragSession): void {
 
   root.schedule(
     () => {
-      const currentDraggedItem = root.findItemByKey(draggedItemId) ?? item;
+      const currentDraggedItem = root.findItemById(draggedItemId) ?? item;
       draggedAnimation.element = currentDraggedItem.element?.isConnected
         ? currentDraggedItem.element
         : null;
@@ -218,7 +218,7 @@ function drop(session: DragSession): void {
 
       if (!displacedAnimation.item || !displacedAnimation.itemId) return;
       const currentDisplacedItem =
-        root.findItemByKey(displacedAnimation.itemId) ??
+        root.findItemById(displacedAnimation.itemId) ??
         displacedAnimation.item;
       displacedAnimation.element = currentDisplacedItem.element?.isConnected
         ? currentDisplacedItem.element

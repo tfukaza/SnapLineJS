@@ -2,6 +2,7 @@ import type { Container } from "../container";
 import { buildDragLocation } from "../event-builders";
 import type { DragLocation } from "../events";
 import { Item } from "../item";
+import { assertPlacementItemIdsUnique } from "./tree-state";
 
 function removeFromOrder(container: Item, item: Item): void {
   const index = container.itemOrderedList.indexOf(item);
@@ -21,6 +22,7 @@ export function assertCanPlaceItems(
   for (const { container, item } of placements) {
     container.assertCanPlaceItem(item);
   }
+  assertPlacementItemIdsUnique(placements);
 }
 
 /** @internal Resolve an Item's current live sortable location. */
@@ -46,7 +48,7 @@ export function placeItemAt(
   item: Item,
   index: number,
 ): void {
-  container.assertCanPlaceItem(item);
+  assertCanPlaceItems([{ container, item }]);
   placeItemAtUnchecked(container, item, index);
 }
 

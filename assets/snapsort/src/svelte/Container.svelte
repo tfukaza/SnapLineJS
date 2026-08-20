@@ -1,46 +1,38 @@
-<script lang="ts" generics="T">
-  import {
-    Container as SnapSortContainer,
-  } from "@snap-engine/snapsort";
+<script lang="ts">
+  import { Container as SnapSortContainer } from "@snap-engine/snapsort";
   import type {
-    ContainerCallbacks,
     ContainerConfig,
-    GhostCreateEvent,
-    GhostInsertEvent,
-    GhostRemoveEvent,
+    ItemMetadata,
+    SnapSortAdapter,
   } from "@snap-engine/snapsort";
 
-  import { flushSync, getContext, setContext, onMount, onDestroy, untrack } from "svelte";
+  import {
+    flushSync,
+    getContext,
+    setContext,
+    onMount,
+    onDestroy,
+    untrack,
+  } from "svelte";
   import type { Snippet } from "svelte";
   import type { HTMLAttributes } from "svelte/elements";
   import type { Engine } from "@snap-engine/core";
-  import Ghost from "./Ghost.svelte";
 
-  type ContainerProps<T> = Omit<HTMLAttributes<HTMLDivElement>, "children"> & {
+  type ContainerProps = Omit<HTMLAttributes<HTMLDivElement>, "children"> & {
+    children?: Snippet;
     config?: ContainerConfig;
-    before?: Snippet<[]>;
-    after?: Snippet<[]>;
-    itemId?: string;
-    items?: T[];
-    getItemId?: (entry: T) => string;
-    entry?: Snippet<[T]>;
-    ghost?: Snippet<[GhostInsertEvent]>;
-    container?: SnapSortContainer;
+    itemId: string;
+    container?: SnapSortContainer | null;
     locked?: boolean;
     selected?: boolean;
     className?: string;
-    metadata?: Record<string, unknown>;
+    metadata?: ItemMetadata;
   };
 
   let {
+    children,
     config = {},
-    before,
-    after,
     itemId,
-    items,
-    getItemId = (entry: T) => (entry as { id: string }).id,
-    entry: entrySnippet,
-    ghost: ghostSnippet,
     container = $bindable(),
     locked = true,
     selected = false,
@@ -49,106 +41,60 @@
     metadata = {},
     style = "",
     ...divProps
-  }: ContainerProps<T> = $props();
+  }: ContainerProps = $props();
   const engine: Engine = getContext("engine");
   const parentContainer: SnapSortContainer | null = getContext("container");
-  const initial = untrack(() => ({ config, entrySnippet, itemId, locked, metadata, selected }));
-
-  if (!initial.entrySnippet) {
-    throw new Error("SnapSort Container: missing required `entry` snippet.");
-  }
-  const renderEntry: Snippet<[T]> = initial.entrySnippet;
+  const initial = untrack(() => ({
+    config,
+    itemId,
+    locked,
+    metadata,
+    selected,
+  }));
 
   function validateFrameworkConfig(value: ContainerConfig): void {
-    if (value.callbacks?.createGhost) {
-      throw new Error(
-        "SnapSort Container: callbacks.createGhost cannot be used with the Svelte adapter because Svelte owns ghost DOM. Use the `ghost` snippet to customize ghost content.",
-      );
-    }
-    if (value.mode === "swap" && !value.callbacks?.onItemSwap) {
+    if (
+      !parentContainer &&
+      value.mode === "swap" &&
+      !value.callbacks?.onItemSwap
+    ) {
       throw new Error(
         "SnapSort Container: swap mode in the Svelte adapter requires callbacks.onItemSwap so Svelte state can commit the pairwise exchange atomically.",
       );
     }
   }
-  validateFrameworkConfig(initial.config);
 
-  interface GhostEntryState {
-    event: GhostInsertEvent;
-  }
-  let ghostEntries = $state<GhostEntryState[]>([]);
-
-  function handleFrameworkCreateGhost(_event: GhostCreateEvent): void {
-    // Returning void marks this ghost as framework-managed in core. Its DOM
-    // node is created by the keyed entry below for every ghost kind/role.
-  }
-
-  function handleFrameworkGhostInsert(event: GhostInsertEvent): void {
-    ghostEntries = [
-      ...ghostEntries.filter((g) => g.event.ghostItem !== event.ghostItem),
-      { event },
-    ];
-    config.callbacks?.onGhostInsert?.(event);
-  }
-
-  function handleFrameworkGhostRemove(event: GhostRemoveEvent): void {
-    ghostEntries = ghostEntries.filter((g) => g.event.ghostItem !== event.ghostItem);
-    config.callbacks?.onGhostRemove?.(event);
-  }
-
-  function frameworkCallbacks(
-    consumerCallbacks: ContainerCallbacks | undefined,
-  ): ContainerCallbacks {
-    return {
-      ...consumerCallbacks,
-      createGhost: handleFrameworkCreateGhost,
-      onGhostInsert: handleFrameworkGhostInsert,
-      onGhostRemove: handleFrameworkGhostRemove,
-      // Commit the state mutation before core advances to its final geometry
-      // read and inverse-transform write in this rendering opportunity.
-      flushMutation: (mutation) => flushSync(mutation),
-    };
-  }
-
-  type RenderedEntry =
-    | { kind: "item"; id: string; entry: T }
-    | { kind: "ghost"; id: string; ghost: GhostEntryState };
-
-  const renderedEntries = $derived.by((): RenderedEntry[] => {
-    const base: RenderedEntry[] = (items ?? []).map((entry) => ({
-      kind: "item" as const,
-      id: getItemId(entry),
-      entry,
-    }));
-    if (ghostEntries.length === 0) return base;
-
-    const session = ghostEntries[0].event.session;
-    const draggedIds = new Set(
-      session.items.map((i) => i.resolvedItemId),
-    );
-    const sorted = ghostEntries.slice().sort((a, b) => a.event.index - b.event.index);
-    const result = base.slice();
-    for (const g of sorted) {
-      let count = 0;
-      let p = 0;
-      while (p < result.length && count < g.event.index) {
-        if (!draggedIds.has(result[p].id)) count++;
-        p++;
-      }
-      while (p < result.length && result[p].kind === "item" && draggedIds.has(result[p].id)) {
-        p++;
-      }
-      result.splice(p, 0, { kind: "ghost", id: `ghost:${g.event.ghostItem.id}`, ghost: g });
+  function validateMetadata(value: ItemMetadata): void {
+    if ("itemId" in value) {
+      throw new Error(
+        "SnapSort Container: `metadata.itemId` was removed. Pass `itemId` as its own prop instead.",
+      );
     }
-    return result;
-  });
+  }
 
-  let itemContainer: SnapSortContainer = new SnapSortContainer(engine, parentContainer, {
-    ...initial.config,
-    domOwnership: "framework",
-    callbacks: frameworkCallbacks(initial.config.callbacks),
-  });
-  itemContainer.itemId = initial.itemId;
+  validateFrameworkConfig(initial.config);
+  validateMetadata(initial.metadata);
+  if (!initial.itemId) {
+    throw new Error("SnapSort Container: missing required `itemId` prop.");
+  }
+
+  const parentAdapter: SnapSortAdapter | undefined =
+    getContext("snapsort-adapter");
+  const adapter: SnapSortAdapter = parentAdapter ?? {
+    callbacks: {},
+    commit: (mutation) => flushSync(mutation),
+  };
+
+  let itemContainer: SnapSortContainer = new SnapSortContainer(
+    engine,
+    parentContainer,
+    {
+      ...initial.config,
+      itemId: initial.itemId,
+      adapter,
+      callbacks: initial.config.callbacks,
+    },
+  );
   itemContainer.locked = initial.locked;
   itemContainer.selected = initial.selected;
   itemContainer.metadata = initial.metadata;
@@ -158,7 +104,9 @@
   itemContainer.stretchItems = initial.config.stretchItems ?? false;
   itemContainer.dropPriority = initial.config.dropPriority ?? 0;
   const direction = $derived(config.direction ?? "column");
-  const justifyContent = $derived(config.mainAxisAlign === "center" ? "center" : "flex-start");
+  const justifyContent = $derived(
+    config.mainAxisAlign === "center" ? "center" : "flex-start",
+  );
   const mergedClass = $derived(
     `snapsort-container snapsort-mode-${itemContainer.mode} ${classValue} ${className}`.trim(),
   );
@@ -167,21 +115,27 @@
   );
   setContext("container", itemContainer);
   setContext("item", itemContainer);
+  setContext("snapsort-adapter", adapter);
 
   $effect(() => {
     validateFrameworkConfig(config);
-    itemContainer.itemId = itemId;
+    validateMetadata(metadata);
+    if (itemId !== initial.itemId) {
+      throw new Error(
+        "SnapSort Container: the `itemId` prop cannot change after mount. Remount the Container with a new key.",
+      );
+    }
     itemContainer.locked = locked;
     itemContainer.selected = selected;
     itemContainer.metadata = metadata;
+    itemContainer.mode = config.mode ?? itemContainer.mode;
     itemContainer.direction = direction;
     itemContainer.mainAxisAlign = config.mainAxisAlign ?? "start";
     itemContainer.wrap = config.wrap ?? "auto";
     itemContainer.stretchItems = config.stretchItems ?? false;
     itemContainer.dropPriority = config.dropPriority ?? 0;
     itemContainer.config.animation = config.animation;
-    itemContainer.config.domOwnership = "framework";
-    itemContainer.config.callbacks = frameworkCallbacks(config.callbacks);
+    itemContainer.callbacks = config.callbacks ?? {};
   });
 
   onMount(() => {
@@ -192,13 +146,12 @@
   });
 
   onDestroy(() => {
+    if (container === itemContainer) {
+      container = null;
+    }
     itemContainer.destroy(false);
   });
 </script>
-
-{#snippet defaultGhost(event: GhostInsertEvent)}
-  <Ghost {event} className="ghost" />
-{/snippet}
 
 <div
   {...divProps}
@@ -206,15 +159,7 @@
   style={mergedStyle}
   bind:this={itemContainer.element}
 >
-  {@render before?.()}
-  {#each renderedEntries as re (re.id)}
-    {#if re.kind === "ghost"}
-      {@render (ghostSnippet ?? defaultGhost)(re.ghost.event)}
-    {:else}
-      {@render renderEntry(re.entry)}
-    {/if}
-  {/each}
-  {@render after?.()}
+  {@render children?.()}
 </div>
 
 <style>

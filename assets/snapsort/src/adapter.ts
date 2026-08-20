@@ -10,6 +10,12 @@ import type {
   ItemSwapEvent,
 } from "./events";
 import type { Container } from "./container";
+import {
+  insertionMarkerRect,
+  stockInsertionMarkerRectOptions,
+  toContainerLocalRect,
+  type InsertionMarkerRectOptions,
+} from "./insertion-geometry";
 
 /** @internal Structural callbacks supported by a renderer adapter. */
 export const STRUCTURAL_CALLBACKS = [
@@ -40,6 +46,7 @@ export interface SnapSortAdapter {
 
 export interface CreateVanillaAdapterOptions {
   readonly createGhostElement?: (event: GhostCreateEvent) => HTMLElement;
+  readonly insertionMarker?: InsertionMarkerRectOptions;
 }
 
 function insertionTarget(
@@ -75,9 +82,8 @@ function defaultGhostElement(ghost: GhostState): HTMLElement {
     element.style.zIndex = "1000";
     if (ghost.type === "insertion-marker") {
       element.dataset.snapsortGhost = "insertion";
-      element.style.height = "0px";
+      element.style.border = "0";
       element.style.borderRadius = "999px";
-      element.style.borderTop = "3px solid currentColor";
       element.style.background = "currentColor";
       element.style.color = "rgb(37, 99, 235)";
     } else {
@@ -89,8 +95,22 @@ function defaultGhostElement(ghost: GhostState): HTMLElement {
   return element;
 }
 
-function applyGhostState(ghost: GhostState, element: HTMLElement): void {
-  const { rect } = ghost;
+function applyGhostState(
+  ghost: GhostState,
+  element: HTMLElement,
+  insertionMarker: InsertionMarkerRectOptions,
+): void {
+  if (ghost.type === "insertion-marker") {
+    const rect = insertionMarkerRect(ghost, insertionMarker);
+    element.style.left = `${rect.x}px`;
+    element.style.top = `${rect.y}px`;
+    element.style.width = `${rect.width}px`;
+    element.style.height = `${rect.height}px`;
+    element.style.zIndex = "999";
+    return;
+  }
+
+  const rect = ghost.rect;
   element.style.width = `${rect.width}px`;
   element.style.height = `${rect.height}px`;
 
@@ -101,19 +121,14 @@ function applyGhostState(ghost: GhostState, element: HTMLElement): void {
     return;
   }
 
-  const container = ghost.location.container;
-  const containerBox =
-    container.dragSnapshot?.box ?? container.currentDomProperty;
-  element.style.left = `${rect.x - containerBox.x}px`;
-  element.style.top = `${rect.y - containerBox.y}px`;
-  if (ghost.type === "insertion-marker") {
-    element.style.height = "0px";
-    element.style.zIndex = "999";
-  }
+  const localRect = toContainerLocalRect(ghost.rect, ghost.location.container);
+  element.style.left = `${localRect.x}px`;
+  element.style.top = `${localRect.y}px`;
 }
 
 function createVanillaCallbacks(
   createGhostElement: (event: GhostCreateEvent) => HTMLElement,
+  insertionMarker: InsertionMarkerRectOptions,
 ): SnapSortAdapterCallbacks {
   const ensureGhostElement = (ghost: GhostState): HTMLElement => {
     const existing = ghost.ghostItem.element;
@@ -136,7 +151,7 @@ function createVanillaCallbacks(
       "ghost insertion",
     );
     const element = ensureGhostElement(ghost);
-    applyGhostState(ghost, element);
+    applyGhostState(ghost, element, insertionMarker);
     containerElement.insertBefore(element, beforeElement);
   };
 
@@ -151,7 +166,7 @@ function createVanillaCallbacks(
         const element = item.element;
         if (!element) {
           throw new Error(
-            `SnapSort: Vanilla item insertion requires a bound element for item "${item.resolvedItemId}".`,
+            `SnapSort: Vanilla item insertion requires a bound element for item "${item.itemId}".`,
           );
         }
         return element;
@@ -216,8 +231,10 @@ export function createVanillaAdapter(
   const createGhostElement =
     options.createGhostElement ??
     ((event: GhostCreateEvent) => defaultGhostElement(event.ghost));
+  const insertionMarker =
+    options.insertionMarker ?? stockInsertionMarkerRectOptions;
   return {
-    callbacks: createVanillaCallbacks(createGhostElement),
+    callbacks: createVanillaCallbacks(createGhostElement, insertionMarker),
     commit: (mutation) => mutation(),
   };
 }

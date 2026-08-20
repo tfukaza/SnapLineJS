@@ -1,5 +1,5 @@
 import type { BaseObject, Engine } from "@snap-engine/core";
-import { Item } from "./item";
+import { Item, type ItemOptions } from "./item";
 import type {
   ContainerCallbacks,
   VisualGeometryInvalidationReason,
@@ -51,7 +51,7 @@ export interface ContainerConfig {
 }
 
 /** Construction-only options, including the root-scoped renderer adapter. */
-export interface ContainerOptions extends ContainerConfig {
+export interface ContainerOptions extends ContainerConfig, ItemOptions {
   readonly adapter?: SnapSortAdapter;
 }
 
@@ -113,7 +113,7 @@ export class Container extends Item {
   constructor(
     engine: Engine,
     parent: Container | null,
-    options?: ContainerOptions,
+    options: ContainerOptions,
   ) {
     const inheritedAdapter = parent?.adapter;
     if (
@@ -133,7 +133,7 @@ export class Container extends Item {
       );
     }
 
-    super(engine, parent);
+    super(engine, parent, { itemId: options?.itemId });
     this.locked = true;
     this.#adapter =
       inheritedAdapter ?? options?.adapter ?? createVanillaAdapter();

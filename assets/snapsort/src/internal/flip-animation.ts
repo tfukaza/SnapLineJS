@@ -1,8 +1,8 @@
 import { AnimationObject } from "@snap-engine/core/animation";
 import type { AnimationConfig, Container } from "../container";
 import { Item } from "../item";
-import { renderKey, type RenderKey } from "../render-key";
 import { settleMutation } from "../mutation";
+import type { ItemId } from "../snapshot";
 import { getDragSessionController } from "../drag/session-store";
 import { reconcileRootTreeState } from "./tree-state";
 import {
@@ -30,7 +30,7 @@ export interface ElementRectAnimationOptions {
 
 interface FlipAnimationState {
   item: Item;
-  key: RenderKey;
+  itemId: ItemId;
   first: VisualRectSnapshot | null;
   firstParent: VisualRectSnapshot | null;
   firstParentItem: Item | null;
@@ -81,23 +81,17 @@ function visitFlipItems(node: Item, visitor: (item: Item) => void): void {
   }
 }
 
-function renderKeyForItem(item: Item): RenderKey {
-  return renderKey(item.isGhost ? "ghost" : "item", item.resolvedItemId);
-}
-
 function duplicateFlipItemError(item: Item): Error {
-  const kind = item.isGhost ? "ghost" : "item";
   return new Error(
-    `SnapSort: duplicate ${kind} ID "${item.resolvedItemId}" cannot participate in FLIP animation.`,
+    `SnapSort: duplicate itemId "${item.itemId}" cannot participate in FLIP animation.`,
   );
 }
 
-function indexFlipItems(root: Container): Map<RenderKey, Item> {
-  const items = new Map<RenderKey, Item>();
+function indexFlipItems(root: Container): Map<ItemId, Item> {
+  const items = new Map<ItemId, Item>();
   visitFlipItems(root, (item) => {
-    const key = renderKeyForItem(item);
-    if (items.has(key)) throw duplicateFlipItemError(item);
-    items.set(key, item);
+    if (items.has(item.itemId)) throw duplicateFlipItemError(item);
+    items.set(item.itemId, item);
   });
   return items;
 }
@@ -106,18 +100,17 @@ function captureFlipSnapshot(
   root: Container,
   exclude: Set<Item> | null,
 ): FlipAnimationState[] {
-  const keys = new Set<RenderKey>();
+  const itemIds = new Set<ItemId>();
   const cache: VisualRectReadCache = new Map();
   const snapshot: FlipAnimationState[] = [];
   visitFlipItems(root, (item) => {
-    const key = renderKeyForItem(item);
-    if (keys.has(key)) throw duplicateFlipItemError(item);
-    keys.add(key);
+    if (itemIds.has(item.itemId)) throw duplicateFlipItemError(item);
+    itemIds.add(item.itemId);
     if (exclude?.has(item)) return;
     const parent = parentItem(item);
     snapshot.push({
       item,
-      key,
+      itemId: item.itemId,
       first: readVisualRect(item, cache),
       firstParent: parent ? readVisualRect(parent, cache) : null,
       firstParentItem: parent,
@@ -138,7 +131,7 @@ function captureFlipLast(
   const currentItems = indexFlipItems(root);
   const cache: VisualRectReadCache = new Map();
   for (const entry of snapshot) {
-    const currentItem = currentItems.get(entry.key) ?? null;
+    const currentItem = currentItems.get(entry.itemId) ?? null;
     if (currentItem) {
       entry.item = currentItem;
       entry.targetElement = currentItem.element;

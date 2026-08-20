@@ -96,8 +96,8 @@ export async function startItemVisual(session: DragSession): Promise<void> {
         {
           type: "source-spacer",
           location: buildGhostSlotLocation(container, liveIndex),
+          rect,
         },
-        rect,
       );
       session.sourceGhostRun.push(ghost);
       if (session.sourceGhostRun.length === 1) {

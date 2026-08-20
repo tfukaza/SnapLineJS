@@ -259,7 +259,7 @@ export function fireItemSwap(
     session: session?.handle ?? null,
     a: {
       item: a.item,
-      itemId: a.item.resolvedItemId,
+      itemId: a.item.itemId,
       itemMetadata: a.item.metadata,
       container: a.container,
       containerMetadata: a.container.metadata,
@@ -267,7 +267,7 @@ export function fireItemSwap(
     },
     b: {
       item: b.item,
-      itemId: b.item.resolvedItemId,
+      itemId: b.item.itemId,
       itemMetadata: b.item.metadata,
       container: b.container,
       containerMetadata: b.container.metadata,
@@ -286,10 +286,10 @@ function buildDragItemHoverEvent(
   return {
     session: session.handle,
     item,
-    itemId: item.resolvedItemId,
+    itemId: item.itemId,
     itemMetadata: item.metadata,
     overItem,
-    overItemId: overItem.resolvedItemId,
+    overItemId: overItem.itemId,
     overItemMetadata: overItem.metadata,
     container,
     containerMetadata: container.metadata,

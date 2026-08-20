@@ -21,24 +21,26 @@ Extract item markup into a component when every entry shares the same content
 and controls. The stable application ID is passed directly to `Item`.
 
 ```tsx
-import { Handle, Item } from "@snap-engine/snapsort/react";
+import { Container, Ghost, Handle, Item } from "@snap-engine/snapsort/react";
 
 type Task = { id: string; label: string };
 
 function TaskItem({
+  itemId,
   task,
   onMove,
 }: {
+  itemId: string;
   task: Task;
   onMove?: (id: string) => void;
 }) {
   return (
-    <Item itemId={task.id}>
+    <Item itemId={itemId}>
       <article>
         <Handle className="drag-handle">Drag</Handle>
         <span>{task.label}</span>
         {onMove && (
-          <button type="button" onClick={() => onMove(task.id)}>
+          <button type="button" onClick={() => onMove(itemId)}>
             Move
           </button>
         )}
@@ -48,13 +50,37 @@ function TaskItem({
 }
 ```
 
-Use the component when mapping a container's rendered entries:
+Use the component only for the ordinary leaf branch of the mixed RenderTree
+loop. `TaskContainer` below is the recursive Container renderer defined on the
+[Container reference](/docs/snapsort/reference/react/container):
 
 ```tsx
-{tasks.map((task) => (
-  <TaskItem key={task.id} task={task} onMove={moveToOtherColumn} />
-))}
+<Container itemId="tasks-root" config={{ callbacks }}>
+  {tree.entries.map((entry) =>
+    entry.isGhost ? (
+      <Ghost key={entry.itemId} ghost={entry.ghost} />
+    ) : entry.childTree ? (
+      <TaskContainer key={entry.itemId} entry={entry} />
+    ) : (
+      <TaskItem
+        key={entry.itemId}
+        itemId={entry.itemId}
+        task={entry.value}
+        onMove={moveToOtherColumn}
+      />
+    ),
+  )}
+</Container>
 ```
+
+The `Ghost` and nested `Container` branches must stay in the same keyed loop;
+mapping a separate task array would leave application-owned RenderTree ghost
+state with no place to render.
+
+Adding or deleting an ordinary application value is a React-state operation.
+When its keyed `Item` mounts or unmounts, the wrapper synchronizes the core
+registration; reconciliation does not emit `onItemInsert` or `onItemRemove`.
+Those callbacks report core-originated commands instead.
 
 ## Props
 
@@ -63,22 +89,22 @@ type ItemProps = {
   children: ReactNode;
   className?: string;
   item?: SnapSortItem | null;
-  itemId?: string;
+  itemId: string;
   metadata?: ItemMetadata;
   selected?: boolean;
   style?: CSSProperties;
 };
 ```
 
-| Prop        | Default     | Description                                                                                                     |
-| ----------- | ----------- | --------------------------------------------------------------------------------------------------------------- |
-| `children`  | Required    | Rendered item content.                                                                                          |
-| `className` | `""`        | Extra class string applied to the rendered element.                                                             |
-| `item`      | `null`      | Advanced: an existing core Item to borrow instead of creating one.                                              |
-| `itemId`    | `undefined` | Stable ID used by moves, removes, ghosts, and state callbacks. Required unless an adopted Item already has one. |
-| `metadata`  | `{}` / preserved | Metadata assigned to a generated Item, or preserved when omitted for an adopted Item.                       |
-| `selected`  | `false` / preserved | Consumer-owned selection flag. Omission preserves an adopted Item's value.                                |
-| `style`     | `undefined` | Inline styles merged onto the rendered item element.                                                            |
+| Prop        | Default             | Description                                                                           |
+| ----------- | ------------------- | ------------------------------------------------------------------------------------- |
+| `children`  | Required            | Rendered item content.                                                                |
+| `className` | `""`                | Extra class string applied to the rendered element.                                   |
+| `item`      | `null`              | Advanced: an existing core Item to borrow instead of creating one.                    |
+| `itemId`    | Required            | Non-empty construction identity used by moves, removes, ghosts, and state callbacks.  |
+| `metadata`  | `{}` / preserved    | Metadata assigned to a generated Item, or preserved when omitted for an adopted Item. |
+| `selected`  | `false` / preserved | Consumer-owned selection flag. Omission preserves an adopted Item's value.            |
+| `style`     | `undefined`         | Inline styles merged onto the rendered item element.                                  |
 
 `Item` forwards a ref to its core item object, renders a `div` with `snapsort-item`, and provides its core object to descendants.
 
@@ -95,23 +121,25 @@ const itemRef = useRef<SnapSortItem | null>(null);
 
 <Item ref={itemRef} itemId={task.id}>
   {task.title}
-</Item>
+</Item>;
 ```
 
 ### `item` (advanced)
 
 Pass `item` only when the component must bind an exact, existing core instance.
 An application-created instance must use the same Engine, already belong to the
-surrounding core Container, and carry an `itemId` unless the component supplies
-one. The adapter does not reparent or destroy it. Omitted `itemId`, `metadata`,
-and `selected` props preserve its current state, while explicitly supplied props
-override it. Do not replace the instance after mount.
+surrounding core Container, and receive its immutable `itemId` at construction.
+The component's required `itemId` prop must match it. The adapter does not
+reparent or destroy it. Omitted `metadata` and `selected` props preserve their
+current values, while explicitly supplied props override them. Do not replace
+the instance or change its identity after mount.
 
 ```tsx
-const existingItem = new SnapSortItem(engine, container);
-existingItem.itemId = task.id;
+const existingItem = new SnapSortItem(engine, container, { itemId: task.id });
 
-<Item item={existingItem}>{task.title}</Item>
+<Item item={existingItem} itemId={task.id}>
+  {task.title}
+</Item>;
 ```
 
 An adopted Item can also participate in an advanced
@@ -130,10 +158,11 @@ SnapSort carries into snapshots and callback events without mutating it. The
 application may replace the metadata object; React synchronizes the replacement
 to the core Item, while an active drag keeps its shallow frozen snapshot.
 
-Geometry is deliberately not metadata. Configure insertion markers with the
-destination container's `getInsertionMarkerRect` callback and item hover/swap
-hitboxes with the candidate owner's `getItemHitbox` callback. Pass stable
-identity through `itemId`; `metadata.itemId` is rejected.
+Geometry is deliberately not metadata. An insertion-marker `GhostState`
+contains SnapSort's canonical gap and adjacent frozen Item geometry; render it
+through `Ghost` or convert it with `insertionMarkerRect`. Customize item
+hover/swap hitboxes with the candidate owner's `getItemHitbox` callback. Pass
+stable identity through `itemId`; `metadata.itemId` is rejected.
 
 ## Selection
 

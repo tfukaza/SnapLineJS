@@ -12,196 +12,297 @@ frameworkKey: container
 
 `Container` wraps a core SnapSort container and provides it to descendant `Item` and nested `Container` components through React context.
 
-React owns the rendered collection. Supply synchronous state and ghost
-callbacks for every structural operation the container accepts; the adapter
-does not fall back to SnapSort's Vanilla DOM callbacks.
+React owns the rendered collection. Supply synchronous callbacks on the tree
+root for every SnapSort-originated structural operation the tree accepts; the
+framework adapter has no Vanilla DOM fallback. Application-originated add and
+delete operations update React state directly.
 
-## Define Container State
+## Define Render State
 
-Keep persistent items and temporary ghosts in separate state collections.
+`RenderTree` is an optional application-state shape for flat and nested
+collections. Every tree owns one keyed sequence of ordinary entries and ghosts.
+A non-null `childTree` says that an ordinary entry is a nested sortable
+Container rather than a leaf Item.
+
+Item IDs must be unique across one RenderTree root, including the root
+Container, nested Containers, ordinary Items, and live ghosts. Independent
+roots may reuse IDs. The reducer recognizes the callback's root structurally
+and routes nested Containers through their immutable `itemId`; no framework
+ref is part of RenderTree state. Keep the root component mounted for the
+lifetime of that state. If it is destroyed, discard the tree and create a new
+one for the replacement root.
 
 ```tsx
 import { useCallback, useState } from "react";
-import type {
-  GhostInsertEvent,
-  GhostRemoveEvent,
-  ItemMoveEvent,
+import {
+  createRenderEntry,
+  createRenderTree,
+  reduceRenderTree,
+  type ContainerCallbacks,
+  type GhostLifecycleEvent,
+  type ItemMoveEvent,
+  type RenderTree,
 } from "@snap-engine/snapsort";
 
-type Task = { id: string; label: string };
-type Column = { id: string; title: string; items: Task[] };
+type BoardValue =
+  | { kind: "column"; title: string }
+  | { kind: "task"; label: string };
 
-const initialColumns: Column[] = [
-  {
-    id: "todo",
-    title: "To do",
-    items: [
-      { id: "task-1", label: "Sketch layout" },
-      { id: "task-2", label: "Wire behavior" },
-    ],
-  },
-  { id: "done", title: "Done", items: [] },
-];
+function createInitialBoard(): RenderTree<BoardValue> {
+  const tasks = (values: { id: string; label: string }[]) =>
+    createRenderTree(
+      values.map(({ id, label }) =>
+        createRenderEntry<BoardValue>({ kind: "task", label }, id),
+      ),
+    );
+
+  return createRenderTree([
+    createRenderEntry(
+      { kind: "column", title: "To do" },
+      "todo",
+      tasks([
+        { id: "task-1", label: "Sketch layout" },
+        { id: "task-2", label: "Wire behavior" },
+      ]),
+    ),
+    createRenderEntry({ kind: "column", title: "Done" }, "done", tasks([])),
+  ]);
+}
 ```
+
+The empty `Done` child tree is intentional. Its Container still mounts and can
+receive the first task or ghost.
 
 ## Define Callback Functions
 
-Pure helpers keep the framework callbacks small and make their state changes
-easy to test independently.
-
-```tsx
-function moveTask(current: Column[], event: ItemMoveEvent): Column[] {
-  const itemId = String(event.itemId);
-  const targetId = String(event.to.containerMetadata.columnId);
-  const task = current
-    .flatMap((column) => column.items)
-    .find((entry) => entry.id === itemId);
-  if (!task) return current;
-
-  return current.map((column) => {
-    const items = column.items.filter((entry) => entry.id !== itemId);
-    if (column.id === targetId) {
-      items.splice(Math.min(event.to.index, items.length), 0, task);
-    }
-    return { ...column, items };
-  });
-}
-
-function upsertGhost(
-  current: GhostInsertEvent[],
-  event: GhostInsertEvent,
-): GhostInsertEvent[] {
-  return [
-    ...current.filter((entry) => entry.ghostItem !== event.ghostItem),
-    event,
-  ];
-}
-
-function removeGhost(
-  current: GhostInsertEvent[],
-  event: GhostRemoveEvent,
-): GhostInsertEvent[] {
-  return current.filter((entry) => entry.ghostItem !== event.ghostItem);
-}
-```
-
-Use those helpers inside the component callbacks. These state updates remain
-synchronous because the adapter invokes them through `flushMutation`.
+The root owns the structural callbacks. Item and ghost APIs remain explicit;
+the callbacks may delegate to the same optional reducer.
 
 ```tsx
 function useTaskBoardState() {
-  const [columns, setColumns] = useState(initialColumns);
-  const [ghosts, setGhosts] = useState<GhostInsertEvent[]>([]);
+  const [board, setBoard] = useState(createInitialBoard);
 
   const onItemMove = useCallback((event: ItemMoveEvent) => {
-    setColumns((current) => moveTask(current, event));
+    setBoard((current) => reduceRenderTree(current, event));
   }, []);
 
-  const onGhostInsert = useCallback((event: GhostInsertEvent) => {
-    setGhosts((current) => upsertGhost(current, event));
+  const onGhostMove = useCallback((event: GhostLifecycleEvent) => {
+    setBoard((current) => reduceRenderTree(current, event));
   }, []);
 
-  const onGhostRemove = useCallback((event: GhostRemoveEvent) => {
-    setGhosts((current) => removeGhost(current, event));
-  }, []);
+  const callbacks = {
+    onItemMove,
+    onGhostInsert: onGhostMove,
+    onGhostMove,
+    onGhostRemove: onGhostMove,
+  } satisfies ContainerCallbacks;
 
-  return {
-    columns,
-    ghosts,
-    callbacks: { onItemMove, onGhostInsert, onGhostRemove },
-  };
+  return { board, callbacks };
 }
 ```
 
-## Merge Ghosts into Rendered Entries
+`GhostLifecycleEvent` is a convenience union for the shared local function;
+SnapSort still exposes and dispatches `onGhostInsert`, `onGhostMove`, and
+`onGhostRemove` separately. SnapSort owns the ghosts' presence, so React must
+be told when a ghost appears, when the same keyed ghost relocates or changes
+its insertion-gap presentation, and when it disappears. A presentation-only
+insertion update carries equal `from` and `to` locations.
 
-`onGhostInsert` supplies a core index that excludes dragged items. Convert it
-into the keyed entry list React will render.
+One `onItemMove` event, meanwhile, describes the whole semantic transition:
+its source, destination, and complete selected run. It does not also emit item
+remove and insert events. Application-created and application-deleted ordinary
+values do not require callbacks; update React state and let reconciliation
+mount or unmount the corresponding component.
 
-```tsx
-type RenderEntry =
-  | { kind: "task"; task: Task }
-  | { kind: "ghost"; event: GhostInsertEvent };
+## Render Items and Nested Containers
 
-function renderColumnEntries(
-  column: Column,
-  ghosts: GhostInsertEvent[],
-): RenderEntry[] {
-  const entries: RenderEntry[] = column.items.map((task) => ({
-    kind: "task",
-    task,
-  }));
-  const relevantGhosts = ghosts
-    .filter((event) => event.containerMetadata.columnId === column.id)
-    .sort((a, b) => a.index - b.index);
-  const draggedIds = new Set(
-    relevantGhosts[0]?.itemIds.map(String) ?? [],
-  );
+Rendering has three branches:
 
-  for (const event of relevantGhosts) {
-    let persistentIndex = 0;
-    let renderedIndex = 0;
-    while (renderedIndex < entries.length && persistentIndex < event.index) {
-      const entry = entries[renderedIndex];
-      if (entry.kind === "task" && !draggedIds.has(entry.task.id)) {
-        persistentIndex += 1;
-      }
-      renderedIndex += 1;
-    }
-    while (renderedIndex < entries.length) {
-      const entry = entries[renderedIndex];
-      if (entry.kind !== "task" || !draggedIds.has(entry.task.id)) break;
-      renderedIndex += 1;
-    }
-    entries.splice(renderedIndex, 0, { kind: "ghost", event });
-  }
+1. Ghost entries render `Ghost`.
+2. Ordinary entries with `childTree` render a nested `Container`.
+3. Other ordinary entries render `Item`.
 
-  return entries;
-}
-```
+Use `entry.itemId` directly as each React key. SnapSort keeps ordinary Items,
+nested Containers, and live ghosts unique inside one root, so no second key
+domain or prefix is needed.
 
-This helper handles list-positioned target/source ghosts. A pointer preview is
-owned by the root and has `role: "pointer"` with `index: -1`; render it once
-under that root as a separate absolutely positioned `Ghost`, not inside a
-column's index conversion.
+A SnapSort Container is already an Item. Do not wrap the nested Container in
+another Item.
 
-## Define a Container
-
-Render the keyed item and ghost entries owned by React.
+Ordinary UI nested inside an `Item` does not need a `childTree`. Keep it null
+and render the item's labels, buttons, handles, or other React children inside
+`Item`. Set `childTree` only when the entry itself renders a SnapSort
+`Container` with its own sortable sequence.
 
 ```tsx
 import { Container, Ghost, Item } from "@snap-engine/snapsort/react";
-import type { ContainerCallbacks, GhostInsertEvent } from "@snap-engine/snapsort";
+import { rejectDrop } from "@snap-engine/snapsort/callbacks";
 
-function TaskContainer({
-  column,
-  ghosts,
-  callbacks,
+function ChildContainer({
+  entry,
 }: {
-  column: Column;
-  ghosts: GhostInsertEvent[];
-  callbacks: ContainerCallbacks;
+  entry: Extract<RenderTree<BoardValue>["entries"][number], { isGhost: false }>;
 }) {
-  const renderedEntries = renderColumnEntries(column, ghosts);
+  if (!entry.childTree || entry.value.kind !== "column") {
+    throw new Error("A board column requires a child render tree.");
+  }
 
   return (
-    <Container
-      metadata={{ columnId: column.id }}
-      config={{ callbacks }}
-    >
-      {renderedEntries.map((entry) =>
-        entry.kind === "ghost" ? (
-          <Ghost key={`ghost-${entry.event.ghostItem.id}`} event={entry.event} />
-        ) : (
-          <Item key={entry.task.id} itemId={entry.task.id}>
-            {entry.task.label}
+    <Container itemId={entry.itemId} metadata={{ columnId: entry.itemId }}>
+      <h2>{entry.value.title}</h2>
+
+      {entry.childTree.entries.map((child) =>
+        child.isGhost ? (
+          <Ghost key={child.itemId} ghost={child.ghost} />
+        ) : child.childTree ? (
+          <ChildContainer key={child.itemId} entry={child} />
+        ) : child.value.kind === "task" ? (
+          <Item key={child.itemId} itemId={child.itemId}>
+            {child.value.label}
           </Item>
-        ),
+        ) : null,
       )}
     </Container>
   );
 }
+
+function TaskBoard() {
+  const { board, callbacks } = useTaskBoardState();
+
+  return (
+    <Container
+      itemId="project-board-root"
+      config={{ callbacks: { ...callbacks, canDrop: rejectDrop } }}
+      locked
+    >
+      <header>Project board</header>
+
+      {board.entries.map((entry) =>
+        entry.isGhost ? (
+          <Ghost key={entry.itemId} ghost={entry.ghost} />
+        ) : entry.childTree ? (
+          <ChildContainer key={entry.itemId} entry={entry} />
+        ) : (
+          <Item key={entry.itemId} itemId={entry.itemId}>
+            Unexpected root item
+          </Item>
+        ),
+      )}
+
+      <footer>Board controls</footer>
+    </Container>
+  );
+}
 ```
+
+The root owns structural callbacks; descendants configure only local policy,
+geometry, or hover behavior. `rejectDrop` keeps tasks out of the board's top
+level while child lists remain eligible. Fixed headers and footers stay outside
+the keyed loop and never become SnapSort Items.
+
+`reduceRenderTree` moves an ordinary entry together with its complete
+`childTree`, so a draggable nested Container retains its descendants and
+immutable identity. Applications with a different state model can skip this helper and
+implement the explicit callbacks directly.
+
+`reduceRenderTree` accepts `ItemMoveEvent`, `ItemSwapEvent`, `ItemRemoveEvent`,
+and the three ghost lifecycle events. Those events completely describe the
+next state of existing application entries. It deliberately does not accept
+`ItemInsertEvent`: that event identifies a new core Item and its location but
+cannot provide the application value to store in `RenderEntry<T>`. An advanced
+`onItemInsert` integration must resolve that value and edit its own state.
+
+### Application-owned item lifetime
+
+An Add button or Delete button should edit application state directly. Inside
+`useTaskBoardState`, these functions update one nested child tree while
+preserving its entries:
+
+```tsx
+const addTaskToTodo = useCallback((id: string, label: string) => {
+  setBoard((current) => ({
+    ...current,
+    entries: current.entries.map((entry) =>
+      !entry.isGhost && entry.itemId === "todo" && entry.childTree
+        ? {
+            ...entry,
+            childTree: {
+              ...entry.childTree,
+              entries: [
+                ...entry.childTree.entries,
+                createRenderEntry<BoardValue>({ kind: "task", label }, id),
+              ],
+            },
+          }
+        : entry,
+    ),
+  }));
+}, []);
+
+const deleteTasksFromTodo = useCallback((itemIds: readonly string[]) => {
+  const deleted = new Set(itemIds);
+  setBoard((current) => ({
+    ...current,
+    entries: current.entries.map((entry) =>
+      !entry.isGhost && entry.itemId === "todo" && entry.childTree
+        ? {
+            ...entry,
+            childTree: {
+              ...entry.childTree,
+              entries: entry.childTree.entries.filter(
+                (child) => child.isGhost || !deleted.has(child.itemId),
+              ),
+            },
+          }
+        : entry,
+    ),
+  }));
+}, []);
+```
+
+These are application functions, not SnapSort helpers. React reconciliation
+mounts or unmounts `Item` and synchronizes its core registration. A
+drop-to-trash interface follows the same ownership rule: set
+`session.dropEffect = "none"` for the trash target, then delete all
+`event.itemIds` from application state only if `onDragEnd` reports the trash as
+its final `destination`. See [Placement Modes](/docs/snapsort/guides/02_placement_modes#give-a-drop-application-meaning)
+for a recursive, cancellation-safe recipe.
+
+The imperative command is a separate direction of synchronization. If code
+calls a core Container's `removeItem(id)`, SnapSort removes it from the core
+tree and emits root `onItemRemove`. Add that callback and reduce it
+synchronously:
+
+```tsx
+import type {
+  Container as SnapSortContainer,
+  ItemRemoveEvent,
+} from "@snap-engine/snapsort";
+
+const onItemRemove = useCallback((event: ItemRemoveEvent) => {
+  setBoard((current) => reduceRenderTree(current, event));
+}, []);
+
+const callbacksWithCoreRemove = {
+  onItemMove,
+  onItemRemove,
+  onGhostInsert: onGhostMove,
+  onGhostMove,
+  onGhostRemove: onGhostMove,
+} satisfies ContainerCallbacks;
+
+function removeThroughSnapSort(source: SnapSortContainer, itemId: string) {
+  source.removeItem(itemId);
+}
+```
+
+Use this imperative path only when SnapSort's core command is intended to lead
+the change. Do not call it after already deleting the same entry from React
+state, and do not expect `onItemRemove` for the source half of a move.
+
+`Ghost` remains a thin lifecycle view: it binds the engine-owned `ghostItem` to
+the rendered element and applies ghost geometry plus the `snapsort-ghost` class.
+It does not own or distribute state.
 
 See the [Item reference](/docs/snapsort/reference/react/item) for extracting
 the item branch into a reusable component.
@@ -214,39 +315,48 @@ type ContainerProps = {
   className?: string;
   config?: ContainerConfig;
   containerObject?: SnapSortContainer | null;
-  itemId?: string;
+  itemId: string;
   locked?: boolean;
   selected?: boolean;
-  metadata?: Record<string, unknown>;
+  metadata?: ItemMetadata;
   style?: CSSProperties;
 };
 ```
 
-| Prop | Default | Description |
-|------|---------|-------------|
-| `children` | `undefined` | Item and nested container content. |
-| `className` | `""` | Extra class string applied to the rendered element. |
-| `config` | `{}` | Optional SnapSort container configuration. |
-| `containerObject` | `null` | Optional existing core container object. The component does not own its creation. |
-| `itemId` | `undefined` | Required when this container is a sortable entry inside another container. |
-| `locked` | `true` | Keeps a nested container from being dragged. Set to `false` to make it draggable. |
-| `selected` | `false` | Consumer-owned selection flag for multi-item drags. Only meaningful when `locked` is `false`. |
-| `metadata` | `{}` | Metadata assigned to the container object and exposed in callback events. |
-| `style` | `undefined` | Inline styles merged onto the container element. |
+| Prop              | Default     | Description                                                                                                        |
+| ----------------- | ----------- | ------------------------------------------------------------------------------------------------------------------ |
+| `children`        | `undefined` | Item and nested container content.                                                                                 |
+| `className`       | `""`        | Extra class string applied to the rendered element.                                                                |
+| `config`          | `{}`        | Optional SnapSort container configuration.                                                                         |
+| `containerObject` | `null`      | Optional existing nested container that already uses the exact parent React adapter. Root adoption is unsupported. |
+| `itemId`          | —           | Required non-empty construction identity for every root and nested Container.                                      |
+| `locked`          | `true`      | Keeps a nested container from being dragged. Set to `false` to make it draggable.                                  |
+| `selected`        | `false`     | Consumer-owned selection flag for multi-item drags. Only meaningful when `locked` is `false`.                      |
+| `metadata`        | `{}`        | Metadata assigned to the container object and exposed in callback events.                                          |
+| `style`           | `undefined` | Inline styles merged onto the container element.                                                                   |
 
 `Container` forwards a ref to its core object and renders a `div` with `snapsort-container` plus a mode-specific class.
 
+Identity comes only from the `itemId` prop. It cannot change while mounted and
+must match an adopted core Container. `metadata.itemId` is unsupported and
+throws a clear error.
+
+Let the root React `Container` create its own core object so React owns the
+root adapter and its synchronous commit boundary. `containerObject` is only an
+advanced nested-adoption seam; the supplied object must already use the exact
+adapter inherited from its parent tree.
+
 ## Config
 
-| Option | Default | Description |
-|--------|---------|-------------|
-| `mode` | `"euclidean"` | Drag/drop mode for this tree: `"euclidean"`, `"progressive"`, `"insertion"`, or `"swap"`. |
-| `direction` | `"column"` | Main layout direction: `"column"` or `"row"`. |
-| `mainAxisAlign` | `"start"` | Main-axis alignment for virtual placement. Supports `"start"` and `"center"`. |
-| `name` | Generated | Human-readable container name. |
-| `animation` | `undefined` | Optional reorder, drop, and programmatic-move animation settings. Omit it or set it to `null` for no animation. |
-| `dropPriority` | `0` | Base preference for candidate positions owned directly by this container. Higher eligible priorities are considered first. |
-| `callbacks` | No persistent mutation default | Required framework-state/ghost callbacks plus lifecycle and validation hooks. |
+| Option          | Default                        | Description                                                                                                                |
+| --------------- | ------------------------------ | -------------------------------------------------------------------------------------------------------------------------- |
+| `mode`          | `"euclidean"`                  | Drag/drop mode for this tree: `"euclidean"`, `"progressive"`, `"insertion"`, or `"swap"`.                                  |
+| `direction`     | `"column"`                     | Main layout direction: `"column"` or `"row"`.                                                                              |
+| `mainAxisAlign` | `"start"`                      | Main-axis alignment for virtual placement. Supports `"start"` and `"center"`.                                              |
+| `name`          | Generated                      | Human-readable container name.                                                                                             |
+| `animation`     | `undefined`                    | Optional reorder, drop, and programmatic-move animation settings. Omit it or set it to `null` for no animation.            |
+| `dropPriority`  | `0`                            | Base preference for candidate positions owned directly by this container. Higher eligible priorities are considered first. |
+| `callbacks`     | No persistent mutation default | Root handlers for SnapSort-originated structure/lifecycle plus local policy, geometry, and hover hooks.                    |
 
 Animations are opt-in. Use SnapSort's standard 100ms preset when you want the
 library's conventional motion:
@@ -254,45 +364,47 @@ library's conventional motion:
 ```tsx
 import { defaultAnimations } from "@snap-engine/snapsort";
 
-<Container config={{ animation: defaultAnimations }} />
+<Container
+  itemId="animated-list-root"
+  config={{ animation: defaultAnimations }}
+/>;
 ```
 
 Mode is resolved from the root container when a drag starts, so nested containers in one drag tree should use the same mode.
 
 ## Callbacks
 
-Callbacks belong to the specific `Container` where they are configured. They
-are never inherited by nested containers and never bubble to a parent. The
-receiver shown below is the container whose `callbacks` object SnapSort reads;
-event fields such as `source`, `from`, `to`, and `current` describe locations
-and do not change that receiver.
+Callbacks have two explicit ownership rules.
 
-| Callback | Fires on | Built-in modes / trigger | Notes |
-|----------|----------|--------------------------|-------|
-| `onItemMove(event)` | Direct destination (`event.to.container`) | Euclidean/progressive/insertion commits; placement-changing programmatic `moveItem`; Vanilla's swap fallback | Preferred state callback. It reports one semantic move with non-null `from` and `to`; same-placement insertion/programmatic moves are no-ops, and the source does not also receive `onItemRemove`. |
-| `onItemInsert(event)` | Direct destination (`event.container`) | Primitive insertions; otherwise move, programmatic, and Vanilla swap-fallback paths when that destination has no `onItemMove` | Lower-level destination primitive and fallback. Configure either this callback or `onItemMove` anywhere an item can land. |
-| `onItemRemove(event)` | Current direct owner (`event.container`) | Programmatic `removeItem` | This is not the source half of an ordinary move. Programmatic events have `session === null`. |
-| `onItemSwap(event)` | Dragged item's pre-swap direct source (`event.a.container`) | Swap commit only | Receives both participants once. The target container does not receive a second swap callback. Required by the React adapter. |
-| `onDragStart(event)` | Tree root | Start of every mode | Runs directly, outside `flushMutation`. Return `false` to veto; set `event.session.dragVisual` here while the session is pending. `event.source.container` identifies the direct source. |
-| `onDragEnd(event)` | Tree root | End of every activated drag, including cancellation | Runs through the root's `flushMutation` after the final mutation or return path. It does not fire after a startup veto or pre-activation failure. Inspect `event.source` and `event.destination` for locations. |
-| `onDropTargetChange(event)` | Tree root | Every mode, when the prospective container or index changes | Runs through the root's `flushMutation`. `event.current?.container` is the prospective target, not the receiver. `dragVisual` is already fixed; `dropEffect` may switch between `"move"` and `"none"`. |
-| `onDragItemEnter(event)` | Direct owner of `event.overItem` (`event.container`) | Every mode, when the pointer first enters an item's hitbox | Semantically distinct from resolved slot changes, but hit-testing is scoped to items in the currently resolved target container. Runs directly. |
-| `onDragItemMove(event)` | Direct owner of `event.overItem` (`event.container`) | Every mode, on each pointer move while still inside an item's hitbox | Semantically distinct from resolved slot changes, but hit-testing is scoped to items in the currently resolved target container. Runs directly. |
-| `onDragItemLeave(event)` | Direct owner of `event.overItem` (`event.container`) | Every mode, when the pointer leaves an item's hitbox or the drag ends | Part of the same target-scoped hover stream; the final leave prevents hover UI from remaining active. Runs directly. |
-| `onVisualGeometryInvalidated(event)` | Tree root (`event.root`) | Mode-independent, after transient drag, ghost, animation, or settle geometry changes | Direct notification, including outside an active session; coalesced to at most once per engine frame. |
-| `canDrop(event)` | Each candidate destination (`event.container`) | Every mode, once per candidate container during each target resolution | Runs directly before priority. Return `false` to reject all candidates owned directly by that container for this resolution. Programmatic moves bypass it. |
-| `getDropPriority(event)` | Each eligible candidate destination (`event.container`) | Every mode, once per eligible container during each target resolution | Runs directly after `canDrop`. Return a finite override or `undefined` to keep `dropPriority`. Programmatic moves bypass it. |
-| `getInsertionMarkerRect(event)` | Each direct candidate destination (`event.container`) | Insertion mode, once per candidate gap during resolution | Pure synchronous geometry hook outside `flushMutation`. Return the complete finite, nonnegative world-space marker rectangle; `event.defaultRect` provides SnapSort's default. |
-| `getItemHitbox(event)` | Direct owner of `event.overItem` (`event.container`) | Hover resolution in every mode; directly drives swap targeting | Pure synchronous geometry hook outside `flushMutation`. Return a world-space rectangle or circle; `event.defaultRect` is the candidate item's frozen border box. |
-| `createGhost(event)` | Container where the ghost is first created (`event.container`) | Placement feedback and drag visuals in every mode | Creation notification only; moving an existing ghost does not fire it again. Target/source ghosts belong to their placement container; a `"preview"` drag visual creates one root-owned pointer Ghost. Returned DOM nodes are ignored because React owns ghost DOM. Runs directly. |
-| `onGhostInsert(event)` | Current ghost owner (`event.container`) | Target/source placement and root pointer-preview creation/movement | Required on every possible React ghost owner. Store/upsert the event and render `Ghost`; runs through that owner's `flushMutation`. |
-| `onGhostRemove(event)` | Ghost owner it is leaving (`event.container`) | Ghost crosses containers, is replaced, or the session ends | Required on every possible React ghost owner. Remove the matching rendered ghost; runs through the departing owner's `flushMutation`. |
-| `flushMutation(mutation)` | Same container as the callback being transacted | Structural and lifecycle mutations in every mode, plus programmatic mutations | Adapter hook, not a session event. React supplies it automatically. It wraps item move/insert/remove/swap, ghost insert/remove, and root target-change and drag-end callbacks. |
+Structural and lifecycle callbacks resolve on the **tree root**. Put them only
+in the root `Container`'s config; descendant structural callbacks are rejected.
+The event payload identifies the semantic containers, so one root handler can
+route state for the entire tree.
 
-The table describes **dispatch**, which is separate from startup
-**configuration validation**. For framework-owned trees, SnapSort verifies
-that the source can service mutations before activating a drag even though a
-successful move is later dispatched on the destination.
+| Root callback                        | Meaning                                                                                                                          |
+| ------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------- |
+| `onItemMove(event)`                  | Preferred persistent move. `from` and `to` identify the source and destination; the source does not also receive `onItemRemove`. |
+| `onItemInsert(event)`                | Lower-level core insertion and fallback when `onItemMove` is absent; framework mounting does not emit it.                        |
+| `onItemRemove(event)`                | Core `removeItem` command, not application-state unmounting or the source half of a move.                                        |
+| `onItemSwap(event)`                  | One atomic pairwise exchange; required for swap mode in React.                                                                   |
+| `onGhostInsert/Move/Remove(event)`   | Explicit presence and relocation commands carrying `event.ghost`; an application may pass each one to `reduceRenderTree`.        |
+| `onDragStart/End(event)`             | Root lifecycle. Start may veto or choose `dragVisual`; end reports the final outcome.                                            |
+| `onDropTargetChange(event)`          | Reports a changed prospective destination.                                                                                       |
+| `onVisualGeometryInvalidated(event)` | Coalesced notification for dependent visuals after drag, ghost, FLIP, or settle geometry changes.                                |
+
+The following callbacks remain **per container** because they answer policy,
+geometry, or hover questions about that direct container:
+
+| Local callback               | Owner                                   |
+| ---------------------------- | --------------------------------------- |
+| `canDrop`, `getDropPriority` | Each candidate destination.             |
+| `getItemHitbox`              | The direct owner of the candidate item. |
+| `onDragItemEnter/Move/Leave` | The direct owner of `event.overItem`.   |
+
+Root structural callbacks run inside the root adapter's synchronous commit.
+Policy, geometry, and hover callbacks run directly. Missing framework
+structural callbacks fail clearly; SnapSort never falls back to Vanilla DOM
+mutation for a React-owned tree.
 
 ### Drag visuals
 
@@ -308,10 +420,10 @@ const rootCallbacks = {
 ```
 
 The choices are `"item"`, `"preview"`, and `"none"`. A preview is one
-root-owned `kind: "marker", role: "pointer"` Ghost for the complete dragged
-run; insertion's destination marker remains a separate `role: "target"`
-Ghost. Store both events in framework state and render a `Ghost` for each. Set
-the property only while the session is pending, normally in `onDragStart`.
+root-owned `pointer-preview` ghost for the complete dragged run; insertion's
+destination remains a separate `insertion-marker` ghost. Both live in their
+owning tree node's `entries` sequence and render through `Ghost`. Set the
+property only while the session is pending, normally in `onDragStart`.
 
 ### Advanced session handoff
 
@@ -330,49 +442,111 @@ calling `handoff`; an `onDragStart` state update by itself does not provide
 that guarantee. Calling it after activation begins throws without changing the
 session.
 
-### Geometry callbacks
+Insertion targeting continues to exclude the original Items represented in
+the frozen root snapshot after handoff. The replacement run supplies the live
+source locations used to decide whether a candidate is the current placement.
+That distinction keeps a replacement Item's two outer boundaries attached to
+one logical target and suppresses internal boundaries in a contiguous run.
 
-Geometry callbacks run during target resolution, so keep them synchronous and
-free of state or DOM writes. `getInsertionMarkerRect` receives the candidate
-destination/index, pointer, dragged run, source locations, frozen drag and
-container rectangles, and `defaultRect`. Return the complete final world-space
-rectangle rather than an inset:
+### Insertion marker geometry and item hitboxes
+
+SnapSort owns insertion targeting geometry. The `insertion-marker` state
+contains a zero-thickness world-space `gap`, frozen `previous` and `next`
+neighbors for the chosen physical boundary, and `isCurrentPlacement`. Marker
+paint is deliberately separate from candidate ranking.
+
+The insertion-specific part of the public state is:
 
 ```ts
-getInsertionMarkerRect: ({ containerMetadata, defaultRect }) => {
-  const left = Number(containerMetadata.depth ?? 0) * 16;
-  return {
-    ...defaultRect,
-    x: defaultRect.x + left,
-    width: Math.max(0, defaultRect.width - left),
-  };
+interface InsertionMarkerState {
+  readonly type: "insertion-marker";
+  readonly location: GhostSlotLocation;
+  readonly gap: InsertionGapSegment;
+  readonly previous: InsertionMarkerNeighbor | null;
+  readonly next: InsertionMarkerNeighbor | null;
+  readonly isCurrentPlacement: boolean;
+  // Plus the shared GhostState identity and dragged-run fields.
 }
 ```
 
-`getItemHitbox` receives the dragged item, candidate `overItem`, direct owner,
-pointer, and frozen `defaultRect`. Return either
-`{ shape: "rect", rect }` or `{ shape: "circle", center, radius }`.
+Each neighbor contains its exact `Item`, `itemId`, frozen metadata, and frozen
+world-space border rectangle. A nested `Container` is also an `Item`, so no
+separate container-neighbor variant is needed.
 
-- In euclidean, progressive, and insertion trees, configure either
-  `onItemMove` or `onItemInsert` on every possible direct source and
-  destination.
-- Configure `onItemSwap` on every container that can be the direct source of a
-  swap.
-- Configure `onGhostInsert` and `onGhostRemove` on every possible ghost owner:
-  placement target containers, source containers that may hold an actual
-  dragged Item's slot, and the root whenever `dragVisual` can be `"preview"`.
-- A shared handler object is fine, but pass it explicitly to every
-  participating `Container`; nesting alone does not share callbacks.
+The built-in `Ghost` has an explicit 3px stock presentation. Pass all three
+marker options when the product needs another rectangle:
 
-Configure `onItemRemove` as well when a container can receive
-`removeItem(id)`. Ordinary moves emit
-only the destination-owned `onItemMove`/`onItemInsert` event.
+```tsx
+import type {
+  GhostState,
+  InsertionMarkerRectOptions,
+} from "@snap-engine/snapsort";
+import { Ghost } from "@snap-engine/snapsort/react";
 
-Update React state synchronously in `onItemMove` or `onItemSwap`. The adapter
-wraps structural callbacks in `flushSync`, allowing SnapSort to read committed
-DOM before paint. Do not defer these updates with transitions, timers,
-animation frames, or promises. Missing callbacks fail clearly instead of
-mutating framework-rendered DOM.
+const markerOptions = {
+  thickness: 2,
+  startInset: 24,
+  endInset: 8,
+} satisfies InsertionMarkerRectOptions;
+
+function RenderGhost({ ghost }: { ghost: GhostState }) {
+  return ghost.type === "insertion-marker" ? (
+    <Ghost ghost={ghost} insertionMarker={markerOptions} />
+  ) : (
+    <Ghost ghost={ghost} />
+  );
+}
+```
+
+Custom renderers and adapters use the same pure conversion instead of
+reimplementing coordinate projection:
+
+```ts
+import { insertionMarkerRect } from "@snap-engine/snapsort";
+import type { InsertionMarkerState } from "@snap-engine/snapsort";
+
+function renderMarker(marker: InsertionMarkerState, element: HTMLElement) {
+  const rect = insertionMarkerRect(marker, markerOptions);
+  element.style.left = `${rect.x}px`;
+  element.style.top = `${rect.y}px`;
+  element.style.width = `${rect.width}px`;
+  element.style.height = `${rect.height}px`;
+}
+```
+
+`startInset` means left for a horizontal line and top for a vertical line;
+`endInset` means right or bottom. Insets and thickness alter only rendering.
+Both insets must be non-negative and their sum must not exceed `gap.length`.
+The returned rectangle is relative to `ghost.location.container`, including
+its border and scroll offset, and is ready for absolute positioning.
+
+`toContainerLocalRect(worldRect, container)` exposes the same border-, scroll-,
+and camera-aware projection for another world-space overlay. Vanilla can keep
+the stock adapter and choose marker presentation with
+`createVanillaAdapter({ insertionMarker: markerOptions })`.
+
+`getItemHitbox` remains a direct-container geometry callback because its return
+value intentionally changes hover/swap targeting. It receives the dragged
+item, candidate `overItem`, direct owner, pointer, and frozen `defaultRect`.
+Return either `{ shape: "rect", rect }` or
+`{ shape: "circle", center, radius }`.
+
+- Configure persistent and ghost structural callbacks once on the root.
+  Their event locations route updates to the source and destination records.
+- Configure `onItemSwap` on the root of every swap tree.
+- Keep `canDrop`, priority, item-hitbox geometry, and hover callbacks on the
+  direct containers whose behavior they customize.
+
+Configure `onItemRemove` when application code can invoke `removeItem(id)`, and
+pass it through `reduceRenderTree` when using RenderTree state. Direct
+application-state deletion needs no callback. Ordinary moves emit only the
+root-dispatched `onItemMove`/`onItemInsert` event.
+
+Update React state synchronously in every structural callback. The adapter
+wraps the root command in `flushSync`, allowing SnapSort to read committed DOM
+before paint. Do not defer these updates with transitions, timers, animation
+frames, or promises. Missing callbacks fail clearly instead of mutating
+framework-rendered DOM.
 
 ### Drop policy events
 
@@ -393,37 +567,55 @@ Container components forward refs to their core container object.
 
 ```tsx
 import { useRef } from "react";
-import { Container, Item } from "@snap-engine/snapsort/react";
 import type { Container as SnapSortContainer } from "@snap-engine/snapsort";
 
 export function ProgrammaticMove() {
-  const source = useRef<SnapSortContainer>(null);
-  const target = useRef<SnapSortContainer>(null);
+  const { board, callbacks } = useTaskBoardState();
+  const rootRef = useRef<SnapSortContainer>(null);
 
-  function moveToTarget(id: string) {
-    if (!source.current || !target.current) return;
-    source.current.moveItem(id, target.current, target.current.numberOfItems);
+  function moveTodoToEnd() {
+    const root = rootRef.current;
+    if (!root) return;
+    root.moveItem("todo", root, root.numberOfItems);
   }
 
   return (
     <>
-      <Container ref={source} config={{ callbacks }}>
-        {renderedSourceEntries}
-      </Container>
-      <Container ref={target} config={{ callbacks }}>
-        {renderedTargetEntries}
+      <button type="button" onClick={moveTodoToEnd}>
+        Move To do column to end
+      </button>
+      <Container
+        ref={rootRef}
+        itemId="project-board-root"
+        config={{ callbacks }}
+        locked
+      >
+        {board.entries.map((entry) =>
+          entry.isGhost ? (
+            <Ghost key={entry.itemId} ghost={entry.ghost} />
+          ) : entry.childTree ? (
+            <ChildContainer key={entry.itemId} entry={entry} />
+          ) : (
+            <Item key={entry.itemId} itemId={entry.itemId}>
+              Unexpected root item
+            </Item>
+          ),
+        )}
       </Container>
     </>
   );
 }
 ```
 
-The omitted `callbacks` and rendered-entry construction are the same
-state/ghost pattern shown in Setup. Imperative and pointer moves both commit
-through `onItemMove`; `moveItem` never authorizes direct DOM mutation. It is an
-authoritative application command and bypasses `canDrop` and priority policy.
+The ref is application-owned imperative state; it is not part of RenderTree.
+Keep separate refs or an application ref map only when controls need direct
+access to nested Containers. Imperative and pointer moves both commit through the root's `onItemMove`;
+`moveItem` never authorizes direct DOM mutation. It is an authoritative
+application command and bypasses `canDrop` and priority policy.
 
 The ref exposes `moveItem`, `removeItem`, `numberOfItems`, `dropPriority`,
 `direction`, `mainAxisAlign`, `mode`, `config`, `callbacks`, and `dragSession`
 from the core container. `dragSession` is the stable read-only public handle on
 the root ref while a gesture is active; nested container refs return `null`.
+Calling `removeItem` emits root `onItemRemove`, so a framework-owned tree must
+apply that event synchronously.

@@ -13,7 +13,7 @@
     children: Snippet;
     className?: string;
     item?: SnapSortItem | null;
-    itemId?: string;
+    itemId: string;
     metadata?: ItemMetadata;
     selected?: boolean;
   };
@@ -40,12 +40,14 @@
   if (initial.metadata && "itemId" in initial.metadata) {
     throw new Error("SnapSort Item: `metadata.itemId` was removed. Pass `itemId` as its own prop instead.");
   }
-  if (initial.item == null && !initial.itemId) {
+  if (!initial.itemId) {
     throw new Error("SnapSort Item: missing required `itemId` prop.");
   }
 
   const ownsItem = initial.item == null;
-  const resolvedItem = initial.item ?? new SnapSortItem(engine, container);
+  const resolvedItem =
+    initial.item ??
+    new SnapSortItem(engine, container, { itemId: initial.itemId });
   const mergedClass = $derived(`snapsort-item ${classValue} ${className}`.trim());
 
   if (resolvedItem.engine !== engine) {
@@ -56,15 +58,14 @@
       "SnapSort Item: the supplied `item` must already belong to the surrounding Container.",
     );
   }
+  if (!ownsItem && resolvedItem.itemId !== initial.itemId) {
+    throw new Error(
+      "SnapSort Item: the supplied `item` ID must exactly match the `itemId` prop.",
+    );
+  }
   item = resolvedItem;
   setContext("item", resolvedItem);
 
-  if (initial.itemId !== undefined) {
-    resolvedItem.itemId = initial.itemId;
-  }
-  if (!resolvedItem.itemId) {
-    throw new Error("SnapSort Item: missing required `itemId` prop.");
-  }
   if (initial.metadata !== undefined) {
     resolvedItem.metadata = initial.metadata;
   }
@@ -76,8 +77,10 @@
     if (item !== resolvedItem) {
       throw new Error("SnapSort Item: the `item` prop cannot change after mount.");
     }
-    if (itemId !== undefined) {
-      resolvedItem.itemId = itemId;
+    if (itemId !== initial.itemId) {
+      throw new Error(
+        "SnapSort Item: the `itemId` prop cannot change after mount. Remount the Item with a new key.",
+      );
     }
     if (metadata !== undefined) {
       if ("itemId" in metadata) {
@@ -119,7 +122,7 @@
 <div
   {...divProps}
   class={mergedClass}
-  data-snapsort-item-id={resolvedItem.resolvedItemId}
+  data-snapsort-item-id={resolvedItem.itemId}
   use:bindItemElement
   {style}
 >

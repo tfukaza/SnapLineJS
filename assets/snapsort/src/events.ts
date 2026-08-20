@@ -123,6 +123,30 @@ export interface GhostRect {
   height: number;
 }
 
+/** A zero-thickness insertion boundary in world coordinates. */
+export type InsertionGapSegment =
+  | {
+      readonly orientation: "horizontal";
+      readonly x: number;
+      readonly y: number;
+      readonly length: number;
+    }
+  | {
+      readonly orientation: "vertical";
+      readonly x: number;
+      readonly y: number;
+      readonly length: number;
+    };
+
+/** One item immediately adjacent to the insertion marker's visual boundary. */
+export interface InsertionMarkerNeighbor {
+  readonly item: Item;
+  readonly itemId: ItemId;
+  readonly itemMetadata: ItemMetadata;
+  /** Frozen world-space border box captured for this resolution. */
+  readonly rect: Readonly<CollisionRect>;
+}
+
 export interface GhostSlotLocation {
   readonly type: "slot";
   readonly container: Container;
@@ -158,29 +182,53 @@ export interface GhostStateBase {
   readonly ghostItem: Item;
   readonly ghostItemId: ItemId;
   readonly ghostMetadata: ItemMetadata;
+}
+
+interface RectGhostStateBase extends GhostStateBase {
   readonly rect: GhostRect;
 }
 
+/** Framework-ready render state for insertion placement feedback. */
+export interface InsertionMarkerState extends GhostStateBase {
+  readonly type: "insertion-marker";
+  readonly location: GhostSlotLocation;
+  readonly gap: InsertionGapSegment;
+  readonly previous: InsertionMarkerNeighbor | null;
+  readonly next: InsertionMarkerNeighbor | null;
+  /** Whether committing this candidate preserves the dragged run's placement. */
+  readonly isCurrentPlacement: boolean;
+}
+
+/** @internal Marker presentation before a transient ghost Item is allocated. */
+export type InsertionMarkerPresentation = Pick<
+  InsertionMarkerState,
+  "gap" | "previous" | "next" | "isCurrentPlacement"
+>;
+
 export type GhostState =
-  | (GhostStateBase & {
+  | (RectGhostStateBase & {
       readonly type: "source-spacer";
       readonly location: GhostSlotLocation;
     })
-  | (GhostStateBase & {
+  | (RectGhostStateBase & {
       readonly type: "target-spacer";
       readonly location: GhostSlotLocation;
     })
-  | (GhostStateBase & {
-      readonly type: "insertion-marker";
-      readonly location: GhostSlotLocation;
-    })
-  | (GhostStateBase & {
+  | InsertionMarkerState
+  | (RectGhostStateBase & {
       readonly type: "pointer-preview";
       readonly location: GhostOverlayLocation;
     });
 
 type GhostStatePlacementFor<State extends GhostState> = State extends GhostState
-  ? Pick<State, "type" | "location">
+  ? State extends InsertionMarkerState
+    ? Pick<
+        State,
+        "type" | "location" | "gap" | "previous" | "next" | "isCurrentPlacement"
+      >
+    : State extends { readonly rect: GhostRect }
+      ? Pick<State, "type" | "location" | "rect">
+      : never
   : never;
 
 /** A ghost variant paired with the only location kind that it can occupy. */
@@ -222,11 +270,13 @@ export type GhostInsertEvent = GhostInsertEventFor<GhostState>;
 export type GhostMoveEvent = GhostMoveEventFor<GhostState>;
 export type GhostRemoveEvent = GhostRemoveEventFor<GhostState>;
 
-export type GhostEvent =
-  | GhostCreateEvent
+/** The three explicit framework ghost-presence and relocation events. */
+export type GhostLifecycleEvent =
   | GhostInsertEvent
   | GhostMoveEvent
   | GhostRemoveEvent;
+
+export type GhostEvent = GhostCreateEvent | GhostLifecycleEvent;
 
 export interface DragStartEvent {
   session: DragSession;
@@ -322,28 +372,6 @@ export interface ItemHitboxEvent {
   pointer: { x: number; y: number };
   /** Frozen world-space border box used when no callback is configured. */
   defaultRect: CollisionRect;
-}
-
-/** Geometry supplied to an insertion candidate's direct destination. */
-export interface InsertionMarkerRectEvent {
-  session: DragSession | null;
-  item: Item;
-  itemId: ItemId;
-  itemMetadata: ItemMetadata;
-  items: Item[];
-  itemIds: ItemId[];
-  itemsMetadata: ItemMetadata[];
-  source: DragLocation | null;
-  sources: readonly (DragLocation | null)[];
-  container: Container;
-  containerMetadata: Record<string, unknown>;
-  index: number;
-  pointer: { x: number; y: number };
-  dragRect: CollisionRect;
-  containerRect: CollisionRect;
-  containerContentRect: CollisionRect;
-  /** Default final marker rectangle in world coordinates. */
-  defaultRect: GhostRect;
 }
 
 /**
@@ -518,13 +546,6 @@ export interface ContainerCallbacks {
   getDropPriority?: (event: DropPriorityEvent) => number | undefined;
 
   /**
-   * Consulted synchronously on an insertion candidate's direct destination.
-   * Return the complete final marker rectangle in world coordinates. This is
-   * a pure geometry calculation and is not wrapped by the adapter commit.
-   */
-  getInsertionMarkerRect?: (event: InsertionMarkerRectEvent) => GhostRect;
-
-  /**
    * Consulted synchronously on the direct owner of each hover candidate.
    * Return a world-space rectangle or circle. This is a pure geometry
    * calculation and is not wrapped by the adapter commit.
@@ -538,8 +559,9 @@ export interface ContainerCallbacks {
   onGhostInsert?: (event: GhostInsertEvent) => void;
 
   /**
-   * Root-dispatched. Fires once when an existing ghost changes location;
-   * `event.from`/`event.to` identify the source and destination containers.
+   * Root-dispatched. Fires when an existing ghost changes location or when an
+   * insertion marker changes physical gap presentation at the same logical
+   * location. `event.from`/`event.to` may therefore be equal.
    */
   onGhostMove?: (event: GhostMoveEvent) => void;
 

@@ -11,11 +11,10 @@ import {
 } from "react";
 import {
   Container as ContainerObject,
-  defaultCallbacks,
   type ContainerCallbacks,
   type ContainerConfig,
-  type GhostCreateEvent,
-  type Item,
+  type ItemMetadata,
+  type SnapSortAdapter,
 } from "@snap-engine/snapsort";
 import { flushSync } from "react-dom";
 import { useSnapSortEngine } from "./Engine";
@@ -24,6 +23,7 @@ import { useFlushSnapSortAttachments } from "./useFlushSnapSortAttachments";
 export const ContainerObjectContext = createContext<ContainerObject | null>(
   null,
 );
+const AdapterContext = createContext<SnapSortAdapter | null>(null);
 
 export interface ContainerProps
   extends Omit<HTMLAttributes<HTMLDivElement>, "children"> {
@@ -31,52 +31,11 @@ export interface ContainerProps
   className?: string;
   config?: ContainerConfig;
   containerObject?: ContainerObject | null;
-  itemId?: string;
+  itemId: string;
   locked?: boolean;
   /** Consumer-owned selection flag — see `Item.selected` in `@snap-engine/snapsort`. Only meaningful when `locked` is `false`. */
   selected?: boolean;
-  metadata?: Record<string, unknown>;
-}
-
-function frameworkCallbacks(
-  inheritedCallbacks: ContainerCallbacks | undefined,
-  configuredCallbacks: ContainerCallbacks | undefined,
-  flushMutation: (mutation: () => void) => void,
-): ContainerCallbacks {
-  const callbacks: ContainerCallbacks = {
-    ...inheritedCallbacks,
-    ...configuredCallbacks,
-  };
-
-  // An injected core container may still carry the Vanilla defaults. Strip
-  // only those exact functions so legitimate preconfigured framework
-  // callbacks survive adoption by the React adapter.
-  if (callbacks.onItemInsert === defaultCallbacks.onItemInsert) {
-    delete callbacks.onItemInsert;
-  }
-  if (callbacks.onItemRemove === defaultCallbacks.onItemRemove) {
-    delete callbacks.onItemRemove;
-  }
-  if (callbacks.onGhostInsert === defaultCallbacks.onGhostInsert) {
-    delete callbacks.onGhostInsert;
-  }
-  if (callbacks.onGhostRemove === defaultCallbacks.onGhostRemove) {
-    delete callbacks.onGhostRemove;
-  }
-  if (callbacks.createGhost === defaultCallbacks.createGhost) {
-    delete callbacks.createGhost;
-  }
-
-  const createGhost = callbacks.createGhost;
-  return {
-    ...callbacks,
-    // React always owns ghost DOM. Preserve the documented notification
-    // callback, but never pass a returned HTMLElement back to core.
-    createGhost: (event: GhostCreateEvent) => {
-      createGhost?.(event);
-    },
-    flushMutation,
-  };
+  metadata?: ItemMetadata;
 }
 
 export const Container = forwardRef<ContainerObject, ContainerProps>(
@@ -97,14 +56,38 @@ export const Container = forwardRef<ContainerObject, ContainerProps>(
   ) {
     const engine = useSnapSortEngine();
     const parentContainer = useContext(ContainerObjectContext);
+    const parentAdapter = useContext(AdapterContext);
     const containerDomRef = useRef<HTMLDivElement>(null);
     const ownsContainerRef = useRef(containerObject == null);
+    const initialContainerObjectRef = useRef(containerObject);
+    const initialItemIdRef = useRef(itemId);
     const containerRef = useRef<ContainerObject | null>(containerObject);
     const inheritedCallbacksRef = useRef<ContainerCallbacks | undefined>(
       containerObject?.callbacks,
     );
+    if (containerObject !== initialContainerObjectRef.current) {
+      throw new Error(
+        "SnapSort Container: the `containerObject` prop cannot change after mount.",
+      );
+    }
+    if (!initialItemIdRef.current) {
+      throw new Error("SnapSort Container: missing required `itemId` prop.");
+    }
+    if (itemId !== initialItemIdRef.current) {
+      throw new Error(
+        "SnapSort Container: the `itemId` prop cannot change after mount. Remount the Container with a new key.",
+      );
+    }
+    if (
+      containerObject &&
+      containerObject.itemId !== initialItemIdRef.current
+    ) {
+      throw new Error(
+        "SnapSort Container: the supplied `containerObject` ID must exactly match the `itemId` prop.",
+      );
+    }
     const flushSnapSortAttachments = useFlushSnapSortAttachments();
-    const flushMutation = useCallback(
+    const commitFrameworkMutation = useCallback(
       (mutation: () => void) => {
         flushSync(mutation);
         // A state mutation can mount new Item/Container adapters. Flush once
@@ -114,39 +97,64 @@ export const Container = forwardRef<ContainerObject, ContainerProps>(
       },
       [flushSnapSortAttachments],
     );
-    const callbacks = frameworkCallbacks(
-      inheritedCallbacksRef.current,
-      config.callbacks,
-      flushMutation,
-    );
+    const commitRef = useRef(commitFrameworkMutation);
+    commitRef.current = commitFrameworkMutation;
+    const adapterRef = useRef<SnapSortAdapter | null>(null);
+    if (!adapterRef.current) {
+      adapterRef.current = parentAdapter ?? {
+        callbacks: {},
+        commit: (mutation) => commitRef.current(mutation),
+      };
+    }
+    const adapter = adapterRef.current;
+    if (!parentAdapter && containerObject) {
+      throw new Error(
+        "SnapSort Container: adopting a root `containerObject` is unsupported because React must own the root adapter. Let the component create the root Container instead.",
+      );
+    }
+    if (parentAdapter && adapter !== parentAdapter) {
+      throw new Error(
+        "SnapSort Container: every nested Container must use this React root's adapter.",
+      );
+    }
+    if (containerObject && containerObject.adapter !== adapter) {
+      throw new Error(
+        "SnapSort Container: an adopted Container must already use this React root's adapter.",
+      );
+    }
+    const callbacks: ContainerCallbacks = {
+      ...inheritedCallbacksRef.current,
+      ...config.callbacks,
+    };
     const resolvedMode = config.mode ?? containerObject?.mode ?? "euclidean";
-    if (resolvedMode === "swap" && !callbacks.onItemSwap) {
+    if (!parentContainer && resolvedMode === "swap" && !callbacks.onItemSwap) {
       throw new Error(
         "SnapSort Container: swap mode in the React adapter requires callbacks.onItemSwap so React state can commit the pairwise exchange atomically.",
+      );
+    }
+    if ("itemId" in metadata) {
+      throw new Error(
+        "SnapSort Container: `metadata.itemId` was removed. Pass `itemId` as its own prop instead.",
       );
     }
     if (!containerRef.current) {
       containerRef.current = new ContainerObject(engine, parentContainer, {
         ...config,
-        domOwnership: "framework",
+        itemId: initialItemIdRef.current,
+        adapter,
         callbacks,
       });
     }
     const container = containerRef.current;
-    const resolvedItemId =
-      itemId ??
-      (typeof metadata.itemId === "string" ? metadata.itemId : undefined);
     const direction = config.direction ?? "column";
     const mainAxisAlign = config.mainAxisAlign ?? "start";
-    container.itemId = resolvedItemId;
     container.locked = locked;
     container.selected = selected;
     container.metadata = metadata;
-    container.config.mode = config.mode ?? container.config.mode;
+    container.mode = config.mode ?? container.mode;
     container.config.name = config.name ?? container.config.name;
     container.config.animation = config.animation;
-    container.config.domOwnership = "framework";
-    container.config.callbacks = callbacks;
+    container.callbacks = callbacks;
     container.direction = direction;
     container.mainAxisAlign = mainAxisAlign;
     container.wrap = config.wrap ?? "auto";
@@ -157,9 +165,12 @@ export const Container = forwardRef<ContainerObject, ContainerProps>(
 
     const setContainerElement = useCallback(
       (element: HTMLDivElement | null) => {
+        const previousElement = containerDomRef.current;
         containerDomRef.current = element;
         if (element) {
           container.element = element;
+        } else if (previousElement) {
+          container.detachElement(previousElement);
         }
       },
       [container],
@@ -167,7 +178,7 @@ export const Container = forwardRef<ContainerObject, ContainerProps>(
 
     useEffect(() => {
       if (parentContainer && container.parent !== parentContainer) {
-        parentContainer.attachItem(container as unknown as Item);
+        parentContainer.attachItem(container);
       }
       return () => {
         if (ownsContainerRef.current) {
@@ -177,25 +188,27 @@ export const Container = forwardRef<ContainerObject, ContainerProps>(
     }, [container, parentContainer]);
 
     return (
-      <ContainerObjectContext.Provider value={container}>
-        <div
-          {...divProps}
-          ref={setContainerElement}
-          className={`snapsort-container snapsort-mode-${container.mode} ${className}`.trim()}
-          style={{
-            alignItems: "flex-start",
-            display: "flex",
-            flexDirection: direction,
-            flexWrap: "wrap",
-            justifyContent:
-              mainAxisAlign === "center" ? "center" : "flex-start",
-            position: "relative",
-            ...style,
-          }}
-        >
-          {children}
-        </div>
-      </ContainerObjectContext.Provider>
+      <AdapterContext.Provider value={adapter}>
+        <ContainerObjectContext.Provider value={container}>
+          <div
+            {...divProps}
+            ref={setContainerElement}
+            className={`snapsort-container snapsort-mode-${container.mode} ${className}`.trim()}
+            style={{
+              alignItems: "flex-start",
+              display: "flex",
+              flexDirection: direction,
+              flexWrap: "wrap",
+              justifyContent:
+                mainAxisAlign === "center" ? "center" : "flex-start",
+              position: "relative",
+              ...style,
+            }}
+          >
+            {children}
+          </div>
+        </ContainerObjectContext.Provider>
+      </AdapterContext.Provider>
     );
   },
 );

@@ -221,8 +221,8 @@ function ensureFlowGhostRun(
       {
         type: "target-spacer",
         location: buildGhostSlotLocation(container, index + i),
+        rect: rects[i],
       },
-      rects[i],
     );
     run.push(ghost);
   }
@@ -312,8 +312,11 @@ function commitFlowGhostRun(
       previous,
       next: updateGhostState(
         previous,
-        buildGhostSlotLocation(container, index + i),
-        rects[i],
+        {
+          type: "target-spacer",
+          location: buildGhostSlotLocation(container, index + i),
+          rect: rects[i],
+        },
       ),
     };
   });
@@ -420,7 +423,7 @@ async function clearFlowPlacement(session: DragSession): Promise<void> {
 function drop(session: DragSession): void {
   const items = session.items;
   const root = session.root;
-  const dropItemIds = items.map((member) => member.resolvedItemId);
+  const dropItemIds = items.map((member) => member.itemId);
   const dropRects = items.map(() => ({
     first: null as DOMRect | null,
     last: null as DOMRect | null,
@@ -520,7 +523,7 @@ function drop(session: DragSession): void {
   root.schedule(
     () => {
       items.forEach((member, i) => {
-        const currentItem = root.findItemByKey(dropItemIds[i]) ?? member;
+        const currentItem = root.findItemById(dropItemIds[i]) ?? member;
         const element = currentItem.element?.isConnected
           ? currentItem.element
           : null;
@@ -592,7 +595,7 @@ export class FlowGhostLifecycle implements DragLifecycleStrategy {
       Object.freeze({
         container: pressedSource.container,
         index: initialFlowSlotIndex(session, pressedSource),
-        ghostRect: null,
+        insertion: null,
       }),
     );
 

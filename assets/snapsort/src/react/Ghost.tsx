@@ -5,37 +5,64 @@ import {
   useRef,
   type HTMLAttributes,
 } from "react";
-import type { GhostInsertEvent } from "@snap-engine/snapsort";
+import {
+  insertionMarkerRect,
+  stockInsertionMarkerRectOptions,
+  toContainerLocalRect,
+  type GhostState,
+  type InsertionMarkerRectOptions,
+} from "@snap-engine/snapsort";
 
 export interface GhostProps extends HTMLAttributes<HTMLDivElement> {
-  event: GhostInsertEvent;
+  ghost: GhostState;
+  insertionMarker?: InsertionMarkerRectOptions;
 }
 
 export const Ghost = forwardRef<HTMLDivElement, GhostProps>(function Ghost(
-  { children, className = "", event, id = "spacer", style, ...divProps },
+  {
+    children,
+    className = "",
+    ghost,
+    id = "spacer",
+    insertionMarker,
+    style,
+    ...divProps
+  },
   ref,
 ) {
   const elementRef = useRef<HTMLDivElement>(null);
   const original =
-    event.original.dragSnapshot?.box ?? event.original.currentDomProperty;
-  const ghostItem = event.ghostItem;
-  const width = event.ghostRect?.width ?? original.width;
-  const height = event.ghostRect?.height ?? original.height;
-  const container =
-    event.container.dragSnapshot?.box ?? event.container.currentDomProperty;
-  const marker = event.kind === "marker";
-  const left = (event.ghostRect?.x ?? original.x) - container.x;
-  const top = (event.ghostRect?.y ?? original.y) - container.y;
+    ghost.original.dragSnapshot?.box ?? ghost.original.currentDomProperty;
+  const ghostItem = ghost.ghostItem;
+  const rect =
+    ghost.type === "insertion-marker"
+      ? insertionMarkerRect(
+          ghost,
+          insertionMarker ?? stockInsertionMarkerRectOptions,
+        )
+      : ghost.type === "pointer-preview"
+        ? toContainerLocalRect(ghost.rect, ghost.location.container)
+        : ghost.rect;
+  const overlay =
+    ghost.type === "insertion-marker" || ghost.type === "pointer-preview";
+  const marker = ghost.type === "insertion-marker";
 
-  useImperativeHandle(ref, () => elementRef.current as HTMLDivElement, []);
+  useImperativeHandle(ref, () => {
+    const element = elementRef.current;
+    if (!element) {
+      throw new Error("SnapSort Ghost: the element is not mounted.");
+    }
+    return element;
+  }, []);
 
   const bindGhostElement = useCallback(
     (element: HTMLDivElement | null) => {
+      const previousElement = elementRef.current;
       elementRef.current = element;
       if (element) {
         ghostItem.element = element;
-      } else if (ghostItem.element) {
-        ghostItem.destroyDom(false);
+      } else if (previousElement) {
+        ghostItem.detachElement(previousElement);
       }
     },
     [ghostItem],
@@ -45,33 +72,33 @@ export const Ghost = forwardRef<HTMLDivElement, GhostProps>(function Ghost(
     <div
       {...divProps}
       id={id}
-      className={className}
+      className={`snapsort-ghost ${className}`.trim()}
       data-snapsort-ghost={
-        event.role === "pointer" ? "pointer" : marker ? "insertion" : undefined
+        ghost.type === "pointer-preview"
+          ? "pointer"
+          : marker
+            ? "insertion"
+            : undefined
       }
-      data-snapsort-ghost-entry={event.kind}
+      data-snapsort-ghost-entry={ghost.type}
+      data-snapsort-ghost-item-count={ghost.items.length}
       ref={bindGhostElement}
       style={{
         boxSizing: "border-box",
-        background:
-          marker && event.role !== "pointer" ? "currentColor" : undefined,
-        borderRadius: marker && event.role !== "pointer" ? "999px" : undefined,
-        borderTop:
-          marker && event.role !== "pointer"
-            ? "3px solid currentColor"
-            : undefined,
-        color:
-          marker && event.role !== "pointer" ? "rgb(37, 99, 235)" : undefined,
-        height: marker && event.role !== "pointer" ? 0 : height,
-        left: marker ? left : undefined,
-        margin: marker
+        background: marker ? "currentColor" : undefined,
+        border: marker ? 0 : undefined,
+        borderRadius: marker ? "999px" : undefined,
+        color: marker ? "rgb(37, 99, 235)" : undefined,
+        height: rect.height,
+        left: overlay ? rect.x : undefined,
+        margin: overlay
           ? 0
           : `${original.margin.top}px ${original.margin.right}px ${original.margin.bottom}px ${original.margin.left}px`,
-        pointerEvents: marker ? "none" : undefined,
-        position: marker ? "absolute" : undefined,
-        top: marker ? top : undefined,
-        width,
-        zIndex: marker ? 1000 : undefined,
+        pointerEvents: overlay ? "none" : undefined,
+        position: overlay ? "absolute" : undefined,
+        top: overlay ? rect.y : undefined,
+        width: rect.width,
+        zIndex: overlay ? 1000 : undefined,
         ...style,
       }}
     >

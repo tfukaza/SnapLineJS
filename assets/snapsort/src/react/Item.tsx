@@ -20,7 +20,7 @@ export interface ItemProps
   children: ReactNode;
   className?: string;
   item?: ItemObject | null;
-  itemId?: string;
+  itemId: string;
   metadata?: ItemMetadata;
   /** Consumer-owned selection flag — see `Item.selected` in `@snap-engine/snapsort`. */
   selected?: boolean;
@@ -43,6 +43,7 @@ export const Item = forwardRef<ItemObject, ItemProps>(function SnapSortItem(
   const container = useContext(ContainerObjectContext);
   const itemDomRef = useRef<HTMLDivElement>(null);
   const initialProvidedItemRef = useRef<ItemObject | null>(providedItem);
+  const initialItemIdRef = useRef(itemId);
   const ownsItemRef = useRef(providedItem == null);
   const itemRef = useRef<ItemObject | null>(providedItem);
   if (!container) {
@@ -53,16 +54,23 @@ export const Item = forwardRef<ItemObject, ItemProps>(function SnapSortItem(
       "SnapSort Item: the `item` prop cannot change after mount.",
     );
   }
+  if (!initialItemIdRef.current) {
+    throw new Error("SnapSort Item: missing required `itemId` prop.");
+  }
+  if (itemId !== initialItemIdRef.current) {
+    throw new Error(
+      "SnapSort Item: the `itemId` prop cannot change after mount. Remount the Item with a new key.",
+    );
+  }
   if (metadata && "itemId" in metadata) {
     throw new Error(
       "SnapSort Item: `metadata.itemId` was removed. Pass `itemId` as its own prop instead.",
     );
   }
-  if (ownsItemRef.current && !itemId) {
-    throw new Error("SnapSort Item: missing required `itemId` prop.");
-  }
   if (!itemRef.current) {
-    itemRef.current = new ItemObject(engine, null);
+    itemRef.current = new ItemObject(engine, null, {
+      itemId: initialItemIdRef.current,
+    });
   }
   const item = itemRef.current;
   if (item.engine !== engine) {
@@ -75,11 +83,10 @@ export const Item = forwardRef<ItemObject, ItemProps>(function SnapSortItem(
       "SnapSort Item: the supplied `item` must already belong to the surrounding Container.",
     );
   }
-  if (itemId !== undefined) {
-    item.itemId = itemId;
-  }
-  if (!item.itemId) {
-    throw new Error("SnapSort Item: missing required `itemId` prop.");
+  if (!ownsItemRef.current && item.itemId !== initialItemIdRef.current) {
+    throw new Error(
+      "SnapSort Item: the supplied `item` ID must exactly match the `itemId` prop.",
+    );
   }
   if (metadata !== undefined) {
     item.metadata = metadata;
@@ -135,7 +142,7 @@ export const Item = forwardRef<ItemObject, ItemProps>(function SnapSortItem(
         {...divProps}
         ref={setItemElement}
         className={`snapsort-item ${className}`.trim()}
-        data-snapsort-item-id={item.resolvedItemId}
+        data-snapsort-item-id={item.itemId}
         style={{
           alignItems: "center",
           boxSizing: "border-box",

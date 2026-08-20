@@ -11,10 +11,10 @@ hidden: true
 
 Choose a framework, then open the page for the component you are using.
 
-| Framework | Container | Item |
-|-----------|-----------|------|
-| Svelte | [Container](/docs/snapsort/reference/svelte/container) | [Item](/docs/snapsort/reference/svelte/item) |
-| React | [Container](/docs/snapsort/reference/react/container) | [Item](/docs/snapsort/reference/react/item) |
+| Framework | Container                                              | Item                                         |
+| --------- | ------------------------------------------------------ | -------------------------------------------- |
+| Svelte    | [Container](/docs/snapsort/reference/svelte/container) | [Item](/docs/snapsort/reference/svelte/item) |
+| React     | [Container](/docs/snapsort/reference/react/container)  | [Item](/docs/snapsort/reference/react/item)  |
 
 The framework selector in the sidebar keeps the current component selected when you switch between Svelte and React.
 
@@ -22,12 +22,12 @@ The framework selector in the sidebar keeps the current component selected when 
 
 SnapSort ships one package with framework bindings exposed as subpaths.
 
-| Import path | Purpose |
-|---------|---------|
-| `@snap-engine/snapsort` | Framework-agnostic SnapEngine objects and types used by framework bindings. |
-| `@snap-engine/snapsort/callbacks` | Reusable drop eligibility and priority callbacks. |
-| `@snap-engine/snapsort/svelte` | Svelte components that wrap the core objects. |
-| `@snap-engine/snapsort/react` | React components that wrap the core objects. |
+| Import path                       | Purpose                                                                     |
+| --------------------------------- | --------------------------------------------------------------------------- |
+| `@snap-engine/snapsort`           | Framework-agnostic SnapEngine objects and types used by framework bindings. |
+| `@snap-engine/snapsort/callbacks` | Reusable drop eligibility and priority callbacks.                           |
+| `@snap-engine/snapsort/svelte`    | Svelte components that wrap the core objects.                               |
+| `@snap-engine/snapsort/react`     | React components that wrap the core objects.                                |
 
 ## Vanilla Container and Collection Helpers
 
@@ -56,9 +56,9 @@ function moveTask(columns, event) {
   });
 }
 
-function createTaskContainer(engine, parent, columnId, onItemMove) {
+function createTaskContainer(engine, parent, columnId) {
   const container = new Container(engine, parent, {
-    callbacks: { onItemMove },
+    itemId: `column:${columnId}`,
   });
   container.metadata = { columnId };
   return container;
@@ -72,8 +72,22 @@ function onItemMove(event) {
 }
 
 const board = new Container(engine, null, {
-  callbacks: { canDrop: rejectDrop },
+  itemId: "task-board-root",
+  callbacks: { canDrop: rejectDrop, onItemMove },
 });
-const todo = createTaskContainer(engine, board, "todo", onItemMove);
-const done = createTaskContainer(engine, board, "done", onItemMove);
+const todo = createTaskContainer(engine, board, "todo");
+const done = createTaskContainer(engine, board, "done");
 ```
+
+Structural callbacks are root-dispatched, so `onItemMove` belongs on `board`.
+Descendant containers configure only their local drop policy, geometry, and
+hover behavior.
+
+Across every binding, structural callbacks synchronize operations that
+SnapSort originates; they are not application CRUD hooks. Framework Add and
+Delete actions should update application state and let reconciliation mount or
+unmount Items. A semantic move emits one `onItemMove`, while SnapSort-owned
+ghost presence uses explicit insert, move, and remove callbacks. Calling the
+imperative core `container.removeItem(id)` is the exception: it leads with a
+core removal and therefore requires root `onItemRemove` to synchronize
+framework state.

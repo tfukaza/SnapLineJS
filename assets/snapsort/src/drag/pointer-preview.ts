@@ -1,5 +1,6 @@
 import type { GhostRect } from "../events";
 import { buildGhostOverlayLocation, updateGhostState } from "../event-builders";
+import { toContainerLocalRect } from "../insertion-geometry";
 import {
   assertCanFireGhostInsert,
   assertCanFireGhostRemove,
@@ -27,7 +28,7 @@ function frozenGroupGeometry(session: DragSession): GroupGeometry {
     const start = session.dragVisualStart.get(item);
     if (!start) {
       throw new Error(
-        `SnapSort: participant "${item.resolvedItemId}" has no captured visual start.`,
+        `SnapSort: participant "${item.itemId}" has no captured visual start.`,
       );
     }
     left = Math.min(left, start.x);
@@ -77,14 +78,11 @@ export async function startPointerPreview(session: DragSession): Promise<void> {
   }
 
   const rect = pointerPreviewRect(session);
-  const ghost = session.primaryItem.createGhostItem(
-    session,
-    {
-      type: "pointer-preview",
-      location: buildGhostOverlayLocation(session.root),
-    },
+  const ghost = session.primaryItem.createGhostItem(session, {
+    type: "pointer-preview",
+    location: buildGhostOverlayLocation(session.root),
     rect,
-  );
+  });
   session.ghostsByChannel.set("pointer", ghost);
   fireGhostInsert(ghost, null);
   await settleMutation();
@@ -104,22 +102,20 @@ export function updatePointerPreview(session: DragSession): void {
       "SnapSort: the pointer ghost must retain pointer-preview state.",
     );
   }
-  const state = updateGhostState(previous, previous.location, rect);
+  const state = updateGhostState(previous, {
+    type: "pointer-preview",
+    location: previous.location,
+    rect,
+  });
   ghost.ghostState = state;
 
   // Pointer motion is engine-owned visual geometry, not a structural ghost
   // move. Keep it out of adapter commits and update the mounted visual only.
-  const rootSnapshot = session.root.dragSnapshot;
-  if (!rootSnapshot) {
-    throw new Error(
-      "SnapSort: pointer preview requires a captured root drag layout.",
-    );
-  }
-  const rootBox = rootSnapshot.box;
-  element.style.left = `${rect.x - rootBox.x}px`;
-  element.style.top = `${rect.y - rootBox.y}px`;
-  element.style.width = `${rect.width}px`;
-  element.style.height = `${rect.height}px`;
+  const localRect = toContainerLocalRect(rect, session.root);
+  element.style.left = `${localRect.x}px`;
+  element.style.top = `${localRect.y}px`;
+  element.style.width = `${localRect.width}px`;
+  element.style.height = `${localRect.height}px`;
   session.root.invalidateVisualGeometry(session.items, "drag");
 }
 
@@ -154,7 +150,7 @@ export function pointerPreviewMemberRects(
     const start = session.dragVisualStart.get(item);
     if (!start) {
       throw new Error(
-        `SnapSort: participant "${item.resolvedItemId}" has no captured visual start.`,
+        `SnapSort: participant "${item.itemId}" has no captured visual start.`,
       );
     }
     return new DOMRect(

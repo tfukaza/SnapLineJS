@@ -9,8 +9,9 @@ sectionOrder: 2
 ---
 
 <script>
-  import SnapSortConceptsDiagram from "$lib/components/docs/SnapSortConceptsDiagram.svelte";
-  import SnapSortEntityCue from "$lib/components/docs/SnapSortEntityCue.svelte";
+  import SnapSortConceptsDiagram from
+  "$lib/components/docs/SnapSortConceptsDiagram.svelte"; import
+  SnapSortEntityCue from "$lib/components/docs/SnapSortEntityCue.svelte";
 </script>
 
 SnapSort models a drag-and-drop interface with two primitives:
@@ -25,9 +26,10 @@ _containers_ define where things can be placed.
 
 An `Item` is an UI element that can be dragged and placed in different locations.
 
-Each item carries a globally unique `itemId`, which helps the library identify
-items even after they get moved around. `itemId` must be defined by the developer,
-and be consistent and unique for an item throughout its lifetime.
+Each item carries an `itemId`, which helps the library identify it even after it
+moves. The developer must keep that ID stable for the item's lifetime and unique
+within one SnapSort root. Independent roots may reuse the same IDs; a framework
+`RenderTree` represents one such root.
 
 ## Containers Define Placement
 
@@ -49,13 +51,21 @@ containers, `dropPriority` and `getDropPriority` can prefer one destination
 before the active placement mode chooses an exact position. See
 [Drop Policies](/docs/snapsort/guides/04_drop_policies) for the complete order.
 
-The root owns the active `DragSession`, but it does not receive every callback.
-Callbacks are configured per container and do not bubble or inherit. Root
-callbacks report the session lifecycle, candidate containers decide whether
-they can accept a drop, the direct destination commits a normal move, and the
-dragged item's direct source commits a swap. See
+Callbacks follow two ownership rules. Structural mutations and root lifecycle
+events are configured on and dispatched to the tree root; their event payloads
+identify the semantic source, destination, and ghost owner. If a structural
+callback is absent there, SnapSort falls back to the root adapter. Drop policy,
+geometry, and hover callbacks remain local to the candidate destination or
+direct item owner that they inspect. See
 [Session Lifecycle](/docs/snapsort/guides/03_session_lifecycle) for the complete
 routing table.
+
+This does not make SnapSort the owner of application CRUD. An Add button or
+Delete button changes application state directly, and the framework mounts or
+unmounts the matching `Item`. Structural callbacks exist for the opposite
+direction: they tell the application when a SnapSort command or drag has
+already changed the core tree. Application-specific meanings such as “dropping
+here deletes these records” belong in application lifecycle handlers.
 
 > [!WARNING]
 > Root containers must never be destroyed during the lifetime of the application,
@@ -65,17 +75,33 @@ routing table.
 
 <SnapSortEntityCue kind="ghost" />
 
-Ghosts are passive, temporary visuals owned by a drag session. Their `role`
-explains their job:
+Ghosts are passive, temporary visuals owned by a drag session. The exact
+`GhostState.type` explains each ghost's job:
 
-- `target` previews the prospective placement.
-- `source` preserves the layout slot an actual dragged item left behind.
-- `pointer` follows the pointer without becoming application data.
+- `source-spacer` preserves a layout slot vacated by an actual dragged item.
+- `target-spacer` previews a prospective full-size flow placement.
+- `insertion-marker` previews a prospective placement as a marker line. Its
+  zero-thickness `gap` is placement geometry; `previous`, `next`, and
+  `isCurrentPlacement` explain the physical boundary SnapSort selected.
+- `pointer-preview` follows the pointer without becoming application data.
 
 A placement mode can use more than one at once. For example, insertion mode
-can show its target marker while a separate pointer preview follows the drag.
-The application decides what each role looks like through its framework's
-`Ghost` rendering API.
+can show an `insertion-marker` while a separate `pointer-preview` follows the
+drag. Framework `RenderTree` state stores ghosts in the same keyed `entries`
+sequences as ordinary values, and the application decides how each type looks
+through its framework's `Ghost` rendering API.
+
+Insertion marker state deliberately separates targeting from paint. SnapSort
+ranks the immutable, world-space `gap`; the renderer turns that gap into a
+visible rectangle with an explicit thickness and optional insets. Changing the
+painted line does not change which gap wins.
+
+Ghosts still need three structural callbacks because SnapSort owns their whole
+presence lifecycle: it can insert a new ghost, move the same keyed ghost, or
+remove it. Those callbacks remain explicit even when all three delegate to one
+`reduceRenderTree` function. An ordinary cross-container move, by contrast, is
+one semantic `onItemMove` transaction rather than an item-remove event followed
+by an item-insert event.
 
 ## Every Drag Is a Session
 

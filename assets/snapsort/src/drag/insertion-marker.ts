@@ -6,6 +6,7 @@ import {
   updateGhostState,
 } from "../event-builders";
 import type { DragLocation } from "../events";
+import type { GhostStatePlacement } from "../events";
 import {
   assertCanFireGhostInsert,
   assertCanFireGhostMove,
@@ -42,7 +43,7 @@ import {
  * Floating insertion marker: insertion mode. Unlike the flow ghost, the
  * marker is never attached to a container's item-ordered list — its logical
  * position lives solely in `DragSession.pendingPlacement`, and its DOM
- * element is absolutely positioned from the algorithm's computed rect.
+ * element is rendered from the algorithm's canonical gap segment.
  * Pointer representation is independent: `dragVisual` can hoist the real
  * Item, render the shared group preview, or show no pointer-following visual.
  */
@@ -51,11 +52,11 @@ async function syncInsertionPlacement(
   session: DragSession,
   placement: DropPlacement,
 ): Promise<void> {
-  const { container, index, ghostRect } = placement;
+  const { container, index, insertion } = placement;
   const item = session.primaryItem;
   let ghostItem = session.ghostsByChannel.get("target") ?? null;
-  if (!ghostRect) {
-    throw new Error("SnapSort: insertion placement requires marker geometry.");
+  if (!insertion) {
+    throw new Error("SnapSort: insertion placement requires gap geometry.");
   }
   if (!container.element) {
     throw new Error(
@@ -70,16 +71,14 @@ async function syncInsertionPlacement(
   assertCanFireGhostRemove(container);
 
   const firstRect = ghostItem ? consumeStagedVisualRect(ghostItem) : null;
+  const markerPlacement = {
+    type: "insertion-marker",
+    location: buildGhostSlotLocation(container, index),
+    ...insertion,
+  } satisfies Extract<GhostStatePlacement, { type: "insertion-marker" }>;
 
   if (!ghostItem) {
-    ghostItem = item.createGhostItem(
-      session,
-      {
-        type: "insertion-marker",
-        location: buildGhostSlotLocation(container, index),
-      },
-      ghostRect,
-    );
+    ghostItem = item.createGhostItem(session, markerPlacement);
     session.ghostsByChannel.set("target", ghostItem);
     session.pendingPlacement = placement;
     // The marker is intentionally never attached to the container's item
@@ -92,11 +91,7 @@ async function syncInsertionPlacement(
         "SnapSort: the insertion ghost must retain insertion-marker state.",
       );
     }
-    const state = updateGhostState(
-      previousState,
-      buildGhostSlotLocation(container, index),
-      ghostRect,
-    );
+    const state = updateGhostState(previousState, markerPlacement);
     ghostItem.ghostState = state;
     session.pendingPlacement = placement;
     fireGhostMove(previousState, state, null);
@@ -152,7 +147,7 @@ function drop(session: DragSession): void {
   const item = session.primaryItem;
   const items = session.items;
   const root = session.root;
-  const dropItemIds = items.map((member) => member.resolvedItemId);
+  const dropItemIds = items.map((member) => member.itemId);
   const dropRects = items.map(() => ({
     first: null as DOMRect | null,
     last: null as DOMRect | null,
@@ -237,7 +232,7 @@ function drop(session: DragSession): void {
   root.schedule(
     () => {
       items.forEach((member, i) => {
-        const currentItem = root.findItemByKey(dropItemIds[i]) ?? member;
+        const currentItem = root.findItemById(dropItemIds[i]) ?? member;
         const element = currentItem.element?.isConnected
           ? currentItem.element
           : null;

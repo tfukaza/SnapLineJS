@@ -79,22 +79,46 @@ Set a stable preference with `dropPriority`:
 
 ```svelte framework=Svelte
 <Container
+  itemId="words-root"
   metadata={{ boardId: "sentence" }}
   config={{ dropPriority: 2, callbacks }}
-  items={words}
 >
-  <!-- entry and ghost snippets -->
+  {#each words.entries as entry (entry.itemId)}
+    {#if entry.isGhost}
+      <Ghost ghost={entry.ghost} />
+    {:else if entry.childTree}
+      <WordContainer {entry} />
+    {:else}
+      <Item itemId={entry.itemId}>{entry.value.label}</Item>
+    {/if}
+  {/each}
 </Container>
 ```
 
 ```tsx framework=React
 <Container
+  itemId="words-root"
   metadata={{ boardId: "sentence" }}
   config={{ dropPriority: 2, callbacks }}
 >
-  {renderedEntries}
+  {words.entries.map((entry) =>
+    entry.isGhost ? (
+      <Ghost key={entry.itemId} ghost={entry.ghost} />
+    ) : entry.childTree ? (
+      <WordContainer key={entry.itemId} entry={entry} />
+    ) : (
+      <Item key={entry.itemId} itemId={entry.itemId}>
+        {entry.value.label}
+      </Item>
+    ),
+  )}
 </Container>
 ```
+
+`WordContainer` is the recursive nested-Container branch: it renders the
+entry's `childTree` and uses `entry.itemId` as the Container's `itemId`. Flat
+word lists never enter that branch, but keeping the
+three-way renderer makes the same component safe for nested data.
 
 Use `getDropPriority` when preference depends on the current drag:
 
@@ -111,14 +135,14 @@ function prioritizeUrgentItems(event: DropPriorityEvent) {
 `DropPriorityEvent` includes the same item, source, and destination fields as
 the eligibility event, plus:
 
-| Field | Description |
-|-------|-------------|
-| `staticPriority` | The destination's configured `dropPriority` before the callback. |
-| `pointer` | Current pointer position in world coordinates. |
-| `dragRect` | Current world-space rectangle of the primary dragged item. |
-| `containerRect` | Frozen world-space border box of the destination. |
-| `containerContentRect` | Frozen world-space content box of the destination. |
-| `depth` | Destination depth in the SnapSort tree. |
+| Field                  | Description                                                      |
+| ---------------------- | ---------------------------------------------------------------- |
+| `staticPriority`       | The destination's configured `dropPriority` before the callback. |
+| `pointer`              | Current pointer position in world coordinates.                   |
+| `dragRect`             | Current world-space rectangle of the primary dragged item.       |
+| `containerRect`        | Frozen world-space border box of the destination.                |
+| `containerContentRect` | Frozen world-space content box of the destination.               |
+| `depth`                | Destination depth in the SnapSort tree.                          |
 
 The callback runs only after `canDrop` accepts the destination. Returning a
 number is an absolute override, so use `event.staticPriority` explicitly when
@@ -132,12 +156,12 @@ The geometry policies use SnapEngine's core collision primitives, keeping
 containment, intersection, and edge-distance behavior consistent with the
 collision engine.
 
-| Callback | Behavior |
-|----------|----------|
-| `prioritizePointerContainer` | Returns `1` when `containerRect` contains the pointer; otherwise preserves static priority. |
-| `prioritizeIntersectingContainer` | Returns `1` when the primary `dragRect` intersects `containerRect`; otherwise preserves static priority. |
-| `prioritizeNearestContainerEdge` | Returns the negative pointer-to-container distance; a pointer inside scores `0`. |
-| `rejectDrop` | Always returns `false`; use it as `canDrop` for a structural container that must never accept items directly. |
+| Callback                          | Behavior                                                                                                      |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `prioritizePointerContainer`      | Returns `1` when `containerRect` contains the pointer; otherwise preserves static priority.                   |
+| `prioritizeIntersectingContainer` | Returns `1` when the primary `dragRect` intersects `containerRect`; otherwise preserves static priority.      |
+| `prioritizeNearestContainerEdge`  | Returns the negative pointer-to-container distance; a pointer inside scores `0`.                              |
+| `rejectDrop`                      | Always returns `false`; use it as `canDrop` for a structural container that must never accept items directly. |
 
 ```ts
 import { prioritizePointerContainer } from "@snap-engine/snapsort/callbacks";
@@ -160,3 +184,11 @@ application command. It bypasses `canDrop`, `dropPriority`, and
 `getDropPriority`, then commits through the normal mutation callbacks. Validate
 button, keyboard, or other programmatic actions in application code when they
 should follow the same domain policy as pointer drops.
+
+Adding or deleting application data is different: update framework state
+directly and let reconciliation mount or unmount the corresponding Item. If
+code deliberately invokes the core `container.removeItem(id)` command instead,
+configure root `onItemRemove` and synchronize the application collection from
+that event. A metadata role such as `"trash"` never gives SnapSort delete
+semantics; see [Placement Modes](/docs/snapsort/guides/02_placement_modes#give-a-drop-application-meaning)
+for the application-owned drop-to-delete recipe.

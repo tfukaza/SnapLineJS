@@ -6,15 +6,16 @@ import type {
   DragStartEvent,
   DropTargetChangeEvent,
   GhostInsertEvent,
-  GhostLocation,
   GhostMoveEvent,
   GhostOverlayLocation,
-  GhostRect,
   GhostRemoveEvent,
   GhostState,
   GhostStateBase,
   GhostStatePlacement,
   GhostSlotLocation,
+  InsertionGapSegment,
+  InsertionMarkerNeighbor,
+  InsertionMarkerState,
 } from "./events";
 import type { Item } from "./item";
 import type { ItemId, ItemMetadata } from "./snapshot";
@@ -32,10 +33,10 @@ export function buildItemRunEvent(items: readonly Item[]): ItemRunEventFields {
   const item = items[0];
   return {
     item,
-    itemId: item.resolvedItemId,
+    itemId: item.itemId,
     itemMetadata: item.metadata,
     items: [...items],
-    itemIds: items.map((member) => member.resolvedItemId),
+    itemIds: items.map((member) => member.itemId),
     itemsMetadata: items.map((member) => member.metadata),
   };
 }
@@ -74,24 +75,41 @@ export function buildGhostOverlayLocation(
   };
 }
 
+function freezeInsertionGap(gap: InsertionGapSegment): InsertionGapSegment {
+  return Object.freeze({ ...gap });
+}
+
+function freezeInsertionNeighbor(
+  neighbor: InsertionMarkerNeighbor | null,
+): InsertionMarkerNeighbor | null {
+  if (neighbor === null) return null;
+  return Object.freeze({
+    ...neighbor,
+    rect: Object.freeze({
+      x: neighbor.rect.x,
+      y: neighbor.rect.y,
+      width: neighbor.rect.width,
+      height: neighbor.rect.height,
+    }),
+  });
+}
+
 export function buildGhostState(
   session: DragSession,
   placement: GhostStatePlacement,
   original: Item,
   ghostItem: Item,
-  rect: GhostRect,
 ): GhostState {
   const base: GhostStateBase = {
     session: session.handle,
     original,
-    originalItemId: original.resolvedItemId,
+    originalItemId: original.itemId,
     originalMetadata: original.metadata,
     items: [...session.items],
-    itemIds: session.items.map((item) => item.resolvedItemId),
+    itemIds: session.items.map((item) => item.itemId),
     ghostItem,
-    ghostItemId: ghostItem.resolvedItemId,
+    ghostItemId: ghostItem.itemId,
     ghostMetadata: ghostItem.metadata,
-    rect,
   };
 
   switch (placement.type) {
@@ -100,24 +118,31 @@ export function buildGhostState(
         ...base,
         type: "source-spacer",
         location: placement.location,
+        rect: placement.rect,
       };
     case "target-spacer":
       return {
         ...base,
         type: "target-spacer",
         location: placement.location,
+        rect: placement.rect,
       };
     case "insertion-marker":
-      return {
+      return Object.freeze({
         ...base,
         type: "insertion-marker",
         location: placement.location,
-      };
+        gap: freezeInsertionGap(placement.gap),
+        previous: freezeInsertionNeighbor(placement.previous),
+        next: freezeInsertionNeighbor(placement.next),
+        isCurrentPlacement: placement.isCurrentPlacement,
+      } satisfies InsertionMarkerState);
     case "pointer-preview":
       return {
         ...base,
         type: "pointer-preview",
         location: placement.location,
+        rect: placement.rect,
       };
   }
 }
@@ -127,57 +152,73 @@ type GhostStateOf<Type extends GhostState["type"]> = Extract<
   { type: Type }
 >;
 
+type GhostStatePlacementOf<Type extends GhostState["type"]> = Extract<
+  GhostStatePlacement,
+  { type: Type }
+>;
+
 export function updateGhostState(
   previous: GhostStateOf<"source-spacer">,
-  location: GhostSlotLocation,
-  rect: GhostRect,
+  placement: GhostStatePlacementOf<"source-spacer">,
 ): GhostStateOf<"source-spacer">;
 export function updateGhostState(
   previous: GhostStateOf<"target-spacer">,
-  location: GhostSlotLocation,
-  rect: GhostRect,
+  placement: GhostStatePlacementOf<"target-spacer">,
 ): GhostStateOf<"target-spacer">;
 export function updateGhostState(
   previous: GhostStateOf<"insertion-marker">,
-  location: GhostSlotLocation,
-  rect: GhostRect,
+  placement: GhostStatePlacementOf<"insertion-marker">,
 ): GhostStateOf<"insertion-marker">;
 export function updateGhostState(
   previous: GhostStateOf<"pointer-preview">,
-  location: GhostOverlayLocation,
-  rect: GhostRect,
+  placement: GhostStatePlacementOf<"pointer-preview">,
 ): GhostStateOf<"pointer-preview">;
 export function updateGhostState(
   previous: GhostState,
-  location: GhostLocation,
-  rect: GhostRect,
+  placement: GhostStatePlacement,
 ): GhostState {
-  switch (previous.type) {
+  switch (placement.type) {
     case "source-spacer":
-      if (location.type !== "slot") {
-        throw new Error("SnapSort: a source spacer requires a slot location.");
+      if (previous.type !== "source-spacer") {
+        break;
       }
-      return { ...previous, location, rect };
+      return {
+        ...previous,
+        location: placement.location,
+        rect: placement.rect,
+      };
     case "target-spacer":
-      if (location.type !== "slot") {
-        throw new Error("SnapSort: a target spacer requires a slot location.");
+      if (previous.type !== "target-spacer") {
+        break;
       }
-      return { ...previous, location, rect };
+      return {
+        ...previous,
+        location: placement.location,
+        rect: placement.rect,
+      };
     case "insertion-marker":
-      if (location.type !== "slot") {
-        throw new Error(
-          "SnapSort: an insertion marker requires a slot location.",
-        );
+      if (previous.type !== "insertion-marker") {
+        break;
       }
-      return { ...previous, location, rect };
+      return Object.freeze({
+        ...previous,
+        location: placement.location,
+        gap: freezeInsertionGap(placement.gap),
+        previous: freezeInsertionNeighbor(placement.previous),
+        next: freezeInsertionNeighbor(placement.next),
+        isCurrentPlacement: placement.isCurrentPlacement,
+      } satisfies InsertionMarkerState);
     case "pointer-preview":
-      if (location.type !== "overlay") {
-        throw new Error(
-          "SnapSort: a pointer preview requires an overlay location.",
-        );
+      if (previous.type !== "pointer-preview") {
+        break;
       }
-      return { ...previous, location, rect };
+      return {
+        ...previous,
+        location: placement.location,
+        rect: placement.rect,
+      };
   }
+  throw new Error("SnapSort: a ghost cannot change its state type.");
 }
 
 export function buildGhostInsertEvent(

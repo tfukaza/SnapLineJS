@@ -17,8 +17,12 @@ export type {
   GhostOverlayLocation,
   GhostState,
   GhostStatePlacement,
+  InsertionGapSegment,
+  InsertionMarkerNeighbor,
+  InsertionMarkerState,
   GhostEvent,
   GhostCreateEvent,
+  GhostLifecycleEvent,
   GhostInsertEvent,
   GhostMoveEvent,
   GhostRemoveEvent,
@@ -34,28 +38,36 @@ export type {
   CanDropEvent,
   DropPriorityEvent,
   DropPriorityRect,
-  InsertionMarkerRectEvent,
   ItemHitbox,
   ItemHitboxEvent,
   VisualGeometryInvalidationEvent,
   VisualGeometryInvalidationReason,
 } from "./events";
 export type {
+  ContainerLocalRect,
+  InsertionMarkerRectOptions,
+} from "./insertion-geometry";
+export {
+  insertionMarkerRect,
+  stockInsertionMarkerRectOptions,
+  toContainerLocalRect,
+} from "./insertion-geometry";
+export type {
   SnapSortAdapter,
   SnapSortAdapterCallbacks,
   CreateVanillaAdapterOptions,
 } from "./adapter";
 export { createVanillaAdapter } from "./adapter";
-export type { RenderEntry } from "./ghost-state";
-export { renderKey, type RenderKey } from "./render-key";
+export type { RenderEntry, RenderTree, RenderTreeEvent } from "./render-state";
 export {
-  insertGhostState,
-  moveGhostState,
-  removeGhostState,
-  composeRenderEntries,
-} from "./ghost-state";
+  createRenderEntries,
+  createRenderEntry,
+  createRenderTree,
+  reduceRenderTree,
+} from "./render-state";
 export type { LayoutMainAxisAlign } from "./layout";
 export { Item } from "./item";
+export type { ItemOptions } from "./item";
 export type { ItemId, ItemMetadata, ItemSnapshot } from "./snapshot";
 export type { DragSession, DragSessionStatus } from "./drag/session";
 export type { SortMode } from "./drag/drop-strategy";

@@ -10,19 +10,20 @@ sectionOrder: 1
 
 ## Install
 
-SnapSort comes in two packages, `@snap-engine/snapsort` itself 
+SnapSort comes in two packages, `@snap-engine/snapsort` itself
 and the `@snap-engine/asset-base` dependency.
 
 ```bash framework=Svelte
 npm install @snap-engine/snapsort @snap-engine/asset-base
 ```
+
 ```bash framework=React
 npm install @snap-engine/snapsort @snap-engine/asset-base react react-dom
 ```
+
 ```bash framework=Vanilla
 npm install @snap-engine/snapsort
 ```
-
 
 ## Your First Sortable List
 
@@ -32,107 +33,121 @@ and render one `Item` per entry. This creates a working drag-and-drop list:
 ```svelte framework=Svelte
 <script lang="ts">
   import { Engine } from "@snap-engine/asset-base/svelte";
-  import { Container, Item } from "@snap-engine/snapsort/svelte";
-  import type { ItemMoveEvent } from "@snap-engine/snapsort";
+  import { Container, Ghost, Item } from "@snap-engine/snapsort/svelte";
+  import {
+    createRenderEntries,
+    createRenderTree,
+    reduceRenderTree,
+    type ContainerCallbacks,
+    type GhostLifecycleEvent,
+    type ItemMoveEvent,
+  } from "@snap-engine/snapsort";
 
-  let tasks = $state([
-    { id: "design", label: "Design" },
-    { id: "build", label: "Build" },
-    { id: "ship", label: "Ship" },
-  ]);
+  type Task = { id: string; label: string };
+
+  let list = $state.raw(
+    createRenderTree(
+      createRenderEntries<Task>(
+        [
+          { id: "design", label: "Design" },
+          { id: "build", label: "Build" },
+          { id: "ship", label: "Ship" },
+        ],
+        (task) => task.id,
+      ),
+    ),
+  );
 
   function onItemMove(event: ItemMoveEvent) {
-    const task = tasks.find((entry) => entry.id === event.itemId);
-    if (!task) return;
-
-    const next = tasks.filter((entry) => entry.id !== event.itemId);
-    next.splice(Math.max(0, Math.min(event.to.index, next.length)), 0, task);
-    tasks = next;
+    list = reduceRenderTree(list, event);
   }
+
+  function onGhostMove(event: GhostLifecycleEvent) {
+    list = reduceRenderTree(list, event);
+  }
+
+  const callbacks = {
+    onItemMove,
+    onGhostInsert: onGhostMove,
+    onGhostMove,
+    onGhostRemove: onGhostMove,
+  } satisfies ContainerCallbacks;
 </script>
 
 <Engine id="quick-start">
-  <Container
-    config={{
-      callbacks: { onItemMove },
-    }}
-    items={tasks}
-  >
-    {#snippet entry(task)}
-      <Item itemId={task.id}>{task.label}</Item>
-    {/snippet}
+  <Container itemId="quick-start-root" config={{ callbacks }}>
+    {#each list.entries as entry (entry.itemId)}
+      {#if entry.isGhost}
+        <Ghost ghost={entry.ghost} />
+      {:else}
+        <Item itemId={entry.itemId}>{entry.value.label}</Item>
+      {/if}
+    {/each}
   </Container>
 </Engine>
 ```
 
+`RenderTree` is immutable reducer state containing engine-owned identity
+objects, so Svelte stores it with `$state.raw` and replaces the root with each
+result from `reduceRenderTree`.
+
+`RenderEntry.itemId` is the framework key. SnapSort guarantees that every
+ordinary Item, nested Container, and live ghost has a distinct identity inside
+one root tree, so no local prefixing scheme is needed.
+
 ```tsx framework=React
-import { useState } from "react";
-import { Engine, Container, Ghost, Item } from "@snap-engine/snapsort/react";
-import type {
-  GhostInsertEvent,
-  GhostRemoveEvent,
-  ItemMoveEvent,
+import { useCallback, useState } from "react";
+import { Container, Engine, Ghost, Item } from "@snap-engine/snapsort/react";
+import {
+  createRenderEntries,
+  createRenderTree,
+  reduceRenderTree,
 } from "@snap-engine/snapsort";
+import type { GhostLifecycleEvent, ItemMoveEvent } from "@snap-engine/snapsort";
 
 type Task = { id: string; label: string };
-type RenderEntry =
-  | { kind: "task"; task: Task }
-  | { kind: "ghost"; event: GhostInsertEvent };
 
-const initialTasks: Task[] = [
-  { id: "design", label: "Design" },
-  { id: "build", label: "Build" },
-  { id: "ship", label: "Ship" },
-];
+function createInitialList() {
+  return createRenderTree(
+    createRenderEntries<Task>(
+      [
+        { id: "design", label: "Design" },
+        { id: "build", label: "Build" },
+        { id: "ship", label: "Ship" },
+      ],
+      (task) => task.id,
+    ),
+  );
+}
 
 export function QuickStart() {
-  const [tasks, setTasks] = useState(initialTasks);
-  const [ghost, setGhost] = useState<GhostInsertEvent | null>(null);
-
-  function onItemMove(event: ItemMoveEvent) {
-    setTasks((current) => {
-      const task = current.find((entry) => entry.id === event.itemId);
-      if (!task) return current;
-
-      const next = current.filter((entry) => entry.id !== event.itemId);
-      next.splice(Math.max(0, Math.min(event.to.index, next.length)), 0, task);
-      return next;
-    });
-  }
-
-  function onGhostRemove(event: GhostRemoveEvent) {
-    setGhost((current) =>
-      current?.ghostItem === event.ghostItem ? null : current,
-    );
-  }
-
-  const entries: RenderEntry[] = tasks.map((task) => ({ kind: "task", task }));
-  if (ghost) {
-    const originalIndex = tasks.findIndex((task) => task.id === ghost.originalItemId);
-    const coreIndex = Math.max(0, Math.min(ghost.index, entries.length));
-    entries.splice(originalIndex !== -1 && originalIndex <= coreIndex ? coreIndex + 1 : coreIndex, 0, {
-      kind: "ghost",
-      event: ghost,
-    });
-  }
+  const [list, setList] = useState(createInitialList);
+  const onItemMove = useCallback((event: ItemMoveEvent) => {
+    setList((current) => reduceRenderTree(current, event));
+  }, []);
+  const onGhostMove = useCallback((event: GhostLifecycleEvent) => {
+    setList((current) => reduceRenderTree(current, event));
+  }, []);
 
   return (
     <Engine id="quick-start">
       <Container
+        itemId="quick-start-root"
         config={{
           callbacks: {
             onItemMove,
-            onGhostInsert: setGhost,
-            onGhostRemove,
+            onGhostInsert: onGhostMove,
+            onGhostMove,
+            onGhostRemove: onGhostMove,
           },
         }}
       >
-        {entries.map((entry) =>
-          entry.kind === "ghost" ? (
-            <Ghost key={`ghost-${entry.event.ghostItem.id}`} event={entry.event} />
+        {list.entries.map((entry) =>
+          entry.isGhost ? (
+            <Ghost key={entry.itemId} ghost={entry.ghost} />
           ) : (
-            <Item key={entry.task.id} itemId={entry.task.id}>
-              {entry.task.label}
+            <Item key={entry.itemId} itemId={entry.itemId}>
+              {entry.value.label}
             </Item>
           ),
         )}
@@ -141,6 +156,85 @@ export function QuickStart() {
   );
 }
 ```
+
+## Who Changes Framework Render State?
+
+In Svelte and React, the callbacks above are not a general CRUD layer. They
+synchronize changes that **SnapSort originates** with application state. One
+semantic item move can remove a complete run from its source and insert it at
+its destination, so it produces one root `onItemMove` callback rather than
+separate remove and insert notifications.
+
+Ghosts have a different lifetime. SnapSort creates, relocates, and destroys
+them while a drag is active, so the framework needs all three explicit
+`onGhostInsert`, `onGhostMove`, and `onGhostRemove` hooks. The hooks may still
+share one local `GhostLifecycleEvent` function because `reduceRenderTree`
+understands all three events.
+
+When application code owns an operation—an Add button, a Delete button, or a
+server update—it should update its ordinary `RenderTree` entries directly.
+Mounting and unmounting the corresponding framework components registers and
+unregisters their core Items; SnapSort does not echo the application's own
+change through an item callback.
+
+Add functions like these to the framework examples above:
+
+```ts framework=Svelte
+import { createRenderEntry, type ItemId } from "@snap-engine/snapsort";
+
+function addTask(task: Task) {
+  list = {
+    ...list,
+    entries: [...list.entries, createRenderEntry(task, task.id)],
+  };
+}
+
+function deleteTasks(itemIds: readonly ItemId[]) {
+  const deleted = new Set(itemIds);
+  list = {
+    ...list,
+    entries: list.entries.filter(
+      (entry) => entry.isGhost || !deleted.has(entry.itemId),
+    ),
+  };
+}
+```
+
+```tsx framework=React
+import { createRenderEntry, type ItemId } from "@snap-engine/snapsort";
+
+const addTask = useCallback((task: Task) => {
+  setList((current) => ({
+    ...current,
+    entries: [...current.entries, createRenderEntry(task, task.id)],
+  }));
+}, []);
+
+const deleteTasks = useCallback((itemIds: readonly ItemId[]) => {
+  const deleted = new Set(itemIds);
+  setList((current) => ({
+    ...current,
+    entries: current.entries.filter(
+      (entry) => entry.isGhost || !deleted.has(entry.itemId),
+    ),
+  }));
+}, []);
+```
+
+These flat-list functions are deliberately application code, not SnapSort
+exports. A nested application performs the same immutable edit in the selected
+child tree. Keep the root Container mounted for the lifetime of this state; if
+the root is destroyed, discard the tree and call `createRenderTree` again for
+its replacement.
+
+There is one separate imperative path: calling
+`container.removeItem(itemId)` changes SnapSort's core tree first. Configure a
+root `onItemRemove` and pass that event to `reduceRenderTree` so framework state
+catches up synchronously. Ordinary moves never emit that remove callback.
+`ItemInsertEvent` is likewise a real lower-level event, but
+`reduceRenderTree` cannot accept it because the event cannot invent the
+application value to store for a newly introduced core Item.
+
 ```javascript framework=Vanilla
 import { Engine } from "@snap-engine/core";
 import { CollisionEngine } from "@snap-engine/core/collision";
@@ -153,14 +247,16 @@ const engine = new Engine();
 engine.setCollisionEngine(new CollisionEngine());
 engine.assignDom(root);
 
-const container = new Container(engine, null);
+const container = new Container(engine, null, { itemId: "quick-start-root" });
 container.element = list;
 
 for (const element of list.querySelectorAll("[data-item-id]")) {
-  const item = new Item(engine, container);
-  item.itemId = element.dataset.itemId;
+  const itemId = element.dataset.itemId;
+  if (!itemId) throw new Error("Missing data-item-id");
+  const item = new Item(engine, container, { itemId });
   item.element = element;
 }
 ```
 
-Items can now be dragged to reorder, with animations included by default.
+Items can now be dragged to reorder. Animations are opt-in through
+`config.animation`; pass `defaultAnimations` for SnapSort's standard motion.

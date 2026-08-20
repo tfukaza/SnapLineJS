@@ -21,16 +21,21 @@ component creates, configures, and eventually destroys its own core Item.
 
 ## A Basic Item
 
-A container's `entry` snippet receives one value from its `items` array. Render
-an `Item` for that value, give it the same stable ID, and put the entry's
-content inside the component. When `onItemMove` updates the array, Svelte
+Render an `Item` from each ordinary entry in the application-owned keyed loop,
+give it `entry.itemId`, and put the entry's content inside the component. When
+`onItemMove` updates the render tree or another application collection, Svelte
 reconciles the new order.
 
 <ItemExample kind="basic" />
 
-`Item` renders a `div` with the `snapsort-item` class, writes its resolved ID to
+`Item` renders a `div` with the `snapsort-item` class, writes its immutable ID to
 `data-snapsort-item-id`, and provides its core Item object to descendants such
 as `Handle`.
+
+Adding or deleting an ordinary application value is an application-state
+operation. When its keyed `Item` mounts or unmounts, the wrapper synchronizes
+the core registration; that reconciliation does not emit `onItemInsert` or
+`onItemRemove`. Those callbacks report core-originated commands instead.
 
 ## Component Properties
 
@@ -42,7 +47,7 @@ type ItemProps = Omit<HTMLAttributes<HTMLDivElement>, "children"> & {
   children: Snippet;
   className?: string;
   item?: SnapSortItem | null;
-  itemId?: string;
+  itemId: string;
   metadata?: ItemMetadata;
   selected?: boolean;
 };
@@ -64,16 +69,17 @@ cards, form controls, or other components.
 ### `itemId`
 
 `itemId` is the stable application identity used by move and remove commands,
-ghosts, keyed collection updates, and callback events. In the Svelte adapter it
-is required unless a supplied `item` already carries an ID.
+ghosts, keyed collection updates, and callback events. It is required for both
+component-owned and adopted Items, must be non-empty, and cannot change while
+the component remains mounted.
 
 ```svelte
 <Item itemId={task.id}>{task.title}</Item>
 ```
 
-Use the same value returned by the parent Container's `getItemId(entry)`.
-Do not put the ID in `metadata`: `metadata.itemId` is unsupported and throws a
-clear error.
+When using `createRenderEntry` or `createRenderEntries`, pass the same ID to
+the helper and the rendered `Item`. Do not put the ID in `metadata`:
+`metadata.itemId` is unsupported and throws a clear error.
 
 ### `metadata`
 
@@ -92,9 +98,10 @@ replace the metadata object; Svelte synchronizes the replacement to the core
 Item, while an active drag keeps its shallow frozen snapshot. SnapSort never
 mutates the object supplied by the application.
 
-Geometry is deliberately not metadata. Configure insertion markers with the
-destination container's `getInsertionMarkerRect` callback and item hover/swap
-hitboxes with the candidate owner's `getItemHitbox` callback.
+Geometry is deliberately not metadata. An insertion-marker `GhostState`
+contains SnapSort's canonical gap and adjacent frozen Item geometry; render it
+through `Ghost` or convert it with `insertionMarkerRect`. Customize item
+hover/swap hitboxes with the candidate owner's `getItemHitbox` callback.
 
 ### `selected` and DOM events
 
@@ -136,11 +143,12 @@ new one. This is an advanced integration seam: most Item components should
 omit it and use `bind:item` when they only need access to the generated object.
 
 For an application-created instance, construct it with the same Engine and
-surrounding core Container. The adapter binds its rendered element but does not
-reparent or destroy the instance. Omitted `itemId`, `metadata`, and `selected`
-props preserve the instance's existing values; explicitly supplied props
-override them. The instance cannot be replaced after the component mounts, and
-the code that created it remains responsible for destroying it.
+surrounding core Container, passing `{ itemId }` to its constructor. The
+component's required `itemId` prop must match that construction-time identity.
+The adapter binds its rendered element but does not reparent or destroy the
+instance. Omitted `metadata` and `selected` props preserve existing values;
+explicitly supplied props override them. Neither the instance nor its identity
+can change after mount, and the creating code remains responsible for cleanup.
 
 <ItemExample kind="item-instance" />
 

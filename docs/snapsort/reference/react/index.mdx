@@ -24,22 +24,74 @@ the unified package and are required only when you import the React binding.
 ## Import
 
 ```tsx
-import { Engine, Container, Ghost, Handle, Item } from "@snap-engine/snapsort/react";
+import {
+  Engine,
+  Container,
+  Ghost,
+  Handle,
+  Item,
+} from "@snap-engine/snapsort/react";
+import {
+  reduceRenderTree,
+  type ContainerCallbacks,
+  type RenderTreeEvent,
+} from "@snap-engine/snapsort";
 ```
 
-Wrap the sortable tree in an `Engine`, then compose containers and items:
+Wrap the sortable tree in an `Engine`, then render the application's mixed
+`RenderTree.entries` sequence. The root callbacks synchronously pass item moves
+and all three explicit ghost events through one `reduceRenderTree` state update.
+Each keyed entry renders as a `Ghost`, a recursive child `Container`, or a leaf
+`Item`:
 
-The abbreviated `callbacks` below synchronously updates the React item array
-and ghost state, while `renderedEntries` contains keyed `Item` and `Ghost`
-elements. See the Container and Setup pages for the full implementation.
+The excerpt assumes `tasks` and `setTasks` come from the `useState` RenderTree
+setup, and `TaskContainer` is the recursive component shown on the Container page.
 
 ```tsx
+const applyTreeEvent = (event: RenderTreeEvent) => {
+  setTasks((current) => reduceRenderTree(current, event));
+};
+
+const callbacks = {
+  onItemMove: applyTreeEvent,
+  onGhostInsert: applyTreeEvent,
+  onGhostMove: applyTreeEvent,
+  onGhostRemove: applyTreeEvent,
+} satisfies ContainerCallbacks;
+
 <Engine id="tasks">
-  <Container config={{ callbacks }}>
-    {renderedEntries}
+  <Container itemId="tasks-root" config={{ callbacks }}>
+    {tasks.entries.map((entry) =>
+      entry.isGhost ? (
+        <Ghost key={entry.itemId} ghost={entry.ghost} />
+      ) : entry.childTree ? (
+        <TaskContainer key={entry.itemId} entry={entry} />
+      ) : (
+        <Item key={entry.itemId} itemId={entry.itemId}>
+          {entry.value.label}
+        </Item>
+      ),
+    )}
   </Container>
-</Engine>
+</Engine>;
 ```
+
+Here `TaskContainer` recursively renders `entry.childTree` with
+`itemId={entry.itemId}`. The root alone receives the structural
+callbacks; see the Container page for the complete state and recursive component.
+
+The callback count reflects ownership rather than item/ghost symmetry. A drag
+produces one semantic `onItemMove` for its complete source-to-destination
+transition. SnapSort itself creates, relocates, and removes ghosts, so React
+must receive all three explicit ghost-presence callbacks; they happen to share
+the `applyTreeEvent` function above.
+
+Do not use these callbacks as a general CRUD API. An application Add or Delete
+action updates `tasks` directly, and React mounting or unmounting the keyed
+`Item` synchronizes its core registration. Add `onItemRemove: applyTreeEvent`
+only when code invokes the core `container.removeItem(id)` command.
+`RenderTreeEvent` excludes `ItemInsertEvent` because a core insertion event
+cannot supply the application value for a new `RenderEntry<T>`.
 
 `Engine` creates or accepts a core `Engine`, assigns it to the rendered root, installs collision handling, and provides it through React context. Use `useSnapSortEngine()` when a descendant needs the current core engine.
 
@@ -49,17 +101,24 @@ elements. See the Container and Setup pages for the full implementation.
 - [Item](/docs/snapsort/reference/react/item) — props, identity, metadata, selection, refs, and drag handles.
 
 `Handle` belongs inside an `Item` and limits where a drag can begin.
-`Ghost` binds a framework-rendered flow placeholder to the `ghostItem` in an
-`onGhostInsert` event. Remove that rendered entry in `onGhostRemove`. Do not
-render a ghost with `Item`, because a ghost is already attached to the core
-container by the drag lifecycle.
+`Ghost` renders any lifecycle `GhostState` from the mixed entry sequence and
+binds its engine-owned `ghostItem` to that element. It covers source and target
+spacers, insertion markers, and pointer previews. Do not render a ghost with
+`Item`, because a ghost is already attached to the core container by the drag
+lifecycle.
+
+For an insertion marker, `Ghost` derives an exact container-local rectangle
+from the state's zero-thickness `gap`. Its `insertionMarker` prop accepts the
+complete `{ thickness, startInset, endInset }` presentation contract. Custom
+adapters use the framework-neutral `insertionMarkerRect` helper with the same
+options; none of those paint choices affect candidate ranking.
 
 Every wrapper accepts standard `div` attributes and forwards them to its DOM
 element. `style` is merged after SnapSort's structural flex/position defaults.
 
 ## Core Types
 
-Import callback events, configuration, metadata, and ref object types from the framework-agnostic package:
+Import callback events, configuration, metadata, and core object types from the framework-agnostic package:
 
 ```ts
 import type { Engine as CoreEngine } from "@snap-engine/core";
@@ -81,10 +140,10 @@ For application-state, ghost, and callback examples, see the [Container referenc
 
 ## Subpath Exports
 
-| Import path | Exports |
-|-------------|---------|
-| `@snap-engine/snapsort/react/Engine` | `Engine`, context, and `useSnapSortEngine` |
-| `@snap-engine/snapsort/react/Container` | Container components and context |
-| `@snap-engine/snapsort/react/Ghost` | Framework-owned flow ghost component |
-| `@snap-engine/snapsort/react/Item` | Item components and context |
-| `@snap-engine/snapsort/react/Handle` | `Handle` |
+| Import path                             | Exports                                    |
+| --------------------------------------- | ------------------------------------------ |
+| `@snap-engine/snapsort/react/Engine`    | `Engine`, context, and `useSnapSortEngine` |
+| `@snap-engine/snapsort/react/Container` | Container components and context           |
+| `@snap-engine/snapsort/react/Ghost`     | Framework-owned lifecycle ghost view       |
+| `@snap-engine/snapsort/react/Item`      | Item components and context                |
+| `@snap-engine/snapsort/react/Handle`    | `Handle`                                   |

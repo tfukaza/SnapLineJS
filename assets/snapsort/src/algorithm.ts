@@ -14,11 +14,14 @@ import {
   contentBoxSize,
   createLayoutResolutionPlan,
   flowAxesForDirection,
+  flowLayoutCanWrap,
+  inferSnapshotVisualLines,
   virtualEntrySizeFor,
   pointFromAxes,
   virtualDimensions as layoutVirtualDimensions,
   type LayoutPlanDiagnostics,
   type LayoutResolutionPlan,
+  type SnapshotVisualLine,
   type VirtualInsertion,
 } from "./layout";
 import type { ItemSnapshot } from "./snapshot";
@@ -26,11 +29,13 @@ import type { DragSessionController as DragSession } from "./drag/session";
 import type {
   CanDropEvent,
   DropPriorityEvent,
-  GhostRect,
-  InsertionMarkerRectEvent,
+  InsertionGapSegment,
+  InsertionMarkerNeighbor,
+  InsertionMarkerPresentation,
   ItemHitboxEvent,
 } from "./events";
 import { buildItemLocation, buildItemRunEvent } from "./event-builders";
+import { projectItemRunMove } from "./internal/move-projection";
 
 const TAG_COLLISIONS = "drop-collisions";
 const TAG_CANDIDATES = "drop-candidates";
@@ -38,7 +43,6 @@ const TAG_LAYOUT = "drop-layout";
 const TOP_CANDIDATE_DEBUG_LIMIT = 3;
 
 type Rect = { x: number; y: number; width: number; height: number };
-type InsertionGhostRect = Rect;
 type ResolvedItemHitbox =
   | { shape: "rect"; rect: Rect }
   | { shape: "circle"; circle: CollisionCircle };
@@ -58,13 +62,13 @@ export interface VirtualDimensions {
 export interface ResolvedDropTarget {
   container: Container;
   index: number;
-  ghostRect?: InsertionGhostRect;
+  insertion?: InsertionMarkerPresentation;
 }
 
 interface CandidateGeometry {
   target: ResolvedDropTarget;
-  ghostCenterX: number;
-  ghostCenterY: number;
+  candidateCenterX: number;
+  candidateCenterY: number;
   distance: number;
   placementRect: Rect;
 }
@@ -84,7 +88,9 @@ interface FlowCandidate extends CandidateGeometry {
   placementContainsDragCenter: boolean;
 }
 
-type InsertionCandidate = CandidateGeometry;
+interface InsertionCandidate extends CandidateGeometry {
+  adjacentDistance: number | null;
+}
 
 interface SwapCandidate {
   target: ResolvedDropTarget;
@@ -100,7 +106,7 @@ function euclidean(x1: number, y1: number, x2: number, y2: number): number {
  * position (its original box translated by the shared pointer delta — see
  * `Item.dragPositionX/Y`) and its projected slot center within `rect`
  * (stacked in `session.items` order along the candidate container's main
- * axis). Degenerates to the single-item ghost-center distance when there's
+ * axis). Degenerates to the single-item placement-center distance when there's
  * only one dragged item, so euclidean mode's scoring is unchanged for
  * single-item drags.
  */
@@ -211,10 +217,10 @@ interface ContainerResolutionBase {
 interface ResolutionContext {
   readonly session: DragSession | null;
   readonly item: ItemBase;
-  readonly itemId: ItemBase["resolvedItemId"];
+  readonly itemId: ItemBase["itemId"];
   readonly itemMetadata: ItemBase["metadata"];
   readonly items: readonly ItemBase[];
-  readonly itemIds: readonly ItemBase["resolvedItemId"][];
+  readonly itemIds: readonly ItemBase["itemId"][];
   readonly itemsMetadata: readonly ItemBase["metadata"][];
   readonly source: ReturnType<typeof buildItemLocation>;
   readonly sources: readonly ReturnType<typeof buildItemLocation>[];
@@ -326,10 +332,10 @@ function resolveItemHitbox(
   const hitbox = callback({
     session: session.handle,
     item: draggedItem,
-    itemId: draggedItem.resolvedItemId,
+    itemId: draggedItem.itemId,
     itemMetadata: draggedItem.metadata,
     overItem: item,
-    overItemId: item.resolvedItemId,
+    overItemId: item.itemId,
     overItemMetadata: item.metadata,
     container,
     containerMetadata: container.metadata,
@@ -690,17 +696,27 @@ function virtualLayoutRecursiveFromSnapshot(
       height: entryHeight,
     };
     const placementRect = rect;
-    const ghostCenterX = rect.x + rect.width / 2;
-    const ghostCenterY = rect.y + rect.height / 2;
+    const candidateCenterX = rect.x + rect.width / 2;
+    const candidateCenterY = rect.y + rect.height / 2;
     const lineIndex = lineIndexForCross(rect[axes.cross]);
     return {
       target: { container, index },
-      ghostCenterX,
-      ghostCenterY,
-      distance: euclidean(ghostCenterX, ghostCenterY, dragCenterX, dragCenterY),
+      candidateCenterX,
+      candidateCenterY,
+      distance: euclidean(
+        candidateCenterX,
+        candidateCenterY,
+        dragCenterX,
+        dragCenterY,
+      ),
       groupDistance: session
         ? groupCandidateDistance(session, rect, isColumn)
-        : euclidean(ghostCenterX, ghostCenterY, dragCenterX, dragCenterY),
+        : euclidean(
+            candidateCenterX,
+            candidateCenterY,
+            dragCenterX,
+            dragCenterY,
+          ),
       lineDistance: Math.abs(lineIndex - dragLineIndex),
       placementRect,
       placementDistance: distanceToRect(
@@ -929,8 +945,8 @@ function drawCandidateDebug(
       : "rgba(180, 180, 180, 0.35)";
 
     root.addDebugCircle(
-      candidate.ghostCenterX,
-      candidate.ghostCenterY,
+      candidate.candidateCenterX,
+      candidate.candidateCenterY,
       isBest ? 6 : 4,
       color,
       true,
@@ -938,8 +954,8 @@ function drawCandidateDebug(
       TAG_CANDIDATES,
     );
     root.addDebugText(
-      candidate.ghostCenterX + 8,
-      candidate.ghostCenterY + 4,
+      candidate.candidateCenterX + 8,
+      candidate.candidateCenterY + 4,
       `${isBest ? ">> " : ""}[${candidate.target.container.id}:${candidate.target.index}] d=${Math.round(candidate.distance)}`,
       color,
       true,
@@ -999,8 +1015,8 @@ function drawCandidateDebug(
         TAG_CANDIDATES,
       );
       root.addDebugCircle(
-        candidate.ghostCenterX,
-        candidate.ghostCenterY,
+        candidate.candidateCenterX,
+        candidate.candidateCenterY,
         i === 0 ? 7 : 5,
         color,
         true,
@@ -1018,13 +1034,15 @@ function drawCandidateDebug(
       );
 
       if (options.distanceOrigin) {
-        const midX = (options.distanceOrigin.x + candidate.ghostCenterX) / 2;
-        const midY = (options.distanceOrigin.y + candidate.ghostCenterY) / 2;
+        const midX =
+          (options.distanceOrigin.x + candidate.candidateCenterX) / 2;
+        const midY =
+          (options.distanceOrigin.y + candidate.candidateCenterY) / 2;
         root.addDebugLine(
           options.distanceOrigin.x,
           options.distanceOrigin.y,
-          candidate.ghostCenterX,
-          candidate.ghostCenterY,
+          candidate.candidateCenterX,
+          candidate.candidateCenterY,
           color,
           true,
           `drop-top-candidate-distance-${i}`,
@@ -1060,198 +1078,237 @@ function drawCandidateDebug(
   }
 }
 
-function insertionMarkerRect(
-  container: Container,
-  index: number,
-  items: ItemBase[],
-  snapshotItems: ItemBase[],
-): InsertionGhostRect {
-  const direction = container.direction;
-  const contentRect = containerContentRect(container);
-  const thickness = 3;
-
-  if (items.length === 0) {
-    if (direction === "row") {
-      return {
-        x: contentRect.x + contentRect.width / 2 - thickness / 2,
-        y: contentRect.y,
-        width: thickness,
-        height: Math.max(1, contentRect.height),
-      };
-    }
-
-    return {
-      x: contentRect.x,
-      y: contentRect.y + contentRect.height / 2 - thickness / 2,
-      width: Math.max(1, contentRect.width),
-      height: thickness,
-    };
-  }
-
-  if (direction === "row") {
-    const previous =
-      index >= items.length
-        ? snapshotItems[snapshotItems.length - 1]
-        : items[index - 1];
-    const next = index === 0 ? snapshotItems[0] : items[index];
-    const previousRect = previous ? requireDragSnapshotBox(previous) : null;
-    const nextRect = next ? requireDragSnapshotBox(next) : null;
-    const markerCenter = adjacentMarkerCenter(
-      previousRect,
-      nextRect,
-      "x",
-      "width",
-      container,
-      index,
-    );
-
-    return {
-      x: markerCenter - thickness / 2,
-      y: contentRect.y,
-      width: thickness,
-      height: Math.max(1, contentRect.height),
-    };
-  }
-
-  const previous =
-    index >= items.length
-      ? snapshotItems[snapshotItems.length - 1]
-      : items[index - 1];
-  const next = index === 0 ? snapshotItems[0] : items[index];
-  const previousRect = previous ? requireDragSnapshotBox(previous) : null;
-  const nextRect = next ? requireDragSnapshotBox(next) : null;
-  const markerCenter = adjacentMarkerCenter(
-    previousRect,
-    nextRect,
-    "y",
-    "height",
-    container,
-    index,
-  );
-
-  return {
-    x: contentRect.x,
-    y: markerCenter - thickness / 2,
-    width: Math.max(1, contentRect.width),
-    height: thickness,
-  };
+function insertionMarkerNeighbor(
+  snapshot: ItemSnapshot<ItemBase> | null,
+): InsertionMarkerNeighbor | null {
+  if (!snapshot) return null;
+  return Object.freeze({
+    item: snapshot.value,
+    itemId: snapshot.itemId,
+    itemMetadata: snapshot.metadata,
+    rect: frozenRect(snapshot.box),
+  });
 }
 
-function adjacentMarkerCenter(
-  previousRect: DomProperty | null,
-  nextRect: DomProperty | null,
-  axis: "x" | "y",
-  size: "width" | "height",
-  container: Container,
-  index: number,
-): number {
-  if (previousRect && nextRect) {
-    return (previousRect[axis] + previousRect[size] + nextRect[axis]) / 2;
+function insertionVisualLine(
+  snapshot: ItemSnapshot<ItemBase> | null,
+  lineBySnapshot: ReadonlyMap<
+    ItemSnapshot<ItemBase>,
+    SnapshotVisualLine<ItemBase>
+  >,
+): SnapshotVisualLine<ItemBase> | null {
+  if (!snapshot) return null;
+  const line = lineBySnapshot.get(snapshot);
+  if (!line) {
+    throw new Error("SnapSort: insertion neighbor has no visual line.");
   }
-  if (previousRect) return previousRect[axis] + previousRect[size];
-  if (nextRect) return nextRect[axis];
-  throw new Error(
-    `SnapSort: insertion container "${container.name}" has no adjacent snapshot for slot ${index}.`,
-  );
+  return line;
 }
 
-function configuredInsertionMarkerRect(
-  container: Container,
-  index: number,
-  context: ResolutionContext,
-  defaultRect: GhostRect,
-): GhostRect {
-  const callback = container.callbacks?.getInsertionMarkerRect;
-  if (!callback) return frozenRect(defaultRect);
+function insertionGapSegment(
+  containerSnapshot: ItemSnapshot<ItemBase>,
+  previous: ItemSnapshot<ItemBase> | null,
+  next: ItemSnapshot<ItemBase> | null,
+  lineBySnapshot: ReadonlyMap<
+    ItemSnapshot<ItemBase>,
+    SnapshotVisualLine<ItemBase>
+  >,
+  useVisualLineBand: boolean,
+): InsertionGapSegment {
+  const axes = flowAxesForDirection(containerSnapshot.direction);
+  const contentOrigin = contentBoxOrigin(containerSnapshot.box);
+  const contentSize = contentBoxSize(containerSnapshot.box);
+  const contentMainStart = contentOrigin[axes.main];
+  const contentMainSize = contentSize[axes.mainSize];
+  const previousMainEnd = previous
+    ? previous.box[axes.main] + previous.box[axes.mainSize]
+    : null;
+  const nextMainStart = next ? next.box[axes.main] : null;
+  const previousLine = insertionVisualLine(previous, lineBySnapshot);
+  const nextLine = insertionVisualLine(next, lineBySnapshot);
+  const wrapsToNextLine =
+    previousLine !== null && nextLine !== null && previousLine !== nextLine;
+  const visualLine = wrapsToNextLine ? nextLine : previousLine ?? nextLine;
 
-  const base = containerResolutionBase(context, container);
-  const result = callback({
-    session: context.session?.handle ?? null,
-    item: context.item,
-    itemId: context.itemId,
-    itemMetadata: context.itemMetadata,
-    items: [...context.items],
-    itemIds: [...context.itemIds],
-    itemsMetadata: [...context.itemsMetadata],
-    source: context.source,
-    sources: [...context.sources],
-    container,
-    containerMetadata: base.containerMetadata,
-    index,
-    pointer: context.pointer,
-    dragRect: context.dragRect,
-    containerRect: base.containerRect,
-    containerContentRect: base.containerContentRect,
-    defaultRect: frozenRect(defaultRect),
-  } satisfies InsertionMarkerRectEvent);
-  assertRect(result, "getInsertionMarkerRect", container);
-  return frozenRect(result);
+  let main: number;
+  if (previousMainEnd === null) {
+    main =
+      nextMainStart === null
+        ? contentMainStart + contentMainSize / 2
+        : nextMainStart;
+  } else if (nextMainStart === null) {
+    main = previousMainEnd;
+  } else {
+    main = wrapsToNextLine
+      ? nextMainStart
+      : (previousMainEnd + nextMainStart) / 2;
+  }
+
+  const crossStart =
+    useVisualLineBand && visualLine
+      ? contentOrigin[axes.cross] + visualLine.crossStart
+      : contentOrigin[axes.cross];
+  const crossSize =
+    useVisualLineBand && visualLine
+      ? visualLine.crossSize
+      : contentSize[axes.crossSize];
+
+  if (axes.direction === "column") {
+    return Object.freeze({
+      orientation: "horizontal",
+      x: crossStart,
+      y: main,
+      length: crossSize,
+    });
+  }
+
+  return Object.freeze({
+    orientation: "vertical",
+    x: main,
+    y: crossStart,
+    length: crossSize,
+  });
+}
+
+function insertionGapCenter(gap: InsertionGapSegment): {
+  x: number;
+  y: number;
+} {
+  return gap.orientation === "horizontal"
+    ? { x: gap.x + gap.length / 2, y: gap.y }
+    : { x: gap.x, y: gap.y + gap.length / 2 };
+}
+
+function insertionGapRect(gap: InsertionGapSegment): Rect {
+  return gap.orientation === "horizontal"
+    ? { x: gap.x, y: gap.y, width: gap.length, height: 0 }
+    : { x: gap.x, y: gap.y, width: 0, height: gap.length };
+}
+
+function insertionAdjacentDistance(
+  pointer: { x: number; y: number },
+  previous: InsertionMarkerNeighbor | null,
+  next: InsertionMarkerNeighbor | null,
+): number | null {
+  const neighborRects: Readonly<Rect>[] = [];
+  if (previous) neighborRects.push(previous.rect);
+  if (next) neighborRects.push(next.rect);
+  if (neighborRects.length === 0) return null;
+  return Math.min(
+    ...neighborRects.map((rect) => distanceToRect(pointer, rect)),
+  );
 }
 
 function collectInsertionCandidates(
   item: ItemBase,
   root: Container,
   context: ResolutionContext,
-): {
-  candidates: InsertionCandidate[];
-  pointerX: number;
-  pointerY: number;
-} {
+): InsertionCandidate[] {
   const pointerX = context.pointer.x;
   const pointerY = context.pointer.y;
   const excludeSet = context.session
-    ? context.session.itemSet
+    ? context.session.snapshotItemSet
     : new Set([item]);
   const candidates: InsertionCandidate[] = [];
+  const fallbackSources = context.items.map(buildItemLocation);
+  const activeSources =
+    context.session?.activeSources ??
+    (fallbackSources.every((source) => source !== null) ? fallbackSources : []);
 
   const visit = (container: Container) => {
     if (excludeSet.has(container)) return;
 
-    const snapshotOrderedList = dragSnapshotItems(container);
-    const children = snapshotOrderedList.filter(
-      (child) => !excludeSet.has(child) && !child.isGhost,
+    const containerSnapshot = requireDragSnapshot(container);
+    const rawChildren = containerSnapshot.children.filter(
+      (child) => !child.value.isGhost,
     );
-    const snapshotChildren = snapshotOrderedList.filter(
-      (child) => !child.isGhost,
+    const visualLines = inferSnapshotVisualLines(
+      containerSnapshot,
+      flowAxesForDirection(containerSnapshot.direction),
     );
-    const snapshotIndices = new Map(
-      snapshotOrderedList.map((child, index) => [child, index]),
+    const lineBySnapshot = new Map<
+      ItemSnapshot<ItemBase>,
+      SnapshotVisualLine<ItemBase>
+    >();
+    for (const line of visualLines) {
+      for (const snapshot of line.snapshots) {
+        lineBySnapshot.set(snapshot, line);
+      }
+    }
+    const useVisualLineBand =
+      containerSnapshot.layoutModel === "slots"
+        ? visualLines.length > 1
+        : flowLayoutCanWrap(
+            containerSnapshot,
+            flowAxesForDirection(containerSnapshot.direction),
+            visualLines.length,
+          );
+    const retainedIndices = rawChildren.flatMap((child, rawIndex) =>
+      excludeSet.has(child.value) ? [] : [rawIndex],
     );
-    const indexForGap = (index: number) => {
-      const nextItem = children[index] ?? null;
-      if (!nextItem) return snapshotOrderedList.length;
+    let previousRetainedIndex = -1;
 
-      const snapshotIndex = snapshotIndices.get(nextItem) ?? -1;
-      return snapshotIndex === -1 ? index : snapshotIndex;
-    };
+    for (
+      let logicalGapIndex = 0;
+      logicalGapIndex <= retainedIndices.length;
+      logicalGapIndex++
+    ) {
+      const nextRetainedIndex =
+        retainedIndices[logicalGapIndex] ?? rawChildren.length;
+      const firstPhysicalBoundary = previousRetainedIndex + 1;
+      const lastPhysicalBoundary = nextRetainedIndex;
+      const physicalBoundaries =
+        firstPhysicalBoundary === lastPhysicalBoundary
+          ? [firstPhysicalBoundary]
+          : [firstPhysicalBoundary, lastPhysicalBoundary];
+      const projection = projectItemRunMove(
+        container,
+        nextRetainedIndex,
+        activeSources,
+      );
 
-    for (let index = 0; index <= children.length; index++) {
-      const insertionIndex = indexForGap(index);
-      const defaultRect = insertionMarkerRect(
-        container,
-        index,
-        children,
-        snapshotChildren,
-      );
-      const ghostRect = configuredInsertionMarkerRect(
-        container,
-        insertionIndex,
-        context,
-        defaultRect,
-      );
-      const ghostCenterX = ghostRect.x + ghostRect.width / 2;
-      const ghostCenterY = ghostRect.y + ghostRect.height / 2;
-      const distance = distanceToRect({ x: pointerX, y: pointerY }, ghostRect);
-      candidates.push({
-        target: { container, index: insertionIndex, ghostRect },
-        ghostCenterX,
-        ghostCenterY,
-        distance,
-        placementRect: ghostRect,
-      });
+      for (const boundary of physicalBoundaries) {
+        const previousSnapshot = rawChildren[boundary - 1] ?? null;
+        const nextSnapshot = rawChildren[boundary] ?? null;
+        const gap = insertionGapSegment(
+          containerSnapshot,
+          previousSnapshot,
+          nextSnapshot,
+          lineBySnapshot,
+          useVisualLineBand,
+        );
+        const previous = insertionMarkerNeighbor(previousSnapshot);
+        const next = insertionMarkerNeighbor(nextSnapshot);
+        const insertion = Object.freeze({
+          gap,
+          previous,
+          next,
+          isCurrentPlacement: projection.isCurrentPlacement,
+        }) satisfies InsertionMarkerPresentation;
+        const center = insertionGapCenter(gap);
+        candidates.push({
+          target: {
+            container,
+            index: nextRetainedIndex,
+            insertion,
+          },
+          candidateCenterX: center.x,
+          candidateCenterY: center.y,
+          distance: euclidean(pointerX, pointerY, center.x, center.y),
+          adjacentDistance: insertionAdjacentDistance(
+            context.pointer,
+            previous,
+            next,
+          ),
+          placementRect: insertionGapRect(gap),
+        });
+      }
+
+      previousRetainedIndex = nextRetainedIndex;
     }
 
-    for (const child of children) {
+    for (const retainedIndex of retainedIndices) {
+      const child = rawChildren[retainedIndex].value;
       if (isContainerObject(child)) {
         visit(child);
       }
@@ -1259,14 +1316,11 @@ function collectInsertionCandidates(
   };
 
   visit(root);
-
-  return { candidates, pointerX, pointerY };
+  return candidates;
 }
 
 function chooseInsertionCandidate(
   candidates: InsertionCandidate[],
-  pointerX: number,
-  pointerY: number,
 ): InsertionCandidate | null {
   let best: InsertionCandidate | null = null;
   for (const candidate of candidates) {
@@ -1275,15 +1329,19 @@ function chooseInsertionCandidate(
       continue;
     }
 
-    if (
-      Math.abs(candidate.distance - best.distance) <= 1 &&
-      candidate.target.container.id !== best.target.container.id
-    ) {
-      best = chooseByContentBox(best, candidate, pointerX, pointerY);
+    if (candidate.distance < best.distance) {
+      best = candidate;
       continue;
     }
 
-    if (candidate.distance < best.distance) {
+    if (
+      candidate.distance === best.distance &&
+      candidate.candidateCenterX === best.candidateCenterX &&
+      candidate.candidateCenterY === best.candidateCenterY &&
+      candidate.adjacentDistance !== null &&
+      best.adjacentDistance !== null &&
+      candidate.adjacentDistance < best.adjacentDistance
+    ) {
       best = candidate;
     }
   }
@@ -1476,13 +1534,9 @@ export function determineInsertionDropTarget(
     session,
     resolutionPointer(item, session),
   );
-  const { candidates, pointerX, pointerY } = collectInsertionCandidates(
-    item,
-    root,
-    context,
-  );
+  const candidates = collectInsertionCandidates(item, root, context);
   const allowed = applyDropPolicy(candidates, () => context);
-  const best = chooseInsertionCandidate(allowed, pointerX, pointerY);
+  const best = chooseInsertionCandidate(allowed);
   if (debugEnabled) {
     drawCandidateDebug(root, item, allowed, best);
     debugDropTargetTree(root, item);

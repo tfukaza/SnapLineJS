@@ -34,7 +34,6 @@ export type ItemMetadata = Readonly<Record<string, unknown>>;
 
 export interface ItemSnapshot<T> {
   value: T;
-  key: string;
   itemId: ItemId;
   metadata: ItemMetadata;
   direction: LayoutDirection;

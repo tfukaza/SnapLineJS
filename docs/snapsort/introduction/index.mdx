@@ -13,10 +13,19 @@ Its framework-neutral API and first-party Svelte and React bindings ship from
 the single `@snap-engine/snapsort` package.
 The goal of SnapSort is to provide _utilities_ for
 making drag-and-drop, not pre-built components. This means:
-  - You only need to know two components: `Item` and `Container`. Every UI is derived from these primitives.
-  - Extensive hooks to customize features.
-  - Wide array of configurations for drag and drop behavior, animations, etc.
-  - Style-less by default, bring your own CSS.
+
+- Framework rendering uses three primitives: `Container` owns a sortable
+  region, `Item` renders an ordinary leaf, and `Ghost` renders SnapSort's
+  transient entry in the same keyed loop. `Handle` is an optional drag-input
+  alias inside an Item.
+- Extensive hooks to customize features.
+- Wide array of configurations for drag and drop behavior, animations, etc.
+- Style-less by default, bring your own CSS.
+
+SnapSort owns drag mechanics and reports structural transitions; the
+application owns the meaning and lifetime of its data. For example, SnapSort
+can resolve that a run ended over a container, but only application code may
+decide that the container represents trash and delete those records.
 
 > [!TIP]
 > Using a coding agent? Start with <a href="/docs/snapsort/llms.txt" data-sveltekit-reload>SnapSort's <code>llms.txt</code></a> for the complete documentation tree, or append `.md` to any documentation URL to get clean, framework-aware Markdown. For example, open <a href="/docs/snapsort/introduction.md" data-sveltekit-reload>this page as Markdown</a>.

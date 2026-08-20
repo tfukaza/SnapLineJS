@@ -19,7 +19,6 @@ import type {
 } from "./snapshot";
 import type {
   DragLocation,
-  GhostRect,
   GhostState,
   GhostStatePlacement,
   VisualGeometryInvalidationReason,
@@ -54,6 +53,7 @@ import {
   releaseItem,
 } from "./internal/tree-mutation";
 import { reconcileRootTreeState } from "./internal/tree-state";
+import { projectItemRunMove } from "./internal/move-projection";
 import {
   ancestorVisualOffset,
   animationConfigFor,
@@ -65,24 +65,31 @@ import {
   type ElementRectAnimationOptions,
 } from "./internal/flip-animation";
 
+export interface ItemOptions {
+  readonly itemId: ItemId;
+}
+
+function validateItemId(engine: Engine, itemId: unknown): Engine {
+  if (typeof itemId !== "string" || itemId.length === 0) {
+    throw new TypeError("SnapSort: itemId must be a non-empty string.");
+  }
+  return engine;
+}
+
 export class Item extends ElementObject {
   #rootContainer: Container | null = null;
-  #itemId: ItemId | null = null;
+  readonly #itemId: ItemId;
   #metadata: ItemMetadata = {};
   #locked: boolean = false;
   #selected: boolean = false;
   #dragSnapshot: ItemSnapshot<Item> | null = null;
   #itemOrderedList: Item[] = [];
-  #isGhost: boolean = false;
+  #isGhost = false;
   #ghostState: GhostState | null = null;
 
-  constructor(
-    engine: Engine,
-    parent: Container | null,
-    isGhost: boolean = false,
-  ) {
-    super(engine, parent);
-    this.#isGhost = isGhost;
+  constructor(engine: Engine, parent: Container | null, options: ItemOptions) {
+    super(validateItemId(engine, options?.itemId), parent);
+    this.#itemId = options.itemId;
     this.event.input.dragStart = this.dragStart;
     this.event.input.drag = this.drag;
     this.event.input.dragEnd = this.dragEnd;
@@ -98,16 +105,21 @@ export class Item extends ElementObject {
   }
 
   /** Create a transient Item whose state is rendered by the root adapter. */
-  createGhostItem(
-    session: DragSession,
-    placement: GhostStatePlacement,
-    rect: GhostRect,
-  ): Item {
-    const ghostItem = new Item(this.engine, null, true);
+  createGhostItem(session: DragSession, placement: GhostStatePlacement): Item {
+    const ghostItem = Item.#createGhostItem(
+      this.engine,
+      session.allocateGhostItemId(),
+    );
     ghostItem.rootContainer = session.root;
     ghostItem.metadata = { ...this.metadata };
-    const state = buildGhostState(session, placement, this, ghostItem, rect);
+    const state = buildGhostState(session, placement, this, ghostItem);
     ghostItem.ghostState = state;
+    return ghostItem;
+  }
+
+  static #createGhostItem(engine: Engine, itemId: ItemId): Item {
+    const ghostItem = new Item(engine, null, { itemId });
+    ghostItem.#isGhost = true;
     return ghostItem;
   }
 
@@ -140,13 +152,11 @@ export class Item extends ElementObject {
   removeItem(itemId: ItemId) {
     const item =
       this.#itemOrderedList.find(
-        (item) => !item.isGhost && item.resolvedItemId === itemId,
+        (item) => !item.isGhost && item.itemId === itemId,
       ) ??
       this.children.find(
         (item): item is Item =>
-          item instanceof Item &&
-          !item.isGhost &&
-          item.resolvedItemId === itemId,
+          item instanceof Item && !item.isGhost && item.itemId === itemId,
       );
     if (!item) return false;
 
@@ -161,21 +171,19 @@ export class Item extends ElementObject {
    * @returns Matching item object, or null when the tree has no matching item.
    * @internal
    */
-  findItemByKey(itemId: ItemId): Item | null {
+  findItemById(itemId: ItemId): Item | null {
     const directItem =
       this.#itemOrderedList.find(
-        (item) => !item.isGhost && item.resolvedItemId === itemId,
+        (item) => !item.isGhost && item.itemId === itemId,
       ) ??
       this.children.find(
         (item): item is Item =>
-          item instanceof Item &&
-          !item.isGhost &&
-          item.resolvedItemId === itemId,
+          item instanceof Item && !item.isGhost && item.itemId === itemId,
       );
     if (directItem) return directItem;
 
     for (const child of this.#itemOrderedList) {
-      const found = child.findItemByKey(itemId);
+      const found = child.findItemById(itemId);
       if (found) return found;
     }
 
@@ -196,7 +204,7 @@ export class Item extends ElementObject {
    */
   moveItem(itemId: ItemId, container: Container, index: number) {
     const root = this.#rootContainer as unknown as Item;
-    const item = root.findItemByKey(itemId);
+    const item = root.findItemById(itemId);
     if (!item) return false;
     assertCanPlaceItems([{ container, item }]);
     this.takeRootSnapshot();
@@ -250,21 +258,8 @@ export class Item extends ElementObject {
     this.#metadata = value;
   }
 
-  get itemId(): ItemId | null {
+  get itemId(): ItemId {
     return this.#itemId;
-  }
-
-  set itemId(value: ItemId | null | undefined) {
-    if (this.#isGhost) {
-      throw new Error(
-        "SnapSort: a ghost Item's generated itemId is read-only.",
-      );
-    }
-    this.#itemId = value ?? null;
-  }
-
-  get resolvedItemId(): ItemId {
-    return this.#itemId ?? this.id;
   }
 
   get container(): Container {
@@ -538,8 +533,7 @@ export class Item extends ElementObject {
     const snapshotItems = this.#itemOrderedList.slice();
     const snapshot: ItemSnapshot<Item> = {
       value: this,
-      key: this.resolvedItemId,
-      itemId: this.resolvedItemId,
+      itemId: this.itemId,
       metadata: Object.freeze({ ...this.#metadata }),
       direction: this.#snapshotDirection(),
       mainAxisAlign: this.#snapshotMainAxisAlign(),
@@ -570,8 +564,7 @@ export class Item extends ElementObject {
     if (!src) return;
     this.#dragSnapshot = {
       value: this,
-      key: this.resolvedItemId,
-      itemId: this.resolvedItemId,
+      itemId: this.itemId,
       metadata: Object.freeze({ ...this.#metadata }),
       direction: src.direction,
       mainAxisAlign: src.mainAxisAlign,
@@ -851,28 +844,14 @@ export class Item extends ElementObject {
     index: number,
     session: DragSession | null,
   ): void {
-    // Adjust for members already living in the destination container: each
-    // one that currently sits before `index` will vanish from in front of
-    // the target slot once detached, shifting it left by one. Must be
-    // computed from *live* (pre-detach) indices.
-    const adjustedIndexFor = (liveItems: readonly Item[]): number => {
-      const removedBefore = liveItems.filter(
-        (member) =>
-          member.parent === container &&
-          container.itemOrderedList.indexOf(member) < index,
-      ).length;
-      return index - removedBefore;
+    const projectionFor = (liveItems: readonly Item[]) => {
+      const sources = liveItems.map((member) => {
+        const location = buildItemLocation(member);
+        if (!location) throw new Error("Item has no parent container");
+        return location;
+      });
+      return projectItemRunMove(container, index, sources);
     };
-    const isAlreadyInPlace = (
-      liveItems: readonly Item[],
-      adjustedIndex: number,
-    ): boolean =>
-      liveItems.length > 0 &&
-      liveItems.every(
-        (member, i) =>
-          member.parent === container &&
-          container.itemOrderedList.indexOf(member) === adjustedIndex + i,
-      );
 
     const move = () => {
       // The move is deferred to a later render stage; members may have been
@@ -880,8 +859,8 @@ export class Item extends ElementObject {
       const liveItems = items.filter((member) => !!member.parent);
       if (liveItems.length === 0) return;
 
-      const adjustedIndex = adjustedIndexFor(liveItems);
-      if (isAlreadyInPlace(liveItems, adjustedIndex)) return;
+      const projection = projectionFor(liveItems);
+      if (projection.isCurrentPlacement) return;
 
       assertCanPlaceItems(liveItems.map((item) => ({ container, item })));
       assertCanFireItemMove(container);
@@ -894,10 +873,16 @@ export class Item extends ElementObject {
       for (const member of liveItems) {
         detachItem(member.container, member);
       }
-      this.#commitItemsAt(froms, container, liveItems, adjustedIndex, session);
+      this.#commitItemsAt(
+        froms,
+        container,
+        liveItems,
+        projection.adjustedIndex,
+        session,
+      );
     };
 
-    if (isAlreadyInPlace(items, adjustedIndexFor(items))) {
+    if (projectionFor(items).isCurrentPlacement) {
       return;
     }
 

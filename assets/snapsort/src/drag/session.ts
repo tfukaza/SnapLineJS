@@ -7,7 +7,7 @@ import type {
 } from "@snap-engine/core";
 import type { Container } from "../container";
 import type { Item } from "../item";
-import { reconcileRootTreeState } from "../internal/tree-state";
+import { reconcileRootTreeState, rootHasItemId } from "../internal/tree-state";
 import { stageVisualRectBeforeMutation } from "../internal/visual-rect";
 import { findHoveredItem, type ResolvedDropTarget } from "../algorithm";
 import {
@@ -20,8 +20,10 @@ import type {
   DragLocation,
   DragVisual,
   DropEffect,
-  GhostRect,
+  InsertionMarkerPresentation,
 } from "../events";
+import { sameInsertionMarkerPresentation } from "../insertion-geometry";
+import type { ItemId } from "../snapshot";
 import {
   fireDragItemEnter,
   fireDragItemLeave,
@@ -54,7 +56,7 @@ export interface DragSession {
 export interface DropPlacement {
   readonly container: Container;
   readonly index: number;
-  readonly ghostRect: GhostRect | null;
+  readonly insertion: InsertionMarkerPresentation | null;
 }
 
 /** @internal Direction-aware size of the whole dragged group, used to size a single group ghost/marker. */
@@ -76,9 +78,9 @@ function freezeLocation(location: DragLocation): DragLocation {
 function freezePlacement(
   container: Container,
   index: number,
-  ghostRect: GhostRect | null,
+  insertion: InsertionMarkerPresentation | null,
 ): DropPlacement {
-  return Object.freeze({ container, index, ghostRect });
+  return Object.freeze({ container, index, insertion });
 }
 
 class PublicDragSession implements DragSession {
@@ -114,7 +116,7 @@ class PublicDragSession implements DragSession {
     return this.#controller.pointer;
   }
   get status() {
-    return this.#controller.status;
+    return this.#controller.publicStatus;
   }
   get dragVisual() {
     return this.#controller.dragVisual;
@@ -153,6 +155,8 @@ export class DragSessionController {
   pressedItem!: Item;
   /** `items` as a Set, for O(1) exclusion checks in layout/algorithm code. */
   itemSet!: Set<Item>;
+  /** @internal Original participants represented in the frozen root snapshot. */
+  readonly snapshotItemSet: ReadonlySet<Item>;
   /** @internal Current participants' mounted locations. Public `sources` always remain the gesture origins. */
   activeSources!: readonly DragLocation[];
   readonly #touchedItems = new Set<Item>();
@@ -164,6 +168,16 @@ export class DragSessionController {
   status: DragSessionStatus = "pending";
   /** @internal True when a lifecycle is dropping only to unwind a failed drag. */
   cancelled = false;
+  #runningScheduledPointerMove = false;
+
+  /** Status exposed through the public handle during a logically pre-drop move. */
+  get publicStatus(): DragSessionStatus {
+    return this.#runningScheduledPointerMove &&
+      this.status === "dropping" &&
+      !this.cancelled
+      ? "active"
+      : this.status;
+  }
 
   /**
    * What committing this drag should do to source data. Defaults to `"move"`.
@@ -176,7 +190,7 @@ export class DragSessionController {
   }
 
   set dropEffect(value: DropEffect) {
-    if (this.status !== "pending" && this.status !== "active") {
+    if (this.publicStatus !== "pending" && this.publicStatus !== "active") {
       throw new Error(
         "DragSession.dropEffect can only be changed before dropping begins.",
       );
@@ -241,6 +255,15 @@ export class DragSessionController {
   /** @internal Source-slot spacers used when insertion/swap hoist real Items. */
   readonly sourceGhostRun: Item[] = [];
 
+  /** @internal Allocate a collision-free transient identity in this root. */
+  allocateGhostItemId(): ItemId {
+    let itemId = this.root.global.createId();
+    while (rootHasItemId(this.root, itemId)) {
+      itemId = this.root.global.createId();
+    }
+    return itemId;
+  }
+
   /** The placement most recently requested by the lifecycle strategy. */
   pendingPlacement: DropPlacement | null = null;
   /** Last drop candidate resolved by the drop-target strategy (raw, snapshot-space index). */
@@ -272,6 +295,7 @@ export class DragSessionController {
     this.handle = new PublicDragSession(this);
     this.root = root;
     this.sources = Object.freeze(sources.map(freezeLocation));
+    this.snapshotItemSet = new Set(items);
     this.#setParticipants(items, sources.slice(), pressedItem);
     this.strategy = strategy;
     this.#dragVisual =
@@ -420,7 +444,7 @@ export class DragSessionController {
     const box = item.dragSnapshot?.box;
     if (!box) {
       throw new Error(
-        `DragSession: participant "${item.resolvedItemId}" has no captured drag geometry.`,
+        `DragSession: participant "${item.itemId}" has no captured drag geometry.`,
       );
     }
     return box;
@@ -528,7 +552,7 @@ export class DragSessionController {
     const item = this.primaryItem;
     item.schedule(
       () => {
-        if (this.status !== "active") return;
+        if (!this.#acceptsScheduledPointerMove()) return;
         this.pointer = freezePoint(prop.position);
         const ghostItem = this.ghostsByChannel.get("target");
         if (ghostItem) stageVisualRectBeforeMutation(ghostItem);
@@ -537,12 +561,17 @@ export class DragSessionController {
     );
     item.schedule(
       async () => {
-        if (this.status !== "active") return;
+        if (!this.#acceptsScheduledPointerMove()) return;
         let completed = false;
         try {
           this.pointer = freezePoint(prop.position);
-          await this.updateDropTarget();
-          await this.strategy.lifecycle.dragMove(this);
+          this.#runningScheduledPointerMove = true;
+          try {
+            await this.updateDropTarget();
+            await this.strategy.lifecycle.dragMove(this);
+          } finally {
+            this.#runningScheduledPointerMove = false;
+          }
           completed = true;
         } finally {
           if (!completed) this.scheduleErrorFinalizer();
@@ -551,6 +580,15 @@ export class DragSessionController {
       { stage: "WRITE_1", queueId: `drag-${item.id}` },
     );
     this.root.queueReadTree("READ_2", `drag-${item.id}`);
+  }
+
+  #acceptsScheduledPointerMove(): boolean {
+    // A normal pointerup queues drop work after the final move in the same
+    // frame; cancellation must still suppress any queued move immediately.
+    return (
+      this.status === "active" ||
+      (this.status === "dropping" && !this.cancelled)
+    );
   }
 
   #isEnded(): boolean {
@@ -725,16 +763,24 @@ export class DragSessionController {
     const placement = freezePlacement(
       target.container,
       lifecycle.placementIndexFor(this, target),
-      target.ghostRect ?? null,
+      target.insertion ?? null,
     );
 
     this.#updateHoveredItem(placement.container);
 
-    const changed =
+    const logicalChanged =
       !currentPlacement ||
       placement.container !== currentPlacement.container ||
       placement.index !== currentPlacement.index;
-    if (changed) {
+    const previousInsertion = this.pendingPlacement?.insertion ?? null;
+    const presentationChanged =
+      previousInsertion === null || placement.insertion === null
+        ? previousInsertion !== placement.insertion
+        : !sameInsertionMarkerPresentation(
+            previousInsertion,
+            placement.insertion,
+          );
+    if (logicalChanged || presentationChanged) {
       await lifecycle.syncPlacement(this, placement);
       this.#invalidateVisualGeometry(
         currentPlacement
@@ -742,10 +788,12 @@ export class DragSessionController {
           : [placement.container],
         "ghost",
       );
-      this.#fireDropTargetChange(currentPlacement, {
-        container: placement.container,
-        index: placement.index,
-      });
+      if (logicalChanged) {
+        this.#fireDropTargetChange(currentPlacement, {
+          container: placement.container,
+          index: placement.index,
+        });
+      }
     }
     lifecycle.afterPlacementSync(this);
   }

@@ -1,5 +1,5 @@
 import type { DomProperty } from "@snap-engine/core";
-import type { ItemSnapshot, LayoutDirection } from "./snapshot";
+import type { ItemSnapshot, LayoutDirection, LayoutWrap } from "./snapshot";
 
 export type { LayoutDirection, LayoutMainAxisAlign } from "./snapshot";
 type AxisName = "x" | "y";
@@ -20,6 +20,30 @@ type SizeName = "width" | "height";
  * observed noise and ~100x below typical feature scale.
  */
 const LAYOUT_EPSILON = 0.05;
+const LINE_RESET_EPSILON = 1;
+
+/** @internal Whether measured main-axis coordinates begin a wrapped line. */
+export function startsNewVisualLine(
+  wrap: LayoutWrap,
+  previousMainStart: number,
+  nextMainStart: number,
+): boolean {
+  return (
+    wrap !== "nowrap" && nextMainStart < previousMainStart - LINE_RESET_EPSILON
+  );
+}
+
+/** @internal Whether a measured flow layout can create another visual line. */
+export function flowLayoutCanWrap<T>(
+  container: ItemSnapshot<T>,
+  axes: FlowAxes,
+  measuredLineCount: number,
+): boolean {
+  return (
+    container.wrap !== "nowrap" &&
+    (axes.direction === "row" || measuredLineCount > 1)
+  );
+}
 
 export interface FlowAxes {
   readonly direction: LayoutDirection;
@@ -46,6 +70,13 @@ export interface FlowMetrics {
    * the DOM demonstrably fits — wrapping lines the browser kept whole.
    */
   readonly measuredMainExtent: number;
+}
+
+/** @internal One measured visual line in content-box-relative coordinates. */
+export interface SnapshotVisualLine<T> {
+  readonly snapshots: readonly ItemSnapshot<T>[];
+  readonly crossStart: number;
+  readonly crossSize: number;
 }
 
 export interface LayoutFilter<T> {
@@ -206,6 +237,53 @@ export function layoutItems<T>(
   );
 }
 
+/**
+ * Infer measured visual lines once from the frozen snapshot. Layout metrics
+ * and insertion geometry share this boundary detection so their understanding
+ * of wrapping cannot drift apart.
+ */
+export function inferSnapshotVisualLines<T>(
+  container: ItemSnapshot<T>,
+  axes: FlowAxes,
+): readonly SnapshotVisualLine<T>[] {
+  const lines: Array<{
+    snapshots: ItemSnapshot<T>[];
+    crossStart: number;
+    crossEnd: number;
+  }> = [];
+  let previousMainStart: number | null = null;
+
+  for (const snapshot of container.children) {
+    const offset = childRelativeOffset(container.box, snapshot.box);
+    const mainStart = offset[axes.main];
+    const startsNewLine =
+      previousMainStart !== null &&
+      startsNewVisualLine(container.wrap, previousMainStart, mainStart);
+    const crossStart = offset[axes.cross];
+    const crossEnd = crossStart + snapshot.box[axes.crossSize];
+
+    if (lines.length === 0 || startsNewLine) {
+      lines.push({ snapshots: [snapshot], crossStart, crossEnd });
+    } else {
+      const line = lines[lines.length - 1];
+      line.snapshots.push(snapshot);
+      line.crossStart = Math.min(line.crossStart, crossStart);
+      line.crossEnd = Math.max(line.crossEnd, crossEnd);
+    }
+    previousMainStart = mainStart;
+  }
+
+  return Object.freeze(
+    lines.map((line) =>
+      Object.freeze({
+        snapshots: Object.freeze([...line.snapshots]),
+        crossStart: line.crossStart,
+        crossSize: Math.max(0, line.crossEnd - line.crossStart),
+      }),
+    ),
+  );
+}
+
 function median(values: number[]): number {
   if (values.length === 0) return 0;
   const sorted = values.slice().sort((a, b) => a - b);
@@ -266,29 +344,18 @@ export function inferFlowLayoutMetrics<T>(
 
   const firstOffset = childRelativeOffset(container.box, ordered[0].box);
   const mainGaps: number[] = [];
-  const lines: Array<{ cross: number; crossSize: number }> = [];
-  let currentLine: { cross: number; crossSize: number } | null = null;
-  let previousOffset: { x: number; y: number } | null = null;
+  const visualLines = inferSnapshotVisualLines(container, axes);
+  const lineBySnapshot = new Map<ItemSnapshot<T>, SnapshotVisualLine<T>>();
+  for (const line of visualLines) {
+    for (const snapshot of line.snapshots) {
+      lineBySnapshot.set(snapshot, line);
+    }
+  }
   let measuredMainExtent = 0;
 
   for (let i = 0; i < ordered.length; i++) {
     const item = ordered[i];
     const offset = childRelativeOffset(container.box, item.box);
-    const startsNewLine =
-      previousOffset != null &&
-      offset[axes.main] < previousOffset[axes.main] - 1;
-    if (!currentLine || startsNewLine) {
-      currentLine = {
-        cross: offset[axes.cross],
-        crossSize: item.box[axes.crossSize],
-      };
-      lines.push(currentLine);
-    } else {
-      currentLine.crossSize = Math.max(
-        currentLine.crossSize,
-        item.box[axes.crossSize],
-      );
-    }
 
     const trailingMargin =
       axes.main === "x" ? item.box.margin.right : item.box.margin.bottom;
@@ -300,19 +367,21 @@ export function inferFlowLayoutMetrics<T>(
     const next = ordered[i + 1];
     if (next) {
       const nextOffset = childRelativeOffset(container.box, next.box);
-      const nextStartsNewLine = nextOffset[axes.main] < offset[axes.main] - 1;
+      const nextStartsNewLine =
+        lineBySnapshot.get(item) !== lineBySnapshot.get(next);
       if (!nextStartsNewLine) {
         const gap =
           nextOffset[axes.main] - (offset[axes.main] + item.box[axes.mainSize]);
         if (gap >= 0) mainGaps.push(gap);
       }
     }
-    previousOffset = offset;
   }
 
   const crossGaps: number[] = [];
-  for (let i = 0; i < lines.length - 1; i++) {
-    const gap = lines[i + 1].cross - (lines[i].cross + lines[i].crossSize);
+  for (let i = 0; i < visualLines.length - 1; i++) {
+    const gap =
+      visualLines[i + 1].crossStart -
+      (visualLines[i].crossStart + visualLines[i].crossSize);
     if (gap >= 0) crossGaps.push(gap);
   }
 
@@ -321,8 +390,8 @@ export function inferFlowLayoutMetrics<T>(
     crossStart: firstOffset[axes.cross],
     mainGap: median(mainGaps),
     crossGap: median(crossGaps),
-    lineCrossSize: median(lines.map((line) => line.crossSize)),
-    lineCount: lines.length,
+    lineCrossSize: median(visualLines.map((line) => line.crossSize)),
+    lineCount: visualLines.length,
     measuredMainExtent,
   };
 }
@@ -756,9 +825,7 @@ export function createLayoutResolutionPlan<T>(
         ? createSlotBackendPlan(container)
         : Object.freeze({
             kind: "flow",
-            canWrap:
-              container.wrap !== "nowrap" &&
-              (axes.direction === "row" || metrics.lineCount > 1),
+            canWrap: flowLayoutCanWrap(container, axes, metrics.lineCount),
             // Keep the measured-capacity calibration and jitter tolerance
             // exactly where candidate materialization applies wrapping.
             mainCapacity: Math.max(
