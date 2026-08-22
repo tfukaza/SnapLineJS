@@ -262,10 +262,38 @@ test.describe("SnapSort insertion move-and-backfill recipe", () => {
     const dragged = project.locator(".insertion-card", {
       hasText: "README.md",
     });
+    const draggedId = await dragged.getAttribute("data-snapsort-item-id");
+    expect(draggedId).toBeTruthy();
+    if (!draggedId) throw new Error("Expected the dragged item to have an ID.");
+    const draggedStart = await rect(dragged);
+    const movedItem = page.locator(`[data-snapsort-item-id="${draggedId}"]`);
     const target = source.locator(".insertion-card", {
       hasText: "Handle.svelte",
     });
-    await dragOnto(page, dragged, target);
+    await dragOnto(page, dragged, target, {
+      beforeDrop: async () => {
+        await expect(
+          page.locator('[data-snapsort-ghost="pointer"]'),
+        ).toHaveCount(0);
+        await expect(
+          page.locator('[data-snapsort-ghost="insertion"]'),
+        ).toHaveCount(1);
+        const liveRect = await rect(movedItem);
+        expect(Math.abs(liveRect.x - draggedStart.x)).toBeLessThan(2);
+        expect(Math.abs(liveRect.y - draggedStart.y)).toBeLessThan(2);
+      },
+      afterDrop: async () => {
+        await expect
+          .poll(
+            () =>
+              movedItem.evaluate(
+                (node) => getComputedStyle(node).transform !== "none",
+              ),
+            { intervals: [10, 20, 40], timeout: 500 },
+          )
+          .toBe(true);
+      },
+    });
 
     await expect(project.locator(".insertion-card")).toHaveCount(3);
     await expect(
@@ -275,6 +303,7 @@ test.describe("SnapSort insertion move-and-backfill recipe", () => {
     await expect(
       source.locator(".insertion-card", { hasText: "README.md" }),
     ).toHaveCount(1);
+    await expect(movedItem).toHaveCSS("transform", "none");
 
     await expect(page.locator(".demo-header p")).toHaveText(
       /7 files and folders (?:·|-) original row stays still until drop/,

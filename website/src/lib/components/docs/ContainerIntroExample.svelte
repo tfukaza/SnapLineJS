@@ -1,53 +1,29 @@
 <script lang="ts">
   import type { Component } from "svelte";
-  import { page } from "$app/stores";
   import ClientDemoFrame from "$lib/components/ClientDemoFrame.svelte";
   import ContainerIntroBasicDemo from "./ContainerIntroBasicDemo.svelte";
   import ContainerIntroMixedDemo from "./ContainerIntroMixedDemo.svelte";
   import ContainerIntroSortableDemo from "./ContainerIntroSortableDemo.svelte";
-  import type { ContainerIntroExampleKind } from "./containerIntroExampleSources";
   import DemoCodeTabs from "./DemoCodeTabs.svelte";
+  import {
+    containerIntroExampleId,
+    snapSortExampleMetadata,
+    type ContainerIntroExampleKind,
+  } from "./snapsortExampleCatalog";
 
-  type Example = {
-    label: string;
-    component: Component;
-  };
-
-  type PageDataWithExamples = {
-    containerIntroExampleHtml?: Partial<
-      Record<ContainerIntroExampleKind, string>
-    > | null;
-  };
-
-  const examples: Record<ContainerIntroExampleKind, Example> = {
-    basic: {
-      label: "A basic container",
-      component: ContainerIntroBasicDemo,
-    },
-    sortable: {
-      label: "A sortable container",
-      component: ContainerIntroSortableDemo,
-    },
-    mixed: {
-      label: "Items and nested containers",
-      component: ContainerIntroMixedDemo,
-    },
-  };
+  const exampleComponents = {
+    basic: ContainerIntroBasicDemo,
+    sortable: ContainerIntroSortableDemo,
+    mixed: ContainerIntroMixedDemo,
+  } satisfies Record<ContainerIntroExampleKind, Component>;
 
   let { kind }: { kind: ContainerIntroExampleKind } = $props();
-  const example = $derived(examples[kind]);
-  const ExampleComponent = $derived(example.component);
-  const codeHtml = $derived(
-    ($page.data as PageDataWithExamples).containerIntroExampleHtml?.[kind] ??
-      "",
-  );
+  const id = $derived(containerIntroExampleId(kind));
+  const label = $derived(snapSortExampleMetadata[id].label);
+  const ExampleComponent = $derived(exampleComponents[kind]);
 </script>
 
-<DemoCodeTabs
-  id={`container-intro-${kind}`}
-  label={example.label}
-  {codeHtml}
->
+<DemoCodeTabs {id} {label}>
   {#snippet demo()}
     <ClientDemoFrame className="container-intro-demo-skeleton">
       <div

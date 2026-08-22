@@ -16,10 +16,12 @@ import {
 import type { DragSessionController as DragSession } from "./session";
 import {
   removePointerPreview,
+  pointerPreviewMemberRects,
   startPointerPreview,
   updatePointerPreview,
   validatePointerPreview,
 } from "./pointer-preview";
+import { readVisualRect } from "../internal/visual-rect";
 
 /** @internal Validate callbacks needed to keep source slots stable. */
 export function validateItemVisual(session: DragSession): void {
@@ -193,6 +195,16 @@ export function updateDragVisual(session: DragSession): void {
   } else if (session.dragVisual === "preview") {
     updatePointerPreview(session);
   }
+}
+
+/** @internal Capture each dragged member's visible origin for drop FLIP. */
+export function captureDropOriginRects(
+  session: DragSession,
+): Array<DOMRect | null> {
+  if (session.dragVisual === "preview") {
+    return pointerPreviewMemberRects(session);
+  }
+  return session.items.map((member) => readVisualRect(member));
 }
 
 /** @internal Stop the selected pointer visual. */

@@ -17,13 +17,13 @@ import { reconcileRootTreeState } from "../internal/tree-state";
 import { assertCanPlaceItems } from "../internal/tree-mutation";
 import { readVisualRect } from "../internal/visual-rect";
 import {
+  captureDropOriginRects,
   restoreActiveItems,
   startDragVisual,
   stopDragVisual,
   updateDragVisual,
   validateDragVisual,
 } from "./item-visual";
-import { pointerPreviewMemberRects } from "./pointer-preview";
 import {
   animationConfigFor,
   playDropAnimation,
@@ -84,12 +84,7 @@ function drop(session: DragSession): void {
 
   item.schedule(
     () => {
-      draggedAnimation.first =
-        session.dragVisual === "preview"
-          ? pointerPreviewMemberRects(session)[0]
-          : session.dragVisual === "item"
-            ? readVisualRect(item)
-            : null;
+      draggedAnimation.first = captureDropOriginRects(session)[0] ?? null;
 
       dropTarget = resolveDropTarget();
       if (!dropTarget || dropTarget.item === item) return;

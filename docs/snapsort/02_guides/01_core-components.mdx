@@ -1,0 +1,67 @@
+---
+title: Core Components
+order: 0
+project: snapsort
+projectTitle: SnapSort
+section: guides
+sectionTitle: Guides
+sectionOrder: 2
+---
+
+<script>
+  import SnapSortConceptsDiagram from
+  "$lib/components/docs/SnapSortConceptsDiagram.svelte"; import
+  SnapSortEntityCue from "$lib/components/docs/SnapSortEntityCue.svelte";
+</script>
+
+SnapSort models a drag-and-drop interface with two primitives:
+**items** represent the things that can move, and
+**containers** define where things can be placed.
+
+<SnapSortConceptsDiagram />
+
+## Items Are Movable Elements
+
+<SnapSortEntityCue kind="item" />
+
+An `Item` is an UI element that can be dragged and placed in different locations.
+
+Each item carries an `itemId`, which helps the library identify it even after it
+moves or its DOM representation mutates. The developer must keep that ID stable
+and unique for the item's lifetime.
+
+## Containers Define Placement
+
+<SnapSortEntityCue kind="container" />
+
+A `Container` represents a region that can hold a set of items.
+Containers themselves are also considered an item, so it can be placed within
+other container as well. That means containers must also maintain an `itemId`.
+
+For every drag-and-drop interface, there is always a single **root container**
+that serves as the top-level parent for all draggable items and containers.
+Containers that need to exchange items must be descendants of that same root.
+Conversely, containers that should not exchange items should be kept disjoint
+as separate root containers.
+
+> [!WARNING]
+> Root containers must never be destroyed during the lifetime of the application,
+> since they are responsible for maintaining the state of the entire drag-and-drop system.
+
+## Ghosts Represent Temporary Visuals
+
+<SnapSortEntityCue kind="ghost" />
+
+`Ghosts` act as a visual preview of where the item will be dropped.
+It is most commonly rendered as a shallow clone of the item it is
+supposed to represent, hence its name. In other cases though, ghost can
+behave differently depending on the **mode** you selected (covered in
+more detail in the next section).
+
+## Pointers
+
+<SnapSortEntityCue kind="pointer" />
+
+Although not a component per se, `Pointers` are an important concept in SnapSort.
+They represent the user's input device that initiates the drag operation,
+usually a mouse or a touch contact.

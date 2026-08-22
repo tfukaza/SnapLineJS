@@ -1,6 +1,5 @@
 <script lang="ts">
   import type { Component } from "svelte";
-  import { page } from "$app/stores";
   import ClientDemoFrame from "$lib/components/ClientDemoFrame.svelte";
   import DemoCodeTabs from "./DemoCodeTabs.svelte";
   import ItemBasicDemo from "./ItemBasicDemo.svelte";
@@ -8,49 +7,27 @@
   import ItemMetadataDemo from "./ItemMetadataDemo.svelte";
   import ItemInstanceDemo from "./ItemInstanceDemo.svelte";
   import ItemSelectionDemo from "./ItemSelectionDemo.svelte";
-  import type { ItemExampleKind } from "./itemExampleSources";
+  import {
+    itemExampleId,
+    snapSortExampleMetadata,
+    type ItemExampleKind,
+  } from "./snapsortExampleCatalog";
 
-  type Example = {
-    label: string;
-    component: Component;
-  };
-
-  type PageDataWithExamples = {
-    itemExampleHtml?: Partial<Record<ItemExampleKind, string>> | null;
-  };
-
-  const examples: Record<ItemExampleKind, Example> = {
-    basic: {
-      label: "A basic item",
-      component: ItemBasicDemo,
-    },
-    metadata: {
-      label: "Metadata in callbacks",
-      component: ItemMetadataDemo,
-    },
-    selection: {
-      label: "Consumer-owned selection",
-      component: ItemSelectionDemo,
-    },
-    "item-instance": {
-      label: "Adopting a core item",
-      component: ItemInstanceDemo,
-    },
-    handle: {
-      label: "Dragging from a handle",
-      component: ItemHandleDemo,
-    },
-  };
+  const exampleComponents = {
+    basic: ItemBasicDemo,
+    metadata: ItemMetadataDemo,
+    selection: ItemSelectionDemo,
+    "item-instance": ItemInstanceDemo,
+    handle: ItemHandleDemo,
+  } satisfies Record<ItemExampleKind, Component>;
 
   let { kind }: { kind: ItemExampleKind } = $props();
-  const example = $derived(examples[kind]);
-  const ExampleComponent = $derived(example.component);
-  const codeHtml = $derived(
-    ($page.data as PageDataWithExamples).itemExampleHtml?.[kind] ?? "",
-  );
+  const id = $derived(itemExampleId(kind));
+  const label = $derived(snapSortExampleMetadata[id].label);
+  const ExampleComponent = $derived(exampleComponents[kind]);
 </script>
 
-<DemoCodeTabs id={`item-example-${kind}`} label={example.label} {codeHtml}>
+<DemoCodeTabs {id} {label}>
   {#snippet demo()}
     <ClientDemoFrame className="item-example-demo-skeleton">
       <div class="item-example-demo-surface">

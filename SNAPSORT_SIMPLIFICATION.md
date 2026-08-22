@@ -98,9 +98,6 @@ Unless a reviewed phase says otherwise:
 - Public item counts describe application items and exclude transient ghosts.
 - Pointer-only visual motion must not become a persistent application-data
   mutation.
-- A pending handoff may replace the internally active Items and mounted source
-  locations, but it must not rewrite the public original `items`/`sources` or
-  the frozen root snapshot used to resolve the gesture.
 
 ## Audit findings
 
@@ -333,10 +330,9 @@ consumer-error identity, and the existing single reporting path.
 
 **Required tests:** successful and exceptional completion must clear all
 session/visual/hover/ghost state and allow an immediate second drag. Include
-disconnected elements, mutation callback errors, and handoff failures. Include
-an `onItemSwap` error sentinel and assert that the same error is reported once
-while tree reconciliation/finalization still run and an immediate second drag
-succeeds.
+disconnected elements and mutation callback errors. Include an `onItemSwap`
+error sentinel and assert that the same error is reported once while tree
+reconciliation/finalization still run and an immediate second drag succeeds.
 
 **Verification:**
 
@@ -461,8 +457,7 @@ session use in demos and guides → lifecycle internal access.
 
 - Read-only: `root`, `pointerId`, `items`, `sources`, `pressedItem`,
   `primaryItem`, `start`, `pointer`, and `status`.
-- Controlled: `dragVisual`, `dropEffect`, and `handoff(replacements)` with their
-  current phase validation.
+- Controlled: `dragVisual` and `dropEffect` with their current phase validation.
 
 **Changes:**
 
@@ -475,8 +470,12 @@ session use in demos and guides → lifecycle internal access.
 - Update callbacks, `Container.dragSession`, docs, demos, and tests to expose
   only the handle.
 
-**Verification:** API type assertions plus handoff, drag-visual, drop-effect,
-and lifecycle suites for all supported phases and invalid mutations.
+`handoff(replacements)` predates the move-and-backfill copy recipe and has no
+first-party use case. Preserve it only as a deprecated temporary API, then
+remove it in a future release unless a concrete use case emerges.
+
+**Verification:** API type assertions plus drag-visual, drop-effect, and
+lifecycle suites for all supported phases and invalid mutations.
 
 ```bash
 npm run validate:packages
@@ -702,7 +701,7 @@ or colliding application ID fails.
 npm run test:snapsort
 npm run test:snapsort-react
 npm run test:snapsort-svelte
-npm run test:snapsort-gallery
+npm run test:snapsort-examples
 npm run check:adapters
 npm run check:website
 npx playwright test -c tests/e2e/docs-framework-code.playwright.config.ts
@@ -776,7 +775,7 @@ After all approved phases:
 npm run ci
 npm run test:snapsort
 npm run test:layout
-npm run test:snapsort-gallery
+npm run test:snapsort-examples
 npx playwright test -c tests/e2e/docs-framework-code.playwright.config.ts
 ```
 

@@ -26,7 +26,7 @@ export default defineConfig({
   webServer: {
     cwd: resolve(repoRoot, "website"),
     command: `npx vite dev --host 127.0.0.1 --port ${websitePort} --strictPort`,
-    url: `http://127.0.0.1:${websitePort}/snapsort/gallery`,
+    url: `http://127.0.0.1:${websitePort}/docs/snapsort/examples/complete-interfaces`,
     reuseExistingServer: false,
     timeout: 60_000,
   },

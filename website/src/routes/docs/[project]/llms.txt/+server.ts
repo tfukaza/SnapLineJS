@@ -1,13 +1,10 @@
 import {
-  entries,
-  getGroupedEntries,
+  getDocNavigation,
   projectDescriptions,
-  findDocProject,
+  type DocEntry,
+  type DocNavigationNode,
 } from "$lib/docsCatalog";
-import {
-  frameworkLabel,
-  frameworksForDoc,
-} from "$lib/server/docsMarkdown";
+import { frameworkLabel, frameworksForDoc } from "$lib/server/docsMarkdown";
 import { frameworkLabels, isFramework, type Framework } from "$lib/frameworks";
 import { absoluteUrl } from "$lib/seo";
 import { error } from "@sveltejs/kit";
@@ -24,66 +21,79 @@ function markdownLink(
   slug: string,
   title: string,
   framework: Framework | null,
+  depth: number,
 ): string {
   const path = `/docs/${slug}.md${framework ? `?framework=${framework}` : ""}`;
-  return `- [${title}](${absoluteUrl(path)})`;
+  return `${"  ".repeat(depth)}- [${title}](${absoluteUrl(path)})`;
+}
+
+function appendEntryLinks(
+  lines: string[],
+  entry: DocEntry,
+  depth: number,
+): void {
+  const entryFramework = isFramework(entry.framework) ? entry.framework : null;
+  if (entryFramework) {
+    lines.push(
+      markdownLink(
+        entry.slug,
+        linkTitle(entry.title, entryFramework),
+        entryFramework,
+        depth,
+      ),
+    );
+    return;
+  }
+
+  const codeFrameworks = frameworksForDoc(entry.slug);
+  if (codeFrameworks.length === 0) {
+    lines.push(markdownLink(entry.slug, entry.title, null, depth));
+    return;
+  }
+
+  for (const framework of codeFrameworks) {
+    lines.push(
+      markdownLink(
+        entry.slug,
+        `${entry.title} (${frameworkLabel(framework)})`,
+        framework,
+        depth,
+      ),
+    );
+  }
+}
+
+function appendNavigationNode(
+  lines: string[],
+  node: DocNavigationNode,
+  depth: number,
+): void {
+  appendEntryLinks(lines, node.entry, depth);
+  for (const child of node.children) {
+    appendNavigationNode(lines, child, depth + 1);
+  }
 }
 
 export const GET: RequestHandler = ({ params }) => {
   const project = params.project;
-  if (!findDocProject(project)) {
-    throw error(404, `Documentation project not found: ${project}`);
-  }
-
-  const projectEntries = entries().filter((entry) => entry.project === project);
-  const projectTitle = projectEntries[0]?.projectTitle;
-  if (!projectTitle) {
+  const navigation = getDocNavigation(project);
+  if (!navigation) {
     throw error(404, `Documentation project not found: ${project}`);
   }
 
   const lines = [
-    `# ${projectTitle} Documentation`,
+    `# ${navigation.projectTitle} Documentation`,
     "",
     `> ${projectDescriptions[project]}`,
     "",
     "Framework-specific pages and code examples are listed separately. Each link returns clean Markdown suitable for coding-agent context.",
   ];
 
-  for (const section of getGroupedEntries().filter(
-    (candidate) => candidate.project === project,
-  )) {
+  for (const section of navigation.sections) {
     lines.push("", `## ${section.title}`, "");
 
-    for (const entry of section.entries) {
-      const entryFramework = isFramework(entry.framework)
-        ? (entry.framework.toLowerCase() as Framework)
-        : null;
-      if (entryFramework) {
-        lines.push(
-          markdownLink(
-            entry.slug,
-            linkTitle(entry.title, entryFramework),
-            entryFramework,
-          ),
-        );
-        continue;
-      }
-
-      const codeFrameworks = frameworksForDoc(entry.slug);
-      if (codeFrameworks.length === 0) {
-        lines.push(markdownLink(entry.slug, entry.title, null));
-        continue;
-      }
-
-      for (const framework of codeFrameworks) {
-        lines.push(
-          markdownLink(
-            entry.slug,
-            `${entry.title} (${frameworkLabel(framework)})`,
-            framework,
-          ),
-        );
-      }
+    for (const node of section.nodes) {
+      appendNavigationNode(lines, node, 0);
     }
   }
 

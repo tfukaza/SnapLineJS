@@ -59,7 +59,7 @@
     "test:snapsort": "playwright test -c tests/e2e/snapsort.playwright.config.ts",
     "test:snapsort-svelte": "playwright test -c tests/e2e/snapsort.playwright.config.ts --project=svelte-chromium",
     "test:snapsort-react": "playwright test -c tests/e2e/snapsort.playwright.config.ts --project=react-chromium",
-    "test:snapsort-gallery": "playwright test -c tests/e2e/snapsort-gallery.playwright.config.ts",
+    "test:snapsort-examples": "playwright test -c tests/e2e/snapsort-examples.playwright.config.ts",
     "promo:snapsort": "playwright test -c tests/promo/snapsort-promo.playwright.config.ts && node scripts/convert-snapsort-promo.mjs",
     "test:ui": "start-server-and-test server:vanilla http://localhost:3001 'playwright test --ui'",
     "render:collision-dots": "node scripts/render_collision_text_dots.mjs",

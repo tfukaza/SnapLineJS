@@ -12,7 +12,7 @@
     type GhostLifecycleEvent,
     type ItemMoveEvent,
   } from "@snap-engine/snapsort";
-  import SnapSortContextBoundary from "../SnapSortContextBoundary.svelte";
+  import SnapSortContextBoundary from "$lib/components/SnapSortContextBoundary.svelte";
 
   let {
     debugLayout,
@@ -115,8 +115,8 @@
               <div class="hero-stack-item hero-cta-item">
                 <div class="hero-row hero-row-final card">
                   <div class="hero-cta">
-                    <a class="button primary" href="/docs/snapsort/introduction/01_setup" tabindex="-1">Install SnapSort</a>
-                    <a class="button" href="/snapsort/gallery" tabindex="-1">Gallery</a>
+                    <a class="button primary" href="/docs/snapsort/introduction/setup" tabindex="-1">Install SnapSort</a>
+                    <a class="button" href="/docs/snapsort/examples" tabindex="-1">Examples</a>
                   </div>
                 </div>
               </div>
@@ -217,8 +217,8 @@
                       </span>
                     </Handle>
                     <div class="hero-cta">
-                      <a class="button primary" href="/docs/snapsort/introduction/01_setup">Install SnapSort</a>
-                      <a class="button" href="/snapsort/gallery">Gallery</a>
+                      <a class="button primary" href="/docs/snapsort/introduction/setup">Install SnapSort</a>
+                      <a class="button" href="/docs/snapsort/examples">Examples</a>
                     </div>
                   </div>
                 </Item>

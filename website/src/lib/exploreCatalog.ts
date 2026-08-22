@@ -21,7 +21,7 @@ export type ExploreCatalogEntry = {
   maturity?: ExploreMaturity;
   href?: string;
   docsHref?: string;
-  galleryHref?: string;
+  examplesHref?: string;
   motif: ExploreMotif;
   accent: string;
 };
@@ -49,7 +49,7 @@ export const exploreActionLabels: Record<ExploreStatus, string> = {
 
 export const exploreSecondaryLinkLabels = {
   docs: "Docs",
-  gallery: "Live examples",
+  examples: "Live examples",
 } as const;
 
 export function getExploreStatusLabel(entry: ExploreCatalogEntry): string {
@@ -74,13 +74,12 @@ export const exploreEntries: readonly ExploreCatalogEntry[] = [
   {
     slug: "snapsort",
     name: "SnapSort",
-    summary:
-      "Unstyled components for sortable lists, kanban boards, and more.",
+    summary: "Unstyled components for sortable lists, kanban boards, and more.",
     status: "available",
     maturity: "early-beta",
     href: "/snapsort",
     docsHref: "/docs/snapsort/introduction",
-    galleryHref: "/snapsort/gallery",
+    examplesHref: "/docs/snapsort/examples",
     motif: "sort",
     accent: "var(--color-primary)",
   },

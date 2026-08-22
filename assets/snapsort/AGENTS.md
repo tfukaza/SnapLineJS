@@ -117,26 +117,16 @@ its stable `DragSession` handle. Nested containers report `null`.
 
 The handle exposes read-only `root`, `pointerId`, `items`, `sources`,
 `pressedItem`, `primaryItem`, `start`, `pointer`, and `status`, plus the
-phase-checked `dragVisual`, `dropEffect`, and `handoff(replacements)` controls.
-Its arrays, locations, and coordinate objects are immutable. `DragSession` is
-a type-only root export and cannot be constructed by consumers. Internal code
-that needs lifecycle state must resolve the controller through
-`drag/session-store.ts`; never widen the public handle to expose controller
-fields.
+phase-checked `dragVisual` and `dropEffect` controls. Its arrays, locations, and
+coordinate objects are immutable. `DragSession` is a type-only root export and
+cannot be constructed by consumers. Internal code that needs lifecycle state
+must resolve the controller through `drag/session-store.ts`; never widen the
+public handle to expose controller fields.
 
-`handoff(replacements)` deliberately remains public. It atomically validates a
-parallel, unique, connected replacement run in the same engine/root, transfers
-pointer ownership and frozen drag geometry, and makes those Items the session
-participants. It is pending-only and must run during `onDragStart`, before
-lifecycle activation. It does not mount data, imply copy semantics, destroy
-either run, or clean application state. Framework integrations must commit the
-replacement DOM before calling it.
-
-The public `items`/`sources` observations and `snapshotItemSet` continue to
-describe the original gesture participants and frozen root snapshot after a
-handoff. The controller separately updates `activeItems`/`activeSources` to the
-replacements and their mounted locations. Do not rewrite the original
-resolution snapshot when retargeting pointer ownership.
+`handoff(replacements)` is deprecated. It predates the move-and-backfill copy
+recipe, has no first-party use case, and remains temporarily only so it can be
+removed in a future release if no concrete use case emerges. Do not add new
+call sites or present it as a supported application recipe.
 
 ### Mutator (`mutation.ts`)
 

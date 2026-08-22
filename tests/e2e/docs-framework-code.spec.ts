@@ -1,4 +1,5 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
+import { insertionTreeMarkerOptions } from "../../website/src/lib/components/docs/placement-modes/insertionTreeMarker";
 
 async function dragBetween(
   page: Page,
@@ -34,12 +35,62 @@ async function dragBetween(
   await page.waitForTimeout(150);
 }
 
-test("core concepts demo reduces ghost teardown through the framework tree", async ({
+test("tree insertion marker options follow adjacent item geometry", () => {
+  expect(
+    insertionTreeMarkerOptions({
+      gap: { orientation: "horizontal", x: 10, y: 40, length: 100 },
+      previous: { rect: { x: 20, y: 10, width: 70, height: 30 } },
+      next: null,
+    }),
+  ).toEqual({ thickness: 3, startInset: 10, endInset: 20 });
+
+  expect(
+    insertionTreeMarkerOptions({
+      gap: { orientation: "horizontal", x: 10, y: 40, length: 100 },
+      previous: null,
+      next: { rect: { x: 0, y: 40, width: 80, height: 30 } },
+    }),
+  ).toEqual({ thickness: 3, startInset: 0, endInset: 30 });
+
+  expect(
+    insertionTreeMarkerOptions({
+      gap: { orientation: "horizontal", x: 10, y: 40, length: 100 },
+      previous: { rect: { x: 15, y: 10, width: 90, height: 30 } },
+      next: { rect: { x: 25, y: 40, width: 60, height: 30 } },
+    }),
+  ).toEqual({ thickness: 3, startInset: 15, endInset: 25 });
+
+  expect(
+    insertionTreeMarkerOptions({
+      gap: { orientation: "vertical", x: 40, y: 20, length: 120 },
+      previous: { rect: { x: 10, y: 35, width: 30, height: 80 } },
+      next: null,
+    }),
+  ).toEqual({ thickness: 3, startInset: 15, endInset: 25 });
+
+  expect(
+    insertionTreeMarkerOptions({
+      gap: { orientation: "horizontal", x: 10, y: 40, length: 100 },
+      previous: null,
+      next: null,
+    }),
+  ).toEqual({ thickness: 3, startInset: 0, endInset: 0 });
+
+  expect(
+    insertionTreeMarkerOptions({
+      gap: { orientation: "horizontal", x: 10, y: 40, length: 100 },
+      previous: { rect: { x: 0, y: 10, width: 5, height: 30 } },
+      next: { rect: { x: 120, y: 40, width: 20, height: 30 } },
+    }),
+  ).toEqual({ thickness: 3, startInset: 0, endInset: 0 });
+});
+
+test("core components demo reduces ghost teardown through the framework tree", async ({
   page,
 }) => {
   const pageErrors: Error[] = [];
   page.on("pageerror", (error) => pageErrors.push(error));
-  const response = await page.goto("/docs/snapsort/guides/01_core_concepts");
+  const response = await page.goto("/docs/snapsort/guides/core-components");
   expect(response?.status()).toBe(200);
 
   const diagram = page.locator(".snapsort-concepts-diagram");
@@ -49,6 +100,608 @@ test("core concepts demo reduces ghost teardown through the framework tree", asy
 
   await expect(diagram.locator(".snapsort-concepts-ghost")).toHaveCount(0);
   expect(pageErrors).toEqual([]);
+});
+
+test("Ghosts guide demonstrates all four transient roles and cleanup", async ({
+  page,
+}) => {
+  const pageErrors: Error[] = [];
+  page.on("pageerror", (error) => pageErrors.push(error));
+  const response = await page.goto(
+    "/docs/snapsort/guides/sessions/ghosts?framework=svelte",
+    { waitUntil: "networkidle" },
+  );
+  expect(response?.status()).toBe(200);
+
+  const flow = page.locator('[data-ghost-demo="flow-lifecycle"]');
+  await dragBetween(
+    page,
+    flow.locator('[data-demo-item="ghost-flow-outline"]'),
+    flow.locator('[data-demo-item="ghost-flow-review"]'),
+    {
+      beforeDrop: async () => {
+        await expect(
+          flow.locator('[data-snapsort-ghost-entry="target-spacer"]'),
+        ).toHaveCount(1);
+        await expect(
+          flow.locator('[data-snapsort-ghost-entry="pointer-preview"]'),
+        ).toHaveCount(1);
+      },
+    },
+  );
+  await expect(flow.locator("[data-snapsort-ghost-entry]")).toHaveCount(0);
+  await expect(flow.locator('[data-ghost-event="insert"]')).not.toHaveCount(0);
+  await expect(flow.locator('[data-ghost-event="remove"]')).not.toHaveCount(0);
+
+  const overlay = page.locator('[data-ghost-demo="overlay-channels"]');
+  await dragBetween(
+    page,
+    overlay.locator('[data-demo-item="ghost-overlay-alpha"]'),
+    overlay.locator('[data-demo-item="ghost-overlay-charlie"]'),
+    {
+      beforeDrop: async () => {
+        await expect(
+          overlay.locator('[data-snapsort-ghost-entry="source-spacer"]'),
+        ).toHaveCount(1);
+        await expect(
+          overlay.locator('[data-snapsort-ghost-entry="insertion-marker"]'),
+        ).toHaveCount(1);
+      },
+    },
+  );
+  await expect(overlay.locator("[data-snapsort-ghost-entry]")).toHaveCount(0);
+  await expect(
+    overlay.locator('[data-ghost-type="insertion-marker"]'),
+  ).not.toHaveCount(0);
+  await expect(
+    overlay.locator('[data-ghost-type="source-spacer"]'),
+  ).not.toHaveCount(0);
+  expect(pageErrors).toEqual([]);
+});
+
+test("SnapSort guide routes use the new session hierarchy without legacy fallbacks", async ({
+  request,
+}) => {
+  const currentSlugs = [
+    "snapsort/guides/core-components",
+    "snapsort/guides/placement-modes",
+    "snapsort/guides/sessions",
+    "snapsort/guides/sessions/drag-start",
+    "snapsort/guides/sessions/ghosts",
+    "snapsort/guides/sessions/commit-and-cleanup",
+    "snapsort/guides/sessions/advanced-settings-and-callbacks",
+    "snapsort/guides/sessions/drop-policies",
+    "snapsort/examples",
+    "snapsort/examples/basics",
+    "snapsort/examples/containers",
+    "snapsort/examples/items",
+    "snapsort/examples/complete-interfaces",
+  ];
+  const removedSlugs = [
+    "snapsort/introduction/01_core_concepts",
+    "snapsort/introduction/01_setup",
+    "snapsort/guides/01_core_concepts",
+    "snapsort/guides/02_placement_modes",
+    "snapsort/guides/03_ghosts",
+    "snapsort/guides/03_session_lifecycle",
+    "snapsort/guides/04_drop_policies",
+    "snapsort/guides/sessions/placement-modes",
+  ];
+
+  for (const slug of currentSlugs) {
+    for (const suffix of ["", ".md"]) {
+      const path = `/docs/${slug}${suffix}`;
+      const response = await request.get(path, { maxRedirects: 0 });
+      expect(response.status(), path).toBe(200);
+    }
+  }
+
+  for (const slug of removedSlugs) {
+    for (const suffix of ["", ".md"]) {
+      const path = `/docs/${slug}${suffix}`;
+      const response = await request.get(path, { maxRedirects: 0 });
+      expect(response.status(), path).toBe(404);
+    }
+  }
+
+  const retiredGallery = await request.get("/snapsort/gallery", {
+    maxRedirects: 0,
+  });
+  expect(retiredGallery.status()).toBe(404);
+
+  const knownSource = await request.get(
+    "/docs/snapsort/examples/source/todo-list",
+  );
+  expect(knownSource.status()).toBe(200);
+  expect(knownSource.headers()["content-type"]).toContain("text/html");
+  expect(await knownSource.text()).toContain('<pre class="display shiki');
+
+  const unknownSource = await request.get(
+    "/docs/snapsort/examples/source/not-an-example",
+  );
+  expect(unknownSource.status()).toBe(404);
+});
+
+test("SnapSort navigation orders Placement Modes, Drag Sessions, and Examples", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  const response = await page.goto(
+    "/docs/snapsort/guides/sessions/ghosts?framework=svelte",
+  );
+  expect(response?.status()).toBe(200);
+
+  const guidesSection = page.locator(".doc-sidebar .sidebar-section", {
+    has: page.locator(".section-title", { hasText: "Guides" }),
+  });
+  const topLevelLinks = guidesSection.locator(":scope > ul > li > a");
+  await expect(topLevelLinks).toHaveText([
+    "Core Components",
+    "Placement Modes",
+    "Drag Sessions",
+    "Examples",
+  ]);
+
+  const sessionsLink = guidesSection.locator(
+    ':scope > ul > li > a[href="/docs/snapsort/guides/sessions"]',
+  );
+  const sessionsNode = sessionsLink.locator("..");
+  await expect(sessionsLink).toHaveClass(/ancestor/);
+  await expect(sessionsNode.locator(":scope > ul > li > a")).toHaveText([
+    "Drag Start",
+    "Ghosts",
+    "Commit and Cleanup",
+    "Advanced Session Settings and Callbacks",
+    "Drop Policies",
+  ]);
+  await expect(
+    sessionsNode.locator('a[href="/docs/snapsort/guides/placement-modes"]'),
+  ).toHaveCount(0);
+  await expect(
+    sessionsNode.locator(
+      ':scope > ul > li > a[href="/docs/snapsort/guides/sessions/ghosts"]',
+    ),
+  ).toHaveAttribute("aria-current", "page");
+
+  const examplesLink = guidesSection.locator(
+    ':scope > ul > li > a[href="/docs/snapsort/examples"]',
+  );
+  const examplesNode = examplesLink.locator("..");
+  await expect(examplesNode.locator(":scope > ul > li > a")).toHaveText([
+    "Basics",
+    "Container Recipes",
+    "Item Recipes",
+    "Complete Interfaces",
+  ]);
+
+  const ghostsBreadcrumb = page.locator(".doc-breadcrumb");
+  await expect(
+    ghostsBreadcrumb.getByRole("link", { name: "Drag Sessions" }),
+  ).toHaveAttribute("href", "/docs/snapsort/guides/sessions");
+  await expect(ghostsBreadcrumb.locator('[aria-current="page"]')).toHaveText(
+    "Ghosts",
+  );
+  await expect(
+    page.locator(".pagination-link.prev .pagination-title"),
+  ).toHaveText("Drag Start");
+  await expect(
+    page.locator(".pagination-link.next .pagination-title"),
+  ).toHaveText("Commit and Cleanup");
+
+  await page.goto("/docs/snapsort/guides/placement-modes?framework=svelte");
+  const placementLink = guidesSection.locator(
+    ':scope > ul > li > a[href="/docs/snapsort/guides/placement-modes"]',
+  );
+  await expect(placementLink).toHaveAttribute("aria-current", "page");
+  await expect(sessionsLink).not.toHaveClass(/ancestor/);
+
+  const placementBreadcrumb = page.locator(".doc-breadcrumb");
+  await expect(placementBreadcrumb).toContainText("Guides");
+  await expect(placementBreadcrumb.locator('[aria-current="page"]')).toHaveText(
+    "Placement Modes",
+  );
+  await expect(
+    placementBreadcrumb.getByRole("link", { name: "Drag Sessions" }),
+  ).toHaveCount(0);
+
+  await page.goto("/docs/snapsort/examples/containers?framework=svelte");
+  await expect(examplesLink).toHaveClass(/ancestor/);
+  await expect(
+    examplesNode.locator(
+      ':scope > ul > li > a[href="/docs/snapsort/examples/containers"]',
+    ),
+  ).toHaveAttribute("aria-current", "page");
+  await expect(
+    page.locator(".doc-breadcrumb").getByRole("link", { name: "Examples" }),
+  ).toHaveAttribute("href", "/docs/snapsort/examples");
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/docs/snapsort/guides/sessions/ghosts?framework=svelte", {
+    waitUntil: "networkidle",
+  });
+  const primaryNav = page.getByRole("navigation", {
+    name: "Primary navigation",
+  });
+  const mobileNavigationTrigger = primaryNav.getByRole("button", {
+    name: "Toggle navigation",
+  });
+  await mobileNavigationTrigger.click();
+  await expect(mobileNavigationTrigger).toHaveAttribute(
+    "aria-expanded",
+    "true",
+  );
+
+  const mobileDocs = primaryNav.locator(".mobile-doc-navigation");
+  await expect(mobileDocs).toBeVisible();
+  await expect(mobileDocs).toContainText("SnapSort docs");
+  const mobileGuides = mobileDocs.locator(".mobile-doc-section", {
+    has: page.locator(".mobile-doc-section-title", {
+      hasText: "Guides",
+    }),
+  });
+  await expect(mobileGuides.locator(":scope > ul > li > a")).toHaveText([
+    "Core Components",
+    "Placement Modes",
+    "Drag Sessions",
+    "Examples",
+  ]);
+  const mobileSessionsLink = mobileGuides.locator(
+    ':scope > ul > li > a[href="/docs/snapsort/guides/sessions"]',
+  );
+  const mobileSessionsNode = mobileSessionsLink.locator("..");
+  await expect(mobileSessionsNode.locator(":scope > ul > li > a")).toHaveText([
+    "Drag Start",
+    "Ghosts",
+    "Commit and Cleanup",
+    "Advanced Session Settings and Callbacks",
+    "Drop Policies",
+  ]);
+  await expect(
+    mobileSessionsNode.locator(
+      'a[href="/docs/snapsort/guides/placement-modes"]',
+    ),
+  ).toHaveCount(0);
+
+  const mobileExamplesLink = mobileGuides.locator(
+    ':scope > ul > li > a[href="/docs/snapsort/examples"]',
+  );
+  await expect(
+    mobileExamplesLink.locator("..").locator(":scope > ul > li > a"),
+  ).toHaveText([
+    "Basics",
+    "Container Recipes",
+    "Item Recipes",
+    "Complete Interfaces",
+  ]);
+});
+
+test("SnapSort example source tabs recover from a failed lazy request", async ({
+  page,
+}) => {
+  let sourceAttempts = 0;
+  await page.route(
+    "**/docs/snapsort/examples/source/container-intro-basic",
+    async (route) => {
+      sourceAttempts += 1;
+      if (sourceAttempts === 1) {
+        await route.fulfill({ status: 503, body: "Unavailable" });
+        return;
+      }
+      await route.continue();
+    },
+  );
+
+  await page.goto("/docs/snapsort/examples/basics", {
+    waitUntil: "networkidle",
+  });
+  expect(sourceAttempts).toBe(0);
+
+  const example = page.locator('[data-demo-code-tabs="container-intro-basic"]');
+  await example.getByRole("tab", { name: "Svelte source" }).click();
+  await expect(example.getByRole("alert")).toContainText(
+    "Could not load the Svelte source.",
+  );
+  await example.getByRole("button", { name: "Retry" }).click();
+  await expect(example.locator("pre.shiki.display")).toHaveCount(1);
+  expect(sourceAttempts).toBe(2);
+});
+
+test("article outlines expose Markdown headings without demo internals", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto("/docs/snapsort/guides/placement-modes?framework=svelte");
+
+  const rail = page.locator('[data-article-outline="rail"]');
+  const inline = page.locator('[data-article-outline="inline"]');
+  await expect(rail).toBeVisible();
+  await expect(inline).toBeHidden();
+  const desktopOutlineGeometry = await page.evaluate(() => {
+    const content = document.querySelector(".doc-content");
+    const outline = document.querySelector('[data-article-outline="rail"]');
+    if (
+      !(content instanceof HTMLElement) ||
+      !(outline instanceof HTMLElement)
+    ) {
+      throw new Error("Missing desktop documentation outline geometry");
+    }
+
+    const contentRect = content.getBoundingClientRect();
+    const outlineRect = outline.getBoundingClientRect();
+    return {
+      contentRight: contentRect.right,
+      outlineLeft: outlineRect.left,
+    };
+  });
+  expect(desktopOutlineGeometry.outlineLeft).toBeGreaterThanOrEqual(
+    desktopOutlineGeometry.contentRight - 1,
+  );
+  await expect(rail.locator("a")).toHaveText([
+    "Euclidean",
+    "Insertion",
+    "Swap",
+    "Progressive",
+  ]);
+  await expect(rail.locator('[data-outline-depth="2"]')).toHaveCount(4);
+  await expect(rail.locator('[data-outline-depth="3"]')).toHaveCount(0);
+
+  for (const [title, id] of [
+    ["Euclidean", "euclidean"],
+    ["Insertion", "insertion"],
+    ["Swap", "swap"],
+    ["Progressive", "progressive"],
+  ]) {
+    await expect(
+      rail.getByRole("link", { name: title, exact: true }),
+    ).toHaveAttribute("href", `#${id}`);
+    await expect(page.locator(`h2#${id}`)).toHaveCount(1);
+  }
+
+  await rail.getByRole("link", { name: "Insertion", exact: true }).click();
+  await expect(page).toHaveURL(/#insertion$/);
+  await expect(page.locator("h2#insertion")).toBeInViewport();
+  await page.evaluate(() =>
+    window.scrollTo(0, document.documentElement.scrollHeight),
+  );
+  await expect(
+    rail.getByRole("link", { name: "Progressive", exact: true }),
+  ).toHaveAttribute("aria-current", "location");
+  expect(new URL(page.url()).hash).toBe("#insertion");
+
+  await page.goto("/docs/snapsort/guides/sessions/ghosts?framework=svelte");
+  const ghostsRail = page.locator('[data-article-outline="rail"]');
+  await expect(
+    page.getByRole("heading", { name: "Active ghosts", level: 3 }),
+  ).toHaveCount(2);
+  await expect(
+    page.getByRole("heading", { name: "Lifecycle ledger", level: 3 }),
+  ).toHaveCount(2);
+  await expect(
+    ghostsRail.getByRole("link", { name: "Active ghosts" }),
+  ).toHaveCount(0);
+  await expect(
+    ghostsRail.getByRole("link", { name: "Lifecycle ledger" }),
+  ).toHaveCount(0);
+
+  await page.goto("/docs/snapsort/reference/svelte/item?framework=svelte");
+  const itemRail = page.locator('[data-article-outline="rail"]');
+  const childrenLinks = itemRail.getByRole("link", {
+    name: "children",
+    exact: true,
+  });
+  await expect(childrenLinks).toHaveCount(2);
+  await expect(childrenLinks.nth(0)).toHaveAttribute("href", "#children");
+  await expect(childrenLinks.nth(1)).toHaveAttribute("href", "#children-1");
+  await expect(page.locator("h3#children")).toHaveCount(1);
+  await expect(page.locator("h3#children-1")).toHaveCount(1);
+
+  await page.goto(
+    "/docs/snapsort/reference/react/container?framework=react#callbacks",
+  );
+  await expect(page.locator("h2#callbacks")).toBeInViewport();
+
+  await page.goto("/docs/snapsort/introduction");
+  await expect(page.locator("[data-article-outline]")).toHaveCount(0);
+
+  await page.goto("/docs");
+  const docsHomeRail = page.locator('[data-article-outline="rail"]');
+  await expect(page.locator(".doc-sidebar")).toHaveCount(0);
+  await expect(page.locator(".doc-breadcrumb")).toHaveText("Docs");
+  await expect(docsHomeRail).toBeVisible();
+  await expect(docsHomeRail.locator("a")).toHaveText([
+    "SnapEngine Core",
+    "Assets",
+    "SnapSort",
+    "SnapLine",
+    "SnapZap",
+  ]);
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/docs/snapsort/guides/placement-modes?framework=svelte", {
+    waitUntil: "networkidle",
+  });
+  const mobileRail = page.locator('[data-article-outline="rail"]');
+  const mobileInline = page.locator('[data-article-outline="inline"]');
+  await expect(mobileRail).toBeHidden();
+  await expect(mobileInline).toBeVisible();
+  const outlineSummary = mobileInline.locator("summary");
+  await outlineSummary.focus();
+  await expect(outlineSummary).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(mobileInline).toHaveAttribute("open", "");
+  await expect(mobileInline.locator("a")).toHaveText([
+    "Euclidean",
+    "Insertion",
+    "Swap",
+    "Progressive",
+  ]);
+  await mobileInline
+    .getByRole("link", { name: "Insertion", exact: true })
+    .click();
+  await expect(mobileInline).not.toHaveAttribute("open", "");
+  await expect(outlineSummary).toBeFocused();
+  await expect(page.locator("h2#insertion")).toBeInViewport();
+  const mobilePageWidth = await page.locator("html").evaluate((element) => ({
+    clientWidth: element.clientWidth,
+    scrollWidth: element.scrollWidth,
+  }));
+  expect(mobilePageWidth.scrollWidth).toBeLessThanOrEqual(
+    mobilePageWidth.clientWidth,
+  );
+});
+
+test("insertion placement demo moves items through a nested layers tree", async ({
+  page,
+}) => {
+  const pageErrors: Error[] = [];
+  page.on("pageerror", (error) => pageErrors.push(error));
+  await page.goto("/docs/snapsort/guides/placement-modes?framework=svelte", {
+    waitUntil: "networkidle",
+  });
+
+  const demo = page.locator(".insertion-demo-tree");
+  await expect(page.locator(".euclidean-demo-list")).toHaveCount(2);
+  await expect(page.locator(".progressive-demo-list")).toHaveCount(1);
+  await expect(page.locator(".swap-demo-list")).toHaveCount(1);
+  const unaffectedLabels = await Promise.all([
+    page.locator(".euclidean-demo-list").allTextContents(),
+    page.locator(".progressive-demo-list").allTextContents(),
+    page.locator(".swap-demo-list").allTextContents(),
+  ]);
+  await expect(demo.locator(".insertion-tree-row")).toHaveCount(8);
+  await expect(demo.locator(".insertion-tree-label")).toHaveText([
+    "Item 1",
+    "Item 2",
+    "Item 3",
+    "Item 4",
+    "Item 5",
+    "Item 6",
+    "Item 7",
+    "Item 8",
+  ]);
+  await expect(demo.locator(".insertion-tree-group")).toHaveCount(2);
+  await expect(demo.locator(":scope > .insertion-tree-item")).toHaveCount(3);
+  await expect(demo.locator(":scope > .insertion-tree-group")).toHaveCount(1);
+
+  const labelOffsets = await Promise.all(
+    ["one", "four", "seven"].map((itemId) =>
+      demo
+        .locator(
+          `[data-snapsort-item-id="${itemId}"] .insertion-tree-label, [data-placement-tree-id="${itemId}"] > .insertion-tree-row .insertion-tree-label`,
+        )
+        .boundingBox(),
+    ),
+  );
+  expect(labelOffsets.every(Boolean)).toBe(true);
+  expect(labelOffsets[1]!.x).toBeGreaterThan(labelOffsets[0]!.x);
+  expect(labelOffsets[2]!.x).toBeGreaterThan(labelOffsets[1]!.x);
+
+  const itemEight = demo.locator('[data-snapsort-item-id="eight"]');
+  const itemFour = demo.locator('[data-snapsort-item-id="four"]');
+  const itemSeven = demo.locator('[data-snapsort-item-id="seven"]');
+  await expect(
+    demo
+      .locator('[data-placement-tree-id="six"]')
+      .locator('[data-snapsort-item-id="seven"]'),
+  ).toHaveCount(1);
+  let firstLevelMarkerBox: Awaited<ReturnType<Locator["boundingBox"]>> = null;
+  let firstLevelNeighborBox: Awaited<ReturnType<Locator["boundingBox"]>> = null;
+  await dragBetween(page, itemEight, itemFour, {
+    beforeDrop: async () => {
+      const marker = demo.locator('[data-snapsort-ghost="insertion"]');
+      await expect(marker).toHaveCount(1);
+      [firstLevelMarkerBox, firstLevelNeighborBox] = await Promise.all([
+        marker.boundingBox(),
+        itemFour.boundingBox(),
+      ]);
+    },
+  });
+
+  await expect(
+    demo
+      .locator('[data-placement-tree-id="three"]')
+      .locator('[data-snapsort-item-id="eight"]'),
+  ).toHaveCount(1);
+  await dragBetween(
+    page,
+    itemEight,
+    demo.locator('[data-snapsort-item-id="two"]'),
+  );
+  await expect(
+    demo.locator(':scope > [data-snapsort-item-id="eight"]'),
+  ).toHaveCount(1);
+
+  let secondLevelMarkerBox: Awaited<ReturnType<Locator["boundingBox"]>> = null;
+  let secondLevelNeighborBox: Awaited<ReturnType<Locator["boundingBox"]>> =
+    null;
+  await dragBetween(page, itemEight, itemSeven, {
+    beforeDrop: async () => {
+      const marker = demo.locator('[data-snapsort-ghost="insertion"]');
+      await expect(marker).toHaveCount(1);
+      [secondLevelMarkerBox, secondLevelNeighborBox] = await Promise.all([
+        marker.boundingBox(),
+        itemSeven.boundingBox(),
+      ]);
+    },
+  });
+  await expect(
+    demo
+      .locator('[data-placement-tree-id="six"]')
+      .locator('[data-snapsort-item-id="eight"]'),
+  ).toHaveCount(1);
+
+  for (const [markerBox, neighborBox] of [
+    [firstLevelMarkerBox, firstLevelNeighborBox],
+    [secondLevelMarkerBox, secondLevelNeighborBox],
+  ]) {
+    expect(markerBox).not.toBeNull();
+    expect(neighborBox).not.toBeNull();
+    expect(Math.abs(markerBox!.x - neighborBox!.x)).toBeLessThanOrEqual(1);
+    expect(
+      Math.abs(
+        markerBox!.x + markerBox!.width - (neighborBox!.x + neighborBox!.width),
+      ),
+    ).toBeLessThanOrEqual(1);
+  }
+  expect(secondLevelMarkerBox!.x).toBeGreaterThan(firstLevelMarkerBox!.x);
+  expect(secondLevelMarkerBox!.width).toBeLessThan(firstLevelMarkerBox!.width);
+  await expect(demo.locator("[data-snapsort-ghost]")).toHaveCount(0);
+  await expect(page.locator(".euclidean-demo-list")).toHaveText(
+    unaffectedLabels[0],
+  );
+  await expect(page.locator(".progressive-demo-list")).toHaveText(
+    unaffectedLabels[1],
+  );
+  await expect(page.locator(".swap-demo-list")).toHaveText(unaffectedLabels[2]);
+
+  await dragBetween(
+    page,
+    itemEight,
+    demo.locator('[data-snapsort-item-id="two"]'),
+  );
+  await expect(
+    demo.locator(':scope > [data-snapsort-item-id="eight"]'),
+  ).toHaveCount(1);
+
+  const itemThreeRow = demo.locator(
+    '[data-placement-tree-id="three"] > .insertion-tree-group-row',
+  );
+  await dragBetween(page, itemThreeRow, itemSeven);
+  await expect(
+    demo
+      .locator('[data-placement-tree-id="six"]')
+      .locator('[data-placement-tree-id="three"]'),
+  ).toHaveCount(0);
+  await expect(demo.locator("[data-snapsort-ghost]")).toHaveCount(0);
+  expect(pageErrors).toEqual([]);
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.reload({ waitUntil: "networkidle" });
+  const pageWidth = await page.locator("html").evaluate((element) => ({
+    clientWidth: element.clientWidth,
+    scrollWidth: element.scrollWidth,
+  }));
+  expect(pageWidth.scrollWidth).toBeLessThanOrEqual(pageWidth.clientWidth);
 });
 
 test("SnapSort Svelte reference lists only its component pages", async ({
@@ -63,9 +716,7 @@ test("SnapSort Svelte reference lists only its component pages", async ({
   );
 
   const sidebar = page.locator(".doc-sidebar");
-  await expect(sidebar.getByRole("heading", { name: "SnapSort" })).toHaveCount(
-    1,
-  );
+  await expect(sidebar.getByText("SnapSort", { exact: true })).toHaveCount(1);
   await expect(
     sidebar.getByRole("link", { name: "Container", exact: true }),
   ).toHaveCount(1);
@@ -90,7 +741,7 @@ test("SnapSort Svelte reference lists only its component pages", async ({
   expect(linkBox!.x).toBeCloseTo(titleBox!.x, 0);
 });
 
-test("Svelte Container properties use live, keyboard-accessible Demo and Code tabs", async ({
+test("SnapSort Container examples move out of Reference and keep accessible source tabs", async ({
   page,
 }) => {
   const response = await page.goto(
@@ -107,28 +758,49 @@ test("Svelte Container properties use live, keyboard-accessible Demo and Code ta
       level: 2,
     }),
   ).toBeVisible();
-  await expect(page.locator(".doc-article")).toContainText(
-    "source-spacer, target-spacer, insertion-marker, and pointer-preview",
-  );
+  await expect(page.locator("[data-demo-code-tabs]")).toHaveCount(0);
+  await expect(
+    page.getByRole("link", { name: "Container basics" }),
+  ).toHaveAttribute("href", "/docs/snapsort/examples/basics#basic-container");
+  await expect(
+    page
+      .getByRole("article")
+      .getByRole("link", { name: "Container Recipes", exact: true }),
+  ).toHaveAttribute("href", "/docs/snapsort/examples/containers");
   await expect(
     page.getByRole("heading", {
       name: "Move Items Between Containers",
       level: 2,
     }),
   ).toHaveCount(0);
-  await expect(page.locator("[data-demo-code-tabs]")).toHaveCount(10);
+  const exampleSourceRequests: string[] = [];
+  page.on("request", (request) => {
+    if (request.url().includes("/docs/snapsort/examples/source/")) {
+      exampleSourceRequests.push(request.url());
+    }
+  });
+  await page.goto("/docs/snapsort/examples/basics?framework=svelte");
+  await expect(page.locator("[data-demo-code-tabs]")).toHaveCount(4);
+  expect(exampleSourceRequests).toEqual([]);
 
   const basic = page.locator('[data-demo-code-tabs="container-intro-basic"]');
   await expect(basic.locator(".snapsort-item")).toHaveCount(2);
-  await basic.getByRole("tab", { name: "Code" }).click();
+  await basic.getByRole("tab", { name: "Svelte source" }).click();
+  await expect.poll(() => exampleSourceRequests.length).toBe(1);
+  expect(exampleSourceRequests[0]).toContain(
+    "/docs/snapsort/examples/source/container-intro-basic",
+  );
   await expect(basic.getByRole("tabpanel")).toContainText("{#each");
   await expect(basic.locator("pre.shiki.display")).toHaveCount(1);
+  await basic.getByRole("tab", { name: "Demo" }).click();
+  await basic.getByRole("tab", { name: "Svelte source" }).click();
+  expect(exampleSourceRequests).toHaveLength(1);
 
   const sortable = page.locator(
     '[data-demo-code-tabs="container-intro-sortable"]',
   );
   await expect(sortable.locator(".snapsort-item")).toHaveCount(2);
-  await sortable.getByRole("tab", { name: "Code" }).click();
+  await sortable.getByRole("tab", { name: "Svelte source" }).click();
   await expect(sortable.getByRole("tabpanel")).toContainText(
     "onGhostInsert: onGhostMove",
   );
@@ -148,11 +820,14 @@ test("Svelte Container properties use live, keyboard-accessible Demo and Code ta
   await expect(later.getByText("Draft update", { exact: true })).toHaveCount(1);
   await expect(mixed.locator(".snapsort-ghost")).toHaveCount(0);
 
+  await page.goto("/docs/snapsort/examples/containers?framework=svelte");
+  await expect(page.locator("[data-demo-code-tabs]")).toHaveCount(7);
+
   const collection = page.locator(
     '[data-demo-code-tabs="container-property-collection"]',
   );
   const demoTab = collection.getByRole("tab", { name: "Demo" });
-  const codeTab = collection.getByRole("tab", { name: "Code" });
+  const codeTab = collection.getByRole("tab", { name: "Svelte source" });
   await expect(collection.locator(".property-list")).toBeVisible();
   await expect(demoTab).toHaveAttribute("aria-selected", "true");
   await codeTab.click();
@@ -338,7 +1013,7 @@ test("Svelte Container properties use live, keyboard-accessible Demo and Code ta
   await expect(styledContainer).not.toHaveClass(/is-emphasized/);
 });
 
-test("Svelte Item reference explains props with live Item and Handle examples", async ({
+test("SnapSort Item examples move out of Reference and preserve focused behavior", async ({
   page,
   request,
 }) => {
@@ -353,15 +1028,29 @@ test("Svelte Item reference explains props with live Item and Handle examples", 
   await expect(
     page.getByRole("heading", { name: "Handle", level: 2 }),
   ).toBeVisible();
-  await expect(page.locator("[data-demo-code-tabs]")).toHaveCount(5);
+  await expect(page.locator("[data-demo-code-tabs]")).toHaveCount(0);
+  await expect(
+    page.getByRole("link", { name: "Basic Item", exact: true }),
+  ).toHaveAttribute("href", "/docs/snapsort/examples/basics#basic-item");
+  await expect(
+    page
+      .getByRole("article")
+      .getByRole("link", { name: "Item Recipes", exact: true }),
+  ).toHaveAttribute("href", "/docs/snapsort/examples/items");
+
+  await page.goto("/docs/snapsort/examples/basics?framework=svelte");
+  await expect(page.locator("[data-demo-code-tabs]")).toHaveCount(4);
 
   const basic = page.locator('[data-demo-code-tabs="item-example-basic"]');
   await expect(basic.locator(".item-demo-card")).toHaveCount(3);
-  await basic.getByRole("tab", { name: "Code" }).click();
+  await basic.getByRole("tab", { name: "Svelte source" }).click();
   await expect(basic.locator("pre.shiki.display")).toHaveCount(1);
   await expect(basic.getByRole("tabpanel")).toContainText(
     "<Item itemId={entry.itemId}",
   );
+
+  await page.goto("/docs/snapsort/examples/items?framework=svelte");
+  await expect(page.locator("[data-demo-code-tabs]")).toHaveCount(4);
 
   const metadata = page.locator(
     '[data-demo-code-tabs="item-example-metadata"]',
@@ -399,7 +1088,7 @@ test("Svelte Item reference explains props with live Item and Handle examples", 
   await expect(itemInstance.locator(".instance-report")).toHaveText(
     "ID: adopt-one · index: 0 · origin: application",
   );
-  await itemInstance.getByRole("tab", { name: "Code" }).click();
+  await itemInstance.getByRole("tab", { name: "Svelte source" }).click();
   await expect(itemInstance.getByRole("tabpanel")).toContainText(
     "new SnapSortItem(engine, container, { itemId: initialId })",
   );
@@ -444,9 +1133,9 @@ test("Svelte Item reference explains props with live Item and Handle examples", 
   );
 
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto("/docs/snapsort/reference/svelte/item?framework=svelte");
+  await page.goto("/docs/snapsort/examples/items?framework=svelte");
   await expect(page.locator(".doc-sidebar")).toBeHidden();
-  await expect(page.locator("[data-demo-code-tabs]")).toHaveCount(5);
+  await expect(page.locator("[data-demo-code-tabs]")).toHaveCount(4);
   expect(
     await page.evaluate(() => document.documentElement.scrollWidth),
   ).toBeLessThanOrEqual(390);
@@ -457,18 +1146,28 @@ test("Svelte Item reference explains props with live Item and Handle examples", 
   expect(markdownResponse.status()).toBe(200);
   const markdown = await markdownResponse.text();
   expect(markdown).toContain("## Component Properties");
-  expect(markdown).toContain("<Item itemId={entry.itemId}");
-  expect(markdown).toContain(
-    "new SnapSortItem(engine, container, { itemId: initialId })",
-  );
-  expect(markdown).toContain("<Item itemId={initialId} {item}");
+  expect(markdown).toContain("<Item itemId={task.id}>");
   expect(markdown).toContain("bind:item");
-  expect(markdown).toContain("DragSession.handoff(replacements)");
-  expect(markdown).toContain('<Handle className="drag-grip"');
-  expect(markdown).toContain(
+  expect(markdown).not.toContain("DragSession.handoff");
+  expect(markdown).not.toContain(
     "This page includes interactive diagrams or demos.",
   );
   expect(markdown).not.toContain("<ItemExample");
+
+  const itemExamplesResponse = await request.get(
+    "/docs/snapsort/examples/items.md",
+  );
+  expect(itemExamplesResponse.status()).toBe(200);
+  const itemExamplesMarkdown = await itemExamplesResponse.text();
+  expect(itemExamplesMarkdown).toContain(
+    "new SnapSortItem(engine, container, { itemId: initialId })",
+  );
+  expect(itemExamplesMarkdown).toContain("<Item itemId={initialId} {item}");
+  expect(itemExamplesMarkdown).toContain('<Handle className="drag-grip"');
+  expect(itemExamplesMarkdown).toContain(
+    "This page includes interactive diagrams or demos.",
+  );
+  expect(itemExamplesMarkdown).not.toContain("<ItemExample");
 
   const reactMarkdownResponse = await request.get(
     "/docs/snapsort/reference/react/item.md",
@@ -477,7 +1176,7 @@ test("Svelte Item reference explains props with live Item and Handle examples", 
   const reactMarkdown = await reactMarkdownResponse.text();
   expect(reactMarkdown).toContain("## Core Item Access");
   expect(reactMarkdown).toContain("item={existingItem}");
-  expect(reactMarkdown).toContain("DragSession.handoff(replacements)");
+  expect(reactMarkdown).not.toContain("DragSession.handoff");
   expect(reactMarkdown).not.toContain("itemObject");
 });
 
@@ -486,7 +1185,7 @@ test("SnapSort callback docs expose receiver routing and mutation boundaries", a
   request,
 }) => {
   const lifecycleResponse = await page.goto(
-    "/docs/snapsort/guides/03_session_lifecycle?framework=react",
+    "/docs/snapsort/guides/sessions?framework=react",
   );
   expect(lifecycleResponse?.status()).toBe(200);
 
@@ -494,7 +1193,7 @@ test("SnapSort callback docs expose receiver routing and mutation boundaries", a
     page.getByRole("heading", { name: "Terms", level: 2 }),
   ).toBeVisible();
   await expect(
-    page.getByRole("heading", { name: "Lifecycle", level: 2 }),
+    page.getByRole("heading", { name: "Lifecycle at a Glance", level: 2 }),
   ).toBeVisible();
   await expect(
     page.getByRole("group", {
@@ -817,9 +1516,7 @@ test("SnapSort callback docs expose receiver routing and mutation boundaries", a
   ).toBeVisible();
 
   for (const framework of ["react", "svelte"] as const) {
-    await page.goto(
-      `/docs/snapsort/guides/03_session_lifecycle?framework=${framework}`,
-    );
+    await page.goto(`/docs/snapsort/guides/sessions?framework=${framework}`);
     await expect(page.locator(".lifecycle-diagram")).not.toContainText(
       "createGhost",
     );
@@ -831,9 +1528,7 @@ test("SnapSort callback docs expose receiver routing and mutation boundaries", a
     ).toBeVisible();
   }
 
-  await page.goto(
-    "/docs/snapsort/guides/03_session_lifecycle?framework=vanilla",
-  );
+  await page.goto("/docs/snapsort/guides/sessions?framework=vanilla");
   const vanillaDiagram = page.locator(".lifecycle-diagram");
   await expect(vanillaDiagram).toContainText("Construct Vanilla element");
   await expect(vanillaDiagram).toContainText("The Vanilla adapter constructs");
@@ -876,7 +1571,7 @@ test("SnapSort callback docs expose receiver routing and mutation boundaries", a
   }
 
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto("/docs/snapsort/guides/03_session_lifecycle?framework=react");
+  await page.goto("/docs/snapsort/guides/sessions?framework=react");
   await expect(page.locator(".doc-sidebar")).toBeHidden();
   expect(
     await page.evaluate(() => document.documentElement.scrollWidth),
@@ -963,12 +1658,12 @@ test("SnapSort callback docs expose receiver routing and mutation boundaries", a
   }
 
   const lifecycleMarkdownResponse = await request.get(
-    "/docs/snapsort/guides/03_session_lifecycle.md",
+    "/docs/snapsort/guides/sessions.md",
   );
   expect(lifecycleMarkdownResponse.status()).toBe(200);
   const lifecycleMarkdown = await lifecycleMarkdownResponse.text();
   expect(lifecycleMarkdown).toContain("## Terms");
-  expect(lifecycleMarkdown).toContain("## Lifecycle");
+  expect(lifecycleMarkdown).toContain("## Lifecycle at a Glance");
 
   for (const framework of ["svelte", "react"] as const) {
     const markdownResponse = await request.get(
@@ -999,68 +1694,89 @@ test("SnapSort docs keep application CRUD and destination meaning application-ow
 }) => {
   const [
     quickstartResponse,
-    lifecycleResponse,
+    commitResponse,
+    ghostsResponse,
     placementResponse,
+    advancedResponse,
     svelteContainerResponse,
     reactContainerResponse,
   ] = await Promise.all([
-    request.get("/docs/snapsort/introduction/01_setup.md"),
-    request.get("/docs/snapsort/guides/03_session_lifecycle.md"),
-    request.get("/docs/snapsort/guides/02_placement_modes.md"),
+    request.get("/docs/snapsort/introduction/setup.md"),
+    request.get("/docs/snapsort/guides/sessions/commit-and-cleanup.md"),
+    request.get("/docs/snapsort/guides/sessions/ghosts.md"),
+    request.get("/docs/snapsort/guides/placement-modes.md"),
+    request.get(
+      "/docs/snapsort/guides/sessions/advanced-settings-and-callbacks.md",
+    ),
     request.get("/docs/snapsort/reference/svelte/container.md"),
     request.get("/docs/snapsort/reference/react/container.md"),
   ]);
 
   expect(quickstartResponse.status()).toBe(200);
-  expect(lifecycleResponse.status()).toBe(200);
+  expect(commitResponse.status()).toBe(200);
+  expect(ghostsResponse.status()).toBe(200);
   expect(placementResponse.status()).toBe(200);
+  expect(advancedResponse.status()).toBe(200);
   expect(svelteContainerResponse.status()).toBe(200);
   expect(reactContainerResponse.status()).toBe(200);
 
-  const [quickstart, lifecycle, placement, svelteContainer, reactContainer] =
-    await Promise.all([
-      quickstartResponse.text(),
-      lifecycleResponse.text(),
-      placementResponse.text(),
-      svelteContainerResponse.text(),
-      reactContainerResponse.text(),
-    ]);
+  const [
+    quickstart,
+    commit,
+    ghosts,
+    placement,
+    advanced,
+    svelteContainer,
+    reactContainer,
+  ] = await Promise.all([
+    quickstartResponse.text(),
+    commitResponse.text(),
+    ghostsResponse.text(),
+    placementResponse.text(),
+    advancedResponse.text(),
+    svelteContainerResponse.text(),
+    reactContainerResponse.text(),
+  ]);
 
-  expect(quickstart).toContain("function addTask(task: Task)");
-  expect(quickstart).toContain(
-    "function deleteTasks(itemIds: readonly ItemId[])",
-  );
-  expect(quickstart).toMatch(/application code,\s+not SnapSort\s+exports/);
-  expect(quickstart).toContain("container.removeItem(itemId)");
-  expect(quickstart).toMatch(
-    /`reduceRenderTree` cannot accept it because the event cannot invent the/,
+  expect(quickstart).not.toContain("## Who Changes Framework Render State?");
+  expect(quickstart).not.toContain("function addTask(task: Task)");
+  expect(commit).toContain("function addTask(task: Task)");
+  expect(commit).toContain("function deleteTasks(itemIds: readonly ItemId[])");
+  expect(commit).toMatch(/application code,\s+not SnapSort\s+exports/);
+  expect(commit).toContain("container.removeItem(itemId)");
+  expect(commit).toMatch(
+    /`reduceRenderTree`\s+cannot invent the application value/,
   );
 
-  expect(lifecycle).toContain("## State Ownership");
-  expect(lifecycle).toMatch(
+  expect(commit).toContain("## State Ownership");
+  expect(commit).toMatch(
     /Application-originated additions and deletions do not need to round-trip/,
   );
-  expect(lifecycle).toMatch(
-    /explicit\s+`onGhostInsert`, `onGhostMove`, and `onGhostRemove` events/,
-  );
-  expect(lifecycle).toMatch(
-    /It does not also receive\s+`onItemRemove` for the source and `onItemInsert`/,
+  expect(ghosts).toContain("## Explicit Lifecycle Callbacks");
+  expect(ghosts).toContain("onGhostInsert: applyGhostEvent");
+  expect(ghosts).toContain("onGhostMove: applyGhostEvent");
+  expect(ghosts).toContain("onGhostRemove: applyGhostEvent");
+  expect(commit).toMatch(
+    /If no\s+`onItemMove` exists, SnapSort falls back to root `onItemInsert`\. Neither path\s+also emits `onItemRemove` for the source/,
   );
 
-  expect(placement).toContain("## Give a Drop Application Meaning");
-  expect(placement).toContain(
+  expect(advanced).toContain("## Give a Drop Application Meaning");
+  expect(advanced).toContain(
     'event.session.dropEffect = isTrash ? "none" : "move"',
   );
-  expect(placement).toContain(
+  expect(advanced).toContain(
     'event.destination?.containerMetadata.role !== "trash"',
   );
-  expect(placement).toContain("new Set(event.itemIds)");
-  expect(placement).toMatch(
-    /The recursive `removeEntries` function\s+is intentionally application-local/,
+  expect(advanced).toContain("new Set(event.itemIds)");
+  expect(advanced).toMatch(
+    /The recursive `removeEntries` function\s+is\s+intentionally application-local/,
   );
-  expect(placement).toMatch(
-    /Checking `event.destination` rather than remembered\s+hover state makes cancellation safe/,
+  expect(advanced).toMatch(
+    /Checking `event.destination` rather\s+than\s+remembered\s+hover\s+state\s+makes cancellation safe/,
   );
+  expect(advanced).not.toContain("DragSession.handoff");
+  expect(placement).not.toContain("## Three Independent Decisions");
+  expect(placement).not.toContain("## Give a Drop Application Meaning");
 
   for (const containerReference of [svelteContainer, reactContainer]) {
     expect(containerReference).toContain("### Application-owned item lifetime");
@@ -1073,6 +1789,7 @@ test("SnapSort docs keep application CRUD and destination meaning application-ow
     expect(containerReference).toMatch(
       /do not expect `onItemRemove` for the source half of a move/,
     );
+    expect(containerReference).not.toContain("DragSession.handoff");
     expect(containerReference).not.toContain("entry.key");
   }
 
@@ -1089,33 +1806,76 @@ test("SnapSort docs keep application CRUD and destination meaning application-ow
   expect(reactContainer).not.toContain("ghost:${entry.itemId}");
 });
 
-test("framework selector shows only its matching install code block", async ({
+test("Quickstart package-manager tabs persist independently from framework selection", async ({
   page,
 }) => {
   const response = await page.goto(
-    "/docs/snapsort/introduction/01_setup?framework=svelte",
+    "/docs/snapsort/introduction/setup?framework=svelte",
   );
   expect(response?.status()).toBe(200);
   await page.waitForFunction(
     () => localStorage.getItem("preferredCodeFramework") === "svelte",
   );
 
-  const visibleInstallBlocks = page
-    .locator(".framework-code-block:visible")
-    .filter({
-      hasText: "npm install",
-    });
-
-  await expect(visibleInstallBlocks).toHaveCount(1);
-  await expect(visibleInstallBlocks).toContainText(
+  const tabs = page.locator("[data-code-tabs]");
+  await expect(tabs).toHaveCount(1);
+  await expect(tabs.getByRole("tab")).toHaveText([
+    "npm",
+    "pnpm",
+    "Yarn",
+    "Bun",
+  ]);
+  await expect(
+    tabs.getByRole("tab", { name: "npm", exact: true }),
+  ).toHaveAttribute("aria-selected", "true");
+  await expect(tabs.getByRole("tabpanel")).toHaveCount(1);
+  await expect(tabs.getByRole("tabpanel")).toContainText(
     "npm install @snap-engine/snapsort @snap-engine/asset-base",
   );
-  await expect(visibleInstallBlocks).not.toContainText(
-    "@snap-engine/asset-base/svelte",
+  await expect(tabs).toHaveCSS("border-top-width", "1px");
+  const codeBlockBorders = await tabs
+    .locator("pre.shiki.display:visible")
+    .evaluate((element) => {
+      const style = getComputedStyle(element);
+      return [
+        style.borderTopWidth,
+        style.borderRightWidth,
+        style.borderBottomWidth,
+        style.borderLeftWidth,
+      ];
+    });
+  expect(codeBlockBorders).toEqual(["0px", "0px", "0px", "0px"]);
+
+  await tabs.getByRole("tab", { name: "pnpm" }).click();
+  await expect(tabs.getByRole("tabpanel")).toContainText(
+    "pnpm add @snap-engine/snapsort @snap-engine/asset-base",
   );
-  await expect(visibleInstallBlocks).not.toContainText(
-    "@snap-engine/snapsort/svelte",
+  await tabs.getByRole("tab", { name: "pnpm" }).press("ArrowRight");
+  await expect(tabs.getByRole("tab", { name: "Yarn" })).toBeFocused();
+  await expect(tabs.getByRole("tab", { name: "Yarn" })).toHaveAttribute(
+    "aria-selected",
+    "true",
   );
+  await expect(tabs.getByRole("tabpanel")).toContainText(
+    "yarn add @snap-engine/snapsort @snap-engine/asset-base",
+  );
+  await expect
+    .poll(() =>
+      page.evaluate(() => ({
+        framework: localStorage.getItem("preferredCodeFramework"),
+        packageManager: localStorage.getItem(
+          "preferredCodeTab:npm|pnpm|yarn|bun",
+        ),
+      })),
+    )
+    .toEqual({ framework: "svelte", packageManager: "yarn" });
+
+  await page.reload({ waitUntil: "networkidle" });
+  await expect(tabs.getByRole("tab", { name: "Yarn" })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+  await expect(tabs.getByRole("tabpanel")).toContainText("yarn add");
 
   await page.locator("#desktop-doc-framework").selectOption("react");
 
@@ -1123,16 +1883,32 @@ test("framework selector shows only its matching install code block", async ({
     "data-framework",
     "react",
   );
-  await expect(visibleInstallBlocks).toHaveCount(1);
-  await expect(visibleInstallBlocks).toContainText(
-    "npm install @snap-engine/snapsort @snap-engine/asset-base react react-dom",
+  await expect(tabs.getByRole("tab", { name: "Yarn" })).toHaveAttribute(
+    "aria-selected",
+    "true",
   );
-  await expect(visibleInstallBlocks).not.toContainText(
-    "@snap-engine/asset-base/react",
+  const visibleFrameworkBlock = page.locator(".framework-code-block:visible");
+  await expect(visibleFrameworkBlock).toHaveCount(1);
+  await expect(visibleFrameworkBlock).toContainText(
+    'import { useCallback, useState } from "react"',
   );
-  await expect(visibleInstallBlocks).not.toContainText(
-    "@snap-engine/snapsort/react",
+
+  const markdownResponse = await page.request.get(
+    "/docs/snapsort/introduction/setup.md",
   );
+  expect(markdownResponse.status()).toBe(200);
+  const markdown = await markdownResponse.text();
+  expect(markdown).toContain("npm install @snap-engine/snapsort");
+  expect(markdown).toContain("pnpm add @snap-engine/snapsort");
+  expect(markdown).toContain("yarn add @snap-engine/snapsort");
+  expect(markdown).toContain("bun add @snap-engine/snapsort");
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  const viewport = await page.locator("html").evaluate((element) => ({
+    clientWidth: element.clientWidth,
+    scrollWidth: element.scrollWidth,
+  }));
+  expect(viewport.scrollWidth).toBeLessThanOrEqual(viewport.clientWidth);
 });
 
 test("coding-agent resource links bypass client-side routing", async ({
@@ -1166,7 +1942,7 @@ test("raw Markdown selects one framework without damaging fenced code", async ({
   request,
 }) => {
   const svelteResponse = await request.get(
-    "/docs/snapsort/introduction/01_setup.md",
+    "/docs/snapsort/introduction/setup.md",
   );
   expect(svelteResponse.status()).toBe(200);
   expect(svelteResponse.headers()["content-type"]).toContain("text/markdown");
@@ -1184,7 +1960,7 @@ test("raw Markdown selects one framework without damaging fenced code", async ({
   expect(svelteMarkdown).not.toContain("@snap-engine/snapsort-svelte");
 
   const reactResponse = await request.get(
-    "/docs/snapsort/introduction/01_setup.md?framework=react",
+    "/docs/snapsort/introduction/setup.md?framework=react",
   );
   expect(reactResponse.status()).toBe(200);
   const reactMarkdown = await reactResponse.text();
@@ -1194,7 +1970,7 @@ test("raw Markdown selects one framework without damaging fenced code", async ({
   expect(reactMarkdown).not.toContain("framework=React");
 
   const vanillaResponse = await request.get(
-    "/docs/snapsort/introduction/01_setup.md?framework=vanilla",
+    "/docs/snapsort/introduction/setup.md?framework=vanilla",
   );
   expect(vanillaResponse.status()).toBe(200);
   const vanillaMarkdown = await vanillaResponse.text();
@@ -1245,53 +2021,122 @@ test("raw Markdown switches paired reference pages and cleans interactive MDX", 
   expect(svelteReferenceMarkdown).not.toContain("{#snippet entry");
   expect(svelteReferenceMarkdown).not.toContain("composeRenderEntries");
   expect(svelteReferenceMarkdown).not.toContain("{#snippet ghost(event)}");
-  expect(svelteReferenceMarkdown).toContain(
+  expect(svelteReferenceMarkdown).not.toContain(
     "This page includes interactive diagrams or demos.",
   );
   expect(svelteReferenceMarkdown).not.toContain("<ContainerIntroExample");
   expect(svelteReferenceMarkdown).not.toContain("<ContainerPropertyExample");
 
+  const basicsResponse = await request.get("/docs/snapsort/examples/basics.md");
+  expect(basicsResponse.status()).toBe(200);
+  const basicsMarkdown = await basicsResponse.text();
+  expect(basicsMarkdown).toContain(
+    "{#each tasks.entries as entry (entry.itemId)}",
+  );
+  expect(basicsMarkdown).toContain("<Item itemId={entry.itemId}");
+  expect(basicsMarkdown).toContain(
+    "This page includes interactive diagrams or demos.",
+  );
+  expect(basicsMarkdown).not.toContain("<ContainerIntroExample");
+  expect(basicsMarkdown).not.toContain("<ItemExample");
+
+  const containerExamplesResponse = await request.get(
+    "/docs/snapsort/examples/containers.md",
+  );
+  expect(containerExamplesResponse.status()).toBe(200);
+  const containerExamplesMarkdown = await containerExamplesResponse.text();
+  expect(containerExamplesMarkdown).toContain("createRenderEntries");
+  expect(containerExamplesMarkdown).toContain("source.container.moveItem(");
+  expect(containerExamplesMarkdown).toContain(
+    "This page includes interactive diagrams or demos.",
+  );
+  expect(containerExamplesMarkdown).not.toContain("<ContainerPropertyExample");
+
+  const completeExamplesResponse = await request.get(
+    "/docs/snapsort/examples/complete-interfaces.md?framework=react",
+  );
+  expect(completeExamplesResponse.status()).toBe(200);
+  const completeExamplesMarkdown = await completeExamplesResponse.text();
+  expect(completeExamplesMarkdown).toContain("# Complete Interfaces");
+  expect(completeExamplesMarkdown).toContain(
+    'data-snapsort-example="todo-list"',
+  );
+  expect(completeExamplesMarkdown).toContain(
+    'data-snapsort-example="form-editor"',
+  );
+  expect(completeExamplesMarkdown).toContain(
+    "<!-- SnapSortContextBoundary.svelte -->",
+  );
+  expect(completeExamplesMarkdown).toContain("```svelte");
+  expect(completeExamplesMarkdown).toContain(
+    "This page includes interactive diagrams or demos.",
+  );
+  expect(completeExamplesMarkdown).not.toContain("<CompleteExample");
+
   const interactiveResponse = await request.get(
-    "/docs/snapsort/guides/01_core_concepts.md",
+    "/docs/snapsort/guides/core-components.md",
   );
   expect(interactiveResponse.status()).toBe(200);
   const interactiveMarkdown = await interactiveResponse.text();
-  expect(interactiveMarkdown).toContain("# Core Concepts");
+  expect(interactiveMarkdown).toContain("# Core Components");
   expect(interactiveMarkdown).toContain(
     "This page includes interactive diagrams or demos.",
   );
   expect(interactiveMarkdown).toContain(
-    "https://snapengine.dev/docs/snapsort/guides/01_core_concepts",
+    "https://snapengine.dev/docs/snapsort/guides/core-components",
   );
   expect(interactiveMarkdown).toMatch(/unique\s+within one SnapSort root/);
-  expect(interactiveMarkdown).toContain("`GhostState.type`");
-  expect(interactiveMarkdown).toContain("`source-spacer`");
-  expect(interactiveMarkdown).toContain("`target-spacer`");
-  expect(interactiveMarkdown).toContain("`insertion-marker`");
-  expect(interactiveMarkdown).toContain("zero-thickness `gap`");
-  expect(interactiveMarkdown).toContain("`isCurrentPlacement`");
-  expect(interactiveMarkdown).toContain("`pointer-preview`");
+  expect(interactiveMarkdown).toContain(
+    "[Ghosts](/docs/snapsort/guides/sessions/ghosts.md?framework=svelte)",
+  );
+  expect(interactiveMarkdown).not.toContain("## Every Drag Is a Session");
   expect(interactiveMarkdown).not.toContain("globally unique `itemId`");
   expect(interactiveMarkdown).not.toContain("Their `role`");
   expect(interactiveMarkdown).not.toContain("<SnapSortConceptsDiagram");
   expect(interactiveMarkdown).not.toContain("<SnapSortEntityCue");
   expect(interactiveMarkdown).not.toContain("<script>");
 
+  const ghostsResponse = await request.get(
+    "/docs/snapsort/guides/sessions/ghosts.md",
+  );
+  expect(ghostsResponse.status()).toBe(200);
+  const ghostsMarkdown = await ghostsResponse.text();
+  expect(ghostsMarkdown).toContain("# Ghosts");
+  expect(ghostsMarkdown).toContain(
+    "This page includes interactive diagrams or demos.",
+  );
+  expect(ghostsMarkdown).toContain(
+    "https://snapengine.dev/docs/snapsort/guides/sessions/ghosts",
+  );
+  expect(ghostsMarkdown).toContain("`source-spacer`");
+  expect(ghostsMarkdown).toContain("`target-spacer`");
+  expect(ghostsMarkdown).toContain("`insertion-marker`");
+  expect(ghostsMarkdown).toContain("zero-thickness, world-space `gap`");
+  expect(ghostsMarkdown).toContain("`isCurrentPlacement`");
+  expect(ghostsMarkdown).toContain("`pointer-preview`");
+  expect(ghostsMarkdown).toContain("## Explicit Lifecycle Callbacks");
+  expect(ghostsMarkdown).toContain("insertionMarker={{");
+  expect(ghostsMarkdown).not.toContain("<GhostGuideDemo");
+  expect(ghostsMarkdown).not.toContain("<script>");
+
+  const lifecycleResponse = await request.get(
+    "/docs/snapsort/guides/sessions.md",
+  );
+  expect(lifecycleResponse.status()).toBe(200);
+  const lifecycleMarkdown = await lifecycleResponse.text();
+  expect(lifecycleMarkdown).toContain("## Every Drag Is a Session");
+
   const placementResponse = await request.get(
-    "/docs/snapsort/guides/02_placement_modes.md",
+    "/docs/snapsort/guides/placement-modes.md",
   );
   expect(placementResponse.status()).toBe(200);
   const placementMarkdown = await placementResponse.text();
-  expect(placementMarkdown).toContain('`type: "target-spacer"`');
-  expect(placementMarkdown).toContain('`type: "insertion-marker"`');
-  expect(placementMarkdown).toContain("world-space `gap`");
-  expect(placementMarkdown).toContain("`previous` and `next`");
-  expect(placementMarkdown).toContain("`isCurrentPlacement`");
+  expect(placementMarkdown).toContain("# Placement Modes");
+  expect(placementMarkdown).toContain('`mode: "euclidean"`');
+  expect(placementMarkdown).toContain('`mode: "insertion"`');
+  expect(placementMarkdown).toContain('`mode: "swap"`');
+  expect(placementMarkdown).toContain('`mode: "progressive"`');
   expect(placementMarkdown).not.toContain("getInsertionMarkerRect");
-  expect(placementMarkdown).toContain('`type: "pointer-preview"`');
-  expect(placementMarkdown).toContain("root-dispatched move commit");
-  expect(placementMarkdown).not.toContain('kind: "marker"');
-  expect(placementMarkdown).not.toContain('role: "pointer"');
 });
 
 test("raw Markdown validates routes and framework values", async ({
@@ -1310,7 +2155,7 @@ test("raw Markdown validates routes and framework values", async ({
   );
 
   const invalidFramework = await request.get(
-    "/docs/snapsort/introduction/01_setup.md?framework=vue",
+    "/docs/snapsort/introduction/setup.md?framework=vue",
   );
   expect(invalidFramework.status()).toBe(400);
 
@@ -1371,19 +2216,96 @@ test("project llms.txt files expose ordered framework-aware Markdown trees", asy
     snapSortIndex.indexOf("## Reference"),
   );
   expect(snapSortIndex).toContain(
-    "[Quickstart (Svelte)](https://snapengine.dev/docs/snapsort/introduction/01_setup.md?framework=svelte)",
+    "[Quickstart (Svelte)](https://snapengine.dev/docs/snapsort/introduction/setup.md?framework=svelte)",
   );
   expect(snapSortIndex).toContain(
-    "[Quickstart (React)](https://snapengine.dev/docs/snapsort/introduction/01_setup.md?framework=react)",
+    "[Quickstart (React)](https://snapengine.dev/docs/snapsort/introduction/setup.md?framework=react)",
   );
   expect(snapSortIndex).toContain(
-    "[Quickstart (Vanilla JS)](https://snapengine.dev/docs/snapsort/introduction/01_setup.md?framework=vanilla)",
+    "[Quickstart (Vanilla JS)](https://snapengine.dev/docs/snapsort/introduction/setup.md?framework=vanilla)",
   );
   expect(snapSortIndex).toContain(
     "https://snapengine.dev/docs/snapsort/reference/svelte/container.md?framework=svelte",
   );
   expect(snapSortIndex).toContain(
     "https://snapengine.dev/docs/snapsort/reference/react/container.md?framework=react",
+  );
+  const dragSessionsLine =
+    "- [Drag Sessions](https://snapengine.dev/docs/snapsort/guides/sessions.md)";
+  const dragStartLine =
+    "  - [Drag Start](https://snapengine.dev/docs/snapsort/guides/sessions/drag-start.md)";
+  const ghostsLine =
+    "  - [Ghosts (Svelte)](https://snapengine.dev/docs/snapsort/guides/sessions/ghosts.md?framework=svelte)";
+  const commitLine =
+    "  - [Commit and Cleanup (Svelte)](https://snapengine.dev/docs/snapsort/guides/sessions/commit-and-cleanup.md?framework=svelte)";
+  const advancedLine =
+    "  - [Advanced Session Settings and Callbacks](https://snapengine.dev/docs/snapsort/guides/sessions/advanced-settings-and-callbacks.md)";
+  const dropPoliciesLine =
+    "  - [Drop Policies (Svelte)](https://snapengine.dev/docs/snapsort/guides/sessions/drop-policies.md?framework=svelte)";
+  const placementModesLine =
+    "- [Placement Modes](https://snapengine.dev/docs/snapsort/guides/placement-modes.md)";
+  const examplesLine =
+    "- [Examples](https://snapengine.dev/docs/snapsort/examples.md)";
+  const basicsLine =
+    "  - [Basics](https://snapengine.dev/docs/snapsort/examples/basics.md)";
+  const containerRecipesLine =
+    "  - [Container Recipes](https://snapengine.dev/docs/snapsort/examples/containers.md)";
+  const itemRecipesLine =
+    "  - [Item Recipes](https://snapengine.dev/docs/snapsort/examples/items.md)";
+  const completeInterfacesLine =
+    "  - [Complete Interfaces](https://snapengine.dev/docs/snapsort/examples/complete-interfaces.md)";
+  for (const line of [
+    dragSessionsLine,
+    dragStartLine,
+    ghostsLine,
+    commitLine,
+    advancedLine,
+    dropPoliciesLine,
+    placementModesLine,
+    examplesLine,
+    basicsLine,
+    containerRecipesLine,
+    itemRecipesLine,
+    completeInterfacesLine,
+  ]) {
+    expect(snapSortIndex).toContain(line);
+  }
+  expect(snapSortIndex.indexOf(placementModesLine)).toBeLessThan(
+    snapSortIndex.indexOf(dragSessionsLine),
+  );
+  expect(snapSortIndex.indexOf(dragSessionsLine)).toBeLessThan(
+    snapSortIndex.indexOf(dragStartLine),
+  );
+  expect(snapSortIndex.indexOf(dragStartLine)).toBeLessThan(
+    snapSortIndex.indexOf(ghostsLine),
+  );
+  expect(snapSortIndex.indexOf(ghostsLine)).toBeLessThan(
+    snapSortIndex.indexOf(commitLine),
+  );
+  expect(snapSortIndex.indexOf(commitLine)).toBeLessThan(
+    snapSortIndex.indexOf(advancedLine),
+  );
+  expect(snapSortIndex.indexOf(advancedLine)).toBeLessThan(
+    snapSortIndex.indexOf(dropPoliciesLine),
+  );
+  expect(snapSortIndex.indexOf(dropPoliciesLine)).toBeLessThan(
+    snapSortIndex.indexOf(examplesLine),
+  );
+  expect(snapSortIndex.indexOf(examplesLine)).toBeLessThan(
+    snapSortIndex.indexOf(basicsLine),
+  );
+  expect(snapSortIndex.indexOf(basicsLine)).toBeLessThan(
+    snapSortIndex.indexOf(containerRecipesLine),
+  );
+  expect(snapSortIndex.indexOf(containerRecipesLine)).toBeLessThan(
+    snapSortIndex.indexOf(itemRecipesLine),
+  );
+  expect(snapSortIndex.indexOf(itemRecipesLine)).toBeLessThan(
+    snapSortIndex.indexOf(completeInterfacesLine),
+  );
+  expect(snapSortIndex).not.toContain("  - [Placement Modes]");
+  expect(snapSortIndex).not.toContain(
+    "/docs/snapsort/guides/sessions/placement-modes",
   );
   expect(snapSortIndex).not.toContain("/docs/snapengine/");
   expect(snapSortIndex).not.toContain("styleguide");

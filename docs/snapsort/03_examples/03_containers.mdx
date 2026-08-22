@@ -1,0 +1,108 @@
+---
+title: Container Recipes
+order: 1
+parent: snapsort/examples
+project: snapsort
+projectTitle: SnapSort
+section: guides
+sectionTitle: Guides
+sectionOrder: 2
+---
+
+<script>
+  import ContainerPropertyExample from
+  "$lib/components/docs/ContainerPropertyExample.svelte";
+</script>
+
+These focused recipes demonstrate the main ways an application composes and
+controls a Container. Each example includes a **Svelte source** tab. The
+Svelte component contract is documented in the
+[`Container` reference](/docs/snapsort/reference/svelte/container).
+The underlying core behavior is shared across framework bindings.
+
+## Rendering a Collection
+
+`Container` renders ordinary optional children. Put fixed markup and the
+application-owned keyed entries loop exactly where they belong in that body.
+There are no collection-specific `items` or `getItemId` props.
+
+<ContainerPropertyExample kind="collection" />
+
+## Changing Container Behavior
+
+The `config` prop changes sorting behavior. This example switches `direction`,
+which sets the main layout direction, without changing who owns the rendered
+collection.
+
+<ContainerPropertyExample kind="config" />
+
+See the complete [configuration table](/docs/snapsort/reference/svelte/container#configuration)
+and [Placement Modes](/docs/snapsort/guides/placement-modes).
+
+## Fixed Content Around Items
+
+Fixed content is ordinary markup before or after the keyed sortable loop. It
+is never registered as a SnapSort Item. Use `entry.itemId` directly as the
+loop's reconciliation key; ordinary Items, nested Containers, and live ghosts
+already share one identity domain within a root.
+
+<ContainerPropertyExample kind="before-after" />
+
+The Add control changes application state directly. SnapSort does not emit an
+item insertion callback for an Item that the framework mounts from that state.
+
+## Programmatic Cross-Container Moves
+
+Use `bind:container` when a button, keyboard command, or other control needs to
+call the core API directly. The bound value may be `undefined` or `null` before
+mount and becomes `null` after unmount.
+
+Clicking **Move →** calls `moveItem`. That command requests the move and emits
+the root structural callback; the callback still updates Svelte state
+synchronously because the core object does not own the rendered collection.
+The command is authoritative: it bypasses `canDrop`, `dropPriority`, and
+`getDropPriority`, so application controls must enforce any equivalent policy
+before invoking it.
+
+<ContainerPropertyExample kind="metadata" />
+
+Containers that interact must share one root. Drop-policy callbacks can filter
+destinations inside that tree; they cannot connect independent roots.
+
+## Nested Containers
+
+A `Container` can itself be an entry in a parent Container. Give it the entry's
+`itemId`, then set `locked={false}` to let the entire nested Container drag.
+`locked` defaults to `true`, which suits Containers that only organize child
+Items.
+
+`selected` remains consumer-owned. In this default move mode, dragging one
+selected, unlocked entry moves the other unlocked selected entries in the same
+tree. Swap mode exchanges only its primary Item. The application owns
+selection controls and state.
+
+<ContainerPropertyExample kind="nested" />
+
+> [!NOTE]
+> Spacing between multiple dragged Items currently does not preserve the
+> original layout's gap or margins.
+
+## Custom Ghost Rendering
+
+SnapSort owns each ghost's presence during a session, so the application
+handles explicit insert, move, and remove events even when all three callbacks
+delegate to `reduceRenderTree`. Ordinary values remain application-owned and
+do not need equivalent callbacks when application code adds or removes them.
+
+<ContainerPropertyExample kind="ghost" />
+
+See [Ghosts](/docs/snapsort/guides/sessions/ghosts) for every ghost role,
+lifecycle transition, and the insertion-marker rendering API.
+
+## Container Presentation and HTML Attributes
+
+`Container` renders a `div`, so `aria-*`, `data-*`, `style`, and other div
+attributes pass through. Svelte's `class` prop and the cross-framework
+`className` alias merge with SnapSort's own classes.
+
+<ContainerPropertyExample kind="presentation" />

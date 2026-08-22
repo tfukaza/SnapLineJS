@@ -1,0 +1,68 @@
+---
+title: Item Recipes
+order: 2
+parent: snapsort/examples
+project: snapsort
+projectTitle: SnapSort
+section: guides
+sectionTitle: Guides
+sectionOrder: 2
+---
+
+<script>
+  import ItemExample from "$lib/components/docs/ItemExample.svelte";
+</script>
+
+These recipes add application behavior around individual Items. Each example
+includes a **Svelte source** tab; see the
+[`Item` reference](/docs/snapsort/reference/svelte/item) for the complete prop
+contracts.
+
+## Metadata in Callbacks
+
+`metadata` is application data SnapSort carries alongside an Item. This
+example attaches an owner and priority to each Item, then displays the metadata
+received by the Container callbacks while a card moves.
+
+<ItemExample kind="metadata" />
+
+Metadata is read-only application context carried by callback events. Drag
+snapshot consumers receive shallow-frozen snapshot metadata. Use metadata for
+policy and application routing; geometry belongs in SnapSort's geometry APIs.
+
+## Consumer-Owned Selection
+
+SnapSort reads `selected` to determine which Items join a drag, but it does not
+render selection controls or selected styling. The application updates the
+boolean state and supplies matching keyboard behavior and ARIA state.
+
+<ItemExample kind="selection" />
+
+In euclidean, progressive, and insertion modes, dragging a selected, unlocked
+Item moves the other unlocked selected Items in the same tree. Dragging an
+unselected Item moves only that Item. Swap mode exchanges only the session's
+primary Item.
+
+## Dragging from a Handle
+
+`Handle` makes one descendant the Item's drag input. Buttons, links, and form
+controls elsewhere in the Item can then keep their ordinary interactions.
+
+<ItemExample kind="handle" />
+
+Use one Handle per Item. The core object has one input-alias slot, so a later
+Handle replaces the earlier drag target rather than creating another one.
+
+## Adopting a Core Item
+
+Passing `item` adopts an existing core Item instead of letting the component
+create one. The component's `itemId` must match the instance's
+construction-time identity, and the creating code remains responsible for
+that instance's lifetime. The adopted Item must already belong to the
+surrounding Engine and Container tree.
+
+<ItemExample kind="item-instance" />
+
+This is an advanced integration seam. Prefer a normal component-owned Item and
+`bind:item` when application controls only need access to the generated core
+object.

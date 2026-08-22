@@ -1,31 +1,78 @@
+<script module lang="ts">
+  const sourceCache = new Map<string, string>();
+</script>
+
 <script lang="ts">
-  import type { Snippet } from "svelte";
+  import { onDestroy, type Snippet } from "svelte";
+  import type { SnapSortExampleId } from "./snapsortExampleCatalog";
 
   type View = "demo" | "code";
+  type SourceStatus = "idle" | "loading" | "ready" | "error";
 
   let {
     id,
     label,
-    codeHtml,
+    wide = false,
     demo,
   }: {
-    id: string;
+    id: SnapSortExampleId;
     label: string;
-    codeHtml: string;
+    wide?: boolean;
     demo: Snippet;
   } = $props();
 
   let activeView: View = $state("demo");
-  let demoTab: HTMLButtonElement;
-  let codeTab: HTMLButtonElement;
+  let sourceStatus: SourceStatus = $state("idle");
+  let codeHtml = $state("");
+  let activeRequest: AbortController | null = null;
+  let demoTab: HTMLButtonElement | null = $state(null);
+  let codeTab: HTMLButtonElement | null = $state(null);
 
   const tabId = (view: View) => `${id}-${view}-tab`;
   const panelId = (view: View) => `${id}-${view}-panel`;
 
+  async function loadSource() {
+    if (sourceStatus === "loading" || sourceStatus === "ready") return;
+
+    const cached = sourceCache.get(id);
+    if (cached !== undefined) {
+      codeHtml = cached;
+      sourceStatus = "ready";
+      return;
+    }
+
+    const request = new AbortController();
+    activeRequest = request;
+    sourceStatus = "loading";
+
+    try {
+      const response = await fetch(
+        `/docs/snapsort/examples/source/${encodeURIComponent(id)}`,
+        { signal: request.signal },
+      );
+      if (!response.ok) {
+        throw new Error(`Example source request failed with ${response.status}.`);
+      }
+
+      const html = await response.text();
+      if (request.signal.aborted) return;
+
+      sourceCache.set(id, html);
+      codeHtml = html;
+      sourceStatus = "ready";
+    } catch {
+      if (!request.signal.aborted) sourceStatus = "error";
+    } finally {
+      if (activeRequest === request) activeRequest = null;
+    }
+  }
+
   function select(view: View, focus = false) {
     activeView = view;
+    if (view === "code") void loadSource();
     if (focus) {
-      (view === "demo" ? demoTab : codeTab)?.focus();
+      const selectedTab = view === "demo" ? demoTab : codeTab;
+      selectedTab?.focus();
     }
   }
 
@@ -43,9 +90,11 @@
     event.preventDefault();
     select(next, true);
   }
+
+  onDestroy(() => activeRequest?.abort());
 </script>
 
-<div class="demo-code-tabs" data-demo-code-tabs={id}>
+<div class:wide class="demo-code-tabs" data-demo-code-tabs={id}>
   <div class="demo-code-tabs-header">
     <span class="demo-code-tabs-label">{label}</span>
     <div
@@ -77,7 +126,7 @@
         tabindex={activeView === "code" ? 0 : -1}
         onclick={() => select("code")}
       >
-        Code
+        Svelte source
       </button>
     </div>
   </div>
@@ -98,12 +147,18 @@
       class="demo-code-tabs-panel code-panel"
       role="tabpanel"
       aria-labelledby={tabId("code")}
+      aria-busy={sourceStatus === "loading"}
       data-example-view="code"
     >
-      {#if codeHtml}
+      {#if sourceStatus === "ready"}
         {@html codeHtml}
+      {:else if sourceStatus === "error"}
+        <div class="source-message" role="alert">
+          <p>Could not load the Svelte source.</p>
+          <button type="button" onclick={() => void loadSource()}>Retry</button>
+        </div>
       {:else}
-        <p class="code-unavailable">Code is unavailable for this example.</p>
+        <p class="source-message" aria-live="polite">Loading Svelte source…</p>
       {/if}
     </div>
   {/if}
@@ -118,6 +173,11 @@
     border-radius: var(--ui-radius);
     background: var(--color-background-tint);
     box-sizing: border-box;
+  }
+
+  .demo-code-tabs.wide {
+    width: 100%;
+    max-width: none;
   }
 
   .demo-code-tabs-header {
@@ -194,9 +254,29 @@
     }
   }
 
-  .code-unavailable {
+  .source-message {
     margin: 0;
     padding: var(--size-24);
+
+    p {
+      margin: 0 0 var(--size-12);
+    }
+
+    button {
+      min-height: 2rem;
+      padding: var(--size-4) var(--size-12);
+      border: 1px solid var(--color-action);
+      border-radius: calc(var(--ui-radius) - var(--size-6, 6px));
+      background: var(--color-background);
+      color: var(--color-action);
+      font: inherit;
+      cursor: pointer;
+
+      &:focus-visible {
+        outline: 2px solid var(--color-action);
+        outline-offset: 2px;
+      }
+    }
   }
 
   @media (max-width: 520px) {

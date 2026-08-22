@@ -1,0 +1,46 @@
+---
+title: Drag Sessions
+order: 2
+project: snapsort
+projectTitle: SnapSort
+section: guides
+sectionTitle: Guides
+sectionOrder: 2
+---
+
+<script>
+  import SessionLifecycleDiagram from
+  "$lib/components/docs/SessionLifecycleDiagram.svelte";
+</script>
+
+## Every Drag Is a Session
+
+A `DragSession` is the temporary state SnapSort creates for one drag gesture.
+One internal controller on the root Container follows the pointer, resolves
+prospective destinations, owns temporary ghosts, commits the result, and
+cleans everything up.
+
+The root's lifecycle callbacks and `root.dragSession` expose the same stable
+public session handle while the gesture is live.
+
+Locations carried by an event describe the direct source, prospective target,
+or final destination. They do not necessarily identify the Container whose
+callback is running. Structural and root lifecycle callbacks run on the root;
+drop policy, geometry, and item-hover callbacks run on the direct Container
+whose candidate or Item they inspect.
+
+## Terms
+
+- **Root / DragSession:** the top-level Container and its public session
+  handle. SnapSort's internal controller orchestrates target resolution,
+  ghost relocation, commits, and cleanup.
+- **Source Container:** an Item's direct parent when the drag begins. In the
+  diagram this lane also represents the current owner for operations such as
+  ghost or Item removal.
+- **Target Container:** the prospective direct Container and index selected
+  while the pointer moves.
+- **Destination Container:** the final direct Container and index reported
+  when the drag ends. It may be the source again, or `null` when the lifecycle
+  ends without a resolved destination.
+- **Ghost Item:** passive temporary render state managed by the session. A
+  ghost does not ask to insert or remove itself.

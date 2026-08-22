@@ -1,0 +1,100 @@
+---
+title: Reference Overview
+order: 0
+project: snapsort
+projectTitle: SnapSort
+section: reference
+sectionTitle: Reference
+sectionOrder: 3
+hidden: true
+---
+
+Choose a framework, then open the page for the component you are using.
+
+| Framework | Container                                              | Item                                         |
+| --------- | ------------------------------------------------------ | -------------------------------------------- |
+| Svelte    | [Container](/docs/snapsort/reference/svelte/container) | [Item](/docs/snapsort/reference/svelte/item) |
+| React     | [Container](/docs/snapsort/reference/react/container)  | [Item](/docs/snapsort/reference/react/item)  |
+
+The framework selector in the sidebar keeps the current component selected when you switch between Svelte and React.
+
+## Examples
+
+Use [Examples](/docs/snapsort/examples) for interactive walkthroughs and
+complete interfaces. The live previews demonstrate behavior shared by every
+binding and include **Svelte source**, while these Reference pages provide the
+exact Svelte and React component contracts.
+
+## Package entry points
+
+SnapSort ships one package with framework bindings exposed as subpaths.
+
+| Import path                       | Purpose                                                                     |
+| --------------------------------- | --------------------------------------------------------------------------- |
+| `@snap-engine/snapsort`           | Framework-agnostic SnapEngine objects and types used by framework bindings. |
+| `@snap-engine/snapsort/callbacks` | Reusable drop eligibility and priority callbacks.                           |
+| `@snap-engine/snapsort/svelte`    | Svelte components that wrap the core objects.                               |
+| `@snap-engine/snapsort/react`     | React components that wrap the core objects.                                |
+
+## Vanilla Container and Collection Helpers
+
+Without a framework adapter, callbacks may update application data and then
+render the resulting DOM directly. Keep the collection operation separate from
+the SnapSort callback just as you would with a framework.
+
+```javascript
+import { Container } from "@snap-engine/snapsort";
+import { rejectDrop } from "@snap-engine/snapsort/callbacks";
+
+function moveTask(columns, event) {
+  const itemId = String(event.itemId);
+  const targetId = String(event.to.containerMetadata.columnId);
+  const task = columns
+    .flatMap((column) => column.items)
+    .find((entry) => entry.id === itemId);
+  if (!task) return columns;
+
+  return columns.map((column) => {
+    const items = column.items.filter((entry) => entry.id !== itemId);
+    if (column.id === targetId) {
+      items.splice(Math.min(event.to.index, items.length), 0, task);
+    }
+    return { ...column, items };
+  });
+}
+
+function createTaskContainer(engine, parent, columnId) {
+  const container = new Container(engine, parent, {
+    itemId: `column:${columnId}`,
+  });
+  container.metadata = { columnId };
+  return container;
+}
+```
+
+```javascript
+function onItemMove(event) {
+  columns = moveTask(columns, event);
+  renderColumns(columns);
+}
+
+const board = new Container(engine, null, {
+  itemId: "task-board-root",
+  callbacks: { canDrop: rejectDrop, onItemMove },
+});
+const todo = createTaskContainer(engine, board, "todo");
+const done = createTaskContainer(engine, board, "done");
+```
+
+Structural callbacks are root-dispatched, so `onItemMove` belongs on `board`.
+Descendant containers configure only their local drop policy, geometry, and
+hover behavior.
+
+Across every binding, structural callbacks synchronize operations that
+SnapSort originates; they are not application CRUD hooks. Framework Add and
+Delete actions should update application state and let reconciliation mount or
+unmount Items. A semantic move emits one `onItemMove`, while SnapSort-owned
+ghost presence uses explicit insert, move, and remove callbacks. Calling the
+imperative core `container.removeItem(id)` is the exception: it leads with a
+core removal and therefore requires root `onItemRemove` to synchronize
+framework state.

@@ -1,0 +1,88 @@
+---
+title: Basics
+order: 0
+parent: snapsort/examples
+project: snapsort
+projectTitle: SnapSort
+section: guides
+sectionTitle: Guides
+sectionOrder: 2
+---
+
+<script>
+  import ContainerIntroExample from
+  "$lib/components/docs/ContainerIntroExample.svelte"; import ItemExample from
+  "$lib/components/docs/ItemExample.svelte";
+</script>
+
+Start here to see how framework-owned state becomes a sortable SnapSort tree.
+Each example includes a **Svelte source** tab. React and Vanilla applications
+use the same identities and mutation events with their own rendering APIs.
+
+## Basic Container
+
+Place ordinary Svelte children inside `Container`. SnapSort does not own the
+collection loop or inspect its children. Each sortable Item needs a stable
+`itemId`, and each Svelte loop needs the corresponding stable key.
+
+This first preview disables pointer interaction so the component structure is
+easy to inspect. Its source still includes the complete `RenderTree` callbacks.
+
+<ContainerIntroExample kind="basic" />
+
+See the complete [`Container` API](/docs/snapsort/reference/svelte/container).
+
+## Sortable Container
+
+Store a `RenderTree` in `$state.raw`. In `onItemMove`, pass the event and the
+current tree to `reduceRenderTree`; the immutable helper returns the next
+application-owned keyed sequence, and Svelte renders it synchronously.
+
+`RenderTree` contains engine-owned identity objects. `$state.raw` keeps those
+identities intact; publish the reducer's returned root instead of mutating
+nested entries in place. Add and delete controls originating in the
+application edit this sequence directly rather than waiting for a SnapSort
+callback.
+
+<ContainerIntroExample kind="sortable" />
+
+Svelte owns the rendered collection, so persistent callbacks such as
+`onItemMove` must update state synchronously. The adapter commits that render
+before SnapSort measures and animates the final DOM.
+
+## Basic Item
+
+Render an `Item` from each ordinary entry in the application-owned keyed loop,
+give it `entry.itemId`, and put the entry's content inside the component. When
+`onItemMove` updates the render tree or another application collection, Svelte
+reconciles the new order.
+
+<ItemExample kind="basic" />
+
+Adding or deleting an ordinary application value is an application-state
+operation. When its keyed `Item` mounts or unmounts, the wrapper synchronizes
+the core registration; that reconciliation does not emit `onItemInsert` or
+`onItemRemove`. Those callbacks report core-originated commands instead.
+
+See the complete [`Item` API](/docs/snapsort/reference/svelte/item).
+
+## Items and Nested Containers
+
+Rendering has three branches: a ghost renders `Ghost`, an ordinary entry with
+`childTree` renders a nested `Container`, and any other ordinary entry renders
+`Item`. A Container is already the sortable Item for its parent entry, so do
+not wrap it in another Item.
+
+Ordinary markup inside an `Item` does not need a `childTree`. Set `childTree`
+only when the entry itself renders a SnapSort `Container` with a sortable
+sequence of its own. Give that Container the entry's `itemId`; set
+`locked={false}` only when the whole Container should be movable.
+
+The example remains one SnapSort tree. Its nested groups use application
+metadata and `canDrop` so their tasks can move between them while the parent
+rejects task drops into its top-level mixture.
+
+<ContainerIntroExample kind="mixed" />
+
+See [Nested Containers](/docs/snapsort/examples/containers#nested-containers)
+for locking, selection, and deeper composition.

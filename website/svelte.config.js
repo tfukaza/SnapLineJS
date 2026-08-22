@@ -6,7 +6,9 @@ import { dirname, join } from "path";
 import { createHighlighter } from "shiki";
 import { remarkAlerts } from "./src/lib/markdown/remarkAlerts.js";
 import { shikiLangs } from "./src/lib/markdown/shikiTheme.js";
+import { remarkCodeTabs } from "./src/lib/markdown/remarkCodeTabs.js";
 import { remarkFrameworkCodeBlocks } from "./src/lib/markdown/remarkFrameworkCodeBlocks.js";
+import { remarkArticleHeadings } from "./src/lib/markdown/remarkArticleHeadings.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const mdsvexLayout = join(__dirname, "src/lib/markdown/MdsvexLayout.svelte");
@@ -33,7 +35,12 @@ const config = {
     mdsvex({
       extensions: [".md", ".mdx"],
       layout: mdsvexLayout,
-      remarkPlugins: [remarkAlerts, remarkFrameworkCodeBlocks],
+      remarkPlugins: [
+        remarkAlerts,
+        remarkCodeTabs,
+        remarkFrameworkCodeBlocks,
+        remarkArticleHeadings,
+      ],
       highlight: {
         highlighter: (code, lang = "plaintext") => {
           // Unknown fence languages (mermaid diagrams in the design docs,
@@ -70,8 +77,7 @@ const config = {
       "@svelte-demo": "../demo/svelte/src",
       "@docs": "../docs",
       "@components": "./src/lib/components",
-      "@snap-engine/asset-base/svelte":
-        "../assets/asset-base/src/svelte",
+      "@snap-engine/asset-base/svelte": "../assets/asset-base/src/svelte",
       "@snap-engine/asset-base": "../assets/asset-base/src",
       "@snap-engine/snapsort/svelte": "../assets/snapsort/src/svelte",
       "@snap-engine/snapsort": "../assets/snapsort/src",

@@ -217,16 +217,9 @@ is exposed through callback events and `root.dragSession`; nested containers
 return `null`. Its read-only observations are `root`, `pointerId`, `items`,
 `sources`, `pressedItem`, `primaryItem`, `start`, `pointer`, and `status`.
 `items`, `sources`, their locations, and the coordinate objects are immutable.
-Consumers may only set `dragVisual` while pending, set `dropEffect` while
-pending or active, or call `handoff(replacements)` while pending. Lifecycle
-methods, placement strategies, target state, ghosts, and animation bookkeeping
-remain internal.
-
-After a handoff, the public `items` and `sources` still describe the original
-gesture participants and their frozen source snapshot. Internally, SnapSort
-tracks the replacement run and its mounted locations as the active sources.
-The handoff therefore retargets pointer ownership and future mutation without
-rewriting the gesture's original resolution snapshot.
+The supported mutable controls are `dragVisual` while pending and `dropEffect`
+while pending or active. Lifecycle methods, placement strategies, target
+state, ghosts, and animation bookkeeping remain internal.
 
 A preview is one root-owned `GhostState` with `type: "pointer-preview"` and an
 overlay location. It can coexist with insertion's destination-owned
@@ -326,14 +319,6 @@ Item that animates into the destination. The source replacement is newly
 mounted, so it has no old FLIP rectangle and is not inverse-animated. Set
 `dragVisual = "preview"` when the source should remain visually occupied during
 the gesture.
-
-`DragSession.handoff(replacements)` remains available as a separate advanced
-primitive for interfaces that already mounted a parallel replacement run and
-need to retarget the pending gesture during `onDragStart`. Replacements must
-be unique, connected Items in the same engine and root. Handoff transfers
-pointer ownership, frozen geometry, and session participation; it does not
-create, render, copy, destroy, or clean up application state. It cannot be
-called after lifecycle activation begins.
 
 ### Migrating from built-in copy
 

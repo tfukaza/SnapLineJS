@@ -1,0 +1,130 @@
+---
+title: Drag Start
+order: 0
+parent: snapsort/guides/sessions
+project: snapsort
+projectTitle: SnapSort
+section: guides
+sectionTitle: Guides
+sectionOrder: 2
+---
+
+When pointer input begins a drag, the root Container creates a pending
+`DragSession` and dispatches `onDragStart`.
+
+## Configure or Veto Startup
+
+Return `false` from the root's `onDragStart` to veto a gesture before active
+session state, ghosts, or dragged-item visuals are created:
+
+```ts
+import type { DragStartEvent } from "@snap-engine/snapsort";
+
+function onDragStart(event: DragStartEvent) {
+  if (event.itemsMetadata.some((metadata) => metadata.disabled === true)) {
+    return false;
+  }
+
+  event.session.dragVisual = "preview";
+}
+```
+
+A vetoed startup clears the pending session and does not fire `onDragEnd`.
+In simple terms, it cancels the drag before it even begins.
+
+## What's in a Session
+
+Once created, the interface for a `DragSession` looks like this.
+
+```ts
+type DragSessionStatus = "pending" | "active" | "dropping" | "ended";
+
+interface DragSession {
+  readonly root: Container;
+  readonly pointerId: number;
+  readonly items: readonly Item[];
+  readonly sources: readonly DragLocation[];
+  readonly pressedItem: Item;
+  readonly primaryItem: Item;
+  readonly start: Readonly<{ x: number; y: number }>;
+  readonly pointer: Readonly<{ x: number; y: number }>;
+  readonly status: DragSessionStatus;
+  dragVisual: "item" | "preview" | "none";
+  dropEffect: "move" | "none";
+}
+```
+
+For now, the key fields are:
+
+- `items`: the ordered run of Items being dragged.
+- `pressedItem`: the Item where pointer input began.
+- `primaryItem`: `items[0]`, used by singular event fields and as swap mode's
+  one participant.
+- `dragVisual`: how the dragged run is represented at the pointer.
+- `dropEffect`: whether SnapSort commits its ordinary drop mutation.
+
+### DragVisual
+
+`dragVisual` can only be set before the dragged item begins moving, usually in
+`onDragStart`. It can take one of the following values:
+
+- `"item"` moves the real Items and creates source-spacer ghosts where their
+  original layout slots need to remain occupied.
+- `"preview"` leaves the real Items in their original locations and creates
+  one pointer-preview ghost for the complete run.
+- `"none"` leaves the Items in layout without a pointer-following visual.
+
+Each placement mode selects its documented initial value. Change it only when
+the interface needs a different pointer representation; the
+[advanced settings guide](/docs/snapsort/guides/sessions/advanced-settings-and-callbacks#three-independent-decisions)
+explains how this choice differs from placement feedback and target resolution.
+
+### DropEffect
+
+`dropEffect` can change any time before the drop commits.
+The two options are:
+
+- `"move"` commits the active mode's ordinary move or swap.
+- `"none"` suppresses that persistent mutation while preserving resolved
+  destination reporting.
+
+All four placement modes begin with `"move"`. Application-specific behavior,
+such as drop-to-delete, can temporarily select `"none"` and apply its own
+meaning after the session reports the final destination.
+
+## Multi-Item Drag
+
+To drag multiple Items together in euclidean, progressive, or insertion mode,
+set each Item's consumer-owned `selected` flag. When a selected, unlocked Item
+starts a drag, SnapSort collects the unlocked selected run and treats it as one
+ordered operation. Swap mode exchanges only `primaryItem` with its target.
+This is why `items` and `sources` are arrays even for a single-Item drag.
+
+The public `items` array is ordered by the run's original document positions.
+`sources` is the parallel array of original locations. These sources remain
+the gesture origins throughout the session.
+
+`DragStartEvent` repeats the primary Item fields for convenient callback code
+and also supplies the complete run:
+
+```ts
+interface DragStartEvent {
+  session: DragSession;
+  item: Item;
+  itemId: ItemId;
+  itemMetadata: ItemMetadata;
+  items: Item[];
+  itemIds: ItemId[];
+  itemsMetadata: ItemMetadata[];
+  element: HTMLElement | null;
+  source: DragLocation;
+  sources: DragLocation[];
+}
+```
+
+`item === items[0]`, `itemId === itemIds[0]`, and
+`source === sources[0]`. The event is dispatched to the root even when
+`source.container` is nested.
+
+Continue with [Ghosts](/docs/snapsort/guides/sessions/ghosts) for the temporary
+render state created after an accepted session activates.

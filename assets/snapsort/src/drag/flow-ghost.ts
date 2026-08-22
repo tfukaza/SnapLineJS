@@ -26,13 +26,13 @@ import type {
 } from "./session";
 import { readVisualRect } from "../internal/visual-rect";
 import {
-  pointerPreviewMemberRects,
   removePointerPreview,
   startPointerPreview,
   updatePointerPreview,
   validatePointerPreview,
 } from "./pointer-preview";
 import {
+  captureDropOriginRects,
   computeGroupOffsets,
   resetItemVisual,
   restoreActiveItems,
@@ -433,15 +433,8 @@ function drop(session: DragSession): void {
 
   session.pressedItem.schedule(
     () => {
-      if (session.dragVisual === "preview") {
-        pointerPreviewMemberRects(session).forEach((rect, i) => {
-          dropRects[i].first = rect;
-        });
-        return;
-      }
-      if (session.dragVisual !== "item") return;
-      items.forEach((member, i) => {
-        dropRects[i].first = readVisualRect(member);
+      captureDropOriginRects(session).forEach((rect, i) => {
+        dropRects[i].first = rect;
       });
     },
     {

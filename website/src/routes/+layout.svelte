@@ -8,6 +8,13 @@
     projectDestination,
     projectNavigationEntries,
   } from "$lib/projectNavigation";
+  import {
+    docNavigationNodeContains,
+    filterDocNavigation,
+    flattenDocNavigation,
+    type DocNavigation,
+    type DocNavigationNode,
+  } from "$lib/docsCatalog";
   import "$lib/fonts.css";
   import { debugLayoutFooterControl } from "$lib/stores/debugLayoutFooter";
   import {
@@ -25,25 +32,6 @@
   const assetProjects = projectNavigationEntries.filter(
     (project) => project.group === "asset",
   );
-  type MobileDocEntry = {
-    slug: string;
-    title: string;
-    project: string;
-    section: string;
-    framework: string | null;
-    frameworkKey: string | null;
-  };
-  type MobileDocSection = {
-    name: string;
-    title: string;
-    entries: MobileDocEntry[];
-  };
-  type MobileDocsNavigation = {
-    project: string;
-    projectTitle: string;
-    frameworks: string[];
-    sections: MobileDocSection[];
-  };
   type MenuName = "projects";
 
   let activeMenu = $state<MenuName | null>(null);
@@ -51,7 +39,7 @@
   let navRoot = $state<HTMLElement | null>(null);
   let mobileNavTrigger = $state<HTMLButtonElement | null>(null);
   let projectsMenuTrigger = $state<HTMLButtonElement | null>(null);
-  const currentPath = $derived(page.url.pathname as string);
+  const currentPath = $derived(page.url.pathname);
   const currentProject = $derived(findProjectForPath(currentPath));
   const isHomePath = $derived(currentPath === "/");
   const isDocsContext = $derived(currentPath.startsWith("/docs"));
@@ -64,19 +52,13 @@
       : "/docs",
   );
   const mobileDocsNavigation = $derived(
-    (page.data as { mobileDocsNavigation?: MobileDocsNavigation | null })
-      .mobileDocsNavigation ?? null,
+    page.data.mobileDocsNavigation ?? null,
   );
   const currentDocSlug = $derived(page.params.slug ?? "");
   const visibleMobileDocSections = $derived(
-    mobileDocsNavigation?.sections
-      .map((section) => ({
-        ...section,
-        entries: section.entries.filter(
-          (entry) => !entry.framework || entry.framework === $selectedFramework,
-        ),
-      }))
-      .filter((section) => section.entries.length > 0) ?? [],
+    mobileDocsNavigation
+      ? filterDocNavigation(mobileDocsNavigation, $selectedFramework).sections
+      : [],
   );
 
   function toggleMenu(menu: MenuName) {
@@ -97,9 +79,7 @@
   function handleMobileFrameworkChange(framework: Framework) {
     if (!mobileDocsNavigation) return;
 
-    const allEntries = mobileDocsNavigation.sections.flatMap(
-      (section) => section.entries,
-    );
+    const allEntries = flattenDocNavigation(mobileDocsNavigation);
     const currentEntry = allEntries.find((entry) => entry.slug === currentDocSlug);
     const equivalentEntry = currentEntry?.frameworkKey
       ? allEntries.find(
@@ -137,6 +117,29 @@
     focusTarget?.focus();
   }
 </script>
+
+{#snippet mobileDocTree(nodes: DocNavigationNode[], depth: number)}
+  <ul>
+    {#each nodes as node (node.entry.slug)}
+      <li>
+        <a
+          href={`/docs/${node.entry.slug}`}
+          style={`--mobile-doc-indent: calc(${depth} * var(--size-16))`}
+          class:active={node.entry.slug === currentDocSlug}
+          class:ancestor={node.entry.slug !== currentDocSlug &&
+            docNavigationNodeContains(node, currentDocSlug)}
+          aria-current={node.entry.slug === currentDocSlug ? "page" : undefined}
+          onclick={closeNavigation}
+        >
+          {node.entry.title}
+        </a>
+        {#if node.children.length > 0}
+          {@render mobileDocTree(node.children, depth + 1)}
+        {/if}
+      </li>
+    {/each}
+  </ul>
+{/snippet}
 
 <svelte:window onpointerdown={handleWindowPointerDown} onkeydown={handleWindowKeyDown} />
 
@@ -277,20 +280,7 @@
             {#if section.name}
               <p class="mobile-doc-section-title">{section.title}</p>
             {/if}
-            <ul>
-              {#each section.entries as entry}
-                <li>
-                  <a
-                    href={`/docs/${entry.slug}`}
-                    class:active={entry.slug === currentDocSlug}
-                    aria-current={entry.slug === currentDocSlug ? "page" : undefined}
-                    onclick={closeNavigation}
-                  >
-                    {entry.title}
-                  </a>
-                </li>
-              {/each}
-            </ul>
+            {@render mobileDocTree(section.nodes, 0)}
           </div>
         {/each}
       </div>
@@ -600,7 +590,7 @@
     display: none;
   }
 
-  @media (max-width: 760px) {
+  @media (max-width: 768px) {
     .nav-bar {
       gap: var(--size-16);
     }
@@ -694,6 +684,7 @@
       a {
         display: block;
         padding: var(--size-8) var(--size-12);
+        padding-left: calc(var(--size-12) + var(--mobile-doc-indent, 0px));
         border-radius: var(--size-8);
         color: var(--color-text);
         font-size: 0.9rem;
@@ -709,6 +700,11 @@
 
         &.active {
           font-weight: 600;
+        }
+
+        &.ancestor {
+          color: var(--color-action);
+          font-weight: 500;
         }
       }
     }

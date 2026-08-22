@@ -1,0 +1,44 @@
+---
+title: Examples
+order: 3
+project: snapsort
+projectTitle: SnapSort
+section: guides
+sectionTitle: Guides
+sectionOrder: 2
+---
+
+Use these examples to move from one sortable Item to complete application
+interfaces. The focused examples isolate one API decision at a time; the
+complete interfaces combine placement modes, nested Containers, session
+callbacks, and application-owned state.
+
+## Learn the Building Blocks
+
+- [Basics](/docs/snapsort/examples/basics) starts with Items, Containers, and
+  the framework-owned render loop.
+- [Container Recipes](/docs/snapsort/examples/containers) covers collection
+  rendering, configuration, nesting, imperative moves, ghosts, and
+  presentation.
+- [Item Recipes](/docs/snapsort/examples/items) covers metadata, selection,
+  adopted core Items, and drag handles.
+
+## Explore Complete Interfaces
+
+[Complete Interfaces](/docs/snapsort/examples/complete-interfaces) brings the
+pieces together in a checklist, Kanban board, sentence builder, file explorer,
+clone palette, drop-to-delete interaction, swap grid, and form editor.
+
+These examples demonstrate application patterns rather than adding another
+SnapSort API layer. Each interface keeps its persistent records in application
+state. Structural callbacks synchronize changes that SnapSort originates;
+session and hover callbacks also let the application configure transient
+behavior or attach application-specific meaning to a resolved result.
+
+## Framework Source
+
+Every live example includes a **Svelte source** tab. The
+interaction model and core events are shared across bindings; use the
+[Svelte Reference](/docs/snapsort/reference/svelte/container) or
+[React Reference](/docs/snapsort/reference/react) for the exact component
+syntax in your framework.

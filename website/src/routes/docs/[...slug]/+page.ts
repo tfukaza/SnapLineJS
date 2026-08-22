@@ -1,34 +1,32 @@
 import { error, redirect } from "@sveltejs/kit";
+import type { Component } from "svelte";
 import {
   docSlugFromPath,
   entries,
-  getGroupedEntries,
+  findDocEntry,
+  getDocAncestors,
+  getDocNavigation,
   legacyDocRedirects,
   findDocProject,
 } from "$lib/docsCatalog";
+import type { DocMetadata } from "$lib/markdown/docMetadata";
+
+type DocsPageModule = {
+  default: Component;
+  metadata?: DocMetadata;
+};
 
 export const csr = true;
 
 export { entries };
-export const _getGroupedEntries = getGroupedEntries;
 
 function mobileDocsNavigationForSlug(slug: string) {
   const projectSlug = slug.split("/")[0] ?? "";
-  const project = findDocProject(projectSlug);
-  if (!project) return null;
-
-  return {
-    project: project.slug,
-    projectTitle: project.title,
-    frameworks: [...project.frameworks],
-    sections: getGroupedEntries().filter(
-      (section) => section.project === project.slug,
-    ),
-  };
+  return getDocNavigation(projectSlug);
 }
 
-export async function load({ params, data }) {
-  const modules = import.meta.glob("@docs/**/*.{md,mdx}");
+export async function load({ params }) {
+  const modules = import.meta.glob<DocsPageModule>("@docs/**/*.{md,mdx}");
 
   const slug = params.slug || "";
   // `/docs` renders the hub page (docs/index.mdx) that explains the
@@ -50,21 +48,23 @@ export async function load({ params, data }) {
     if (pathSlug) {
       if (pathSlug === "index") {
         if (slug === "") {
-          const mdx: any = await resolver();
+          const mdx = await resolver();
           return {
-            ...data,
             component: mdx.default,
             metadata: mdx.metadata,
+            docEntry: findDocEntry("index"),
+            docAncestors: [],
             mobileDocsNavigation: null,
           };
         }
       } else {
         if (pathSlug === slug && slug !== "") {
-          const mdx: any = await resolver();
+          const mdx = await resolver();
           return {
-            ...data,
             component: mdx.default,
             metadata: mdx.metadata,
+            docEntry: findDocEntry(slug),
+            docAncestors: getDocAncestors(slug),
             mobileDocsNavigation: mobileDocsNavigationForSlug(slug),
           };
         }

@@ -106,7 +106,7 @@
           <p class="catalog-summary">{entry.summary}</p>
         </div>
 
-        {#if isExploreEntryBrowsable(entry) || entry.status === "coming-soon" || (!compact && (entry.docsHref || entry.galleryHref))}
+        {#if isExploreEntryBrowsable(entry) || entry.status === "coming-soon" || (!compact && (entry.docsHref || entry.examplesHref))}
           <div class="catalog-actions">
             {#if isExploreEntryBrowsable(entry)}
               <a class="button primary catalog-primary-link" href={entry.href}>
@@ -117,11 +117,11 @@
               <span class="button catalog-coming-soon">Coming soon</span>
             {/if}
 
-            {#if !compact && (entry.docsHref || entry.galleryHref)}
+            {#if !compact && (entry.docsHref || entry.examplesHref)}
               <div class="catalog-secondary-links" aria-label={`${entry.name} resources`}>
-                {#if entry.galleryHref}
-                  <a href={entry.galleryHref}>
-                    {exploreSecondaryLinkLabels.gallery}
+                {#if entry.examplesHref}
+                  <a href={entry.examplesHref}>
+                    {exploreSecondaryLinkLabels.examples}
                   </a>
                 {/if}
                 {#if entry.docsHref}

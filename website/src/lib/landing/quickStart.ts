@@ -1,7 +1,7 @@
 import type { Framework } from "$lib/frameworks";
 
 /**
- * Landing-page quick start. Mirrors docs/snapsort/introduction/01_setup.mdx —
+ * Landing-page quick start. Mirrors docs/snapsort/01_introduction/02_setup.mdx —
  * keep these in step when that page changes.
  */
 export const installCommands: Record<Framework, string> = {

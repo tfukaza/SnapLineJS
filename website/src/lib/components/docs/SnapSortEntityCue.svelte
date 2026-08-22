@@ -1,5 +1,6 @@
 <script lang="ts">
-  let { kind }: { kind: "item" | "container" | "ghost" } = $props();
+  let { kind }: { kind: "item" | "container" | "ghost" | "pointer" } =
+    $props();
 </script>
 
 <div class="entity-cue" class:is-ghost={kind === "ghost"} aria-hidden="true">
@@ -13,8 +14,14 @@
       <strong>Item</strong>
       <code>itemId: 2</code>
     </div>
-  {:else}
+  {:else if kind === "ghost"}
     <div class="entity-ghost"><strong>ghost</strong></div>
+  {:else}
+    <img
+      class="entity-pointer"
+      src="/icon/noun-cursor-740125.svg"
+      alt=""
+    />
   {/if}
 </div>
 
@@ -40,6 +47,13 @@
     margin: 0 auto;
     padding: var(--size-4) var(--size-8);
     box-sizing: border-box;
+  }
+
+  .entity-pointer {
+    display: block;
+    width: var(--size-48);
+    height: var(--size-48);
+    margin: 0 auto;
   }
 
   .entity-container {

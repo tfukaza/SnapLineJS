@@ -27,22 +27,22 @@ const captureStyles = (exhibitId: string, contentWidth: number) => `
     background: #f7f4ec !important;
   }
 
-  nav,
-  footer,
-  .gallery-hero,
-  .gallery-sidebar,
-  .gallery-outro,
-  .gallery-exhibits > h2,
-  .example-card:not(#${exhibitId}) {
+  .nav-bar,
+  .page-content + footer,
+  .doc-sidebar,
+  .doc-breadcrumb,
+  .doc-header,
+  .doc-pagination,
+  [data-article-outline],
+  .doc-article > :not([data-demo-code-tabs="${exhibitId}"]) {
     display: none !important;
   }
 
-  main,
+  main.page-content,
+  .doc-layout,
   .page-content,
-  .gallery-body,
-  .gallery-exhibits,
-  .snap-engine-canvas,
-  .examples-grid {
+  .doc-content,
+  .doc-article {
     width: 1200px !important;
     height: 1200px !important;
     min-width: 1200px !important;
@@ -53,7 +53,7 @@ const captureStyles = (exhibitId: string, contentWidth: number) => `
     overflow: hidden !important;
   }
 
-  #${exhibitId} {
+  [data-demo-code-tabs="${exhibitId}"] {
     position: fixed !important;
     inset: 56px !important;
     z-index: 100 !important;
@@ -75,11 +75,22 @@ const captureStyles = (exhibitId: string, contentWidth: number) => `
     box-shadow: 0 30px 80px -52px rgb(31 30 41 / 35%) !important;
   }
 
-  #${exhibitId} > .example-placard {
+  [data-demo-code-tabs="${exhibitId}"] > .demo-code-tabs-header {
     display: none !important;
   }
 
-  #${exhibitId} > :not(.example-placard) {
+  [data-demo-code-tabs="${exhibitId}"] > .demo-panel {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    width: 100% !important;
+    height: 100% !important;
+    padding: 64px !important;
+    box-sizing: border-box !important;
+  }
+
+  [data-demo-code-tabs="${exhibitId}"] .complete-example-surface,
+  [data-snapsort-example="${exhibitId}"] {
     width: min(100%, ${contentWidth}px) !important;
     max-width: ${contentWidth}px !important;
     margin: auto !important;
@@ -140,7 +151,7 @@ async function prepareExhibit(
   exhibitId: string,
   contentWidth: number,
 ) {
-  const exhibit = page.locator(`#${exhibitId}`);
+  const exhibit = page.locator(`[data-snapsort-example="${exhibitId}"]`);
   await exhibit.scrollIntoViewIfNeeded();
   await page.addStyleTag({
     content: captureStyles(exhibitId, contentWidth),
@@ -210,12 +221,16 @@ async function recordDragClip(
 }
 
 test.beforeEach(async ({ page }) => {
-  await page.goto("/snapsort/gallery", { waitUntil: "networkidle" });
-  await expect(page.locator("#todo-list .snapsort-item").first()).toBeVisible();
+  await page.goto("/docs/snapsort/examples/complete-interfaces", {
+    waitUntil: "networkidle",
+  });
+  await expect(
+    page.locator('[data-snapsort-example="todo-list"] .snapsort-item').first(),
+  ).toBeVisible();
 });
 
 test("01 TODO List reorder", async ({ page }) => {
-  const exhibit = page.locator("#todo-list");
+  const exhibit = page.locator('[data-snapsort-example="todo-list"]');
   const cards = exhibit.locator(".project-card");
   const source = cards.first().locator(".project-drag-handle");
   const target = cards.nth(3);
@@ -237,7 +252,7 @@ test("01 TODO List reorder", async ({ page }) => {
 });
 
 test("02 Kanban Board transfer", async ({ page }) => {
-  const exhibit = page.locator("#kanban-board");
+  const exhibit = page.locator('[data-snapsort-example="kanban-board"]');
   const columns = exhibit.locator(".kanban-column");
   const source = columns.first().locator(".kanban-card").first();
   const target = columns.nth(1);
@@ -257,7 +272,7 @@ test("02 Kanban Board transfer", async ({ page }) => {
 });
 
 test("03 File Explorer nesting", async ({ page }) => {
-  const exhibit = page.locator("#file-explorer");
+  const exhibit = page.locator('[data-snapsort-example="file-explorer"]');
   const source = exhibit
     .locator(".tree-row.file-row")
     .filter({ hasText: "package.json" });
@@ -278,7 +293,7 @@ test("03 File Explorer nesting", async ({ page }) => {
 });
 
 test("04 Template Palette duplication", async ({ page }) => {
-  const exhibit = page.locator("#clone-palette");
+  const exhibit = page.locator('[data-snapsort-example="clone-palette"]');
   const palette = exhibit.locator(".clone-palette");
   const canvas = exhibit.locator(".clone-canvas");
   const source = palette
@@ -301,7 +316,7 @@ test("04 Template Palette duplication", async ({ page }) => {
 });
 
 test("05 Trash It deletion", async ({ page }) => {
-  const exhibit = page.locator("#trash-it");
+  const exhibit = page.locator('[data-snapsort-example="trash-it"]');
   const list = exhibit.locator(".trash-list");
   const source = list.locator(".trash-task").first();
   const target = exhibit.locator(".trash-drop-target");
@@ -317,7 +332,7 @@ test("05 Trash It deletion", async ({ page }) => {
 });
 
 test("06 Swap Grid exchange", async ({ page }) => {
-  const exhibit = page.locator("#swap-grid");
+  const exhibit = page.locator('[data-snapsort-example="swap-grid"]');
   const tiles = exhibit.locator(".snapsort-item");
   const source = tiles.filter({ hasText: "A1" });
   const target = tiles.filter({ hasText: "B2" });

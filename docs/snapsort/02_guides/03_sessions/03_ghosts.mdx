@@ -1,0 +1,291 @@
+---
+title: Ghosts
+order: 1
+parent: snapsort/guides/sessions
+project: snapsort
+projectTitle: SnapSort
+section: guides
+sectionTitle: Guides
+sectionOrder: 2
+---
+
+TODO:
+General session, mode specific session
+
+<script>
+  import GhostGuideDemo from "$lib/components/docs/GhostGuideDemo.svelte";
+</script>
+
+A ghost is passive, temporary render state owned by one drag session. It is
+not an application record or a clone that the application adds to its domain
+model.
+
+## Application Boundary
+
+A recurring pattern you will see a lot, including in this section,
+is how SnapSort splits responsibility with frontend frameworks.
+SnapSort is strictly designed to manage the logic necessary to
+move and animate items, containers, and ghosts; it
+is prohibited from making any permanent changes to the DOM or application state
+without first invoking callbacks to _commit_ a request to change the DOM.
+
+Subsequently, the frontend framework is responsible for _applying_ these
+callbacks to update the DOM and application state as needed.
+
+## Drag Start and Ghost Creation
+
+After an accepted drag activates, its placement mode and `dragVisual` may
+create one or more transient Ghost Items. Each `onGhostInsert` event tells the
+application that one state became present; it does not insert application data.
+
+`GhostState` is a closed union. Narrowing its `type` reveals the geometry and
+location data for that exact role:
+
+- **`source-spacer`** preserves an old slot when insertion or swap mode hoists
+  the actual dragged Item. It is a full-size, flow-participating slot with one
+  anchor per dragged member.
+- **`target-spacer`** previews a full-size destination in euclidean and
+  progressive modes. It participates in flow and relocates with the
+  prospective placement.
+- **`insertion-marker`** identifies the exact gap selected by insertion mode.
+  It has a semantic slot location but renders as an absolute overlay, so it
+  never consumes list flow.
+- **`pointer-preview`** represents the complete dragged run at the pointer. It
+  is one root-owned overlay, independent from destination feedback.
+
+Placement feedback and pointer representation are separate choices. Euclidean
+and progressive placement use a `target-spacer`; insertion uses an
+`insertion-marker`; and swap uses Item-hover feedback without a target ghost.
+Independently, `dragVisual = "item"` moves the actual Items and uses whichever
+slot-preserving role the active lifecycle requires: insertion and swap use
+source spacers, while euclidean and progressive relocate their target-spacer
+run. `"preview"` creates a `pointer-preview`, and `"none"` has no
+pointer-following visual.
+
+A session can therefore own several ghosts at once. For example, insertion
+mode with a preview uses an `insertion-marker` in the destination and a
+`pointer-preview` at the root.
+
+## Flow Target and Pointer Preview in Action
+
+Drag a task from one list toward the other and pause before releasing. The
+destination card labels the `target-spacer`, while a separate
+`pointer-preview` follows the pointer. The panels report both active
+`RenderTree` entries and the root callback sequence.
+
+<GhostGuideDemo variant="flow" />
+
+The target and pointer ghosts have separate generated identities. Moving a
+target spacer preserves its `ghostItemId`; removing it and later re-entering a
+valid target creates a new ghost.
+
+## Marker and Pointer Channels in Action
+
+This insertion demo deliberately selects `dragVisual = "item"`. Drag over the
+upper and lower halves of an Item to see its `source-spacer` coexist with the
+independently positioned marker.
+
+<GhostGuideDemo variant="overlay" />
+
+The insertion marker's `location.index` is its canonical commit slot. Its
+zero-thickness, world-space `gap` is the targeting geometry. `previous`,
+`next`, and `isCurrentPlacement` describe the physical boundary SnapSort chose.
+When the marker flips between the two edges of the currently dragged run,
+`onGhostMove` can report equal `from` and `to` locations with a changed `gap`.
+That is a presentation update, not a changed drop target.
+
+## Identity and State
+
+Every ghost form carries the same identity and provenance:
+
+- `type` is one of the four roles above; a ghost never changes role during its
+  lifetime.
+- `ghostItem` and `ghostItemId` identify SnapSort's transient Item. The ID is
+  generated, stable through moves, and unique in its root.
+- `ghostMetadata` is the immutable metadata SnapSort copied onto that transient
+  Item for rendering and policy inspection.
+- `original`, `originalItemId`, and `originalMetadata` identify the ordinary
+  Item represented by this particular anchor.
+- `items` and `itemIds` carry the complete ordered dragged run, including a
+  multi-item selection.
+- `location` names the direct slot owner, or the root overlay owner for a
+  pointer preview.
+
+Use `entry.itemId` as the framework key. For a ghost entry it is already the
+generated `ghostItemId`; do not append `"ghost"` to an application ID or key by
+array index.
+
+Only `source-spacer`, `target-spacer`, and `pointer-preview` carry a `rect`.
+An `insertion-marker` instead carries its canonical `gap` and marker-specific
+context because marker thickness and insets are presentation, not targeting.
+An insertion neighbor may itself be a nested `Container`, because every
+Container is also an Item.
+
+## Explicit Lifecycle Callbacks
+
+All three structural callbacks are configured on the independent root and run
+synchronously inside its adapter commit:
+
+- `onGhostInsert` reports absent → present with `ghost`, `to`, and
+  `beforeElement`.
+- `onGhostMove` reports present → changed with `ghost`, `from`, `to`, and
+  `beforeElement`.
+- `onGhostRemove` reports present → absent with `ghost` and `from`.
+
+The callbacks remain separate because SnapSort owns all three transitions.
+They may still delegate to one function because `reduceRenderTree` understands
+the complete `GhostLifecycleEvent` union.
+
+```svelte framework=Svelte
+<script lang="ts">
+  import {
+    reduceRenderTree,
+    type ContainerCallbacks,
+    type GhostLifecycleEvent,
+  } from "@snap-engine/snapsort";
+  import { Ghost, Item } from "@snap-engine/snapsort/svelte";
+
+  function applyGhostEvent(event: GhostLifecycleEvent) {
+    tree = reduceRenderTree(tree, event);
+  }
+
+  const callbacks = {
+    onGhostInsert: applyGhostEvent,
+    onGhostMove: applyGhostEvent,
+    onGhostRemove: applyGhostEvent,
+  } satisfies ContainerCallbacks;
+</script>
+
+{#each tree.entries as entry (entry.itemId)}
+  {#if entry.isGhost}
+    <Ghost ghost={entry.ghost} />
+  {:else}
+    <Item itemId={entry.itemId}>{entry.value.label}</Item>
+  {/if}
+{/each}
+```
+
+```tsx framework=React
+import { useCallback, useMemo } from "react";
+import { Ghost, Item } from "@snap-engine/snapsort/react";
+import {
+  reduceRenderTree,
+  type ContainerCallbacks,
+  type GhostLifecycleEvent,
+} from "@snap-engine/snapsort";
+
+const applyGhostEvent = useCallback((event: GhostLifecycleEvent) => {
+  setTree((current) => reduceRenderTree(current, event));
+}, []);
+
+const callbacks = useMemo(
+  () =>
+    ({
+      onGhostInsert: applyGhostEvent,
+      onGhostMove: applyGhostEvent,
+      onGhostRemove: applyGhostEvent,
+    }) satisfies ContainerCallbacks,
+  [applyGhostEvent],
+);
+
+const children = tree.entries.map((entry) =>
+  entry.isGhost ? (
+    <Ghost key={entry.itemId} ghost={entry.ghost} />
+  ) : (
+    <Item key={entry.itemId} itemId={entry.itemId}>
+      {entry.value.label}
+    </Item>
+  ),
+);
+```
+
+`onGhostMove` is not a pointer-move stream. A mounted `pointer-preview` follows
+continuous pointer motion directly; its lifecycle callbacks report insertion
+and removal. Move events report structural relocation or changed marker
+presentation.
+
+`GhostCreateEvent` is also separate from these callbacks. It is supplied only
+to the Vanilla adapter's `createGhostElement` customization hook.
+
+## Rendering an Insertion Marker
+
+SnapSort chooses the canonical gap. The renderer chooses a visible rectangle
+with three explicit values:
+
+```svelte framework=Svelte
+<Ghost
+  ghost={entry.ghost}
+  insertionMarker={{ thickness: 4, startInset: 8, endInset: 8 }}
+/>
+```
+
+```tsx framework=React
+import type { InsertionMarkerRectOptions } from "@snap-engine/snapsort";
+
+const markerOptions = {
+  thickness: 4,
+  startInset: 8,
+  endInset: 8,
+} satisfies InsertionMarkerRectOptions;
+
+<Ghost ghost={entry.ghost} insertionMarker={markerOptions} />;
+```
+
+`startInset` means left for a horizontal gap and top for a vertical gap;
+`endInset` means right or bottom. The values change only painting. They never
+feed back into candidate ranking.
+
+A custom renderer or adapter can use the same pure helper:
+
+```ts
+import { insertionMarkerRect } from "@snap-engine/snapsort";
+
+const rect = insertionMarkerRect(marker, {
+  thickness: 4,
+  startInset: 8,
+  endInset: 8,
+});
+```
+
+The returned rectangle is relative to the marker's owning Container and ready
+for absolute positioning. For the three rect-bearing ghost states, use
+`toContainerLocalRect(ghost.rect, ghost.location.container)` to perform the
+same world-to-container projection. The first-party `Ghost` components already
+apply the appropriate helper for each state.
+
+## Vanilla Rendering
+
+The Vanilla adapter owns structural DOM changes. Its creation hook sees the
+same `GhostState`, while marker presentation remains explicit:
+
+```ts framework=Vanilla
+const adapter = createVanillaAdapter({
+  insertionMarker: { thickness: 4, startInset: 8, endInset: 8 },
+  createGhostElement(event) {
+    const element = document.createElement("div");
+    element.dataset.ghostType = event.ghost.type;
+    return element;
+  },
+});
+```
+
+Framework callbacks must update framework state instead. Do not call
+`insertBefore`, `appendChild`, `remove`, or another structural DOM API for
+Svelte- or React-rendered ghosts.
+
+## Cleanup Rules
+
+- A normal drop removes every placement and pointer ghost before committing
+  the persistent Item move or swap.
+- Cancellation removes temporary ghosts, restores dragged Items, and does not
+  emit `onItemMove` or `onItemSwap`.
+- Losing all eligible candidates removes target feedback immediately; a source
+  spacer or pointer preview may remain until the session ends.
+- When a spacer role is present, multi-item drags create one anchor per
+  represented Item, while a pointer preview represents the complete run.
+- One `RenderTree` belongs to one independent root. Never reduce a ghost event
+  from another root into it.
+
+Continue with
+[Commit and Cleanup](/docs/snapsort/guides/sessions/commit-and-cleanup) for the
+persistent mutation and teardown that follow this temporary render state.

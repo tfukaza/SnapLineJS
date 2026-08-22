@@ -1,0 +1,83 @@
+---
+title: Complete Interfaces
+order: 3
+parent: snapsort/examples
+project: snapsort
+projectTitle: SnapSort
+section: guides
+sectionTitle: Guides
+sectionOrder: 2
+---
+
+<script>
+  import CompleteExample from "$lib/components/docs/CompleteExample.svelte";
+</script>
+
+These complete interfaces combine SnapSort primitives with application-owned
+state and product-specific interactions. Each example includes the complete
+**Svelte source** for that interface.
+
+## TODO List
+
+Reorder a daily checklist by its handles without losing checkbox state. This
+keeps form interaction separate from the Item's drag input.
+
+<CompleteExample kind="todo-list" />
+
+## Kanban Board
+
+Move cards between three linked columns beneath one root Container. The root
+handles structural updates while each nested column remains a direct drop
+destination.
+
+<CompleteExample kind="kanban-board" />
+
+## Sentence Builder
+
+Compose a translation from movable word tiles. Progressive placement and
+custom ghost content show where each tile will settle, and the application
+renders the result of checking the completed sentence.
+
+<CompleteExample kind="sentence-builder" />
+
+## File Explorer
+
+Reorder files and folders in an insertion-mode tree. Physically inset nested
+Containers give their narrower gap candidates distinct centers, allowing the
+pointer to choose whether to insert inside or outside a folder.
+
+<CompleteExample kind="file-explorer" />
+
+## Clone Palette
+
+Drag a block from a palette to a canvas while keeping the palette stocked. The
+interface combines an ordinary move, application-owned source backfill, and a
+`preview` drag visual.
+
+<CompleteExample kind="clone-palette" />
+
+## Trash It
+
+Drop tasks on a dedicated target to delete them while other destinations still
+reorder normally. The root's `onDropTargetChange` inspects the prospective
+target's metadata and sets `dropEffect` to `"none"` over trash; application
+code deletes every dragged record only when `onDragEnd` reports trash as the
+final destination.
+
+<CompleteExample kind="trash-it" />
+
+## Swap Grid
+
+Drag one tile over another to exchange their positions while every other tile
+stays put. This interface uses `mode: "swap"` and application-owned hover
+styling.
+
+<CompleteExample kind="swap-grid" />
+
+## Form Editor
+
+Click a field type to add it to a sortable form, edit the live result, and
+reorder nested option lists independently. Context boundaries keep multiple
+SnapSort roots from accidentally joining one drag tree.
+
+<CompleteExample kind="form-editor" />

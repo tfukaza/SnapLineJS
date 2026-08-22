@@ -20,6 +20,7 @@
 		"@sveltejs/adapter-auto": "^6.0.0",
 		"@sveltejs/kit": "^2.16.0",
 		"@sveltejs/vite-plugin-svelte": "^5.0.0",
+		"github-slugger": "^2.0.0",
 		"mdsvex": "^0.12.6",
 		"sass": "npm:sass-embedded@^1.89.2",
 		"shiki": "^3.21.0",

@@ -1,0 +1,82 @@
+---
+title: Placement Modes
+order: 1
+project: snapsort
+projectTitle: SnapSort
+section: guides
+sectionTitle: Guides
+sectionOrder: 2
+---
+
+<script>
+  import EuclideanPlacementDemo from "$lib/components/docs/placement-modes/EuclideanPlacementDemo.svelte";
+  import InsertionPlacementDemo from "$lib/components/docs/placement-modes/InsertionPlacementDemo.svelte";
+  import ProgressivePlacementDemo from "$lib/components/docs/placement-modes/ProgressivePlacementDemo.svelte";
+  import SwapPlacementDemo from "$lib/components/docs/placement-modes/SwapPlacementDemo.svelte";
+</script>
+
+SnapSort offers several **placement modes**, or simply **modes**,
+which alter how the items and ghosts behave while they are dragged.
+
+## Euclidean
+
+Euclidean is the default mode (`mode: "euclidean"`, or omit `mode`). It
+implements a nearest-neighbor algorithm that tries to place an item
+at a location that is geometrically closest to where the pointer is
+currently positioned.
+
+<EuclideanPlacementDemo />
+
+Euclidean placement is arguably the simplest and most intuitive,
+making it suitable for common layouts such as kanban boards,
+vertical lists, etc.
+
+## Insertion
+
+Insertion placement (`mode: "insertion"`) uses a special ghost that
+levitates over the gap where the item will be inserted into.
+The original items remain in their original positions until the drop commits.
+
+<InsertionPlacementDemo />
+
+Insertion mode has relatively less visual clutter during drag,
+so it is ideal for large lists or lists with deep level of nested containers,
+like a file explorer.
+
+## Swap
+
+Swap placement (`mode: "swap"`) keeps the dragged item in its original
+position while a ghost follows the pointer. The item is placed over whatever
+other item the pointer was hovering over when it was let go.
+
+<SwapPlacementDemo />
+
+In some sense, you can say swap is a hybrid between euclidean and insertion modes.
+It's ideal for large grid-like layouts where a ghost following the pointer
+in real-time may produce too much visual noise.
+
+## Progressive
+
+Progressive placement (`mode: "progressive"`) is designed for layouts
+that "progress" from top left to bottom right.
+
+<div class="placement-mode-comparison">
+  <div>
+    <p class="placement-mode-comparison-label">Progressive</p>
+    <ProgressivePlacementDemo />
+  </div>
+  <div>
+    <p class="placement-mode-comparison-label">Euclidean</p>
+    <EuclideanPlacementDemo comparison compact />
+  </div>
+</div>
+
+Compare the two demos above. The difference is most noticeable if you take an
+item from the top row and move it around near the bottom right of the second row.
+In the euclidean version, the item and its ghost can jump back to the top row, because
+mathematically speaking that is the closest position.
+Meanwhile in progressive mode, once an item is placed near the second row,
+it only places items in the second row.
+
+In case you haven't caught on by now, this mode is perfect for recreating
+the [menacing green owl app](https://en.wikipedia.org/wiki/Duolingo).

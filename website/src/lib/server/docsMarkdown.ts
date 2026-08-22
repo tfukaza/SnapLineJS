@@ -1,4 +1,9 @@
-import { entries, findDocEntry, type DocEntry } from "$lib/docsCatalog";
+import {
+  docSlugFromPath,
+  entries,
+  findDocEntry,
+  type DocEntry,
+} from "$lib/docsCatalog";
 import {
   frameworkLabels,
   frameworks,
@@ -6,9 +11,7 @@ import {
   type Framework,
 } from "$lib/frameworks";
 import { absoluteUrl } from "$lib/seo";
-import { containerIntroExampleSources } from "$lib/components/docs/containerIntroExampleSources";
-import { containerPropertyExampleSources } from "$lib/components/docs/containerPropertyExampleSources";
-import { itemExampleSources } from "$lib/components/docs/itemExampleSources";
+import { findSnapSortExampleSource } from "$lib/server/snapsortExampleSources";
 
 type MarkdownSegment = {
   kind: "text" | "code";
@@ -27,22 +30,18 @@ export type RenderedMarkdownDoc = {
   markdown: string;
 };
 
-const rawModules = import.meta.glob("@docs/**/*.{md,mdx}", {
+const rawModules = import.meta.glob<string>("@docs/**/*.{md,mdx}", {
   eager: true,
   import: "default",
   query: "?raw",
-}) as Record<string, string>;
+});
 
 const rawDocs = Object.entries(rawModules)
   .map(([path, source]): RawDocSource | null => {
-    const match = path.match(/docs\/(.*)\.(md|mdx)$/);
-    if (!match) return null;
-
-    const sourceSlug = match[1];
+    const slug = docSlugFromPath(path);
+    if (!slug) return null;
     return {
-      slug: sourceSlug.endsWith("/index")
-        ? sourceSlug.slice(0, -6)
-        : sourceSlug,
+      slug,
       source,
     };
   })
@@ -61,10 +60,14 @@ function stripFrontmatter(source: string): string {
   return end === -1 ? normalized : lines.slice(end + 1).join("\n");
 }
 
+function normalizeFramework(value: string | null): Framework | null {
+  const normalized = value?.toLowerCase() ?? null;
+  return isFramework(normalized) ? normalized : null;
+}
+
 function frameworkFromInfo(info: string): Framework | null {
   const match = info.match(frameworkPattern);
-  const value = match?.[1] ?? match?.[2] ?? match?.[3] ?? null;
-  return isFramework(value) ? (value.toLowerCase() as Framework) : null;
+  return normalizeFramework(match?.[1] ?? match?.[2] ?? match?.[3] ?? null);
 }
 
 function cleanFenceInfo(info: string): string {
@@ -170,28 +173,36 @@ function cleanTextSegment(
   cleaned = cleaned.replace(/^\s*<script\b[^>]*>[\s\S]*?<\/script>\s*$/gim, "");
 
   cleaned = cleaned.replace(
-    /^\s*<(ContainerIntroExample|ContainerPropertyExample|ItemExample)\s+kind=(?:"([^"]+)"|'([^']+)')\s*\/>\s*$/gm,
+    /^\s*<(ContainerIntroExample|ContainerPropertyExample|ItemExample|CompleteExample)\s+(kind|id)=(?:"([^"]+)"|'([^']+)')\s*\/>\s*$/gm,
     (
       match,
-      componentName:
-        | "ContainerIntroExample"
-        | "ContainerPropertyExample"
-        | "ItemExample",
-      doubleQuotedKind: string,
-      singleQuotedKind: string,
+      componentName: string,
+      attributeName: string,
+      doubleQuotedReference: string,
+      singleQuotedReference: string,
     ) => {
-      const kind = doubleQuotedKind ?? singleQuotedKind;
-      const sources: Record<string, string> =
-        componentName === "ContainerIntroExample"
-          ? containerIntroExampleSources
-          : componentName === "ContainerPropertyExample"
-            ? containerPropertyExampleSources
-            : itemExampleSources;
-      const source = sources[kind];
-      if (!source) return match;
+      const reference = doubleQuotedReference ?? singleQuotedReference;
+      const sourceId =
+        componentName === "ContainerIntroExample" && attributeName === "kind"
+          ? `container-intro-${reference}`
+          : componentName === "ContainerPropertyExample" &&
+              attributeName === "kind"
+            ? `container-property-${reference}`
+            : componentName === "ItemExample" && attributeName === "kind"
+              ? `item-example-${reference}`
+              : componentName === "CompleteExample"
+                ? reference
+                : null;
+      if (!sourceId) return match;
+
+      const example = findSnapSortExampleSource(sourceId);
+      if (!example) return match;
+
       removedInteractiveContent = true;
       const token = `\u0000INTERACTIVE_EXAMPLE_${interactiveExamples.length}\u0000`;
-      interactiveExamples.push(`\`\`\`svelte\n${source.trimEnd()}\n\`\`\``);
+      interactiveExamples.push(
+        `\`\`\`${example.language}\n${example.code.trimEnd()}\n\`\`\``,
+      );
       return token;
     },
   );
@@ -268,9 +279,7 @@ export function renderMarkdownDoc(
   let entry = findDocEntry(slug);
   if (!entry) return null;
 
-  const pathFramework = isFramework(entry.framework)
-    ? (entry.framework.toLowerCase() as Framework)
-    : null;
+  const pathFramework = normalizeFramework(entry.framework);
   const selectedFramework = requestedFramework ?? pathFramework ?? "svelte";
   const pairedEntry = requestedFramework
     ? pairedFrameworkEntry(entry, requestedFramework)

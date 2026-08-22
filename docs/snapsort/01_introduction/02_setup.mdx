@@ -1,0 +1,194 @@
+---
+title: Quickstart
+order: 1
+project: snapsort
+projectTitle: SnapSort
+section: introduction
+sectionTitle: Introduction
+sectionOrder: 1
+---
+
+## Install
+
+SnapSort is published on npm and supports npm, pnpm, Yarn, and Bun. This
+quickstart uses Asset Base's `Engine`, so install both packages with your
+package manager:
+
+```bash title="npm"
+npm install @snap-engine/snapsort @snap-engine/asset-base
+```
+
+```bash title="pnpm"
+pnpm add @snap-engine/snapsort @snap-engine/asset-base
+```
+
+```bash title="Yarn"
+yarn add @snap-engine/snapsort @snap-engine/asset-base
+```
+
+```bash title="Bun"
+bun add @snap-engine/snapsort @snap-engine/asset-base
+```
+
+## Your First Sortable List
+
+Wrap SnapSort components in an `Engine`, configure the collection callback,
+and render one `Item` per entry. This creates a working drag-and-drop list:
+
+```svelte framework=Svelte
+<script lang="ts">
+  // Import SnapEngine which SnapSort is built on top of.
+  import { Engine } from "@snap-engine/asset-base/svelte";
+  // Import the components.
+  import { Container, Ghost, Item } from "@snap-engine/snapsort/svelte";
+  // Import types and helpers to manage the items being dragged.
+  import {
+    createRenderEntries,
+    createRenderTree,
+    reduceRenderTree,
+    type ContainerCallbacks,
+    type GhostLifecycleEvent,
+    type ItemMoveEvent,
+  } from "@snap-engine/snapsort";
+
+  // Define a type for the JSON data representing each item.
+  type Task = { id: string; label: string };
+
+  // Build the data structure representing the initial list.
+  // Use $state.raw to prevent the framework from re-rendering
+  // the UI repeatedly as the helper functions mutate nested structures.
+  let list = $state.raw(
+    createRenderTree(
+      createRenderEntries<Task>(
+        [
+          { id: "design", label: "Design" },
+          { id: "build", label: "Build" },
+          { id: "ship", label: "Ship" },
+        ],
+        (task) => task.id,
+      ),
+    ),
+  );
+
+  // Hook up the helper to update the list state.
+  // Advanced users may define their own callbacks.
+  function onItemMove(event: ItemMoveEvent) {
+    list = reduceRenderTree(list, event);
+  }
+
+  function onGhostMove(event: GhostLifecycleEvent) {
+    list = reduceRenderTree(list, event);
+  }
+
+  const callbacks = {
+    onItemMove,
+    onGhostInsert: onGhostMove,
+    onGhostMove,
+    onGhostRemove: onGhostMove,
+  } satisfies ContainerCallbacks;
+</script>
+
+<Engine id="quick-start">
+  <Container itemId="quick-start-root" config={{ callbacks }}>
+    {#each list.entries as entry (entry.itemId)}
+      {#if entry.isGhost}
+        <Ghost ghost={entry.ghost} />
+      {:else}
+        <Item itemId={entry.itemId}>{entry.value.label}</Item>
+      {/if}
+    {/each}
+  </Container>
+</Engine>
+```
+
+```tsx framework=React
+import { useCallback, useState } from "react";
+// Import the components.
+import { Container, Engine, Ghost, Item } from "@snap-engine/snapsort/react";
+// Import types and helpers to manage the items being dragged.
+import {
+  createRenderEntries,
+  createRenderTree,
+  reduceRenderTree,
+} from "@snap-engine/snapsort";
+import type { GhostLifecycleEvent, ItemMoveEvent } from "@snap-engine/snapsort";
+
+// Define a type for the JSON data representing each item.
+type Task = { id: string; label: string };
+
+// Build the data structure representing the initial list.
+function createInitialList() {
+  return createRenderTree(
+    createRenderEntries<Task>(
+      [
+        { id: "design", label: "Design" },
+        { id: "build", label: "Build" },
+        { id: "ship", label: "Ship" },
+      ],
+      (task) => task.id,
+    ),
+  );
+}
+
+export function QuickStart() {
+  const [list, setList] = useState(createInitialList);
+  // Hook up the helper to update the list state.
+  // Advanced users may define their own callbacks.
+  const onItemMove = useCallback((event: ItemMoveEvent) => {
+    setList((current) => reduceRenderTree(current, event));
+  }, []);
+  const onGhostMove = useCallback((event: GhostLifecycleEvent) => {
+    setList((current) => reduceRenderTree(current, event));
+  }, []);
+
+  return (
+    <Engine id="quick-start">
+      <Container
+        itemId="quick-start-root"
+        config={{
+          callbacks: {
+            onItemMove,
+            onGhostInsert: onGhostMove,
+            onGhostMove,
+            onGhostRemove: onGhostMove,
+          },
+        }}
+      >
+        {list.entries.map((entry) =>
+          entry.isGhost ? (
+            <Ghost key={entry.itemId} ghost={entry.ghost} />
+          ) : (
+            <Item key={entry.itemId} itemId={entry.itemId}>
+              {entry.value.label}
+            </Item>
+          ),
+        )}
+      </Container>
+    </Engine>
+  );
+}
+```
+
+```javascript framework=Vanilla
+// Initialize the engine and container.
+import { Engine } from "@snap-engine/core";
+import { CollisionEngine } from "@snap-engine/core/collision";
+import { Container, Item } from "@snap-engine/snapsort";
+
+const root = document.querySelector("#quick-start");
+const list = root.querySelector("[data-snapsort-container]");
+const engine = new Engine();
+
+engine.setCollisionEngine(new CollisionEngine());
+engine.assignDom(root);
+
+const container = new Container(engine, null, { itemId: "quick-start-root" });
+container.element = list;
+
+// Assume metadata for each item is defined in the data attributes.
+for (const element of list.querySelectorAll("[data-item-id]")) {
+  const itemId = element.dataset.itemId;
+  const item = new Item(engine, container, { itemId });
+  item.element = element;
+}
+```

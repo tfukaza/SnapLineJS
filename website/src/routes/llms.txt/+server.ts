@@ -21,7 +21,9 @@ export const GET: RequestHandler = () => {
   ];
 
   for (const project of projects) {
-    const projectEntries = entries().filter((entry) => entry.project === project);
+    const projectEntries = entries().filter(
+      (entry) => entry.project === project,
+    );
     const title = projectEntries[0]?.projectTitle ?? project;
     lines.push(
       `- [${title}](${absoluteUrl(`/docs/${project}/llms.txt`)}): ${projectDescriptions[project]}`,
@@ -35,7 +37,7 @@ export const GET: RequestHandler = () => {
     `- [Home](${absoluteUrl("/")}): product family overview and shared-engine explanation.`,
     `- [About](${absoluteUrl("/about")}): why SnapEngine exists.`,
     `- [SnapSort](${absoluteUrl("/snapsort")}): drag-and-drop primitives powered by SnapEngine Core.`,
-    `- [Gallery](${absoluteUrl("/snapsort/gallery")}): eight complete interactive examples.`,
+    `- [SnapSort examples](${absoluteUrl("/docs/snapsort/examples")}): focused recipes and complete interactive interfaces.`,
   );
 
   return new Response(`${lines.join("\n")}\n`, {

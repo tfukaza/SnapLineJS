@@ -439,14 +439,14 @@
                 </div>
                 <div class="gallery-copy-panel">
                   <div class="closing-copy">
-                    <h3>Explore the gallery</h3>
+                    <h3>Explore examples</h3>
                     <p>
                       File trees, form builders, sentence puzzles, and more —
                       complete interactive demos built with SnapSort.
                     </p>
                   </div>
-                  <a class="button closing-button" href="/snapsort/gallery">
-                    Browse the gallery
+                  <a class="button closing-button" href="/docs/snapsort/examples">
+                    Browse examples
                   </a>
                 </div>
               </div>

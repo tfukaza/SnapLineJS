@@ -78,8 +78,8 @@
     >
       Read SnapSort docs
     </a>
-    <a class="button get-started-action" href="/snapsort/gallery">
-      View Gallery
+    <a class="button get-started-action" href="/docs/snapsort/examples">
+      View examples
     </a>
   </div>
 </section>

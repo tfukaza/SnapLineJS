@@ -1,61 +1,38 @@
 
 <script lang="ts">
 	import "./doc.scss";
+	import { page } from "$app/stores";
 	import { onMount } from "svelte";
+	import ArticleOutline from "$lib/components/docs/ArticleOutline.svelte";
 	import FrameworkSelect from "$lib/components/FrameworkSelect.svelte";
 	import SeoHead from "$lib/components/SeoHead.svelte";
 	import {
+		docNavigationNodeContains,
+		entries,
+		findDocProject,
+		getDocNavigation,
+		getProjectEntries,
+		type DocNavigationNode
+	} from "$lib/docsCatalog";
+	import {
 		initializeFrameworkPreference,
+		isFramework,
 		selectedFramework,
 		setSelectedFramework,
 		type Framework
 	} from "$lib/stores/frameworkState.svelte";
 	let { data } = $props();
 
-	// Import the grouped entries function from +page.ts for sidebar
-	import { _getGroupedEntries, entries } from './+page.js';
-	import { docProjects, findDocProject } from '$lib/docsCatalog';
-	const docSections = _getGroupedEntries();
 	const allEntries = entries();
-	const projectOptions = docProjects.map((project) => ({
-		slug: project.slug,
-		label: project.title,
-		href: project.href
-	}));
 
-	// Compute breadcrumbs from $page.params.slug
-	import { page } from '$app/stores';
-	const slugParts = $derived($page.params.slug ? $page.params.slug.split('/') : []);
-	// Strip leading two-digit number prefix (e.g., "01_intro" -> "intro")
-	const formatBreadcrumb = (part: string, index: number) => {
-		if (index === 0) {
-			return projectOptions.find((project) => project.slug === part)?.label ?? part;
-		}
-
-		const stripped = part.replace(/^\d{2}_/, '');
-		return stripped.charAt(0).toUpperCase() + stripped.slice(1).replace(/_/g, ' ');
-	};
-	const breadcrumbs = $derived([
-		{ name: 'Docs', href: '/docs' },
-		...slugParts.map((part, i) => ({
-			name: formatBreadcrumb(part, i),
-			href:
-				i === 0
-					? (projectOptions.find((project) => project.slug === part)?.href ??
-						'/docs/' + slugParts.slice(0, i + 1).join('/'))
-					: '/docs/' + slugParts.slice(0, i + 1).join('/')
-		}))
-	]);
-
-	// Compute prev/next navigation
-	const currentSlug = $derived($page.params.slug || '');
-	const isDocsHome = $derived(slugParts.length === 0);
-	const currentProject = $derived(slugParts[0] || '');
+	const currentSlug = $derived($page.params.slug || "");
+	const isDocsHome = $derived(currentSlug.length === 0);
+	const currentProject = $derived(currentSlug.split("/")[0] ?? "");
 	const currentProjectConfig = $derived(findDocProject(currentProject));
-	const currentProjectTitle = $derived(currentProjectConfig?.title ?? 'SnapEngine');
+	const currentProjectTitle = $derived(currentProjectConfig?.title ?? "SnapEngine");
 	const showFrameworkSelect = $derived((currentProjectConfig?.frameworks.length ?? 0) > 1);
 	const docDescription = $derived(
-		currentProjectConfig?.description ?? 'SnapEngine documentation.'
+		currentProjectConfig?.description ?? "SnapEngine documentation."
 	);
 	const docTitle = $derived(
 		isDocsHome
@@ -64,27 +41,53 @@
 				? `${data.metadata.title} | ${currentProjectTitle} Docs`
 				: `${currentProjectTitle} Docs`
 	);
-	const visibleDocSections = $derived(
-		docSections
-			.filter((section) => section.project === currentProject)
-			.map((section) => ({
-				...section,
-				entries: section.entries.filter(
-					(entry) => !entry.framework || entry.framework === $selectedFramework
-				)
-			}))
-			.filter((section) => section.entries.length > 0)
+	const visibleDocNavigation = $derived(
+		getDocNavigation(currentProject, $selectedFramework)
 	);
 	const currentProjectEntries = $derived(
-		allEntries.filter(
-			(entry) =>
-				entry.project === currentProject &&
-				(!entry.framework || entry.framework === $selectedFramework)
-		)
+		getProjectEntries(currentProject, $selectedFramework)
 	);
-	const currentIndex = $derived(currentProjectEntries.findIndex(e => e.slug === currentSlug));
+	const currentIndex = $derived(
+		currentProjectEntries.findIndex((entry) => entry.slug === currentSlug)
+	);
 	const prevEntry = $derived(currentIndex > 0 ? currentProjectEntries[currentIndex - 1] : null);
-	const nextEntry = $derived(currentIndex < currentProjectEntries.length - 1 ? currentProjectEntries[currentIndex + 1] : null);
+	const nextEntry = $derived(
+		currentIndex >= 0 && currentIndex < currentProjectEntries.length - 1
+			? currentProjectEntries[currentIndex + 1]
+			: null
+	);
+	const articleHeadings = $derived(data.metadata?.headings ?? []);
+	const breadcrumbs = $derived.by(() => {
+		if (isDocsHome || !data.docEntry) {
+			return [{ name: "Docs", href: null, current: true }];
+		}
+
+		const project = findDocProject(data.docEntry.project);
+		const projectHref = project?.href ?? `/docs/${data.docEntry.project}`;
+		const projectSlug = projectHref.replace(/^\/docs\//, "");
+		if (data.docEntry.slug === projectSlug) {
+			return [
+				{ name: "Docs", href: "/docs", current: false },
+				{ name: project?.title ?? data.docEntry.projectTitle, href: null, current: true }
+			];
+		}
+
+		return [
+			{ name: "Docs", href: "/docs", current: false },
+			{
+				name: project?.title ?? data.docEntry.projectTitle,
+				href: projectHref,
+				current: false
+			},
+			{ name: data.docEntry.sectionTitle, href: null, current: false },
+			...data.docAncestors.map((ancestor) => ({
+				name: ancestor.title,
+				href: `/docs/${ancestor.slug}`,
+				current: false
+			})),
+			{ name: data.docEntry.title, href: null, current: true }
+		];
+	});
 
 	function handleFrameworkChange(framework: Framework) {
 		const currentEntry = allEntries.find((entry) => entry.slug === currentSlug);
@@ -109,11 +112,33 @@
 		initializeFrameworkPreference(window.location.search);
 
 		const currentEntry = allEntries.find((entry) => entry.slug === currentSlug);
-		if (currentEntry?.framework) {
-			setSelectedFramework(currentEntry.framework as Framework, false);
+		const currentEntryFramework = currentEntry?.framework ?? null;
+		if (isFramework(currentEntryFramework)) {
+			setSelectedFramework(currentEntryFramework, false);
 		}
 	});
 </script>
+
+{#snippet desktopDocTree(nodes: DocNavigationNode[], depth: number)}
+	<ul class:nested={depth > 0}>
+		{#each nodes as node (node.entry.slug)}
+			<li>
+				<a
+					href={`/docs/${node.entry.slug}`}
+					class:active={node.entry.slug === currentSlug}
+					class:ancestor={node.entry.slug !== currentSlug &&
+						docNavigationNodeContains(node, currentSlug)}
+					aria-current={node.entry.slug === currentSlug ? "page" : undefined}
+				>
+					{node.entry.title}
+				</a>
+				{#if node.children.length > 0}
+					{@render desktopDocTree(node.children, depth + 1)}
+				{/if}
+			</li>
+		{/each}
+	</ul>
+{/snippet}
 
 <SeoHead
 	title={docTitle}
@@ -123,10 +148,14 @@
 	noIndex={currentProject === 'snapline'}
 />
 
-<div class="doc-layout" class:docs-home={isDocsHome}>
+<div
+	class="doc-layout"
+	class:docs-home={isDocsHome}
+	class:has-article-outline={articleHeadings.length > 0}
+>
 	{#if !isDocsHome}
 		<aside class="doc-sidebar">
-			<h2 class="doc-sidebar-project">{currentProjectTitle}</h2>
+			<p class="doc-sidebar-project">{currentProjectTitle}</p>
 			{#if showFrameworkSelect}
 				<FrameworkSelect
 					id="desktop-doc-framework"
@@ -135,24 +164,12 @@
 				/>
 			{/if}
 			<nav aria-label="Documentation">
-				{#each visibleDocSections as section}
+				{#each visibleDocNavigation?.sections ?? [] as section}
 					<div class="sidebar-section">
 						{#if section.name}
 							<p class="section-title">{section.title}</p>
 						{/if}
-						<ul>
-							{#each section.entries as entry}
-								<li>
-									<a
-										href={entry.slug ? `/docs/${entry.slug}` : '/docs'}
-										class:active={(entry.slug || '') === currentSlug}
-										aria-current={(entry.slug || '') === currentSlug ? 'page' : undefined}
-									>
-										{entry.title}
-									</a>
-								</li>
-							{/each}
-						</ul>
+						{@render desktopDocTree(section.nodes, 0)}
 					</div>
 				{/each}
 			</nav>
@@ -161,10 +178,12 @@
 	<div class="doc-content">
 		<nav class="doc-breadcrumb" aria-label="Breadcrumb">
 			{#each breadcrumbs as crumb, i}
-				{#if i > 0} <span class="breadcrumb-sep">/</span> {/if}
-				<a href={crumb.href} aria-current={i === breadcrumbs.length - 1 ? 'page' : undefined}>
-					{crumb.name}
-				</a>
+				{#if i > 0} <span class="breadcrumb-sep" aria-hidden="true">/</span> {/if}
+				{#if crumb.href}
+					<a href={crumb.href}>{crumb.name}</a>
+				{:else}
+					<span aria-current={crumb.current ? "page" : undefined}>{crumb.name}</span>
+				{/if}
 			{/each}
 		</nav>
 		<div class="doc-header">
@@ -173,6 +192,7 @@
 					<h1>{data.metadata.title}</h1>
 				{/if}
 			{/if}
+			<ArticleOutline headings={articleHeadings} variant="inline" />
 		</div>
 		<article class="doc-article" data-framework={$selectedFramework}>
 			<data.component />
@@ -197,6 +217,7 @@
 			{/if}
 		</nav>
 	</div>
+	<ArticleOutline headings={articleHeadings} variant="rail" />
 </div>
 
 <style lang="scss">
@@ -217,6 +238,18 @@
 	grid-template-columns: minmax(0, 1fr);
 }
 
+@media (min-width: 1200px) {
+	.doc-layout.has-article-outline:not(.docs-home) {
+		grid-template-columns: minmax(200px, 220px) minmax(0, 1fr) minmax(170px, 190px);
+		gap: clamp(var(--size-16), 1.5vw, var(--size-24));
+	}
+
+	.doc-layout.docs-home.has-article-outline {
+		grid-template-columns: minmax(0, 1fr) minmax(170px, 190px);
+		gap: clamp(var(--size-16), 1.5vw, var(--size-24));
+	}
+}
+
 .doc-sidebar {
 	position: sticky;
 	top: var(--size-32);
@@ -225,6 +258,7 @@
 	overflow-y: auto;
 	padding: var(--size-24);
 	scrollbar-width: thin;
+	box-sizing: border-box;
 
 	.sidebar-section {
 		margin-bottom: var(--size-24);
@@ -238,6 +272,10 @@
 		list-style: none;
 		padding: 0;
 		margin: 0;
+
+		&.nested {
+			padding-left: var(--size-12);
+		}
 	}
 
 	li {
@@ -267,6 +305,11 @@
 		&.active {
 			color: var(--color-action);
 			font-weight: 600;
+		}
+
+		&.ancestor {
+			color: var(--color-background-dark);
+			font-weight: 500;
 		}
 	}
 }

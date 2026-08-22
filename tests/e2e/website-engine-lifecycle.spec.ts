@@ -35,8 +35,10 @@ test("marker ghost callbacks do not emit flow-mode warnings", async ({
     }
   });
 
-  await page.goto("/snapsort/gallery");
-  await expect(page.locator("#swap-grid .swap-grid")).toBeVisible();
+  await page.goto("/docs/snapsort/examples/complete-interfaces");
+  await expect(
+    page.locator('[data-snapsort-example="swap-grid"] .swap-grid'),
+  ).toBeVisible();
 
   expect(ghostWarnings).toEqual([]);
 });

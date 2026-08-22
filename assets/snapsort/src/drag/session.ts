@@ -49,6 +49,12 @@ export interface DragSession {
   readonly status: DragSessionStatus;
   dragVisual: DragVisual;
   dropEffect: DropEffect;
+  /**
+   * @deprecated This escape hatch predates the recommended move-and-backfill
+   * copying recipe. SnapSort retains it temporarily for compatibility, but it
+   * has no supported first-party use case and may be removed in a future
+   * release.
+   */
   handoff(replacements: readonly Item[]): void;
 }
 
