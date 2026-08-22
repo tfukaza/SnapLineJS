@@ -6,11 +6,7 @@
   import SnapButton from "$lib/components/SnapButton.svelte";
   import Slider from "$lib/components/Slider.svelte";
   import Toggle from "$lib/components/Toggle.svelte";
-  import {
-    defaultCreviceFreeMaterialSettings,
-    defaultMaterialSettings,
-    type MaterialSettings,
-  } from "$lib/components/materialSurface";
+  import type { MaterialSettings } from "$lib/components/materialSurface";
 
   type ShowcaseStyle = "existing" | "dev";
   type MaterialTargetId =
@@ -57,14 +53,14 @@
     button: {
       lightAngle: 325,
       ambientBrightness: 0,
-      shadowDistance: 5,
-      shadowBlur: 5,
+      shadowDistance: 6.5,
+      shadowBlur: 6.25,
       shadowStrength: 1,
       specularIntensity: 0.85,
       specularPower: 10,
-      rimWidth: 1.25,
-      rimBlur: 0.3,
-      creviceBrightness: 0.53,
+      rimWidth: 1,
+      rimBlur: 0.1,
+      creviceBrightness: 0.14,
       shadedRim: true,
       creviceOutline: true,
     },
@@ -96,8 +92,34 @@
       shadedRim: true,
       creviceOutline: false,
     },
-    raisedCard: { ...defaultCreviceFreeMaterialSettings },
-    insetSlot: { ...defaultCreviceFreeMaterialSettings },
+    raisedCard: {
+      lightAngle: 325,
+      ambientBrightness: 0.1,
+      shadowDistance: 3.75,
+      shadowBlur: 5.25,
+      shadowStrength: 1,
+      specularIntensity: 0.85,
+      specularPower: 10,
+      rimWidth: 0.5,
+      rimBlur: 0.1,
+      creviceBrightness: 0,
+      shadedRim: true,
+      creviceOutline: false,
+    },
+    insetSlot: {
+      lightAngle: 325,
+      ambientBrightness: 0,
+      shadowDistance: 2.25,
+      shadowBlur: 7.75,
+      shadowStrength: 1,
+      specularIntensity: 0.85,
+      specularPower: 10,
+      rimWidth: 0.5,
+      rimBlur: 0.1,
+      creviceBrightness: 0,
+      shadedRim: true,
+      creviceOutline: false,
+    },
   };
   let materialConfigurations = $state<Record<MaterialTargetId, MaterialSettings>>({
     dial: { ...materialDefaultConfigurations.dial },

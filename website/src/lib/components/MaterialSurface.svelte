@@ -149,6 +149,14 @@
         );
       }
 
+      const roundedNormals = [0, 45, 90, 135, 180, 225, 270, 315] as const;
+      for (const normal of roundedNormals) {
+        node.style.setProperty(
+          `--material-normal-${normal}`,
+          shadedAtNormal(normal, settings, currentState.depth),
+        );
+      }
+
       const sides = [
         ["top", 0],
         ["right", 90],
@@ -206,7 +214,7 @@
     <span class="material-surface-inset-shadow"></span>
   </span>
   <span class="material-rim-overlay" aria-hidden="true">
-    <span class="material-rim material-rim-diffuse"></span>
+    <span class="material-rim material-rim-shading"></span>
     <span class="material-rim material-rim-specular"></span>
   </span>
   <span class="material-crevice" aria-hidden="true"></span>
@@ -224,7 +232,7 @@
     --material-rim-blur: 0.75px;
     --material-rim-overscan: var(--material-rim-width);
     --material-rim-render-width: calc(var(--material-rim-width) + var(--material-rim-width));
-    --material-rim-render-radius: calc(var(--material-radius) + var(--material-rim-overscan));
+    --material-rim-render-radius: var(--material-radius);
     --material-diffuse-dark: hsl(from var(--material-color) h s calc(l - 46) / 0.9);
     --material-diffuse-light: hsl(from var(--material-color) h s calc(l + 12) / 0.9);
     --material-specular-color: #fff;
@@ -237,6 +245,14 @@
     --material-side-right: var(--material-diffuse-dark);
     --material-side-bottom: var(--material-diffuse-dark);
     --material-side-left: var(--material-diffuse-light);
+    --material-normal-0: var(--material-side-top);
+    --material-normal-45: var(--material-diffuse-45);
+    --material-normal-90: var(--material-side-right);
+    --material-normal-135: var(--material-diffuse-135);
+    --material-normal-180: var(--material-side-bottom);
+    --material-normal-225: var(--material-diffuse-135);
+    --material-normal-270: var(--material-side-left);
+    --material-normal-315: var(--material-diffuse-45);
     --material-shadow-far-x: 4px;
     --material-shadow-far-y: 4px;
     --material-shadow-near-x: 2px;
@@ -273,6 +289,16 @@
       var(--material-diffuse-90) 270deg,
       var(--material-diffuse-45) 315deg,
       var(--material-diffuse-0) 360deg;
+    --material-rounded-stops:
+      var(--material-normal-0) 0deg,
+      var(--material-normal-45) 45deg,
+      var(--material-normal-90) 90deg,
+      var(--material-normal-135) 135deg,
+      var(--material-normal-180) 180deg,
+      var(--material-normal-225) 225deg,
+      var(--material-normal-270) 270deg,
+      var(--material-normal-315) 315deg,
+      var(--material-normal-0) 360deg;
     --material-specular-stops:
       transparent 0deg,
       var(--material-specular-shoulder) var(--material-specular-stop-1),
@@ -301,6 +327,7 @@
   }
 
   .material-surface.recessed {
+    --material-rim-render-radius: calc(var(--material-radius) + var(--material-rim-overscan));
     box-shadow: 0 0 2px 0.5px var(--material-ambient-shadow);
   }
 
@@ -377,7 +404,7 @@
     -webkit-mask-composite: xor;
   }
 
-  .circle .material-rim-diffuse {
+  .circle .material-rim-shading {
     background: conic-gradient(from var(--material-light-angle), var(--material-diffuse-stops));
   }
 
@@ -385,12 +412,12 @@
     background: conic-gradient(from var(--material-specular-from), var(--material-specular-stops));
   }
 
-  .rounded .material-rim-diffuse {
+  .rounded .material-rim-shading {
     background-image:
-      conic-gradient(from var(--material-light-angle) at 100% 100%, var(--material-diffuse-stops)),
-      conic-gradient(from var(--material-light-angle) at 0% 100%, var(--material-diffuse-stops)),
-      conic-gradient(from var(--material-light-angle) at 0% 0%, var(--material-diffuse-stops)),
-      conic-gradient(from var(--material-light-angle) at 100% 0%, var(--material-diffuse-stops)),
+      conic-gradient(from 0deg at 100% 100%, var(--material-rounded-stops)),
+      conic-gradient(from 0deg at 0% 100%, var(--material-rounded-stops)),
+      conic-gradient(from 0deg at 0% 0%, var(--material-rounded-stops)),
+      conic-gradient(from 0deg at 100% 0%, var(--material-rounded-stops)),
       linear-gradient(var(--material-side-top), var(--material-side-top)),
       linear-gradient(var(--material-side-right), var(--material-side-right)),
       linear-gradient(var(--material-side-bottom), var(--material-side-bottom)),
@@ -409,18 +436,7 @@
   }
 
   .rounded .material-rim-specular {
-    background-image:
-      conic-gradient(from var(--material-specular-from) at 100% 100%, var(--material-specular-stops)),
-      conic-gradient(from var(--material-specular-from) at 0% 100%, var(--material-specular-stops)),
-      conic-gradient(from var(--material-specular-from) at 0% 0%, var(--material-specular-stops)),
-      conic-gradient(from var(--material-specular-from) at 100% 0%, var(--material-specular-stops));
-    background-position: left top, right top, right bottom, left bottom;
-    background-size:
-      var(--material-rim-render-radius) var(--material-rim-render-radius),
-      var(--material-rim-render-radius) var(--material-rim-render-radius),
-      var(--material-rim-render-radius) var(--material-rim-render-radius),
-      var(--material-rim-render-radius) var(--material-rim-render-radius);
-    background-repeat: no-repeat;
+    display: none;
   }
 
   .material-crevice {
@@ -428,6 +444,10 @@
     box-sizing: border-box;
     border: 1px solid var(--material-crevice-color);
     visibility: var(--material-crevice-visibility);
+  }
+
+  .raised > .material-crevice {
+    z-index: 1;
   }
 
   .recessed .material-crevice {
