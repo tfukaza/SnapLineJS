@@ -40,7 +40,12 @@ interface FlipAnimationState {
   targetElement: HTMLElement | null;
 }
 
+interface MoveAnimationBatch {
+  readonly mutations: Array<() => void>;
+}
+
 const visualAnimationOffsets = new WeakMap<Item, TransformOffset>();
+const moveAnimationBatches = new WeakMap<Container, MoveAnimationBatch>();
 
 export function animationConfigFor(
   container: Container | null,
@@ -440,7 +445,7 @@ function withConfiguredAnimation(
   let snapshot: FlipAnimationState[] | null = null;
   let mutationComplete = false;
   let lastCaptureComplete = false;
-  const queuePrefix = `snapsort-flip-${root.id}`;
+  const queuePrefix = `snapsort-flip-${root.id}-${kind}-${item.id}`;
   root.schedule(
     () => {
       snapshot = captureFlipSnapshot(root, excludedSet);
@@ -480,6 +485,51 @@ function withConfiguredAnimation(
   );
 }
 
+/**
+ * Queue one programmatic tree mutation through a Container's move animation
+ * channel. Mutations with the same Container share one root snapshot and final
+ * FLIP pass. Different Containers schedule independently; because each pass is
+ * root-wide, a later pass may replace animations started by an earlier one.
+ *
+ * @internal
+ */
+export function withMoveAnimation(
+  container: Container,
+  mutate: () => void,
+): void {
+  const existingBatch = moveAnimationBatches.get(container);
+  if (existingBatch) {
+    existingBatch.mutations.push(mutate);
+    return;
+  }
+
+  const batch: MoveAnimationBatch = { mutations: [mutate] };
+  moveAnimationBatches.set(container, batch);
+  const commitBatch = () => {
+    const mutations = batch.mutations.splice(0);
+    moveAnimationBatches.delete(container);
+    let didFail = false;
+    let firstError: unknown;
+    for (const mutation of mutations) {
+      try {
+        mutation();
+      } catch (error) {
+        if (!didFail) {
+          didFail = true;
+          firstError = error;
+        }
+      }
+    }
+    if (didFail) throw firstError;
+  };
+  try {
+    withConfiguredAnimation(container, container, null, "move", commitBatch);
+  } catch (error) {
+    moveAnimationBatches.delete(container);
+    throw error;
+  }
+}
+
 export function withReorderAnimation(
   item: Item,
   container: Container | null,
@@ -487,12 +537,4 @@ export function withReorderAnimation(
   mutate: () => void,
 ): void {
   withConfiguredAnimation(item, container, excludedItem, "reorder", mutate);
-}
-
-export function withMoveAnimation(
-  item: Item,
-  container: Container,
-  mutate: () => void,
-): void {
-  withConfiguredAnimation(item, container, null, "move", mutate);
 }

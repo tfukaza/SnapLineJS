@@ -86,6 +86,7 @@ export class Item extends ElementObject {
   #itemOrderedList: Item[] = [];
   #isGhost = false;
   #ghostState: GhostState | null = null;
+  #programmaticMutationPending = false;
 
   constructor(engine: Engine, parent: Container | null, options: ItemOptions) {
     super(validateItemId(engine, options?.itemId), parent);
@@ -147,7 +148,7 @@ export class Item extends ElementObject {
   /**
    * Remove an item from a container
    * @param itemId Item ID of the item to remove
-   * @returns True if the item was found and removed, false otherwise
+   * @returns True when removal was accepted; false when missing or already pending
    */
   removeItem(itemId: ItemId) {
     const item =
@@ -158,9 +159,15 @@ export class Item extends ElementObject {
         (item): item is Item =>
           item instanceof Item && !item.isGhost && item.itemId === itemId,
       );
-    if (!item) return false;
+    if (!item || item.#programmaticMutationPending) return false;
 
-    this.removeItemFrom(this as unknown as Container, item);
+    const container = this as unknown as Container;
+    assertCanFireItemRemove(container);
+    this.#scheduleProgrammaticMutation(container, [item], () => {
+      if (item.parent === container) {
+        this.#commitItemRemoval(container, item);
+      }
+    });
     return true;
   }
 
@@ -200,12 +207,12 @@ export class Item extends ElementObject {
    * @param itemId Stable item id from `itemId`.
    * @param container Destination SnapSort container.
    * @param index Destination index in the target container.
-   * @returns True when a matching item was found and a move was requested.
+   * @returns True when the move was accepted; false when missing or already pending.
    */
   moveItem(itemId: ItemId, container: Container, index: number) {
     const root = this.#rootContainer as unknown as Item;
     const item = root.findItemById(itemId);
-    if (!item) return false;
+    if (!item || item.#programmaticMutationPending) return false;
     assertCanPlaceItems([{ container, item }]);
     this.takeRootSnapshot();
     this.#scheduleItemsToContainer(container, [item], index, null);
@@ -889,7 +896,30 @@ export class Item extends ElementObject {
     if (session) {
       withReorderAnimation(this, container, items, move);
     } else {
-      withMoveAnimation(this, container, move);
+      this.#scheduleProgrammaticMutation(container, items, move);
+    }
+  }
+
+  #scheduleProgrammaticMutation(
+    animationOwner: Container,
+    items: readonly Item[],
+    mutate: () => void,
+  ): void {
+    const setPending = (pending: boolean) => {
+      for (const item of items) item.#programmaticMutationPending = pending;
+    };
+    setPending(true);
+    try {
+      withMoveAnimation(animationOwner, () => {
+        try {
+          mutate();
+        } finally {
+          setPending(false);
+        }
+      });
+    } catch (error) {
+      setPending(false);
+      throw error;
     }
   }
 
@@ -1002,24 +1032,13 @@ export class Item extends ElementObject {
     detachItem(container, item);
   }
 
-  /**
-   * Remove an item from the engine tree and committed representation.
-   *
-   * @param container Container that currently owns the item.
-   * @param item The item to remove.
-   * @param session Drag session this removal belongs to, or null for a programmatic removal.
-   * @returns Nothing.
-   */
-  removeItemFrom(
-    container: Container,
-    item: Item,
-    session: DragSession | null = null,
-  ) {
+  /** Commit one previously validated programmatic removal. */
+  #commitItemRemoval(container: Container, item: Item): void {
     assertCanFireItemRemove(container);
     const sourceRoot = container.rootContainer;
     releaseItem(item);
     try {
-      fireItemRemove(container, [item], session);
+      fireItemRemove(container, [item], null);
     } finally {
       reconcileRootTreeState(sourceRoot);
     }
@@ -1061,7 +1080,7 @@ export class Item extends ElementObject {
    */
   dragStart(prop: dragStartProp) {
     if (prop.objectId !== this.id) return;
-    if (this.#locked) return;
+    if (this.#locked || this.#programmaticMutationPending) return;
     beginItemDrag(this, prop);
   }
 
@@ -1099,6 +1118,7 @@ export class Item extends ElementObject {
 
   destroy(removeElement: boolean = true) {
     this.#ghostState = null;
+    this.#programmaticMutationPending = false;
     releaseItem(this);
     super.destroy(removeElement);
   }

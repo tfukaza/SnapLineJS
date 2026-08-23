@@ -135,6 +135,15 @@ imperative `moveItem` (when placement changes) and `removeItem` APIs set
 `event.session` to `null` and do not create a drag lifecycle. A same-placement
 `moveItem` request emits no mutation callback.
 
+When the source Container configures `animation.move`, `removeItem(id)` is
+accepted immediately and committed in SnapEngine's next coordinated frame.
+SnapSort removes the requested Item through `onItemRemove`, then FLIP-animates
+the surviving layout. Until an animated programmatic move or removal commits,
+further move/remove commands for that Item return `false` and a drag cannot
+start from it. Directly deleting framework state remains synchronous and does
+not use SnapSort animation; the departing element itself is never retained for
+an exit animation.
+
 Structural callback commands run through the root's `SnapSortAdapter.commit`
 boundary. The Svelte and React bindings use it to publish framework state and
 DOM synchronously; the Vanilla adapter performs the corresponding DOM command.

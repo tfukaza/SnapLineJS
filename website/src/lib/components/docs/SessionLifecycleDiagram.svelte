@@ -553,7 +553,7 @@
       },
       {
         id: "remove",
-        title: "5 · Core-command item removal",
+        title: "5 · Core-command item removal (without move animation)",
         messages: [
           message(
             "5.1a",
@@ -561,7 +561,7 @@
             "container.removeItem(id)",
             "app",
             "source",
-            "Application code asks the item's current direct owner to remove it. This core-command path has session: null and produces onItemRemove. A framework-owned deletion that starts by removing the RenderTree entry does not echo through this path; unmount releases the owned core Item.",
+            "Application code asks the item's current direct owner to remove it. This diagram shows the synchronous path used without animation.move. When animation.move is configured, true reports acceptance immediately and SnapSort runs this commit in the next coordinated frame before animating the surviving layout. A framework-owned deletion that starts by removing the RenderTree entry does not echo through this path.",
             { branch: "Programmatic · session: null" },
           ),
           message(
@@ -613,7 +613,7 @@
             "true",
             "source",
             "app",
-            "container.removeItem returns true to its caller after finding and removing the item.",
+            "In this non-animated branch, container.removeItem returns true after finding and removing the item.",
             { kind: "return" },
           ),
         ],
@@ -1022,7 +1022,7 @@
       },
       {
         id: "remove",
-        title: "5 · Core-command item removal",
+        title: "5 · Core-command item removal (without move animation)",
         messages: [
           message(
             "5.1a",
@@ -1030,7 +1030,7 @@
             "container.removeItem(id)",
             "app",
             "source",
-            "Application code asks the item's current direct owner to remove it with session: null.",
+            "Application code asks the item's current direct owner to remove it with session: null. This diagram shows the synchronous path used without animation.move; animated removal reports acceptance immediately and commits in the next coordinated frame.",
             { branch: "Programmatic · session: null" },
           ),
           message(
@@ -1064,7 +1064,7 @@
             "true",
             "source",
             "app",
-            "container.removeItem returns true after finding and removing the item.",
+            "In this non-animated branch, container.removeItem returns true after finding and removing the item.",
             { kind: "return" },
           ),
         ],

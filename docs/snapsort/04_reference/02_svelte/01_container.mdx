@@ -328,6 +328,14 @@ Use this imperative path only when SnapSort's core command is intended to lead
 the change. Do not call it after already deleting the same entry from Svelte
 state, and do not expect `onItemRemove` for the source half of a move.
 
+If the source Container has `animation.move`, `removeItem(id)` returns `true`
+when the request is accepted, commits `onItemRemove` in the next coordinated
+frame, and FLIP-animates the surviving layout. While any animated programmatic
+move or removal for that Item is pending, further move/remove commands return
+`false` and dragging it is temporarily disabled. Direct Svelte-state deletion
+bypasses this animation, and SnapSort does not retain the removed element for
+an exit effect.
+
 ## Configuration
 
 | Option          | Default                        | Description                                                                                                     |
@@ -535,15 +543,15 @@ resolution rules and reusable policies from
 After capturing the object with `bind:container`, these are the most commonly
 used core properties and methods.
 
-| API                                              | Description                                                                                                  |
-| ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------ |
-| `container.moveItem(id, targetContainer, index)` | Authoritatively moves an item into another container or index, bypassing drop policy.                        |
-| `container.removeItem(id)`                       | Removes an item from the core tree and emits root `onItemRemove`; framework state must update synchronously. |
-| `container.numberOfItems`                        | Number of tracked child items.                                                                               |
-| `container.dropPriority`                         | Gets or sets the base policy: `-1` rejects; nonnegative values rank the Container.                           |
-| `container.direction`                            | Gets or sets `"column"` or `"row"`.                                                                          |
-| `container.mainAxisAlign`                        | Gets or sets `"start"` or `"center"`.                                                                        |
-| `container.mode`                                 | Gets or sets the drag/drop mode.                                                                             |
-| `container.config`                               | Live `ContainerConfig` object.                                                                               |
-| `container.callbacks`                            | Configured callback object.                                                                                  |
-| `container.dragSession`                          | Stable read-only `DragSession` handle on the root container while active; nested containers return `null`.   |
+| API                                              | Description                                                                                                |
+| ------------------------------------------------ | ---------------------------------------------------------------------------------------------------------- |
+| `container.moveItem(id, targetContainer, index)` | Authoritatively moves an item into another container or index, bypassing drop policy.                      |
+| `container.removeItem(id)`                       | Requests core-led removal through root `onItemRemove`; `animation.move` animates the surviving layout.     |
+| `container.numberOfItems`                        | Number of tracked child items.                                                                             |
+| `container.dropPriority`                         | Gets or sets the base policy: `-1` rejects; nonnegative values rank the Container.                         |
+| `container.direction`                            | Gets or sets `"column"` or `"row"`.                                                                        |
+| `container.mainAxisAlign`                        | Gets or sets `"start"` or `"center"`.                                                                      |
+| `container.mode`                                 | Gets or sets the drag/drop mode.                                                                           |
+| `container.config`                               | Live `ContainerConfig` object.                                                                             |
+| `container.callbacks`                            | Configured callback object.                                                                                |
+| `container.dragSession`                          | Stable read-only `DragSession` handle on the root container while active; nested containers return `null`. |

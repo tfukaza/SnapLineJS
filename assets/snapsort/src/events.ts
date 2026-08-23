@@ -459,7 +459,9 @@ export interface ContainerCallbacks {
   /**
    * Root-dispatched. Fires for programmatic removal; `event.container`
    * identifies the item's direct owner. An ordinary move does not also emit
-   * `onItemRemove` for its source.
+   * `onItemRemove` for its source. With a source `animation.move`, accepted
+   * removals dispatch in the next coordinated frame before surviving Items
+   * FLIP to their committed positions.
    */
   onItemRemove?: (event: ItemRemoveEvent) => void;
 

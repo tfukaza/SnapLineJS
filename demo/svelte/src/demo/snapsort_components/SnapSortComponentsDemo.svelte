@@ -281,6 +281,19 @@
     };
   }
 
+  function removeItemThroughSnapSort(itemId: string) {
+    const column = board.entries.find(
+      (entry) =>
+        isBoardColumn(entry) &&
+        entry.childTree.entries.some(
+          (item) => !item.isGhost && item.itemId === itemId,
+        ),
+    );
+    return column && isBoardColumn(column)
+      ? (column.value.container?.removeItem(itemId) ?? false)
+      : false;
+  }
+
   function moveItemAcrossColumns(itemId: string, direction: -1 | 1) {
     const columns = board.entries.filter(isBoardColumn);
     const sourceColumnIndex = columns.findIndex((column) =>
@@ -315,10 +328,16 @@
   $effect(() => {
     const demoWindow = window as typeof window & {
       __snapsortMoveComponentItem?: typeof moveItemAcrossColumns;
+      __snapsortRemoveComponentItem?: typeof removeItemThroughSnapSort;
+      __snapsortDeleteComponentItem?: typeof deleteItem;
     };
     demoWindow.__snapsortMoveComponentItem = moveItemAcrossColumns;
+    demoWindow.__snapsortRemoveComponentItem = removeItemThroughSnapSort;
+    demoWindow.__snapsortDeleteComponentItem = deleteItem;
     return () => {
       delete demoWindow.__snapsortMoveComponentItem;
+      delete demoWindow.__snapsortRemoveComponentItem;
+      delete demoWindow.__snapsortDeleteComponentItem;
     };
   });
 

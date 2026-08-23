@@ -13,7 +13,7 @@ A single `Container`/`Item` class pair (per framework) whose drag/drop behavior 
 **Exports:**
 
 - `Container` - The only container class. `new Container(engine, parent, { itemId, mode, ... })`.
-- `defaultAnimations` - Opt-in standard reorder, drop, and programmatic-move animation preset.
+- `defaultAnimations` - Opt-in standard reorder, drop, and programmatic move/removal animation preset.
 - `Item` - The only ordinary item class. `new Item(engine, parent, { itemId })`; identity is required and construction-only. Ghosts/markers are created internally.
 - `DragSession` - Type-only public handle for one gesture. Callback events and `root.dragSession` expose the same stable handle; lifecycle/controller state remains internal.
 - Event types: `ItemInsertEvent`, `ItemRemoveEvent`, `ItemMoveEvent`, `ItemSwapEvent`, `GhostCreateEvent`, `GhostInsertEvent`, `GhostMoveEvent`, `GhostRemoveEvent`, `DragStartEvent`, `DragEndEvent`, `DropTargetChangeEvent`, `DropPriorityEvent`, `VisualGeometryInvalidationEvent`, `DragLocation`.
@@ -181,7 +181,17 @@ item/ghost structure.
   callback. Structural item and ghost commands use it; drag start, hover,
   policy, geometry, and visual invalidation dispatch directly.
 - `onItemRemove` is not the source half of a normal move. It represents
-  programmatic removal from the item's current owner.
+  programmatic removal from the item's current owner. When that owner has a
+  `move` animation, it shares only the Container-owned FLIP transaction used by
+  `moveItem`: move and removal keep separate mutation workflows, while
+  same-owner commits coalesce between one root snapshot and final layout read.
+  An Item with a pending animated programmatic mutation rejects another
+  move/removal and cannot start a drag until the commit finishes. Direct
+  framework-state deletion bypasses this command and animation path.
+- Different Containers keep independent programmatic FLIP transactions. Each
+  transaction snapshots the root, so a later Container's pass may replace
+  animations started by an earlier pass in the same frame; mutation commits
+  are still preserved in request order within each Container.
 
 Copying is an application recipe, not a lifecycle effect. The destination's
 ordinary `onItemMove` moves the original stable ID to the destination and, in

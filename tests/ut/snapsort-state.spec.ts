@@ -10,7 +10,10 @@ import {
 } from "../../assets/snapsort/src/container";
 import { builtinStrategies } from "../../assets/snapsort/src/drag/drop-strategy";
 import { DragSessionController as DragSession } from "../../assets/snapsort/src/drag/session";
-import { installDragSession } from "../../assets/snapsort/src/drag/session-store";
+import {
+  getDragSessionController,
+  installDragSession,
+} from "../../assets/snapsort/src/drag/session-store";
 import {
   removePointerPreview,
   startPointerPreview,
@@ -221,6 +224,24 @@ function makeSession(
     } as never,
     item,
   );
+}
+
+function attemptItemDrag(item: Item): void {
+  item.dragStart({
+    objectId: item.id,
+    pointerId: 1,
+    start: {
+      x: 0,
+      y: 0,
+      cameraX: 0,
+      cameraY: 0,
+      screenX: 0,
+      screenY: 0,
+    },
+    button: 0,
+    isWithinEngine: true,
+    handoffTo() {},
+  });
 }
 
 async function drainFrames(global: any, maximumFrames = 5): Promise<void> {
@@ -757,6 +778,239 @@ test("programmatic moves use the destination move animation channel", async () =
 
     await drainFrames(harness.global);
     expect(item.parent).toBe(source);
+  } finally {
+    harness.cleanup();
+  }
+});
+
+test("same-destination programmatic moves share one animation transaction", async () => {
+  const harness = createStateHarness();
+  try {
+    const movedIds: string[] = [];
+    const root = mountRoot(harness, "root", {
+      callbacks: {
+        onItemMove(event) {
+          movedIds.push(...event.itemIds);
+          for (const item of event.items) {
+            event.to.container.element?.insertBefore(
+              item.element!,
+              event.beforeElement,
+            );
+          }
+        },
+      },
+    });
+    const source = mountContainer(harness, root, "source");
+    const destination = mountContainer(
+      harness,
+      root,
+      "destination",
+      undefined,
+      { animation: { move: { duration: 100 } } },
+    );
+    const first = mountItem(harness, source, "first");
+    const second = mountItem(harness, source, "second");
+
+    expect(source.moveItem(first.itemId, destination, 0)).toBe(true);
+    expect(source.moveItem(first.itemId, destination, 1)).toBe(false);
+    expect(source.removeItem(first.itemId)).toBe(false);
+    attemptItemDrag(first);
+    expect(getDragSessionController(root)).toBeNull();
+    expect(source.moveItem(second.itemId, destination, 1)).toBe(true);
+    expect(movedIds).toEqual([]);
+    expect(source.itemList).toEqual([first, second]);
+
+    await drainFrames(harness.global);
+
+    expect(movedIds).toEqual(["first", "second"]);
+    expect(source.itemList).toEqual([]);
+    expect(destination.itemList).toEqual([first, second]);
+
+    expect(destination.moveItem(first.itemId, source, 0)).toBe(true);
+    await drainFrames(harness.global);
+    expect(movedIds).toEqual(["first", "second", "first"]);
+    expect(source.itemList).toEqual([first]);
+    expect(destination.itemList).toEqual([second]);
+  } finally {
+    harness.cleanup();
+  }
+});
+
+test("programmatic placement and removal share their animation owner transaction", async () => {
+  const harness = createStateHarness();
+  try {
+    const operations: string[] = [];
+    const root = mountRoot(harness, "root", {
+      callbacks: {
+        onItemMove(event) {
+          operations.push(`move:${event.itemId}`);
+          event.to.container.element?.insertBefore(
+            event.item.element!,
+            event.beforeElement,
+          );
+        },
+        onItemRemove(event) {
+          operations.push(`remove:${event.itemId}`);
+          event.item.element?.remove();
+        },
+      },
+    });
+    const source = mountContainer(harness, root, "source");
+    const destination = mountContainer(
+      harness,
+      root,
+      "destination",
+      undefined,
+      { animation: { move: { duration: 100 } } },
+    );
+    const moving = mountItem(harness, source, "moving");
+    const removing = mountItem(harness, destination, "removing");
+    const retained = mountItem(harness, destination, "retained");
+
+    expect(source.moveItem(moving.itemId, destination, 2)).toBe(true);
+    expect(destination.removeItem(removing.itemId)).toBe(true);
+    expect(destination.removeItem(removing.itemId)).toBe(false);
+    expect(destination.moveItem(removing.itemId, source, 0)).toBe(false);
+    attemptItemDrag(removing);
+    expect(getDragSessionController(root)).toBeNull();
+    expect(operations).toEqual([]);
+    await drainFrames(harness.global);
+
+    expect(operations).toEqual(["move:moving", "remove:removing"]);
+    expect(source.itemList).toEqual([]);
+    expect(destination.itemList).toEqual([retained, moving]);
+  } finally {
+    harness.cleanup();
+  }
+});
+
+test("programmatic removal stays synchronous when move animation is disabled", () => {
+  const harness = createStateHarness();
+  try {
+    const removedIds: string[] = [];
+    const root = mountRoot(harness, "root", {
+      animation: { move: null },
+      callbacks: {
+        onItemRemove(event) {
+          removedIds.push(...event.itemIds);
+          event.item.element?.remove();
+        },
+      },
+    });
+    const item = mountItem(harness, root, "item");
+
+    expect(root.removeItem(item.itemId)).toBe(true);
+    expect(removedIds).toEqual(["item"]);
+    expect(root.itemList).toEqual([]);
+  } finally {
+    harness.cleanup();
+  }
+});
+
+test("different animation owners preserve all queued removals", async () => {
+  const harness = createStateHarness();
+  try {
+    const removedIds: string[] = [];
+    const root = mountRoot(harness, "root", {
+      callbacks: {
+        onItemRemove(event) {
+          removedIds.push(...event.itemIds);
+          event.item.element?.remove();
+        },
+      },
+    });
+    const firstSource = mountContainer(
+      harness,
+      root,
+      "first-source",
+      undefined,
+      {
+        animation: { move: { duration: 100 } },
+      },
+    );
+    const secondSource = mountContainer(
+      harness,
+      root,
+      "second-source",
+      undefined,
+      { animation: { move: { duration: 100 } } },
+    );
+    const first = mountItem(harness, firstSource, "first");
+    const second = mountItem(harness, secondSource, "second");
+
+    expect(firstSource.removeItem(first.itemId)).toBe(true);
+    expect(secondSource.removeItem(second.itemId)).toBe(true);
+    await drainFrames(harness.global);
+
+    expect(removedIds).toEqual(["first", "second"]);
+    expect(firstSource.itemList).toEqual([]);
+    expect(secondSource.itemList).toEqual([]);
+  } finally {
+    harness.cleanup();
+  }
+});
+
+test("animated removal validates its framework callback before scheduling", () => {
+  const harness = createStateHarness();
+  try {
+    const root = mountRoot(harness, "root", {
+      animation: { move: { duration: 100 } },
+      adapter: { callbacks: {}, commit: (mutation) => mutation() },
+    });
+    const item = mountItem(harness, root, "item");
+
+    expect(() => root.removeItem(item.itemId)).toThrow(
+      /callbacks\.onItemRemove/,
+    );
+    expect(root.itemList).toEqual([item]);
+  } finally {
+    harness.cleanup();
+  }
+});
+
+test("a failing animated removal does not skip later queued mutations", async () => {
+  const harness = createStateHarness();
+  try {
+    const removedIds: string[] = [];
+    const root = mountRoot(harness, "root", {
+      animation: { move: { duration: 100 } },
+      adapter: { callbacks: {}, commit: (mutation) => mutation() },
+      callbacks: {
+        onItemRemove(event) {
+          removedIds.push(...event.itemIds);
+          event.item.element?.remove();
+          if (event.itemId === "first") {
+            throw new Error("intentional removal failure");
+          }
+        },
+      },
+    });
+    const first = mountItem(harness, root, "first");
+    const second = mountItem(harness, root, "second");
+
+    expect(root.removeItem(first.itemId)).toBe(true);
+    expect(root.removeItem(second.itemId)).toBe(true);
+    await expect(drainFrames(harness.global)).rejects.toThrow(
+      "intentional removal failure",
+    );
+    expect(removedIds).toEqual(["first", "second"]);
+    expect(root.itemList).toEqual([]);
+
+    for (const queue of Object.values(harness.global.queue) as Map<
+      string,
+      unknown
+    >[]) {
+      queue.clear();
+    }
+    root.callbacks = {
+      onItemRemove(event) {
+        event.item.element?.remove();
+      },
+    };
+    root.attachItem(first);
+    expect(root.removeItem(first.itemId)).toBe(true);
+    await drainFrames(harness.global);
+    expect(root.itemList).toEqual([]);
   } finally {
     harness.cleanup();
   }

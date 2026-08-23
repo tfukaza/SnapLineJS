@@ -3329,7 +3329,7 @@ async function expectStableDrag(
     samples,
     trace,
     layoutLogs: consoleMessages.filter((message) =>
-      /\[updateDropTarget\]|\[updateGhostElement\]|\[insertItemAt\]|\[removeItemFrom\]|determineDropTarget|chosen|candidate/.test(
+      /\[updateDropTarget\]|\[updateGhostElement\]|\[insertItemAt\]|determineDropTarget|chosen|candidate/.test(
         message,
       ),
     ),
@@ -6307,6 +6307,50 @@ test.describe("Snapsort drag-start snapshot layout", () => {
     await expect(
       panels.nth(1).locator(".task-card .task-main strong"),
     ).toHaveText(["Profile fields", "Board polish"]);
+  });
+
+  test("animates framework-owned programmatic removal but not direct state deletion", async ({
+    page,
+  }) => {
+    const observesTransform = async () =>
+      page.evaluate(async () => {
+        for (let frame = 0; frame < 10; frame++) {
+          await new Promise((resolve) => requestAnimationFrame(resolve));
+          const animatedCard = [
+            ...document.querySelectorAll(".array-list .task-card"),
+          ].find((element) =>
+            /^translate3d\(-?\d/.test((element as HTMLElement).style.transform),
+          );
+          if (animatedCard) return true;
+        }
+        return false;
+      });
+
+    await page.goto("/?demo=snapsort_components&slowFlip=1", {
+      waitUntil: "networkidle",
+    });
+    await page.evaluate(() => {
+      const demoWindow = window as typeof window & {
+        __snapsortDeleteComponentItem?: (itemId: string) => void;
+      };
+      demoWindow.__snapsortDeleteComponentItem?.("item-1");
+    });
+    expect(await observesTransform()).toBe(false);
+
+    await page.goto("/?demo=snapsort_components&slowFlip=1", {
+      waitUntil: "networkidle",
+    });
+    const accepted = await page.evaluate(() => {
+      const demoWindow = window as typeof window & {
+        __snapsortRemoveComponentItem?: (itemId: string) => boolean;
+      };
+      return demoWindow.__snapsortRemoveComponentItem?.("item-1") ?? false;
+    });
+    expect(accepted).toBe(true);
+    expect(await observesTransform()).toBe(true);
+    await expect(
+      page.locator(".array-list .task-card .task-main strong"),
+    ).toHaveText(["Invite flow", "Audit log", "Search filters"]);
   });
 
   test("resets pooled animation variables before a channel is reused", async ({

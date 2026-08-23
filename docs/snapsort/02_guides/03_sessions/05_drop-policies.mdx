@@ -53,6 +53,21 @@ to do the same thing.
 For SnapSort, using these imperative APIs allows items to be animated
 smoothly.
 
+### removeItem
+
+`container.removeItem(id)` provides the same distinction for removal. When the
+source Container configures `animation.move`, SnapSort accepts the command,
+captures the current root layout, invokes `onItemRemove` in the next
+coordinated frame, and animates surviving Items as they close the gap. The
+removed Item itself is unmounted by the framework and does not receive an exit
+animation.
+
+Without `animation.move`, removal keeps its synchronous behavior. Deleting an
+entry directly from Svelte or React state also remains synchronous and does
+not enter SnapSort's animation pipeline. While an animated programmatic move
+or removal is waiting to commit, further move/remove commands for that Item
+return `false` and dragging that Item is temporarily disabled.
+
 <!--## Application-Owned Collection Changes
 
 Application-originated additions and deletions do not need to round-trip
