@@ -3,6 +3,7 @@ import {
   determineDropTarget,
   determineInsertionDropTarget,
   findHoveredItem,
+  findPlacementHoveredItem,
   type ResolvedDropTarget,
   virtualLayoutRecursive,
 } from "../../assets/snapsort/src/algorithm";
@@ -575,9 +576,9 @@ test("insertion ranks nested and parent gaps strictly by gap-center distance", (
   });
 });
 
-test("identical insertion centers use adjacent item geometry as the tie-breaker", () => {
+test("identical horizontal insertion centers align the virtual dragged leading edge", () => {
   const dragged = mockItem("dragged", {
-    x: -40,
+    x: 90,
     y: 90,
     width: 20,
     height: 20,
@@ -640,6 +641,138 @@ test("identical insertion centers use adjacent item geometry as the tie-breaker"
   });
   expect(target.insertion.previous?.item).toBe(nearPrevious);
   expect(target.insertion.next?.item).toBe(nearNext);
+
+  // Keep the pointer fixed while modeling a different pointer-to-item grab
+  // offset, which moves the virtual Item's leading edge.
+  dragged.dragPositionX = -10;
+  const differentGrabOffsetTarget = requireInsertionTarget(
+    resolveMockInsertionTarget(dragged, root, session),
+  );
+  expect(differentGrabOffsetTarget.container).toBe(root);
+  expect(differentGrabOffsetTarget.index).toBe(1);
+});
+
+test("identical vertical insertion centers align the virtual dragged leading edge", () => {
+  const dragged = mockItem("dragged", {
+    x: 90,
+    y: 90,
+    width: 20,
+    height: 20,
+  });
+  const source = mockItem(
+    "source",
+    { x: 80, y: -50, width: 40, height: 30 },
+    { children: [dragged], container: true },
+  );
+  const nearPrevious = mockItem("near-previous", {
+    x: 90,
+    y: 100,
+    width: 6,
+    height: 100,
+  });
+  const nearNext = mockItem("near-next", {
+    x: 104,
+    y: 100,
+    width: 6,
+    height: 100,
+  });
+  const nested = mockItem(
+    "nested",
+    { x: 80, y: 100, width: 40, height: 100 },
+    {
+      children: [nearPrevious, nearNext],
+      container: true,
+      direction: "row",
+    },
+  );
+  const farPrevious = mockItem("far-previous", {
+    x: 0,
+    y: 0,
+    width: 40,
+    height: 300,
+  });
+  const farNext = mockItem("far-next", {
+    x: 160,
+    y: 0,
+    width: 40,
+    height: 300,
+  });
+  const root = mockItem(
+    "root",
+    { x: 0, y: 0, width: 200, height: 300 },
+    {
+      children: [farPrevious, farNext, nested],
+      container: true,
+      direction: "row",
+    },
+  );
+  const session = mockInsertionSession(
+    [dragged],
+    [mockDragLocation(source, 0)],
+    { x: 100, y: 150 },
+  );
+
+  const target = requireInsertionTarget(
+    resolveMockInsertionTarget(dragged, root, session),
+  );
+  expect(target.container).toBe(nested);
+  expect(target.index).toBe(1);
+  expect(target.insertion.gap).toEqual({
+    orientation: "vertical",
+    x: 100,
+    y: 100,
+    length: 100,
+  });
+
+  // Keep the pointer fixed while modeling a different pointer-to-item grab
+  // offset, which moves the virtual Item's leading edge.
+  dragged.dragPositionY = -10;
+  const differentGrabOffsetTarget = requireInsertionTarget(
+    resolveMockInsertionTarget(dragged, root, session),
+  );
+  expect(differentGrabOffsetTarget.container).toBe(root);
+  expect(differentGrabOffsetTarget.index).toBe(1);
+});
+
+test("neighborless identical insertion centers preserve traversal order", () => {
+  const dragged = mockItem("dragged", {
+    x: -40,
+    y: 40,
+    width: 20,
+    height: 20,
+  });
+  const source = mockItem(
+    "source",
+    { x: -50, y: 30, width: 30, height: 40 },
+    { children: [dragged], container: true },
+  );
+  const first = mockItem(
+    "first",
+    { x: 0, y: 0, width: 100, height: 100 },
+    { children: [], container: true },
+  );
+  const second = mockItem(
+    "second",
+    { x: 0, y: 0, width: 100, height: 100 },
+    { children: [], container: true },
+  );
+  const root = mockItem(
+    "root",
+    { x: 0, y: 0, width: 200, height: 200 },
+    { children: [first, second], container: true },
+  );
+  const session = mockInsertionSession(
+    [dragged],
+    [mockDragLocation(source, 0)],
+    { x: 50, y: 50 },
+  );
+
+  const target = requireInsertionTarget(
+    resolveMockInsertionTarget(dragged, root, session),
+  );
+  expect(target.container).toBe(first);
+  expect(target.insertion.previous).toBeNull();
+  expect(target.insertion.next).toBeNull();
 });
 
 test("empty rows expose one centered vertical insertion gap", () => {
@@ -830,9 +963,8 @@ test("drop resolution performs no debug work until a renderer is enabled", () =>
   expect(disabledChild.debugCounters.addDebugRect).toBeGreaterThan(0);
 });
 
-test("drop policy keeps one eligibility-then-priority callback per container", () => {
+test("drop policy exposes one complete frozen event per container", () => {
   const calls: string[] = [];
-  let eligibilityEvent: MockItem | null = null;
   let priorityEvent: MockItem | null = null;
   const child = mockItem("child", { x: 0, y: 0, width: 100, height: 20 });
   const root = mockItem(
@@ -841,11 +973,6 @@ test("drop policy keeps one eligibility-then-priority callback per container", (
     { children: [child], container: true },
   );
   root.callbacks = {
-    canDrop: (event: MockItem) => {
-      calls.push("canDrop");
-      eligibilityEvent = event;
-      return true;
-    },
     getDropPriority: (event: MockItem) => {
       calls.push("getDropPriority");
       priorityEvent = event;
@@ -861,11 +988,7 @@ test("drop policy keeps one eligibility-then-priority callback per container", (
 
   determineDropTarget(dragged as never, root as never);
 
-  expect(calls).toEqual(["canDrop", "getDropPriority"]);
-  expect(eligibilityEvent!.containerRect).toBe(priorityEvent!.containerRect);
-  expect(eligibilityEvent!.containerContentRect).toBe(
-    priorityEvent!.containerContentRect,
-  );
+  expect(calls).toEqual(["getDropPriority"]);
   expect(Object.isFrozen(priorityEvent!.containerRect)).toBe(true);
   expect(Object.isFrozen(priorityEvent!.dragRect)).toBe(true);
 });
@@ -926,4 +1049,123 @@ test("hover overlap prefers the smallest area and keeps first-match ties", () =>
   expect(
     findHoveredItem(dragged as never, container as never, session as never),
   ).toBe(smaller);
+});
+
+test("placement hover includes a nested destination through its actual owner", () => {
+  const dragged = mockItem("dragged", { x: 50, y: 50, width: 10, height: 10 });
+  const destination = mockItem(
+    "destination",
+    { x: 0, y: 0, width: 30, height: 30 },
+    { children: [], container: true },
+  );
+  const root = mockItem(
+    "root",
+    { x: 0, y: 0, width: 60, height: 60 },
+    { children: [destination], container: true },
+  );
+  const hitboxOwners: string[] = [];
+  root.callbacks = {
+    getItemHitbox: (event: MockItem) => {
+      hitboxOwners.push(`${event.container.itemId}:${event.overItemId}`);
+      return { shape: "rect", rect: event.defaultRect };
+    },
+  };
+  const session = {
+    handle: {},
+    itemSet: new Set([dragged]),
+    pointer: { x: 15, y: 15 },
+  };
+
+  expect(
+    findHoveredItem(dragged as never, destination as never, session as never),
+  ).toBeNull();
+  expect(
+    findPlacementHoveredItem(
+      dragged as never,
+      destination as never,
+      session as never,
+    ),
+  ).toBe(destination);
+  expect(hitboxOwners).toEqual(["root:destination"]);
+
+  session.itemSet.add(destination);
+  expect(
+    findPlacementHoveredItem(
+      dragged as never,
+      destination as never,
+      session as never,
+    ),
+  ).toBeNull();
+  session.itemSet.delete(destination);
+  destination.isGhost = true;
+  expect(
+    findPlacementHoveredItem(
+      dragged as never,
+      destination as never,
+      session as never,
+    ),
+  ).toBeNull();
+
+  destination.isGhost = false;
+  session.pointer = { x: 50, y: 50 };
+  expect(
+    findPlacementHoveredItem(dragged as never, root as never, session as never),
+  ).toBeNull();
+});
+
+test("placement hover prefers direct children on equal area and smaller self hitboxes", () => {
+  const dragged = mockItem("dragged", { x: 50, y: 50, width: 10, height: 10 });
+  const child = mockItem("child", { x: 0, y: 0, width: 20, height: 20 });
+  const destination = mockItem(
+    "destination",
+    { x: 0, y: 0, width: 20, height: 20 },
+    { children: [child], container: true },
+  );
+  const root = mockItem(
+    "root",
+    { x: 0, y: 0, width: 60, height: 60 },
+    { children: [destination], container: true },
+  );
+  const ownerCalls: string[] = [];
+  let selfSize = 20;
+  destination.callbacks = {
+    getItemHitbox: (event: MockItem) => {
+      ownerCalls.push(`destination:${event.overItemId}`);
+      return { shape: "rect", rect: event.defaultRect };
+    },
+  };
+  root.callbacks = {
+    getItemHitbox: (event: MockItem) => {
+      ownerCalls.push(`root:${event.overItemId}`);
+      return {
+        shape: "rect",
+        rect: { x: 0, y: 0, width: selfSize, height: selfSize },
+      };
+    },
+  };
+  const session = {
+    handle: {},
+    itemSet: new Set([dragged]),
+    pointer: { x: 2, y: 2 },
+  };
+
+  expect(
+    findPlacementHoveredItem(
+      dragged as never,
+      destination as never,
+      session as never,
+    ),
+  ).toBe(child);
+  expect(ownerCalls).toEqual(["destination:child", "root:destination"]);
+
+  ownerCalls.length = 0;
+  selfSize = 5;
+  expect(
+    findPlacementHoveredItem(
+      dragged as never,
+      destination as never,
+      session as never,
+    ),
+  ).toBe(destination);
+  expect(ownerCalls).toEqual(["destination:child", "root:destination"]);
 });

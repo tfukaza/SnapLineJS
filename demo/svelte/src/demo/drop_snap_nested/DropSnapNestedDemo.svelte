@@ -294,7 +294,7 @@
     ...renderTreeCallbacks(
       (event) => (multiAreaTree = reduceRenderTree(multiAreaTree, event)),
     ),
-    canDrop: rejectDrop,
+    getDropPriority: rejectDrop,
   } satisfies ContainerCallbacks;
   const nestedGroupCallbacks = renderTreeCallbacks(
     (event) => (nestedGroupTree = reduceRenderTree(nestedGroupTree, event)),

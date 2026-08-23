@@ -52,7 +52,7 @@
       mode: "insertion",
       direction: "column",
       name: `code-file-tree-${node.id}`,
-      callbacks: node.open === false ? { canDrop: rejectDrop } : undefined,
+      callbacks: node.open === false ? { getDropPriority: rejectDrop } : undefined,
       animation: {
         reorder: treeAnimation,
         drop: treeAnimation,

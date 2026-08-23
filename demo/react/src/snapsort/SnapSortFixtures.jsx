@@ -14,9 +14,11 @@ import {
 } from "@snap-engine/snapsort/callbacks";
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 
-function hasMatchingDropGroup(event) {
+function prioritizeMatchingDropGroup(event) {
   const sourceGroup = event.source?.containerMetadata.dropGroup;
-  return sourceGroup !== undefined && sourceGroup === event.containerMetadata.dropGroup;
+  return sourceGroup !== undefined && sourceGroup === event.containerMetadata.dropGroup
+    ? prioritizeIntersectingContainer(event)
+    : rejectDrop(event);
 }
 
 const snapSortCubicAnimation = new URLSearchParams(window.location.search).has("slowFlip")
@@ -550,7 +552,7 @@ export function SnapSortWebsiteCoreDemo() {
                     name: "core-multi-root",
                     callbacks: {
                       ...ghostCallbacks,
-                      canDrop: rejectDrop,
+                      getDropPriority: rejectDrop,
                       onItemMove: handleMultiContainerMove,
                     },
                   }}
@@ -837,7 +839,7 @@ export function DropSnapNestedDemo() {
                     name: "multi-root",
                     callbacks: {
                       ...frameworkCallbacks,
-                      canDrop: rejectDrop,
+                      getDropPriority: rejectDrop,
                     },
                   }}
                   itemId="combined-multi-root"
@@ -1433,7 +1435,7 @@ export function SnapSortComponentsDemo() {
                     animation: defaultAnimations,
                     direction: "row",
                     name: "component-kanban-root",
-                    callbacks: { ...callbacks, canDrop: rejectDrop },
+                    callbacks: { ...callbacks, getDropPriority: rejectDrop },
                   }}
                   itemId="component-kanban-root"
                   locked
@@ -1545,7 +1547,7 @@ export function SnapSortComponentsDemo() {
                 name: "progressive-components-root",
                 callbacks: {
                   ...progressiveCallbacks,
-                  canDrop: rejectDrop,
+                  getDropPriority: rejectDrop,
                 },
               }}
               itemId="progressive-components-root"
@@ -1560,7 +1562,7 @@ export function SnapSortComponentsDemo() {
                     direction: "column",
                     mode: "progressive",
                     name: `progressive-example-${example.id}`,
-                    callbacks: { canDrop: rejectDrop },
+                    callbacks: { getDropPriority: rejectDrop },
                   }}
                   itemId={example.id}
                   key={example.id}
@@ -1576,8 +1578,7 @@ export function SnapSortComponentsDemo() {
                       name: `progressive-answer-${example.id}`,
                       animation: { reorder: snapSortCubicAnimation, drop: snapSortCubicAnimation },
                       callbacks: {
-                        canDrop: hasMatchingDropGroup,
-                        getDropPriority: prioritizeIntersectingContainer,
+                        getDropPriority: prioritizeMatchingDropGroup,
                       },
                     }}
                     itemId={`${example.id}-answer`}
@@ -1608,8 +1609,7 @@ export function SnapSortComponentsDemo() {
                       name: `progressive-bank-${example.id}`,
                       animation: { reorder: snapSortCubicAnimation, drop: snapSortCubicAnimation },
                       callbacks: {
-                        canDrop: hasMatchingDropGroup,
-                        getDropPriority: prioritizeIntersectingContainer,
+                        getDropPriority: prioritizeMatchingDropGroup,
                       },
                     }}
                     itemId={`${example.id}-bank`}
@@ -1919,7 +1919,7 @@ export function SnapSortDuolingoDemo({ embedded = false }) {
                 direction: "column",
                 mode: "progressive",
                 name: "sentence-builder-root",
-                callbacks: { ...callbacks, canDrop: rejectDrop },
+                callbacks: { ...callbacks, getDropPriority: rejectDrop },
               }}
               itemId="sentence-builder-root"
               locked
@@ -2203,7 +2203,7 @@ export function SnapSortInsertionDemo() {
             name: "insertion-board-root",
             callbacks: {
               ...callbacks,
-              canDrop: rejectDrop,
+              getDropPriority: rejectDrop,
               onDragStart: (event) => {
                 if (duplicateMode) event.session.dragVisual = "preview";
               },

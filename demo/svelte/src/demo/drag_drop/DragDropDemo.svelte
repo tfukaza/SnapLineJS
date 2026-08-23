@@ -118,11 +118,11 @@
     const sizedCallbacks = renderTreeCallbacks((event) => sizedTree = reduceRenderTree(sizedTree, event));
     const areaCallbacks = {
         ...renderTreeCallbacks((event) => areaTree = reduceRenderTree(areaTree, event)),
-        canDrop: rejectDrop,
+        getDropPriority: rejectDrop,
     } satisfies ContainerCallbacks;
     const rowAreaCallbacks = {
         ...renderTreeCallbacks((event) => rowAreaTree = reduceRenderTree(rowAreaTree, event)),
-        canDrop: rejectDrop,
+        getDropPriority: rejectDrop,
     } satisfies ContainerCallbacks;
 </script>
 

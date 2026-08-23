@@ -35,7 +35,6 @@ export type {
   DragEndEvent,
   DropTargetChangeEvent,
   DragItemHoverEvent,
-  CanDropEvent,
   DropPriorityEvent,
   DropPriorityRect,
   ItemHitbox,
@@ -43,6 +42,7 @@ export type {
   VisualGeometryInvalidationEvent,
   VisualGeometryInvalidationReason,
 } from "./events";
+export { DROP_REJECT_PRIORITY } from "./events";
 export type {
   ContainerLocalRect,
   InsertionMarkerRectOptions,

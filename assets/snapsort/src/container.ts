@@ -44,7 +44,7 @@ export interface ContainerConfig {
   stretchItems?: boolean;
   name?: string;
   animation?: ContainerAnimations | null;
-  /** Base priority assigned to every drop candidate owned directly by this container. Default `0`. */
+  /** Base destination policy: `-1` rejects; nonnegative values rank candidates. Default `0`. */
   dropPriority?: number;
   /** Callbacks owned by this container instance. See `ContainerCallbacks` for dispatch ownership. */
   callbacks?: Readonly<ContainerCallbacks>;

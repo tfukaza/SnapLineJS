@@ -153,7 +153,7 @@ function buildBoard() {
     {
       direction: "row",
       name: "vanilla-kanban-root",
-      callbacks: { canDrop: rejectDrop },
+      callbacks: { getDropPriority: rejectDrop },
     },
     { boardId: "vanilla-kanban" },
   );
@@ -306,7 +306,7 @@ function createFileTreeFolder(node, depth, parentContainer) {
     {
       direction: "column",
       name: `vanilla-file-tree-${node.id}`,
-      callbacks: node.open === false ? { canDrop: rejectDrop } : undefined,
+      callbacks: node.open === false ? { getDropPriority: rejectDrop } : undefined,
       animation: {
         reorder: fileTreeAnimation,
         drop: fileTreeAnimation,

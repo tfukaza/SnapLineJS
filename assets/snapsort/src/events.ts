@@ -326,29 +326,8 @@ export interface DropTargetChangeEvent {
   current: DragLocation | null;
 }
 
-export interface CanDropEvent {
-  session: DragSession | null;
-  item: Item;
-  itemId: ItemId;
-  itemMetadata: ItemMetadata;
-  /** The full dragged run, ordered. `item === items[0]` (single-item case: length 1). */
-  items: Item[];
-  itemIds: ItemId[];
-  itemsMetadata: ItemMetadata[];
-  /** The primary item's source when available. */
-  source: DragLocation | null;
-  /** Source locations parallel to `items`; null when no drag source is available. */
-  sources: readonly (DragLocation | null)[];
-  container: Container;
-  containerMetadata: Record<string, unknown>;
-  /**
-   * Candidate insertion index. `canDrop` is evaluated once per container per
-   * drop-target resolution (not once per candidate slot) for performance, so
-   * this reflects whichever candidate for this container was evaluated
-   * first and should not be used for per-slot gating.
-   */
-  index: number;
-}
+/** Effective priority value that rejects every candidate owned by a Container. */
+export const DROP_REJECT_PRIORITY = -1;
 
 /** A frozen world-space rectangle captured for the current drag resolution. */
 export type DropPriorityRect = CollisionRect;
@@ -358,7 +337,7 @@ export type ItemHitbox =
   | { shape: "rect"; rect: CollisionRect }
   | { shape: "circle"; center: { x: number; y: number }; radius: number };
 
-/** Geometry supplied to a candidate item's direct owner for hitbox resolution. */
+/** Geometry supplied to a hovered item's direct owner for hitbox resolution. */
 export interface ItemHitboxEvent {
   session: DragSession;
   item: Item;
@@ -376,7 +355,7 @@ export interface ItemHitboxEvent {
 
 /**
  * Geometry and metadata supplied when a destination computes its candidate
- * priority. The callback runs once per eligible container per resolution;
+ * priority. The callback runs once per candidate container per resolution;
  * its result applies to candidates owned directly by that container.
  */
 export interface DropPriorityEvent {
@@ -391,10 +370,19 @@ export interface DropPriorityEvent {
   sources: readonly (DragLocation | null)[];
   container: Container;
   containerMetadata: Record<string, unknown>;
+  /**
+   * Candidate insertion index. Policy is evaluated once per container per
+   * resolution, so this reflects the first candidate generated for that
+   * container and must not be used for per-slot gating.
+   */
+  index: number;
   /** The container's configured `dropPriority` before this callback overrides it. */
   staticPriority: number;
   pointer: { x: number; y: number };
-  /** The primary dragged item's current world-space rectangle. */
+  /**
+   * The primary dragged item's virtual current world-space rectangle. Its
+   * leading edge preserves the pointer-to-item offset captured at drag start.
+   */
   dragRect: DropPriorityRect;
   /** The destination's frozen border-box rectangle. */
   containerRect: DropPriorityRect;
@@ -407,9 +395,10 @@ export interface DropPriorityEvent {
  * Fired while dragging as the pointer's hitbox test starts, continues, or
  * stops matching another item's hitbox. Distinct from `onDropTargetChange`,
  * which tracks the resolved drop slot/gap — this tracks hovering over an
- * *item* within the currently resolved target container. `overItem`'s hitbox
- * can be customized by the direct owner's `getItemHitbox` callback. Used
- * directly by swap mode; also available
+ * *item* associated with the currently resolved target. Outside swap mode,
+ * this may be a direct child of that target or the nested target Container
+ * itself. `overItem`'s hitbox can be customized by its direct owner's
+ * `getItemHitbox` callback. Used directly by swap mode; also available
  * generally for hover-driven UI (highlight-on-hover, previews, etc.). Each
  * callback is read from the direct container that owns `overItem`; it does not
  * bubble to the root.
@@ -446,8 +435,8 @@ export interface DragItemHoverEvent {
  * lets the original exception propagate unchanged. During scheduled drag work,
  * the engine boundary reports it and SnapSort queues transient core cleanup
  * before the next paint. It cannot roll back arbitrary application or DOM side
- * effects that already ran. Use `onDragStart` or `canDrop` for supported
- * rejection.
+ * effects that already ran. Use `onDragStart` or `getDropPriority` for
+ * supported rejection.
  */
 export interface ContainerCallbacks {
   /**
@@ -505,8 +494,9 @@ export interface ContainerCallbacks {
 
   /**
    * Fires directly on the container owning `event.overItem` when its hitbox
-   * first matches within the currently resolved target container. Available
-   * in every built-in mode.
+   * first matches for the currently resolved target. Outside swap mode, a
+   * nested target Container can itself be `event.overItem`. Available in every
+   * built-in mode.
    */
   onDragItemEnter?: (event: DragItemHoverEvent) => void;
 
@@ -533,15 +523,9 @@ export interface ContainerCallbacks {
   ) => void;
 
   /**
-   * Consulted directly on each candidate destination in every built-in
-   * resolver; return false to reject that container for this resolution.
-   */
-  canDrop?: (event: CanDropEvent) => boolean;
-
-  /**
-   * Consulted directly on each eligible candidate destination in every
-   * built-in resolver. Override `container.dropPriority` for this resolution,
-   * or return `undefined` to preserve it.
+   * Consulted once per candidate destination in every built-in resolver.
+   * Override `container.dropPriority` for this resolution, return `undefined`
+   * to preserve it, or return `DROP_REJECT_PRIORITY` to reject the destination.
    */
   getDropPriority?: (event: DropPriorityEvent) => number | undefined;
 

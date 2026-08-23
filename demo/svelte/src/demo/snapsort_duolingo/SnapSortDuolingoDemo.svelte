@@ -177,7 +177,7 @@
 
   const callbacks = {
     ...renderTreeCallbacks(applyBoardEvent),
-    canDrop: rejectDrop,
+    getDropPriority: rejectDrop,
   } satisfies ContainerCallbacks;
 
   function checkAnswer() {

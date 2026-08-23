@@ -13,9 +13,9 @@
     rejectDrop,
   } from "@snap-engine/snapsort/callbacks";
   import type {
-    CanDropEvent,
     Container as SortContainer,
     ContainerCallbacks,
+    DropPriorityEvent,
     GhostState,
     RenderEntry,
     RenderTree,
@@ -70,9 +70,14 @@
     );
   }
 
-  function hasMatchingDropGroup(event: CanDropEvent): boolean {
+  function prioritizeMatchingDropGroup(
+    event: DropPriorityEvent,
+  ): number | undefined {
     const sourceGroup = event.source?.containerMetadata.dropGroup;
-    return sourceGroup !== undefined && sourceGroup === event.containerMetadata.dropGroup;
+    return sourceGroup !== undefined &&
+      sourceGroup === event.containerMetadata.dropGroup
+      ? prioritizeIntersectingContainer(event)
+      : rejectDrop(event);
   }
 
   const initialColumns: DemoColumn[] = [
@@ -365,13 +370,13 @@
 
   const boardCallbacks = {
     ...renderTreeCallbacks(applyBoardEvent),
-    canDrop: rejectDrop,
+    getDropPriority: rejectDrop,
   } satisfies ContainerCallbacks;
   const progressiveCallbacks = {
     ...renderTreeCallbacks(
       (event) => (progressiveTree = reduceRenderTree(progressiveTree, event)),
     ),
-    canDrop: rejectDrop,
+    getDropPriority: rejectDrop,
   } satisfies ContainerCallbacks;
 
   function stopControlEvent(event: Event) {
@@ -568,7 +573,7 @@
                   mode: "progressive",
                   direction: "column",
                   name: `progressive-example-${example.id}`,
-                  callbacks: { canDrop: rejectDrop },
+                  callbacks: { getDropPriority: rejectDrop },
                 }}
                 locked={true}
                 metadata={{ exampleId: example.id }}
@@ -595,8 +600,7 @@
                         drop: snapSortCubicAnimation,
                       },
                       callbacks: {
-                        canDrop: hasMatchingDropGroup,
-                        getDropPriority: prioritizeIntersectingContainer,
+                        getDropPriority: prioritizeMatchingDropGroup,
                       },
                     }}
                     locked={true}

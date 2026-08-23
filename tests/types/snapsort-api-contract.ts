@@ -1,5 +1,6 @@
 import {
   Container,
+  DROP_REJECT_PRIORITY,
   Item,
   createRenderEntries,
   createRenderEntry,
@@ -17,6 +18,7 @@ import {
   type ContainerOptions,
   type CreateVanillaAdapterOptions,
   type DragSession,
+  type DropPriorityEvent,
   type GhostInsertEvent,
   type GhostLifecycleEvent,
   type GhostMoveEvent,
@@ -40,6 +42,13 @@ import {
 } from "@snap-engine/snapsort";
 import * as reactBinding from "@snap-engine/snapsort/react";
 import type { GhostProps } from "@snap-engine/snapsort/react";
+import {
+  prioritizeIntersectingContainer,
+  prioritizeNearestContainerEdge,
+  prioritizePointerContainer,
+  prioritizeTreeDepth,
+  rejectDrop,
+} from "@snap-engine/snapsort/callbacks";
 
 declare const container: Container;
 declare const item: Item;
@@ -60,6 +69,26 @@ declare const ghostRemoveEvent: GhostRemoveEvent;
 declare const ghostProps: GhostProps;
 declare const adapter: SnapSortAdapter;
 declare const engine: import("@snap-engine/core").Engine;
+
+void prioritizePointerContainer;
+void prioritizeIntersectingContainer;
+void prioritizeNearestContainerEdge;
+void prioritizeTreeDepth;
+void rejectDrop;
+void DROP_REJECT_PRIORITY;
+
+const dropPolicy = (event: DropPriorityEvent): number | undefined => {
+  const candidateIndex: number = event.index;
+  void candidateIndex;
+  return event.containerMetadata.disabled ? DROP_REJECT_PRIORITY : undefined;
+};
+const policyCallbacks: ContainerCallbacks = { getDropPriority: dropPolicy };
+void policyCallbacks;
+const removedCanDrop: ContainerCallbacks = {
+  // @ts-expect-error canDrop was replaced by getDropPriority rejection.
+  canDrop: () => true,
+};
+void removedCanDrop;
 
 const itemOptions: ItemOptions = { itemId: "task-1" };
 const constructedItem = new Item(engine, null, itemOptions);

@@ -26,13 +26,13 @@ import {
 } from "./layout";
 import type { ItemSnapshot } from "./snapshot";
 import type { DragSessionController as DragSession } from "./drag/session";
-import type {
-  CanDropEvent,
-  DropPriorityEvent,
-  InsertionGapSegment,
-  InsertionMarkerNeighbor,
-  InsertionMarkerPresentation,
-  ItemHitboxEvent,
+import {
+  DROP_REJECT_PRIORITY,
+  type DropPriorityEvent,
+  type InsertionGapSegment,
+  type InsertionMarkerNeighbor,
+  type InsertionMarkerPresentation,
+  type ItemHitboxEvent,
 } from "./events";
 import { buildItemLocation, buildItemRunEvent } from "./event-builders";
 import { projectItemRunMove } from "./internal/move-projection";
@@ -89,7 +89,7 @@ interface FlowCandidate extends CandidateGeometry {
 }
 
 interface InsertionCandidate extends CandidateGeometry {
-  adjacentDistance: number | null;
+  virtualLeadingEdgeDistance: number | null;
 }
 
 interface SwapCandidate {
@@ -368,6 +368,38 @@ function resolveItemHitbox(
   );
 }
 
+interface HoveredItemCandidate {
+  readonly item: ItemBase;
+  readonly area: number;
+}
+
+function hoveredItemCandidate(
+  draggedItem: ItemBase,
+  item: ItemBase,
+  owner: Container,
+  session: DragSession,
+): HoveredItemCandidate | null {
+  if (session.itemSet.has(item) || item.isGhost) return null;
+  const hitbox = resolveItemHitbox(draggedItem, item, owner, session);
+  const area =
+    hitbox.shape === "circle"
+      ? Math.PI * hitbox.circle.radius ** 2
+      : hitbox.rect.width * hitbox.rect.height;
+  const intersects =
+    hitbox.shape === "circle"
+      ? pointIntersectsCircle(session.pointer, hitbox.circle)
+      : pointIntersectsRect(session.pointer, hitbox.rect);
+  return intersects ? { item, area } : null;
+}
+
+function preferMoreSpecificHoveredItem(
+  current: HoveredItemCandidate | null,
+  candidate: HoveredItemCandidate | null,
+): HoveredItemCandidate | null {
+  if (!candidate || (current && current.area <= candidate.area)) return current;
+  return candidate;
+}
+
 /**
  * Find which of `container`'s direct children (excluding `draggedItem` and
  * ghosts) the drag pointer's hitbox currently matches, if any. Distinct from
@@ -383,22 +415,45 @@ export function findHoveredItem(
 ): ItemBase | null {
   if (!container.dragSnapshot) return null;
 
-  const pointer = session.pointer;
-  let best: { item: ItemBase; area: number } | null = null;
+  let best: HoveredItemCandidate | null = null;
   for (const child of dragSnapshotItems(container)) {
-    if (session.itemSet.has(child) || child.isGhost) continue;
-    const hitbox = resolveItemHitbox(draggedItem, child, container, session);
-    const area =
-      hitbox.shape === "circle"
-        ? Math.PI * hitbox.circle.radius ** 2
-        : hitbox.rect.width * hitbox.rect.height;
-    const intersects =
-      hitbox.shape === "circle"
-        ? pointIntersectsCircle(pointer, hitbox.circle)
-        : pointIntersectsRect(pointer, hitbox.rect);
-    if (intersects && (!best || area < best.area)) {
-      best = { item: child, area };
-    }
+    best = preferMoreSpecificHoveredItem(
+      best,
+      hoveredItemCandidate(draggedItem, child, container, session),
+    );
+  }
+  return best?.item ?? null;
+}
+
+/**
+ * Resolve hover feedback for a placement target. Direct children remain the
+ * first candidates, then a nested destination may match as an Item through
+ * its actual owner. Checking the destination last makes an equal-area direct
+ * child the stable, more specific result. Swap mode deliberately continues to
+ * use `findHoveredItem` and its direct-child-only contract.
+ * @internal
+ */
+export function findPlacementHoveredItem(
+  draggedItem: ItemBase,
+  container: Container,
+  session: DragSession,
+): ItemBase | null {
+  if (!container.dragSnapshot) return null;
+
+  let best: HoveredItemCandidate | null = null;
+  for (const child of dragSnapshotItems(container)) {
+    best = preferMoreSpecificHoveredItem(
+      best,
+      hoveredItemCandidate(draggedItem, child, container, session),
+    );
+  }
+
+  const owner = container.getIndexAndContainer().container;
+  if (owner) {
+    best = preferMoreSpecificHoveredItem(
+      best,
+      hoveredItemCandidate(draggedItem, container, owner, session),
+    );
   }
   return best?.item ?? null;
 }
@@ -1185,8 +1240,9 @@ function insertionGapRect(gap: InsertionGapSegment): Rect {
     : { x: gap.x, y: gap.y, width: 0, height: gap.length };
 }
 
-function insertionAdjacentDistance(
-  pointer: { x: number; y: number },
+function insertionVirtualLeadingEdgeDistance(
+  dragRect: Rect,
+  orientation: InsertionGapSegment["orientation"],
   previous: InsertionMarkerNeighbor | null,
   next: InsertionMarkerNeighbor | null,
 ): number | null {
@@ -1194,8 +1250,13 @@ function insertionAdjacentDistance(
   if (previous) neighborRects.push(previous.rect);
   if (next) neighborRects.push(next.rect);
   if (neighborRects.length === 0) return null;
+  const leadingEdge = orientation === "horizontal" ? dragRect.x : dragRect.y;
   return Math.min(
-    ...neighborRects.map((rect) => distanceToRect(pointer, rect)),
+    ...neighborRects.map((rect) => {
+      const neighborLeadingEdge =
+        orientation === "horizontal" ? rect.x : rect.y;
+      return Math.abs(leadingEdge - neighborLeadingEdge);
+    }),
   );
 }
 
@@ -1295,8 +1356,9 @@ function collectInsertionCandidates(
           candidateCenterX: center.x,
           candidateCenterY: center.y,
           distance: euclidean(pointerX, pointerY, center.x, center.y),
-          adjacentDistance: insertionAdjacentDistance(
-            context.pointer,
+          virtualLeadingEdgeDistance: insertionVirtualLeadingEdgeDistance(
+            context.dragRect,
+            gap.orientation,
             previous,
             next,
           ),
@@ -1338,9 +1400,9 @@ function chooseInsertionCandidate(
       candidate.distance === best.distance &&
       candidate.candidateCenterX === best.candidateCenterX &&
       candidate.candidateCenterY === best.candidateCenterY &&
-      candidate.adjacentDistance !== null &&
-      best.adjacentDistance !== null &&
-      candidate.adjacentDistance < best.adjacentDistance
+      candidate.virtualLeadingEdgeDistance !== null &&
+      best.virtualLeadingEdgeDistance !== null &&
+      candidate.virtualLeadingEdgeDistance < best.virtualLeadingEdgeDistance
     ) {
       best = candidate;
     }
@@ -1348,20 +1410,32 @@ function chooseInsertionCandidate(
   return best;
 }
 
-function configuredDropPriority(container: Container): number {
-  const value = container.dropPriority;
-  if (!Number.isFinite(value)) {
+function validateDropPriority(
+  container: Container,
+  value: number,
+  source: "dropPriority" | "getDropPriority",
+): void {
+  if (
+    !Number.isFinite(value) ||
+    (value < 0 && value !== DROP_REJECT_PRIORITY)
+  ) {
     throw new TypeError(
-      `SnapSort Container ${container.id}: dropPriority must be a finite number.`,
+      `SnapSort Container ${container.id}: ${source} must be -1 or a finite nonnegative number.`,
     );
   }
+}
+
+function configuredDropPriority(container: Container): number {
+  const value = container.dropPriority;
+  validateDropPriority(container, value, "dropPriority");
   return value;
 }
 
 function dropPolicyEvent(
   candidate: { target: ResolvedDropTarget },
   context: ResolutionContext,
-): Omit<DropPriorityEvent, "staticPriority"> & Pick<CanDropEvent, "index"> {
+  staticPriority: number,
+): DropPriorityEvent {
   const base = containerResolutionBase(context, candidate.target.container);
 
   return {
@@ -1376,6 +1450,7 @@ function dropPolicyEvent(
     sources: [...context.sources],
     container: base.container,
     containerMetadata: base.containerMetadata,
+    staticPriority,
     index: candidate.target.index,
     pointer: context.pointer,
     dragRect: context.dragRect,
@@ -1386,9 +1461,9 @@ function dropPolicyEvent(
 }
 
 /**
- * Apply destination-owned drop policy once per distinct container. Eligibility
- * is resolved before priority; only candidates tied at the highest effective
- * priority continue to the active placement mode's slot-ranking algorithm.
+ * Apply destination-owned drop policy once per distinct container. Effective
+ * priority -1 rejects a destination; only candidates tied at the highest
+ * eligible priority continue to the active mode's slot-ranking algorithm.
  */
 function applyDropPolicy<T extends { target: ResolvedDropTarget }>(
   candidates: T[],
@@ -1408,27 +1483,16 @@ function applyDropPolicy<T extends { target: ResolvedDropTarget }>(
   const eligible: Array<{ candidate: T; priority: number }> = [];
   for (const [container, directCandidates] of byContainer) {
     const callbacks = container.callbacks;
-    let event:
-      | (Omit<DropPriorityEvent, "staticPriority"> &
-          Pick<CanDropEvent, "index">)
-      | undefined;
-    const getEvent = () =>
-      (event ??= dropPolicyEvent(directCandidates[0], getContext()));
-    if (callbacks?.canDrop?.(getEvent()) === false) continue;
-
     const staticPriority = configuredDropPriority(container);
     const override = callbacks?.getDropPriority
-      ? callbacks.getDropPriority({
-          ...getEvent(),
-          staticPriority,
-        })
+      ? callbacks.getDropPriority(
+          dropPolicyEvent(directCandidates[0], getContext(), staticPriority),
+        )
       : undefined;
-    if (override !== undefined && !Number.isFinite(override)) {
-      throw new TypeError(
-        `SnapSort Container ${container.id}: getDropPriority must return a finite number or undefined.`,
-      );
-    }
+    if (override !== undefined)
+      validateDropPriority(container, override, "getDropPriority");
     const priority = override ?? staticPriority;
+    if (priority === DROP_REJECT_PRIORITY) continue;
     for (const candidate of directCandidates) {
       eligible.push({ candidate, priority });
     }

@@ -165,7 +165,7 @@
     ...renderTreeCallbacks(
       (event) => (multiTree = reduceRenderTree(multiTree, event)),
     ),
-    canDrop: rejectDrop,
+    getDropPriority: rejectDrop,
   } satisfies ContainerCallbacks;
 </script>
 

@@ -809,3 +809,159 @@ test("swap, hover, and absent optional callbacks keep their boundaries", async (
     harness.cleanup();
   }
 });
+
+test("placement hover routes a nested destination through its actual owner", async () => {
+  const harness = createHarness();
+  try {
+    const ledger: string[] = [];
+    const root = mountRoot(harness, {
+      getItemHitbox: (event) => {
+        ledger.push(`hitbox:${event.container.itemId}:${event.overItemId}`);
+        return { shape: "rect", rect: event.defaultRect };
+      },
+      onDragItemEnter: (event) => {
+        ledger.push(`enter:${event.container.itemId}:${event.overItemId}`);
+      },
+      onDragItemMove: (event) => {
+        ledger.push(`move:${event.container.itemId}:${event.overItemId}`);
+      },
+      onDragItemLeave: (event) => {
+        ledger.push(`leave:${event.container.itemId}:${event.overItemId}`);
+      },
+    });
+    const source = mountContainer(harness, root, "source");
+    const destination = mountContainer(harness, root, "destination", {
+      getItemHitbox: () => {
+        ledger.push("wrong-owner:hitbox");
+        return {
+          shape: "rect",
+          rect: { x: 0, y: 0, width: 40, height: 40 },
+        };
+      },
+      onDragItemEnter: () => ledger.push("wrong-owner:enter"),
+      onDragItemMove: () => ledger.push("wrong-owner:move"),
+      onDragItemLeave: () => ledger.push("wrong-owner:leave"),
+    });
+    const item = mountItem(harness, source, "item");
+    const lifecycle: DragLifecycleStrategy = {
+      placementOccupiesFlowSlots: false,
+      validateStart() {},
+      dragStart() {},
+      dragMove() {},
+      currentPlacement: (activeSession) => activeSession.pendingPlacement,
+      placementIndexFor: (_activeSession, target) => target.index,
+      syncPlacement: (activeSession, placement) => {
+        activeSession.pendingPlacement = placement;
+      },
+      clearPlacement: (activeSession) => {
+        activeSession.pendingPlacement = null;
+      },
+      afterPlacementSync() {},
+      drop() {},
+    };
+    const strategy: SortStrategy = {
+      mode: "insertion",
+      dropTarget: {
+        resolve: () => ({ container: destination, index: 0 }),
+      },
+      lifecycle,
+    };
+    const session = new DragSession(
+      root,
+      [item],
+      [location(item)],
+      strategy,
+      dragStartFor(item),
+      item,
+    );
+    session.status = "active";
+    root.readDragSnapshotTree();
+    root.captureDragSnapshotTree();
+
+    await session.updateDropTarget();
+    await session.updateDropTarget();
+    session.clearHoveredItem();
+
+    expect(ledger).toEqual([
+      "hitbox:root:destination",
+      "enter:root:destination",
+      "hitbox:root:destination",
+      "move:root:destination",
+      "leave:root:destination",
+    ]);
+  } finally {
+    harness.cleanup();
+  }
+});
+
+test("swap hover remains scoped to the resolved container's direct children", async () => {
+  const harness = createHarness();
+  try {
+    const ledger: string[] = [];
+    const root = mountRoot(harness, {
+      getItemHitbox: () => {
+        ledger.push("wrong-self-hitbox");
+        return {
+          shape: "rect",
+          rect: { x: 15, y: 15, width: 10, height: 10 },
+        };
+      },
+      onDragItemEnter: () => ledger.push("wrong-self-enter"),
+    });
+    const source = mountContainer(harness, root, "source");
+    const destination = mountContainer(harness, root, "destination", {
+      getItemHitbox: (event) => {
+        ledger.push(`hitbox:destination:${event.overItemId}`);
+        return { shape: "rect", rect: event.defaultRect };
+      },
+      onDragItemEnter: (event) => {
+        ledger.push(`enter:destination:${event.overItemId}`);
+      },
+    });
+    const item = mountItem(harness, source, "item");
+    mountItem(harness, destination, "swap-child");
+    const lifecycle: DragLifecycleStrategy = {
+      placementOccupiesFlowSlots: false,
+      validateStart() {},
+      dragStart() {},
+      dragMove() {},
+      currentPlacement: (activeSession) => activeSession.pendingPlacement,
+      placementIndexFor: (_activeSession, target) => target.index,
+      syncPlacement: (activeSession, placement) => {
+        activeSession.pendingPlacement = placement;
+      },
+      clearPlacement: (activeSession) => {
+        activeSession.pendingPlacement = null;
+      },
+      afterPlacementSync() {},
+      drop() {},
+    };
+    const strategy: SortStrategy = {
+      mode: "swap",
+      dropTarget: {
+        resolve: () => ({ container: destination, index: 0 }),
+      },
+      lifecycle,
+    };
+    const session = new DragSession(
+      root,
+      [item],
+      [location(item)],
+      strategy,
+      dragStartFor(item),
+      item,
+    );
+    session.status = "active";
+    root.readDragSnapshotTree();
+    root.captureDragSnapshotTree();
+
+    await session.updateDropTarget();
+
+    expect(ledger).toEqual([
+      "hitbox:destination:swap-child",
+      "enter:destination:swap-child",
+    ]);
+  } finally {
+    harness.cleanup();
+  }
+});

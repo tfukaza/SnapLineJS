@@ -9,7 +9,11 @@ import type { Container } from "../container";
 import type { Item } from "../item";
 import { reconcileRootTreeState, rootHasItemId } from "../internal/tree-state";
 import { stageVisualRectBeforeMutation } from "../internal/visual-rect";
-import { findHoveredItem, type ResolvedDropTarget } from "../algorithm";
+import {
+  findHoveredItem,
+  findPlacementHoveredItem,
+  type ResolvedDropTarget,
+} from "../algorithm";
 import {
   buildDragEndEvent,
   buildDragLocation,
@@ -854,22 +858,25 @@ export class DragSessionController {
   }
 
   /**
-   * Hit-test the pointer against `container`'s children (or clear the hover
-   * when `container` is null, e.g. no valid drop target) and fire
-   * enter/move/leave accordingly. Hover is semantically distinct from the
-   * resolved slot/gap, but its hit-test is scoped to the currently resolved
-   * target container passed here.
+   * Hit-test the pointer against `container`'s children and, when nested, the
+   * destination Container itself for non-swap placement (or clear the hover
+   * when `container` is null, e.g. no valid drop target). Swap hover preserves
+   * its direct-child-only contract. Hover is semantically distinct from the
+   * resolved slot/gap. Callbacks always dispatch through the hovered Item's
+   * actual owner.
    */
   #updateHoveredItem(container: Container | null): void {
     const item = this.primaryItem;
     const nextHovered = container
-      ? findHoveredItem(item, container, this)
+      ? this.strategy.mode === "swap"
+        ? findHoveredItem(item, container, this)
+        : findPlacementHoveredItem(item, container, this)
       : null;
     const previousHovered = this.hoveredItem;
 
     if (previousHovered === nextHovered) {
-      if (nextHovered && container) {
-        fireDragItemMove(container, item, nextHovered, this);
+      if (nextHovered) {
+        fireDragItemMove(nextHovered.container, item, nextHovered, this);
       }
       return;
     }
@@ -878,8 +885,8 @@ export class DragSessionController {
       fireDragItemLeave(previousHovered.container, item, previousHovered, this);
     }
     this.hoveredItem = nextHovered;
-    if (nextHovered && container) {
-      fireDragItemEnter(container, item, nextHovered, this);
+    if (nextHovered) {
+      fireDragItemEnter(nextHovered.container, item, nextHovered, this);
     }
   }
 }

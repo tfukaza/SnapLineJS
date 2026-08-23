@@ -283,7 +283,7 @@
   const multiRowCallbacks = structuralCallbacks(handleMultiRowEvent);
   const multiContainerCallbacks = {
     ...structuralCallbacks(handleMultiContainerEvent),
-    canDrop: rejectDrop,
+    getDropPriority: rejectDrop,
   } satisfies ContainerCallbacks;
 
 </script>

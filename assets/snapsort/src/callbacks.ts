@@ -3,7 +3,7 @@ import {
   pointIntersectsRect,
   rectsIntersect,
 } from "@snap-engine/core/collision";
-import type { CanDropEvent, DropPriorityEvent } from "./events";
+import { DROP_REJECT_PRIORITY, type DropPriorityEvent } from "./events";
 
 /** Prefer the destination whose frozen border box contains the pointer. */
 export function prioritizePointerContainer(
@@ -22,16 +22,29 @@ export function prioritizeIntersectingContainer(
 }
 
 /**
- * Prefer the destination nearest to the pointer. Points inside a destination
- * score `0`; outside points score the negative distance to its border box.
+ * Prefer the destination nearest to the pointer on a nonnegative scale.
+ * Points inside score `1`; scores approach `0` as distance increases.
  */
 export function prioritizeNearestContainerEdge(
   event: DropPriorityEvent,
 ): number {
-  return -distanceToRect(event.pointer, event.containerRect);
+  return 1 / (1 + distanceToRect(event.pointer, event.containerRect));
+}
+
+/**
+ * Prefer the deepest vertical-tree destination containing the virtual dragged
+ * item's leading x edge at the pointer's current y position.
+ */
+export function prioritizeTreeDepth(event: DropPriorityEvent): number {
+  const virtualProbe = { x: event.dragRect.x, y: event.pointer.y };
+  return pointIntersectsRect(virtualProbe, event.containerRect)
+    ? event.depth + 1
+    : event.staticPriority;
 }
 
 /** Reject every drag for a destination container. */
-export function rejectDrop(_event: CanDropEvent): false {
-  return false;
+export function rejectDrop(
+  _event: DropPriorityEvent,
+): typeof DROP_REJECT_PRIORITY {
+  return DROP_REJECT_PRIORITY;
 }

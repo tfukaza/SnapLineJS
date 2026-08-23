@@ -205,7 +205,7 @@
 
   const callbacks = {
     ...renderTreeCallbacks(applyBoardEvent),
-    canDrop: rejectDrop,
+    getDropPriority: rejectDrop,
     onDragStart: handleDragStart,
   } satisfies ContainerCallbacks;
 </script>
