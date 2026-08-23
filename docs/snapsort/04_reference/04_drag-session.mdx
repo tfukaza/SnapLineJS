@@ -8,9 +8,9 @@ sectionTitle: Reference
 sectionOrder: 3
 ---
 
-`DragSession` is the stable public handle for one SnapSort drag gesture. It is
-exported as a TypeScript interface, not as a constructor. SnapSort creates the
-handle and exposes it through lifecycle events and the root Container.
+`DragSession` is the stable public handle for one drag gesture. It is a
+TypeScript interface, not a constructor; SnapSort supplies it through drag
+events and the root Container's `dragSession` property.
 
 ```ts
 import type { DragSession, DragStartEvent } from "@snap-engine/snapsort";
@@ -24,10 +24,6 @@ function onDragStart(event: DragStartEvent) {
 ## Interface
 
 ```ts
-type DragSessionStatus = "pending" | "active" | "dropping" | "ended";
-type DragVisual = "item" | "preview" | "none";
-type DropEffect = "move" | "none";
-
 interface DragSession {
   readonly root: Container;
   readonly pointerId: number;
@@ -40,103 +36,179 @@ interface DragSession {
   readonly status: DragSessionStatus;
   dragVisual: DragVisual;
   dropEffect: DropEffect;
-
   /** @deprecated */
   handoff(replacements: readonly Item[]): void;
 }
 ```
 
-The public handle deliberately excludes placement candidates, ghosts,
-animations, internal drag offsets, and lifecycle methods. Observe those
-systems through their callbacks and public event payloads instead.
+## Properties
 
-## Obtaining the Active Session
+### `root`
 
-Events emitted by an active drag expose the same stable `event.session` object
-throughout that gesture. Policy callbacks invoked outside a drag, such as for
-a programmatic move, may instead receive `session: null`. The root Container
-also exposes the active handle while the gesture is in progress:
+**Type:** `Container` · **Read-only**
+
+The independent root Container that owns the gesture. It receives root
+lifecycle callbacks and exposes this handle as `root.dragSession` while the
+session is active.
 
 ```ts
-const session = root.dragSession; // DragSession | null
+const activeSession = event.session.root.dragSession;
 ```
 
-`root.dragSession` returns `null` before startup and after cleanup. The same
-property on a nested Container always returns `null`; read it from that tree's
-root. Keep callback-local references only when needed—an ended handle remains
-readable, but it no longer describes an active operation.
+### `pointerId`
 
-## Read-Only State
+**Type:** `number` · **Read-only**
 
-| Field         | Meaning                                                                                                            |
-| ------------- | ------------------------------------------------------------------------------------------------------------------ |
-| `root`        | Independent root Container that owns the session and receives root lifecycle callbacks.                            |
-| `pointerId`   | Pointer identifier captured from the starting gesture.                                                             |
-| `items`       | Complete ordered run participating in the drag. A single-item drag has length one.                                 |
-| `sources`     | Immutable gesture-origin locations parallel to `items`; they do not change when a handoff or target change occurs. |
-| `pressedItem` | Item on which pointer input began and the anchor for pointer-following geometry.                                   |
-| `primaryItem` | `items[0]`; singular event fields and swap placement use this participant.                                         |
-| `start`       | Frozen world-space pointer coordinates where the drag began.                                                       |
-| `pointer`     | Latest frozen world-space pointer coordinates processed by the session.                                            |
-| `status`      | Current public lifecycle phase.                                                                                    |
+The browser pointer identifier captured from the gesture that started the
+drag. Use it when correlating the session with application-level pointer
+state.
 
-The coordinate objects and locations are immutable snapshots. `items` and
-`sources` are read-only arrays. Do not use `pointer` as application render
-state; SnapSort updates its own continuous drag visuals directly, while
-callbacks report semantic lifecycle and placement changes.
+```ts
+if (event.pointerId === session.pointerId) {
+  // Both refer to the pointer driving this drag.
+}
+```
 
-## Status Lifecycle
+### `items`
 
-| Status     | Meaning                                                                                                     |
-| ---------- | ----------------------------------------------------------------------------------------------------------- |
-| `pending`  | SnapSort captured the starting layout and is running `onDragStart`; the callback may still veto activation. |
-| `active`   | Startup completed and pointer moves may resolve placement, hover, and ghost state.                          |
-| `dropping` | Pointer input ended or cancellation began; temporary visuals and persistent mutation are being finalized.   |
-| `ended`    | Cleanup completed. The root has already cleared `root.dragSession`.                                         |
+**Type:** `readonly Item[]` · **Read-only**
 
-Returning `false` from `onDragStart` ends a pending session without activating
-it and without firing `onDragEnd`. An activated drag fires `onDragEnd` after
-its temporary state is cleared, including cancellation and a return to the
-source.
+The complete ordered run participating in the drag. A single-item drag has
+one entry. Multi-drag participants are ordered by their original document
+position, not by which Item was pressed.
 
-## `dragVisual`
+```ts
+const draggedIds = session.items.map((item) => item.itemId);
+```
 
-`dragVisual` selects what follows the pointer independently of the placement
-mode:
+The array is frozen. Do not add, remove, or reorder its entries.
 
-| Value       | Behavior                                                                                                          |
-| ----------- | ----------------------------------------------------------------------------------------------------------------- |
-| `"item"`    | Hoists the real dragged Items, sets their positioning directly, and preserves required layout slots with ghosts.  |
-| `"preview"` | Leaves the real Items in layout and creates one root-owned `pointer-preview` ghost for the ordered run.           |
-| `"none"`    | Leaves the Items in layout without a pointer-following visual. Placement feedback may still render independently. |
+### `sources`
 
-The mode defaults are:
+**Type:** `readonly DragLocation[]` · **Read-only**
 
-| Placement mode                 | Default `dragVisual` |
-| ------------------------------ | -------------------- |
-| Euclidean and progressive flow | `"item"`             |
-| Insertion                      | `"none"`             |
-| Swap                           | `"preview"`          |
+The gesture-origin locations parallel to `items`: `sources[i]` describes
+`items[i]`. They remain the original locations when the prospective target
+changes and after a deprecated handoff.
 
-Set `dragVisual` only while the session is `pending`, normally inside
-`onDragStart`. Changing it after activation throws. See the framework-specific
-[Svelte Ghost](/docs/snapsort/reference/svelte/ghost) and
-[React Ghost](/docs/snapsort/reference/react/ghost) pages for preview and
-placement rendering.
+```ts
+const origins = session.items.map((item, index) => ({
+  item,
+  source: session.sources[index],
+}));
+```
 
-## `dropEffect`
+The array and each location are frozen.
 
-`dropEffect` controls whether SnapSort performs its ordinary persistent drop
-mutation:
+### `pressedItem`
 
-| Value    | Behavior                                                                                                  |
-| -------- | --------------------------------------------------------------------------------------------------------- |
-| `"move"` | Commit the resolved move or swap through the configured root callback. This is the default in every mode. |
-| `"none"` | Suppress that persistent mutation while still reporting the resolved destination to `onDragEnd`.          |
+**Type:** `Item` · **Read-only**
 
-It may be changed while the session is `pending` or `active`. Changing it once
-dropping begins throws. Cancellation forces the effective result to no
-persistent mutation.
+The Item on which pointer input began. It anchors pointer-following geometry
+and can differ from `primaryItem` when the user presses a later member of a
+multi-selection.
+
+```ts
+const pressedId = session.pressedItem.itemId;
+```
+
+### `primaryItem`
+
+**Type:** `Item` · **Read-only**
+
+The first participant in the ordered run; equivalent to `items[0]`. SnapSort
+uses this Item for singular event fields and swap placement.
+
+```ts
+const isSingleDrag =
+  session.items.length === 1 && session.primaryItem === session.pressedItem;
+```
+
+### `start`
+
+**Type:** `Readonly<{ x: number; y: number }>` · **Read-only**
+
+Frozen world-space pointer coordinates captured when the drag began.
+
+```ts
+const distanceX = session.pointer.x - session.start.x;
+```
+
+### `pointer`
+
+**Type:** `Readonly<{ x: number; y: number }>` · **Read-only**
+
+The latest world-space pointer coordinates processed by SnapSort. Each value
+is an immutable snapshot. Read it inside callbacks; do not use it as a
+continuous framework render signal.
+
+```ts
+function onDropTargetChange(event: DropTargetChangeEvent) {
+  console.log(event.session.pointer);
+}
+```
+
+### `status`
+
+**Type:** `DragSessionStatus` · **Read-only**
+
+The current public lifecycle phase:
+
+```ts
+type DragSessionStatus = "pending" | "active" | "dropping" | "ended";
+```
+
+- `"pending"`: SnapSort is running `onDragStart`; activation can still be
+  vetoed and `dragVisual` can still be changed.
+- `"active"`: pointer movement can resolve targets, hover, and ghost state.
+- `"dropping"`: cancellation or pointer release is finalizing temporary and
+  persistent state.
+- `"ended"`: cleanup is complete and `root.dragSession` is already `null`.
+
+```ts
+if (session.status === "active") {
+  session.dropEffect = "none";
+}
+```
+
+### `dragVisual`
+
+**Type:** `"item" | "preview" | "none"` · **Writable only while `pending`**
+
+Selects what follows the pointer independently of placement feedback:
+
+- `"item"` hoists and positions the real dragged Items.
+- `"preview"` leaves the Items in layout and creates a root-owned
+  `pointer-preview` Ghost.
+- `"none"` leaves Items in layout without a pointer-following visual.
+
+The default is `"item"` for euclidean and progressive mode, `"none"` for
+insertion mode, and `"preview"` for swap mode. Set it synchronously inside
+`onDragStart`; changing it after activation or assigning another value throws.
+
+```ts
+const callbacks = {
+  onDragStart(event: DragStartEvent) {
+    event.session.dragVisual = "preview";
+  },
+} satisfies ContainerCallbacks;
+```
+
+Placement feedback remains independent, so a preview can coexist with a
+target spacer or insertion marker.
+
+### `dropEffect`
+
+**Type:** `"move" | "none"` · **Default:** `"move"` · **Writable while `pending` or `active`**
+
+Controls whether SnapSort performs its ordinary persistent drop mutation:
+
+- `"move"` commits the resolved move or swap through the root callback.
+- `"none"` suppresses that mutation while `onDragEnd` still reports the
+  resolved destination.
+
+Changing it after dropping begins or assigning another value throws. A
+cancelled session never performs the persistent mutation.
 
 ```ts
 const callbacks = {
@@ -144,36 +216,77 @@ const callbacks = {
     event.session.dropEffect = "none";
   },
   onDragEnd(event: DragEndEvent) {
-    if (event.destination) {
-      handleApplicationOwnedDrop(event);
-    }
+    if (event.destination) handleApplicationOwnedDrop(event);
   },
 } satisfies ContainerCallbacks;
 ```
 
-## Multi-Item Drags
+## Supporting Types
 
-Starting a drag on a selected Item collects the selected participants into
-`items` in document order. `sources` stays parallel to that ordered run.
-`pressedItem` can differ from `primaryItem` when the user grabs a later member
-of the selection; use `pressedItem` for gesture anchoring and `primaryItem`
-only where SnapSort's singular semantics require the run head.
+### `DragLocation`
 
-The `pointer-preview` represents the complete run. Slot-preserving spacer
-lifecycles may create one ghost anchor per represented Item.
+```ts
+interface DragLocation {
+  readonly container: Container;
+  readonly containerMetadata: Record<string, unknown>;
+  readonly index: number;
+}
+```
 
-## Deprecated `handoff`
+`container` is the direct owner, `containerMetadata` is its read-only
+application metadata, and `index` is the zero-based position in that
+Container. DragSession uses this type for every entry in `sources`.
 
-`handoff(replacements)` transfers the active gesture to a parallel run of
-already-mounted replacement Items. It can only be called while `pending`, and
-the replacement list must satisfy SnapSort's identity, ownership, and ordering
-requirements.
+```ts
+const source: DragLocation = session.sources[0];
+console.log(source.container.name, source.index);
+```
 
-This escape hatch predates the supported move-and-backfill copying pattern and
-has no recommended first-party use case. New integrations should not depend on
+## Methods
+
+### Deprecated `handoff`
+
+```ts
+/** @deprecated */
+session.handoff(replacements: readonly Item[]): void;
+```
+
+Transfers a pending gesture to an already-mounted parallel run of replacement
+Items. It may only run synchronously during `onDragStart`. Replacements must
+be a unique, equally sized run of non-ghost Items attached to the same root
+and engine, and must not include the current participants. Invalid input or a
+call after the pending phase throws without changing the current participants.
+
+This escape hatch predates the supported move-and-backfill copying recipe and
+has no recommended first-party use case. Do not add new integrations that use
 it; it may be removed in a future release.
 
-For the gesture walkthrough and callback chronology, begin with
-[Drag Start](/docs/snapsort/guides/sessions/drag-start), then continue through
-[Drags and Ghosts](/docs/snapsort/guides/sessions/ghosts) and
+## Appendix
+
+### Obtaining and Retaining the Session
+
+All events from one active gesture expose the same `event.session` object.
+Policy events created for programmatic work may instead have `session: null`.
+The root's `dragSession` property returns the active handle during the gesture
+and `null` before startup and after cleanup; a nested Container's property
+always returns `null`.
+
+An ended handle remains readable, but it no longer describes an active
+operation. Prefer callback-local access unless the application specifically
+needs to correlate lifecycle events.
+
+### Lifecycle and Multi-Item Model
+
+Returning `false` from `onDragStart` ends the pending session without
+activation or `onDragEnd`. An activated drag fires `onDragEnd` after temporary
+state is cleared, including cancellation and a return to the source.
+
+For multi-item drags, `items` and `sources` stay parallel in document order.
+`pressedItem` anchors the gesture; `primaryItem` is the run head used by
+singular APIs. One pointer-preview can represent the whole run, while
+slot-preserving lifecycles may create one spacer anchor per represented Item.
+
+For the full chronology, see
+[Drag Start](/docs/snapsort/guides/sessions/drag-start),
+[Drags and Ghosts](/docs/snapsort/guides/sessions/ghosts), and
 [Commit and Cleanup](/docs/snapsort/guides/sessions/commit-and-cleanup).

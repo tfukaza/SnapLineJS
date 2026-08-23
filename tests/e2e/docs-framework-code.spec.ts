@@ -1110,7 +1110,16 @@ test("SnapSort reference exposes paired Ghost pages and shared policies", async 
     page.getByRole("heading", { name: "Component Properties", level: 2 }),
   ).toBeVisible();
   await expect(
-    page.getByRole("heading", { name: "Ghost Roles", level: 2 }),
+    page.getByRole("heading", { name: "ghost", exact: true, level: 3 }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "GhostState", exact: true, level: 2 }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "insertionMarkerRect()", level: 3 }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Appendix", level: 2 }),
   ).toBeVisible();
   await expect(
     page.locator(".pagination-link.prev .pagination-title"),
@@ -1143,13 +1152,19 @@ test("SnapSort reference exposes paired Ghost pages and shared policies", async 
     "Standard Callbacks",
   ]);
   await expect(
-    page.getByRole("heading", { name: "Status Lifecycle", level: 2 }),
+    page.getByRole("heading", { name: "root", exact: true, level: 3 }),
   ).toBeVisible();
   await expect(
-    page.getByRole("heading", { name: "dragVisual", level: 2 }),
+    page.getByRole("heading", { name: "status", exact: true, level: 3 }),
   ).toBeVisible();
   await expect(
-    page.getByRole("heading", { name: "dropEffect", level: 2 }),
+    page.getByRole("heading", { name: "dragVisual", exact: true, level: 3 }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "dropEffect", exact: true, level: 3 }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Appendix", level: 2 }),
   ).toBeVisible();
 
   const pairedMarkdownResponse = await request.get(
@@ -1160,9 +1175,14 @@ test("SnapSort reference exposes paired Ghost pages and shared policies", async 
   expect(pairedMarkdown).toContain("# Ghost");
   expect(pairedMarkdown).toContain("@snap-engine/snapsort/react");
   expect(pairedMarkdown).not.toContain("@snap-engine/snapsort/svelte");
-  expect(pairedMarkdown).toContain("## Ghost Roles");
+  expect(pairedMarkdown).toContain("## `GhostState`");
+  expect(pairedMarkdown).toContain("### `ghost`");
+  expect(pairedMarkdown).toContain("### `insertionMarkerRect()`");
   expect(pairedMarkdown).toContain("`source-spacer`");
   expect(pairedMarkdown).toContain("`pointer-preview`");
+  expect(pairedMarkdown.indexOf("## `GhostState`")).toBeLessThan(
+    pairedMarkdown.indexOf("## Appendix"),
+  );
 
   const sessionMarkdownResponse = await request.get(
     "/docs/snapsort/reference/drag-session.md?framework=react",
@@ -1171,18 +1191,41 @@ test("SnapSort reference exposes paired Ghost pages and shared policies", async 
   const sessionMarkdown = await sessionMarkdownResponse.text();
   expect(sessionMarkdown).toContain("# DragSession");
   expect(sessionMarkdown).toContain('type DragSessionStatus = "pending"');
-  expect(sessionMarkdown).toContain("## `dragVisual`");
-  expect(sessionMarkdown).toContain("## Deprecated `handoff`");
+  expect(sessionMarkdown).toContain("### `dragVisual`");
+  expect(sessionMarkdown).toContain("### `dropEffect`");
+  expect(sessionMarkdown).toContain("### Deprecated `handoff`");
+  expect(sessionMarkdown).toContain("### `DragLocation`");
+  expect(sessionMarkdown.indexOf("## Properties")).toBeLessThan(
+    sessionMarkdown.indexOf("## Appendix"),
+  );
 
   const callbacksResponse = await page.goto(
     "/docs/snapsort/reference/callbacks?framework=vanilla",
   );
   expect(callbacksResponse?.status()).toBe(200);
   await expect(
-    page.getByRole("heading", { name: "Callback Summary", level: 2 }),
+    page.getByRole("heading", {
+      name: "DropPriorityEvent",
+      exact: true,
+      level: 2,
+    }),
   ).toBeVisible();
   await expect(
-    page.getByRole("heading", { name: "prioritizeTreeDepth", level: 2 }),
+    page.getByRole("heading", {
+      name: "containerRect",
+      exact: true,
+      level: 3,
+    }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", {
+      name: "prioritizeTreeDepth",
+      exact: true,
+      level: 3,
+    }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Appendix", level: 2 }),
   ).toBeVisible();
   await expect(page.getByRole("article")).toContainText(
     "@snap-engine/snapsort/callbacks",
@@ -1195,7 +1238,9 @@ test("SnapSort reference exposes paired Ghost pages and shared policies", async 
   expect(callbacksMarkdownResponse.status()).toBe(200);
   const callbacksMarkdown = await callbacksMarkdownResponse.text();
   expect(callbacksMarkdown).toContain("# Standard Callbacks");
-  expect(callbacksMarkdown).toContain("## `prioritizeTreeDepth`");
+  expect(callbacksMarkdown).toContain("## `DropPriorityEvent`");
+  expect(callbacksMarkdown).toContain("### `containerContentRect`");
+  expect(callbacksMarkdown).toContain("### `prioritizeTreeDepth`");
   expect(callbacksMarkdown).toContain("x: event.dragRect.x");
   expect(callbacksMarkdown).toContain("y: event.pointer.y");
   expect(callbacksMarkdown).toContain("event.depth + 1");
@@ -1203,6 +1248,9 @@ test("SnapSort reference exposes paired Ghost pages and shared policies", async 
   expect(callbacksMarkdown).toContain("DROP_REJECT_PRIORITY");
   expect(callbacksMarkdown).toContain("1 / (1 + distance)");
   expect(callbacksMarkdown).not.toContain("canDrop");
+  expect(callbacksMarkdown.indexOf("## Functions")).toBeLessThan(
+    callbacksMarkdown.indexOf("## Appendix"),
+  );
 
   const guideMarkdownResponse = await request.get(
     "/docs/snapsort/guides/sessions/ghosts.md",
@@ -1230,9 +1278,12 @@ test("SnapSort Container examples move out of Reference and keep accessible sour
   ).toBeVisible();
   await expect(
     page.getByRole("heading", {
-      name: "Direct Children and Render Entries",
-      level: 2,
+      name: "Direct children and RenderTree entries",
+      level: 3,
     }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Appendix", level: 2 }),
   ).toBeVisible();
   await expect(page.locator("[data-demo-code-tabs]")).toHaveCount(0);
   await expect(
@@ -1650,7 +1701,7 @@ test("SnapSort Item examples move out of Reference and preserve focused behavior
   );
   expect(reactMarkdownResponse.status()).toBe(200);
   const reactMarkdown = await reactMarkdownResponse.text();
-  expect(reactMarkdown).toContain("## Core Item Access");
+  expect(reactMarkdown).toContain("## Core Item Object");
   expect(reactMarkdown).toContain("item={existingItem}");
   expect(reactMarkdown).not.toContain("DragSession.handoff");
   expect(reactMarkdown).not.toContain("itemObject");
@@ -2064,20 +2115,25 @@ test("SnapSort callback docs expose receiver routing and mutation boundaries", a
 
   await page.setViewportSize({ width: 1280, height: 720 });
 
-  const rootCallbackGroups = [
-    "onItemMove(event)",
-    "onItemInsert(event)",
-    "onItemRemove(event)",
-    "onItemSwap(event)",
-    "onGhostInsert/Move/Remove(event)",
-    "onDragStart/End(event)",
-    "onDropTargetChange(event)",
-    "onVisualGeometryInvalidated(event)",
+  const rootCallbacks = [
+    "onItemMove",
+    "onItemInsert",
+    "onItemRemove",
+    "onItemSwap",
+    "onDragStart",
+    "onDragEnd",
+    "onDropTargetChange",
+    "onVisualGeometryInvalidated",
+    "onGhostInsert",
+    "onGhostMove",
+    "onGhostRemove",
   ];
-  const localCallbackGroups = [
+  const localCallbacks = [
     "getDropPriority",
     "getItemHitbox",
-    "onDragItemEnter/Move/Leave",
+    "onDragItemEnter",
+    "onDragItemMove",
+    "onDragItemLeave",
   ];
 
   for (const framework of ["svelte", "react"] as const) {
@@ -2086,27 +2142,18 @@ test("SnapSort callback docs expose receiver routing and mutation boundaries", a
     );
     expect(response?.status()).toBe(200);
 
-    const rootCallbackTable = page.locator("table").filter({
-      has: page.getByRole("columnheader", { name: "Root callback" }),
-    });
-    const localCallbackTable = page.locator("table").filter({
-      has: page.getByRole("columnheader", { name: "Local callback" }),
-    });
-    await expect(rootCallbackTable).toHaveCount(1);
-    await expect(localCallbackTable).toHaveCount(1);
-    await expect(rootCallbackTable.getByRole("row")).toHaveCount(9);
-    await expect(localCallbackTable.getByRole("row")).toHaveCount(4);
-    expect(
-      await rootCallbackTable.evaluate(
-        (element) => element.getBoundingClientRect().width,
-      ),
-    ).toBeLessThanOrEqual(701);
+    for (const callbackName of [...rootCallbacks, ...localCallbacks]) {
+      await expect(
+        page.getByRole("heading", {
+          name: callbackName,
+          exact: true,
+          level: 3,
+        }),
+      ).toHaveCount(1);
+    }
     await expect(
-      rootCallbackTable.locator("tbody tr td:first-child"),
-    ).toHaveText(rootCallbackGroups);
-    await expect(
-      localCallbackTable.locator("tbody tr td:first-child"),
-    ).toHaveText(localCallbackGroups);
+      page.getByRole("heading", { name: "Appendix", level: 2 }),
+    ).toBeVisible();
     await expect(page.locator(".doc-article")).toContainText(
       "insertionMarkerRect",
     );
@@ -2117,26 +2164,9 @@ test("SnapSort callback docs expose receiver routing and mutation boundaries", a
       "getInsertionMarkerRect",
     );
 
-    await expect(
-      rootCallbackTable
-        .locator("tbody tr")
-        .filter({ has: page.getByText("onItemMove(event)", { exact: true }) }),
-    ).toContainText("source and destination");
-    await expect(
-      rootCallbackTable
-        .locator("tbody tr")
-        .filter({ has: page.getByText("onItemSwap(event)", { exact: true }) }),
-    ).toContainText("atomic pairwise exchange");
-    await expect(
-      localCallbackTable
-        .getByRole("row")
-        .filter({ hasText: "getDropPriority" }),
-    ).toContainText("candidate destination");
-    await expect(
-      localCallbackTable
-        .getByRole("row")
-        .filter({ hasText: "onDragItemEnter" }),
-    ).toContainText("overItem");
+    const callbackSection = page.locator(".doc-article");
+    await expect(callbackSection).toContainText("tree root");
+    await expect(callbackSection).toContainText("per container");
   }
 
   const lifecycleMarkdownResponse = await request.get(
@@ -2153,19 +2183,16 @@ test("SnapSort callback docs expose receiver routing and mutation boundaries", a
     );
     expect(markdownResponse.status()).toBe(200);
     const markdown = await markdownResponse.text();
-    expect(markdown).toContain("| Root callback");
-    expect(markdown).toContain("| Local callback");
     expect(markdown).toContain(
       "Structural and lifecycle callbacks resolve on the **tree root**",
     );
     expect(markdown).toContain("remain **per container**");
+    expect(markdown.indexOf("## Callbacks")).toBeLessThan(
+      markdown.indexOf("## Appendix"),
+    );
     expect(markdown).toContain("### Drag visuals");
-    for (const callbackName of [
-      ...rootCallbackGroups,
-      "getDropPriority",
-      ...localCallbackGroups.slice(1),
-    ]) {
-      expect(markdown).toContain(`\`${callbackName}`);
+    for (const callbackName of [...rootCallbacks, ...localCallbacks]) {
+      expect(markdown).toContain(`### \`${callbackName}\``);
     }
   }
 });

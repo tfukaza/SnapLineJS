@@ -10,28 +10,22 @@ framework: svelte
 frameworkKey: item
 ---
 
-`Item` connects one rendered entry to a SnapSort `Container`. Every item must
-be rendered beneath an `Engine` and a `Container` so it can join that
-container's drag tree. In normal application code, omit the `item` prop: the
-component creates, configures, and eventually destroys its own core Item.
+`Item` connects one rendered entry to the surrounding SnapSort `Container`.
+Import the component from the Svelte binding and the object types from the
+package root.
 
-Start with the interactive [Basic Item](/docs/snapsort/examples/basics#basic-item),
-then use [Item Recipes](/docs/snapsort/examples/items) for focused examples of
-metadata, selection, adopted Items, and Handles.
+```svelte
+<script lang="ts">
+  import { Item } from "@snap-engine/snapsort/svelte";
+</script>
 
-`Item` renders a `div` with the `snapsort-item` class, writes its immutable ID to
-`data-snapsort-item-id`, and provides its core Item object to descendants such
-as `Handle`.
+<Item itemId={task.id}>{task.title}</Item>
+```
 
-Adding or deleting an ordinary application value is an application-state
-operation. When its keyed `Item` mounts or unmounts, the wrapper synchronizes
-the core registration; that reconciliation does not emit `onItemInsert` or
-`onItemRemove`. Those callbacks report core-originated commands instead.
+For collection design and complete interfaces, see [Basic Item](/docs/snapsort/examples/basics#basic-item)
+and [Item Recipes](/docs/snapsort/examples/items).
 
 ## Component Properties
-
-The Svelte component accepts the following SnapSort-specific properties in
-addition to standard `HTMLDivElement` attributes and events:
 
 ```ts
 type ItemProps = Omit<HTMLAttributes<HTMLDivElement>, "children"> & {
@@ -46,9 +40,10 @@ type ItemProps = Omit<HTMLAttributes<HTMLDivElement>, "children"> & {
 
 ### `children`
 
-`children` is the required Svelte snippet rendered inside the Item's `div`.
-SnapSort does not impose a content structure, so an item can contain text,
-cards, form controls, or other components.
+**Type:** `Snippet` · **Required**
+
+The snippet rendered inside the Item's managed `div`. SnapSort does not impose
+a content structure.
 
 ```svelte
 <Item itemId={task.id}>
@@ -59,59 +54,90 @@ cards, form controls, or other components.
 
 ### `itemId`
 
-`itemId` is the stable application identity used by move and remove commands,
-ghosts, keyed collection updates, and callback events. It is required for both
-component-owned and adopted Items, must be non-empty, and cannot change while
-the component remains mounted.
+**Type:** `string` · **Required** · **Construction-only**
+
+The stable identity used by moves, removals, ghosts, and callback events. It
+must be non-empty, unique within one SnapSort root, and unchanged while the
+component is mounted. Remount with a new Svelte key to use another ID.
 
 ```svelte
-<Item itemId={task.id}>{task.title}</Item>
+{#each tasks as task (task.id)}
+  <Item itemId={task.id}>{task.title}</Item>
+{/each}
 ```
 
-When using `createRenderEntry` or `createRenderEntries`, pass the same ID to
-the helper and the rendered `Item`. Do not put the ID in `metadata`:
-`metadata.itemId` is unsupported and throws a clear error.
+Pass identity through this property, not `metadata.itemId`; the latter is
+rejected.
 
 ### `metadata`
 
-`metadata` is a read-only open record for application data that SnapSort should carry
-alongside the Item. It appears as `itemMetadata` and `itemsMetadata` in drag,
-mutation, hover, and destination-policy callbacks, and is frozen into the
-Item's drag snapshot.
+**Type:** `ItemMetadata` (`Readonly<Record<string, unknown>>`) · **Default:** `{}`
 
-See [Metadata in Callbacks](/docs/snapsort/examples/items#metadata-in-callbacks)
-for an interactive example that displays the metadata received by Container
-callbacks.
+Application data copied into drag snapshots and exposed as `itemMetadata` and
+`itemsMetadata` in callback events. Replacing the object updates the core Item;
+an active drag continues using its frozen shallow snapshot.
 
-`ItemMetadata` is `Readonly<Record<string, unknown>>`. The application may
-replace the metadata object; Svelte synchronizes the replacement to the core
-Item, while an active drag keeps its shallow frozen snapshot. SnapSort never
-mutates the object supplied by the application.
+```svelte
+<Item
+  itemId={task.id}
+  metadata={{ kind: "task", projectId: task.projectId }}
+>
+  {task.title}
+</Item>
+```
 
-Geometry is deliberately not metadata. An insertion-marker `GhostState`
-contains SnapSort's canonical gap and adjacent frozen Item geometry; render it
-through `Ghost` or convert it with `insertionMarkerRect`. Customize item
-hover/swap hitboxes with the candidate owner's `getItemHitbox` callback.
+SnapSort reads this value but never mutates it.
 
-### `selected` and DOM events
+### `selected`
 
-`selected` is a consumer-owned boolean. SnapSort does not render selection
-controls or selected styling. When a drag starts on a selected Item, all other
-selected Items in the same drag tree join it; dragging an unselected Item moves
-only that Item.
+**Type:** `boolean` · **Default:** `false`
 
-Standard events such as `onclick` and `onkeydown` pass through to the rendered
-`div`, so they can update the application's selection state. Add the matching
-keyboard behavior and ARIA state when the Item itself acts as a control.
+Consumer-owned selection state. Starting a drag on a selected Item includes
+the other selected Items in the same tree; starting on an unselected Item
+drags only that Item.
 
-See [Consumer-Owned Selection](/docs/snapsort/examples/items#consumer-owned-selection)
-for the complete pattern.
+```svelte
+<Item itemId={task.id} selected={selectedIds.has(task.id)}>
+  {task.title}
+</Item>
+```
+
+SnapSort supplies no selection controls, styling, keyboard behavior, or ARIA
+state.
+
+### `item`
+
+**Type:** `SnapSortItem | null` · **Default:** `null` · **Advanced**
+
+Adopts an existing core Item instead of creating one. The object must use the
+same Engine, already belong to the surrounding Container, and have the same
+`itemId`. The object and ID cannot change after mount. The component binds its
+element but does not reparent, destroy, or otherwise take ownership of an
+adopted object.
+
+```svelte
+<script lang="ts">
+  import { Item as SnapSortItem } from "@snap-engine/snapsort";
+  import { Item } from "@snap-engine/snapsort/svelte";
+
+  const existingItem = new SnapSortItem(engine, container, {
+    itemId: task.id,
+  });
+</script>
+
+<Item item={existingItem} itemId={task.id}>{task.title}</Item>
+```
+
+Omitted `metadata` and `selected` properties preserve an adopted Item's current
+values; supplied values override them.
 
 ### `bind:item`
 
-Use `bind:item` when application controls need to inspect or call the core Item.
-The binding receives the same automatically created instance that SnapSort uses
-internally; it does not change the component's ownership of that instance.
+**Type:** `SnapSortItem | null`
+
+Returns the component-owned or adopted core object. The value becomes available
+when the component initializes and is `null` after teardown. Binding does not
+change object ownership.
 
 ```svelte
 <script lang="ts">
@@ -122,33 +148,18 @@ internally; it does not change the component's ownership of that instance.
 
 <Item itemId={task.id} bind:item>{task.title}</Item>
 
-<button type="button" onclick={() => item?.container.moveItem(task.id, archive, 0)}>
-  Move to archive
+<button onclick={() => console.log(item?.getIndexAndContainer())}>
+  Log location
 </button>
 ```
 
-### `item` (advanced)
-
-Passing a non-null `item` adopts that exact core instance instead of creating a
-new one. This is an advanced integration seam: most Item components should
-omit it and use `bind:item` when they only need access to the generated object.
-
-For an application-created instance, construct it with the same Engine and
-surrounding core Container, passing `{ itemId }` to its constructor. The
-component's required `itemId` prop must match that construction-time identity.
-The adapter binds its rendered element but does not reparent or destroy the
-instance. Omitted `metadata` and `selected` props preserve existing values;
-explicitly supplied props override them. Neither the instance nor its identity
-can change after mount, and the creating code remains responsible for cleanup.
-
-See [Adopting a Core Item](/docs/snapsort/examples/items#adopting-a-core-item)
-for a complete component-and-helper implementation.
-
 ### `class`, `className`, `style`, and HTML attributes
 
-`Item` renders a regular `div`. Svelte's native `class` and the cross-framework
-`className` alias are merged with `snapsort-item`; `style`, ARIA attributes,
-`data-*` attributes, and other div properties pass through.
+**Type:** standard Svelte `HTMLAttributes<HTMLDivElement>`
+
+The component renders a `div`. Native `class` and the `className` alias are
+merged with `snapsort-item`; `style`, events, ARIA attributes, and custom
+`data-*` attributes are forwarded.
 
 ```svelte
 <Item
@@ -157,25 +168,170 @@ for a complete component-and-helper implementation.
   className="task-card"
   style="--task-accent: tomato;"
   aria-label={`Task: ${task.title}`}
-  data-priority={task.priority}
+  onclick={() => selectTask(task.id)}
 >
   {task.title}
 </Item>
 ```
 
-SnapSort owns the final `data-snapsort-item-id` value. Use your own `data-*`
-name for additional application state.
+SnapSort owns the final `data-snapsort-item-id` attribute.
+
+## Core Item Object
+
+Access the object through `bind:item`. The entries below cover the supported
+SnapSort-specific surface; inherited SnapEngine object APIs are documented in
+[Objects](/docs/snapengine/reference/objects).
+
+### `item.itemId`
+
+**Type:** `ItemId` · **Read-only**
+
+Returns the construction identity supplied through the component or
+`new Item(...)`.
+
+```ts
+console.log(item.itemId);
+```
+
+### `item.metadata`
+
+**Type:** `ItemMetadata` · **Read/write**
+
+Gets or replaces the application metadata associated with the Item. Prefer the
+component property while Svelte owns the object.
+
+```ts
+item.metadata = { kind: "task", projectId: "alpha" };
+```
+
+### `item.locked`
+
+**Type:** `boolean` · **Read/write** · **Default for Item:** `false`
+
+Controls whether this object can start a drag.
+
+```ts
+item.locked = true;
+```
+
+### `item.selected`
+
+**Type:** `boolean` · **Read/write**
+
+Gets or sets the consumer-owned multi-drag selection flag. Prefer the
+component property for declarative selection state.
+
+```ts
+item.selected = selectedIds.has(item.itemId);
+```
+
+### `item.container`
+
+**Type:** `Container` · **Read-only**
+
+Returns the direct owning Container. Detached Items do not have a usable
+container value.
+
+```ts
+const owner = item.container;
+```
+
+### `item.rootContainer`
+
+**Type:** `Container` · **Read-only for consumers**
+
+Returns the root of the Item's current SnapSort tree.
+
+```ts
+const root = item.rootContainer;
+```
+
+### `item.depth`
+
+**Type:** `number` · **Read-only**
+
+Returns the Item's current depth in the SnapSort object tree. A root Container
+has depth `0`; each Item or nested Container level adds one.
+
+```ts
+console.log(item.depth);
+```
+
+### `item.isGhost`
+
+**Type:** `boolean` · **Read-only**
+
+Reports whether the object is a transient engine-owned ghost Item. A normal
+`Item` component exposes `false`.
+
+```ts
+if (!item.isGhost) console.log(item.itemId);
+```
+
+### `item.dragSnapshot`
+
+**Type:** `ItemSnapshot<Item> | null` · **Read-only**
+
+The frozen geometry and child-state snapshot used for the active drag, or
+`null` outside that lifecycle.
+
+```ts
+const startRect = item.dragSnapshot?.box;
+```
+
+### `item.dragPointerPosition`
+
+**Type:** `{ x: number; y: number } | null` · **Read-only**
+
+Returns the active pointer position in world coordinates when this Item has a
+drag snapshot.
+
+```ts
+const pointer = item.dragPointerPosition;
+```
+
+### `item.dragPositionX`
+
+**Type:** `number` · **Read-only**
+
+Returns the Item's projected world-space left edge during a drag. Outside an
+active drag, it falls back to the object's current world X position.
+
+```ts
+const left = item.dragPositionX;
+```
+
+### `item.dragPositionY`
+
+**Type:** `number` · **Read-only**
+
+Returns the Item's projected world-space top edge during a drag. Outside an
+active drag, it falls back to the object's current world Y position.
+
+```ts
+const top = item.dragPositionY;
+```
+
+### `item.getIndexAndContainer()`
+
+```ts
+getIndexAndContainer(): { index: number; container: Container | null }
+```
+
+Returns the current direct Container and zero-based index. A detached Item
+returns `{ index: -1, container: null }`.
+
+```ts
+const { container, index } = item.getIndexAndContainer();
+```
+
+Engine-owned ghost creation/state methods, internal drag mutation methods, and
+inherited `ElementObject` methods are intentionally outside this reference.
 
 ## Handle
 
-`Handle` makes a descendant element the Item's drag input. Once it mounts, a
-drag can begin from the Handle instead of the rest of the Item, leaving nearby
-buttons, links, and inputs available for their ordinary interactions.
-
-See [Dragging from a Handle](/docs/snapsort/examples/items#dragging-from-a-handle)
-for an interactive example.
-
-The component accepts standard `HTMLDivElement` attributes plus these aliases:
+`Handle` makes one descendant element the Item's drag input. It renders a
+`div` and registers it with the nearest Item through Svelte context.
 
 ```ts
 type HandleProps = Omit<HTMLAttributes<HTMLDivElement>, "children"> & {
@@ -186,15 +342,62 @@ type HandleProps = Omit<HTMLAttributes<HTMLDivElement>, "children"> & {
 
 ### `children`
 
-The required snippet supplies the visible grip, label, icon, or other handle
-content. `Handle` renders it inside a `div` and registers that element with the
-nearest Item through Svelte context.
+**Type:** `Snippet` · **Required**
 
-### Presentation and HTML attributes
+The visible grip, label, icon, or other content rendered inside the handle.
 
-Native `class`, `className`, `style`, ARIA attributes, and other div properties
-are forwarded just like Item properties. The rendered element always includes
-`snapsort-handle`.
+```svelte
+<Item itemId={task.id}>
+  <Handle aria-label={`Drag ${task.title}`}>⋮⋮</Handle>
+  {task.title}
+</Item>
+```
+
+### `class`, `className`, `style`, and HTML attributes
+
+Native classes and `className` are merged with `snapsort-handle`. Styles,
+events, ARIA attributes, and other `div` properties are forwarded.
+
+```svelte
+<Handle className="drag-grip" style="cursor: grab;">Drag</Handle>
+```
 
 Use one Handle per Item. The core object has one input-alias slot, so a later
-Handle replaces the earlier drag target rather than creating multiple handles.
+Handle replaces the earlier drag target.
+
+## Appendix
+
+### Application-owned item lifetime
+
+Adding or deleting an ordinary application value is a Svelte-state operation.
+Render each value from a keyed loop and let reconciliation mount or unmount its
+`Item`. That synchronization does not emit `onItemInsert` or `onItemRemove`;
+those callbacks report operations initiated by SnapSort's core API.
+
+```svelte
+{#each tasks as task (task.id)}
+  <Item itemId={task.id}>{task.title}</Item>
+{/each}
+```
+
+### Metadata, geometry, and selection
+
+Metadata is application data, not geometry. Insertion-marker geometry is
+carried by `GhostState` and rendered through `Ghost` or
+`insertionMarkerRect`; hover and swap geometry is customized through the
+owner Container's `getItemHitbox` callback.
+
+Selection is similarly application-owned. Standard DOM events can update the
+selected ID set, and the `selected` property projects that state into
+SnapSort. Add normal keyboard behavior and ARIA state when the Item itself
+acts as a control.
+
+### Adopting a core Item
+
+Adoption is intended for integrations that create the core object separately.
+Most components should omit `item` and use `bind:item` when they only need an
+imperative handle. The creating code remains responsible for destroying an
+adopted object after the component releases it.
+
+See [Adopting a Core Item](/docs/snapsort/examples/items#adopting-a-core-item)
+for the complete component-and-helper pattern.

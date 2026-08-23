@@ -10,12 +10,8 @@ framework: svelte
 frameworkKey: ghost
 ---
 
-`Ghost` renders temporary SnapSort-owned visual state inside a Svelte
-collection. The application owns the RenderTree and DOM projection, while
-SnapSort owns when each ghost appears, moves, and disappears.
-
-Import the component from the Svelte binding and its state helpers from the
-framework-neutral package:
+`Ghost` renders one temporary SnapSort ghost entry as a `div`. SnapSort creates
+the `GhostState`; the application stores that state and renders the component.
 
 ```svelte
 <script lang="ts">
@@ -39,23 +35,312 @@ type GhostProps = Omit<HTMLAttributes<HTMLDivElement>, "children"> & {
 };
 ```
 
-| Prop              | Default                                        | Description                                                                 |
-| ----------------- | ---------------------------------------------- | --------------------------------------------------------------------------- |
-| `ghost`           | Required                                       | Immutable lifecycle state supplied by a ghost callback or RenderTree entry. |
-| `children`        | Empty                                          | Optional custom content rendered inside the ghost element.                  |
-| `className`       | `""`                                           | Cross-framework class alias merged with `class` and `snapsort-ghost`.       |
-| `insertionMarker` | `{ thickness: 3, startInset: 0, endInset: 0 }` | Presentation used only for an insertion marker.                             |
+### `ghost`
 
-The component renders a `div`. Standard Svelte div attributes, including
-`class`, `style`, ARIA attributes, and `data-*`, pass through. Consumer styles
-are appended after SnapSort's calculated structural styles, so use them for
-intentional visual overrides without changing the supplied ghost state.
+**Type:** `GhostState` · **Required** · **Read-only input**
 
-## RenderTree Integration
+The immutable state for the entry being rendered. Pass the `ghost` from a
+`RenderEntry` or ghost lifecycle event without constructing or modifying it.
+The component binds its element to `ghost.ghostItem` and detaches that binding
+when the state changes or the component unmounts.
 
-Ghost lifecycle callbacks update framework state synchronously. Render the
-resulting ghost entry in the same keyed sequence as ordinary Items and nested
-Containers:
+```svelte
+{#if entry.isGhost}
+  <Ghost ghost={entry.ghost} />
+{/if}
+```
+
+### `children`
+
+**Type:** `Snippet` · **Default:** no content
+
+Custom content rendered inside the ghost `div`. Use `ghost.type` or metadata
+before rendering the component when different roles need different content.
+
+```svelte
+<Ghost ghost={entry.ghost}>
+  {entry.ghost.items.length} selected
+</Ghost>
+```
+
+### `insertionMarker`
+
+**Type:** `InsertionMarkerRectOptions` · **Default:** `stockInsertionMarkerRectOptions`
+
+Controls the painted rectangle for an `"insertion-marker"`. It has no effect
+on other ghost roles and never changes target ranking.
+
+```svelte
+<Ghost
+  ghost={entry.ghost}
+  insertionMarker={{ thickness: 4, startInset: 8, endInset: 8 }}
+/>
+```
+
+All three values must be finite and non-negative. `startInset + endInset` must
+not exceed `ghost.gap.length`.
+
+### `class`, `className`, `style`, `id`, and HTML attributes
+
+**Type:** standard Svelte `HTMLAttributes<HTMLDivElement>`
+
+The component renders a `div`. Native `class` and the cross-framework
+`className` alias are merged with `snapsort-ghost`. The default `id` is
+`"spacer"`. Styles, events, ARIA attributes, and `data-*` attributes are
+forwarded.
+
+Consumer styles are appended after SnapSort's calculated structural styles,
+so they intentionally override properties such as size or positioning.
+
+```svelte
+<Ghost
+  ghost={entry.ghost}
+  class="task-ghost"
+  style="opacity: 0.75;"
+  aria-hidden="true"
+/>
+```
+
+## `GhostState`
+
+**Type:** read-only discriminated union
+
+Narrow `ghost.type` to access role-specific geometry and locations.
+
+```ts
+function inspectGhost(ghost: GhostState) {
+  if (ghost.type !== "insertion-marker") return;
+  console.log(ghost.gap, ghost.isCurrentPlacement);
+}
+```
+
+### `type`
+
+**Type:** `"source-spacer" | "target-spacer" | "insertion-marker" | "pointer-preview"`
+
+Identifies the role and narrows the union:
+
+- `"source-spacer"` preserves a vacated source slot.
+- `"target-spacer"` reserves a prospective flow-layout destination.
+- `"insertion-marker"` describes the resolved insertion gap.
+- `"pointer-preview"` represents the dragged run in an overlay.
+
+### `session`
+
+**Type:** `DragSession` · **Read-only**
+
+The stable session handle that owns this ghost. All ghost roles created during
+one gesture refer to the same handle.
+
+```ts
+const isActiveGhost = ghost.session.status === "active";
+```
+
+### `original`, `originalItemId`, and `originalMetadata`
+
+**Types:** `Item`, `ItemId`, and `ItemMetadata` · **Read-only**
+
+Identify the ordinary Item represented by this ghost anchor. Use
+`originalItemId` for application identity and `originalMetadata` for the
+application data captured with the Item.
+
+```ts
+const label = String(ghost.originalMetadata.label ?? ghost.originalItemId);
+```
+
+### `items` and `itemIds`
+
+**Types:** `readonly Item[]` and `readonly ItemId[]` · **Read-only**
+
+Parallel arrays describing the complete dragged run in its stable order. A
+single-item drag has one entry. A spacer may represent one anchor while these
+properties still describe every participant.
+
+```ts
+const draggedIds = ghost.itemIds.join(", ");
+```
+
+### `ghostItem`, `ghostItemId`, and `ghostMetadata`
+
+**Types:** `Item`, `ItemId`, and `ItemMetadata` · **Read-only**
+
+Identify the transient core Item allocated for this rendered ghost.
+`ghostItemId` is root-unique and is the correct key for a framework-rendered
+entry. Do not persist these values as application Items or render `ghostItem`
+through the `Item` component.
+
+```svelte
+{#each tree.entries as entry (entry.itemId)}
+  {#if entry.isGhost}<Ghost ghost={entry.ghost} />{/if}
+{/each}
+```
+
+### `location`
+
+**Type:** `GhostSlotLocation | GhostOverlayLocation` · **Read-only**
+
+Every location contains `container` and its read-only `containerMetadata`.
+Slot roles also contain a zero-based `index`; overlay roles do not.
+
+```ts
+if (ghost.location.type === "slot") {
+  console.log(ghost.location.container.name, ghost.location.index);
+}
+```
+
+`source-spacer`, `target-spacer`, and `insertion-marker` use
+`GhostSlotLocation`. `pointer-preview` uses `GhostOverlayLocation`.
+
+### `rect`
+
+**Type:** `GhostRect` · **Read-only** · **Spacer and pointer-preview only**
+
+A world-space rectangle with `x`, `y`, `width`, and `height`. The component
+uses width and height for flow spacers and converts pointer-preview coordinates
+into the owning Container's local space.
+
+```ts
+if (ghost.type !== "insertion-marker") {
+  console.log(`${ghost.rect.width} × ${ghost.rect.height}`);
+}
+```
+
+### `gap`
+
+**Type:** `InsertionGapSegment` · **Read-only** · **Insertion marker only**
+
+A zero-thickness world-space segment. `orientation` is `"horizontal"` or
+`"vertical"`; `x` and `y` locate its start and `length` measures it along the
+orientation's main axis.
+
+```ts
+if (ghost.type === "insertion-marker") {
+  const { orientation, length } = ghost.gap;
+}
+```
+
+### `previous` and `next`
+
+**Type:** `InsertionMarkerNeighbor | null` · **Read-only** · **Insertion marker only**
+
+The ordinary Items immediately adjacent to the insertion boundary. Each
+neighbor contains `item`, `itemId`, `itemMetadata`, and its frozen world-space
+border-box `rect`. Either value is `null` at an open edge.
+
+```ts
+if (ghost.type === "insertion-marker") {
+  const beforeId = ghost.previous?.itemId ?? null;
+  const afterId = ghost.next?.itemId ?? null;
+}
+```
+
+### `isCurrentPlacement`
+
+**Type:** `boolean` · **Read-only** · **Insertion marker only**
+
+`true` when committing the candidate would preserve the dragged run's current
+placement. It can be used to tone down or hide a no-op marker.
+
+```svelte
+<Ghost
+  ghost={entry.ghost}
+  class:current-placement={
+    entry.ghost.type === "insertion-marker" &&
+    entry.ghost.isCurrentPlacement
+  }
+/>
+```
+
+## Presentation Helpers
+
+### `InsertionMarkerRectOptions`
+
+```ts
+interface InsertionMarkerRectOptions {
+  readonly thickness: number;
+  readonly startInset: number;
+  readonly endInset: number;
+}
+```
+
+`thickness` expands equally around the zero-thickness gap. The insets trim the
+start and end: left/right for a horizontal gap and top/bottom for a vertical
+gap.
+
+### `stockInsertionMarkerRectOptions`
+
+**Type:** `InsertionMarkerRectOptions`
+
+The frozen options used by `Ghost` when `insertionMarker` is omitted:
+
+```ts
+const stockInsertionMarkerRectOptions = {
+  thickness: 3,
+  startInset: 0,
+  endInset: 0,
+};
+```
+
+### `insertionMarkerRect()`
+
+```ts
+function insertionMarkerRect(
+  marker: InsertionMarkerState,
+  options: InsertionMarkerRectOptions,
+): ContainerLocalRect;
+```
+
+Expands a marker's world-space `gap` into a rectangle positioned in the
+destination Container's local coordinate space. It throws for invalid option
+values, invalid gap geometry, or an unmounted destination Container.
+
+```ts
+const rect = insertionMarkerRect(marker, {
+  thickness: 4,
+  startInset: 6,
+  endInset: 6,
+});
+```
+
+### `toContainerLocalRect()`
+
+```ts
+function toContainerLocalRect(
+  worldRect: Readonly<GhostRect>,
+  container: Container,
+): ContainerLocalRect;
+```
+
+Converts a world-space rectangle to coordinates measured from a mounted
+Container's padding-box outer edge. Border widths and scroll offsets are
+included. It throws if the Container has no mounted element.
+
+```ts
+const localRect = toContainerLocalRect(ghost.rect, ghost.location.container);
+```
+
+### `ContainerLocalRect`
+
+**Type:** `{ readonly x: number; readonly y: number; readonly width: number; readonly height: number }`
+
+The return value of both presentation helpers, suitable for absolute
+positioning inside the owning Container.
+
+## DOM Contract
+
+Every rendered element has `snapsort-ghost`,
+`data-snapsort-ghost-entry={ghost.type}`, and
+`data-snapsort-ghost-item-count={ghost.items.length}`. Pointer previews add
+`data-snapsort-ghost="pointer"`; insertion markers add
+`data-snapsort-ghost="insertion"`.
+
+## Appendix
+
+### RenderTree Integration
+
+Ghost lifecycle callbacks must synchronously update Svelte state and let
+Svelte reconcile the DOM. Do not use structural DOM APIs for a
+framework-rendered ghost.
 
 ```svelte
 <script lang="ts">
@@ -86,95 +371,15 @@ Containers:
 {/each}
 ```
 
-Use `entry.itemId` as the key. For a ghost entry it is the generated,
-root-unique `ghostItemId`. Do not derive a key from the original application
-Item or the array index.
+### Ghost Roles and Positioning
 
-Framework callbacks must update framework state and let Svelte reconcile the
-DOM. Do not call `insertBefore`, `appendChild`, `remove`, or another structural
-DOM API for a Svelte-rendered ghost.
+Source and target spacers remain in normal flow and inherit the original
+Item's measured margins. Pointer previews and insertion markers are absolute,
+pointer-transparent overlays in their owning Container. Pointer representation
+and placement feedback are independent, so one session may own both a
+`pointer-preview` and an `insertion-marker`.
 
-## Ghost Roles
-
-`GhostState` is a closed discriminated union. Test `ghost.type` when a role
-needs different content or styling.
-
-| `ghost.type`       | Meaning                                                         | Geometry and location                                           |
-| ------------------ | --------------------------------------------------------------- | --------------------------------------------------------------- |
-| `source-spacer`    | Preserves a vacated source slot when the real Item is hoisted.  | `rect` and a slot `location` with `container` and `index`.      |
-| `target-spacer`    | Reserves the prospective flow-layout destination.               | `rect` and a slot `location` with `container` and `index`.      |
-| `insertion-marker` | Paints the resolved gap used by insertion placement.            | `gap`, neighbors, current-placement state, and a slot location. |
-| `pointer-preview`  | Represents the dragged run in an overlay following the pointer. | `rect` and an overlay `location` without an index.              |
-
-Pointer representation and placement feedback are independent. A session can,
-for example, own both a `pointer-preview` and an `insertion-marker` at the same
-time. `onGhostMove` reports structural relocation or changed marker
-presentation; it is not a continuous pointer-move stream.
-
-## Shared Identity and Provenance
-
-Every role carries the same base state:
-
-```ts
-interface GhostStateBase {
-  readonly session: DragSession;
-  readonly original: Item;
-  readonly originalItemId: ItemId;
-  readonly originalMetadata: ItemMetadata;
-  readonly items: readonly Item[];
-  readonly itemIds: readonly ItemId[];
-  readonly ghostItem: Item;
-  readonly ghostItemId: ItemId;
-  readonly ghostMetadata: ItemMetadata;
-}
-```
-
-`original` identifies the ordinary Item represented by this ghost anchor,
-while `items` describes the complete ordered dragged run. `ghostItem` is an
-already-created transient core Item. `Ghost` binds its rendered element to
-that object when mounted, updates the binding if the ghost object changes, and
-detaches it on unmount. Never render the same state through `Item` or persist a
-ghost as application data.
-
-## Positioning Behavior
-
-Source and target spacers remain in the collection's normal flow. `Ghost`
-applies their measured width, height, and original Item margins so they occupy
-the intended slot.
-
-Pointer previews and insertion markers are overlays. `Ghost` positions them
-absolutely in their owning Container's local coordinate space, disables
-pointer events, and assigns the overlay z-index. A pointer preview converts its
-world-space `rect` with `toContainerLocalRect`.
-
-An insertion marker instead expands SnapSort's zero-thickness world-space
-`gap` with `insertionMarkerRect`. Customize that painted rectangle explicitly:
-
-```svelte
-<Ghost
-  ghost={entry.ghost}
-  insertionMarker={{ thickness: 4, startInset: 8, endInset: 8 }}
-/>
-```
-
-The insets mean left/right for a horizontal gap and top/bottom for a vertical
-gap. They affect presentation only and never feed back into drop-target
-ranking. Each value must be finite and non-negative, and the two insets must
-not exceed `ghost.gap.length` when added together.
-
-## DOM Contract
-
-The rendered element always includes:
-
-- `snapsort-ghost`
-- `data-snapsort-ghost-entry={ghost.type}`
-- `data-snapsort-ghost-item-count={ghost.items.length}`
-
-Pointer previews additionally use `data-snapsort-ghost="pointer"`; insertion
-markers use `data-snapsort-ghost="insertion"`. The default `id` is `spacer`,
-and callers may override it through ordinary attributes.
-
-For the callback lifecycle that creates and removes these entries, continue to
-[Drags and Ghosts](/docs/snapsort/guides/sessions/ghosts). See
-[DragSession](/docs/snapsort/reference/drag-session) for the independent
-`dragVisual` control.
+`onGhostMove` reports structural relocation or changed marker presentation;
+it is not a continuous pointer-move stream. See
+[Drags and Ghosts](/docs/snapsort/guides/sessions/ghosts) for the lifecycle and
+[DragSession](/docs/snapsort/reference/drag-session) for `dragVisual`.

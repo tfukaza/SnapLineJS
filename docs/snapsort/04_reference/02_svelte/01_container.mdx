@@ -10,13 +10,21 @@ framework: svelte
 frameworkKey: container
 ---
 
-`Container` groups `Item` components into a sortable region and manages their
-drag session. Every container must be rendered inside an `Engine`.
+`Container` renders a sortable region, owns its direct Items, and exposes the
+core Container object through `bind:container`.
 
-Start with the interactive
-[Container basics](/docs/snapsort/examples/basics#basic-container), then use
-[Container Recipes](/docs/snapsort/examples/containers) for focused examples
-of each major prop and composition pattern.
+```svelte
+<script lang="ts">
+  import { Container, Item } from "@snap-engine/snapsort/svelte";
+</script>
+
+<Container itemId="tasks-root">
+  <Item itemId="task-1">Write API reference</Item>
+</Container>
+```
+
+For composition and collection workflows, see [Container basics](/docs/snapsort/examples/basics#basic-container)
+and [Container Recipes](/docs/snapsort/examples/containers).
 
 ## Component Properties
 
@@ -33,112 +41,882 @@ type ContainerProps = Omit<HTMLAttributes<HTMLDivElement>, "children"> & {
 };
 ```
 
-There are no collection-specific `items`, `getItemId`, `entry`, `before`, or
-`after` props. The application writes one ordinary children body and decides
-where its keyed loop sits among fixed markup.
-
 ### `children`
 
-`Container` renders ordinary optional children. Put fixed markup and the
-application-owned keyed entries loop exactly where they belong in that body.
+**Type:** `Snippet` · **Default:** no content
 
-See [Rendering a Collection](/docs/snapsort/examples/containers#rendering-a-collection)
-for an interactive example.
+The markup rendered inside the Container's managed `div`. Put the
+application-owned keyed Item/Container/Ghost loop and any fixed content in
+this snippet.
+
+```svelte
+<Container itemId="tasks-root">
+  {#each tasks as task (task.id)}
+    <Item itemId={task.id}>{task.title}</Item>
+  {/each}
+</Container>
+```
+
+The component has no `items`, `entry`, `before`, or `after` collection props.
 
 ### `config`
 
-`config` changes the container's sorting behavior. The most prominent
-configuration is `direction`, which sets the main layout direction.
+**Type:** `ContainerConfig` · **Default:** `{}`
 
-See [Changing Container Behavior](/docs/snapsort/examples/containers#changing-container-behavior)
-for an interactive example and [Configuration](#configuration) for every
-option.
+Configures sorting, layout projection, animation, policy, and callbacks. The
+component synchronizes supported runtime changes to its core object.
+
+```svelte
+<Container
+  itemId="tasks-root"
+  config={{ direction: "row", mode: "insertion" }}
+>
+  <!-- Items -->
+</Container>
+```
+
+See [Configuration](#configuration) and [Callbacks](#callbacks).
+
+### `itemId`
+
+**Type:** `string` · **Required** · **Construction-only**
+
+The stable identity for both root and nested Containers. It must be non-empty,
+unique within one SnapSort root, and unchanged while mounted. A nested
+Container uses the same ID as its application render entry.
+
+```svelte
+<Container itemId={column.id}>{column.title}</Container>
+```
+
+Pass identity through this property, not `metadata.itemId`; the latter is
+rejected.
+
+### `locked`
+
+**Type:** `boolean` · **Default:** `true`
+
+Controls whether this Container can itself be dragged as an Item of its
+parent. It does not disable dragging the Container's children.
+
+```svelte
+<Container itemId={column.id} locked={false}>
+  <!-- The whole column can move in its parent. -->
+</Container>
+```
+
+### `selected`
+
+**Type:** `boolean` · **Default:** `false`
+
+Consumer-owned multi-drag selection state for a movable nested Container. It
+is only meaningful when `locked={false}`.
+
+```svelte
+<Container
+  itemId={column.id}
+  locked={false}
+  selected={selectedIds.has(column.id)}
+>
+  <!-- Column content -->
+</Container>
+```
+
+### `metadata`
+
+**Type:** `ItemMetadata` · **Default:** `{}`
+
+Application data exposed as `containerMetadata` when this Container is a
+destination and as item metadata when the Container is dragged from a parent.
+
+```svelte
+<Container
+  itemId={column.id}
+  metadata={{ kind: "column", accepts: "task" }}
+>
+  <!-- Items -->
+</Container>
+```
+
+SnapSort reads the object but never mutates it.
 
 ### `bind:container`
 
-`bind:container` is the one optional imperative handle. Use it when a button,
-keyboard command, or other control needs to call the core API directly. The
-bound value may be `undefined` or `null` until the component mounts and becomes
-`null` when it unmounts. Declarative RenderTree rendering does not need a binding:
-the reducer recognizes its root from the callback event and locates nested
-logical trees through each Container's immutable `itemId`.
+**Type:** `SnapSortContainer | null`
 
-`moveItem` requests a move but does not take ownership of the rendered
-collection. The root callback must still update Svelte state synchronously.
-See [Programmatic Cross-Container Moves](/docs/snapsort/examples/containers#programmatic-cross-container-moves)
-for the complete interaction.
+Returns the component-owned core Container. The value is unavailable before
+mount and becomes `null` on unmount. Passing an existing Container through
+this binding does not adopt it; the Svelte component creates its own object.
 
-> [!WARNING]
-> Containers that need to interact must share one root `Container`. Drop-policy
-> callbacks can filter destinations inside that tree; they cannot connect
-> otherwise independent roots.
+```svelte
+<script lang="ts">
+  import type { Container as SnapSortContainer } from "@snap-engine/snapsort";
 
-### `itemId`, `locked`, and `selected`
+  let container = $state<SnapSortContainer | null>(null);
+</script>
 
-A `Container` can itself be an entry in a parent container. Give that nested
-container an `itemId`, then set `locked={false}` to let it drag. `locked` defaults
-to `true`, which is safer for containers that only organize child items.
+<Container itemId="tasks-root" bind:container />
 
-Identity comes only from the required `itemId` prop. It must be non-empty,
-cannot change while mounted, and must match an adopted core Container.
-`metadata.itemId` is unsupported and throws a clear error.
-
-`selected` is a consumer-owned flag. Dragging one selected entry moves the other
-selected entries with it; your interface remains responsible for the selection
-controls and state. See [Nested Containers](/docs/snapsort/examples/containers#nested-containers)
-for the complete pattern.
+<button onclick={() => container?.removeItem("task-1")}>Remove task</button>
+```
 
 ### `class`, `className`, `style`, and HTML attributes
 
-`Container` renders a `div`, so standard div attributes such as `aria-label` and
-`data-*` pass through. Both Svelte's `class` prop and the cross-framework
-`className` alias are merged with SnapSort's own classes; `style` is appended to
-the layout styles SnapSort needs.
+**Type:** standard Svelte `HTMLAttributes<HTMLDivElement>`
 
-See [Container Presentation and HTML Attributes](/docs/snapsort/examples/containers#container-presentation-and-html-attributes)
-for an interactive example.
+The component renders a `div`. Native `class` and the `className` alias are
+merged with `snapsort-container` and the mode class. Styles, events, ARIA
+attributes, and `data-*` attributes are forwarded; `direction` and
+`mainAxisAlign` also contribute inline layout declarations.
 
-## Direct Children and Render Entries
+```svelte
+<Container
+  itemId="tasks-root"
+  class:compact={compact}
+  className="task-list"
+  style="gap: 0.5rem;"
+  aria-label="Tasks"
+  data-view="backlog"
+/>
+```
 
-Fixed content is ordinary markup before or after the keyed sortable loop. It is
-never registered as a SnapSort Item.
+## Configuration
 
-Use `entry.itemId` directly as the keyed loop's reconciliation identity.
-SnapSort keeps ordinary Items, nested Containers, and live ghosts unique across
-one root, so no second render-key domain or prefix is needed.
+`config` accepts the following properties. Defaults shown here are the values
+resolved by a new component.
 
-See [Fixed Content Around Items](/docs/snapsort/examples/containers#fixed-content-around-items)
-for a collection surrounded by application controls and static markup.
+### `mode`
 
-The adapter does not keep private ghost state. A `RenderTree` node owns one
-`entries` sequence containing ordinary values and ghosts. Root
-`onGhostInsert`, `onGhostMove`, and `onGhostRemove` callbacks may all delegate
-to `reduceRenderTree`; the callbacks stay explicit even when they share one
-application function. SnapSort owns the ghosts' presence, so it must tell the
-application when a ghost appears, when the same keyed ghost changes location
-or insertion-gap presentation, and when it disappears. A presentation-only
-insertion update carries equal `from` and `to` locations.
+**Type:** `"euclidean" | "progressive" | "insertion" | "swap"` · **Default:** `"euclidean"`
 
-An ordinary move is intentionally different: `onItemMove` describes the whole
-semantic transition, including its source and destination and every selected
-item. It does not also emit item remove and insert events. Application-created
-and application-deleted ordinary values do not require callbacks at all; edit
-the RenderTree and let Svelte mount or unmount the matching component.
+Selects the built-in drop-target and placement behavior. The root's mode is
+resolved when a drag starts, so Containers in one tree should use the same
+mode. Svelte swap roots must provide `callbacks.onItemSwap`.
 
-Item IDs must be unique across one RenderTree root, including the root
-Container, nested Containers, ordinary Items, and live ghosts. Independent
-roots may reuse IDs. The root component must stay mounted for the lifetime of
-its RenderTree state. If it is destroyed, discard that state and create a new
-tree for the replacement root.
+```svelte
+<Container itemId="tasks-root" config={{ mode: "swap", callbacks }} />
+```
 
-See [Custom Ghost Rendering](/docs/snapsort/examples/containers#custom-ghost-rendering)
-for an interactive renderer. The [Drags and Ghosts guide](/docs/snapsort/guides/sessions/ghosts)
-defines the closed `GhostState` union, the geometry each role carries, and
-which ghosts participate in flow.
+### `direction`
 
-Use `createRenderTree` and `reduceRenderTree` for the opinionated state shape,
-or omit them and implement the explicit callbacks for another application
-model:
+**Type:** `"column" | "row"` · **Default:** `"column"`
+
+Sets the main layout direction used by placement prediction and the rendered
+flex direction.
+
+```svelte
+<Container itemId="toolbar" config={{ direction: "row" }} />
+```
+
+### `mainAxisAlign`
+
+**Type:** `"start" | "center"` · **Default:** `"start"`
+
+Sets main-axis alignment for virtual placement and maps to the component's
+`justify-content` value.
+
+```svelte
+<Container itemId="empty-state" config={{ mainAxisAlign: "center" }} />
+```
+
+### `wrap`
+
+**Type:** `"auto" | "nowrap"` · **Default:** `"auto"`
+
+`"auto"` infers wrapped visual lines from measured layout. `"nowrap"` treats
+the Container as one line along its main axis.
+
+```svelte
+<Container itemId="toolbar" config={{ direction: "row", wrap: "nowrap" }} />
+```
+
+### `stretchItems`
+
+**Type:** `boolean` · **Default:** `false`
+
+Sizes projected entries to the destination's cross axis, analogous to CSS
+`align-items: stretch`.
+
+```svelte
+<Container itemId="cards" config={{ stretchItems: true }} />
+```
+
+### `name`
+
+**Type:** `string` · **Default:** generated `container-N`
+
+A human-readable diagnostic name assigned when the Svelte component creates
+the core object. Treat it as construction-time component configuration; later
+changes to `config.name` are not synchronized by the Svelte wrapper.
+
+```svelte
+<Container itemId="tasks-root" config={{ name: "Task board" }} />
+```
+
+### `animation`
+
+**Type:** `ContainerAnimations | null` · **Default:** `undefined`
+
+Enables optional FLIP animation. `reorder` controls displacement during a
+drag, `drop` controls final settling, and `move` controls programmatic
+`moveItem`/`removeItem` layout changes. Each accepts `{ duration,
+timing_function }` or `null`.
+
+```svelte
+<script lang="ts">
+  import { defaultAnimations } from "@snap-engine/snapsort";
+</script>
+
+<Container itemId="tasks-root" config={{ animation: defaultAnimations }} />
+```
+
+```ts
+const animation = {
+  reorder: { duration: 120, timing_function: "ease-out" },
+  drop: { duration: 160, timing_function: "ease-in-out" },
+  move: null,
+};
+```
+
+### `dropPriority`
+
+**Type:** `number` · **Default:** `0`
+
+Sets the static destination priority. `-1` rejects this Container; finite
+nonnegative values remain eligible and higher values are considered before
+lower values. Other negative or nonfinite values are invalid.
+
+```svelte
+<Container itemId="archive" config={{ dropPriority: -1 }} />
+```
+
+### `callbacks`
+
+**Type:** `Readonly<ContainerCallbacks>` · **Default:** `{}`
+
+Installs structural, lifecycle, policy, geometry, and hover callbacks.
+Root-dispatched callbacks must be configured on the root; local callbacks are
+read from the direct destination or Item owner.
+
+```svelte
+<Container itemId="tasks-root" config={{ callbacks }} />
+```
+
+## Callbacks
+
+Structural and lifecycle callbacks resolve on the **tree root**. Policy,
+geometry, and Item-hover callbacks remain **per container**. Framework
+structural callbacks must update Svelte state synchronously; SnapSort does not
+fall back to Vanilla DOM mutation.
+
+### `onItemMove`
+
+```ts
+onItemMove?: (event: ItemMoveEvent) => void;
+```
+
+Root callback for one semantic move, including the full selected run and its
+`from`/`froms` and `to` locations. It is preferred over primitive insertion.
+
+```ts
+const onItemMove = (event: ItemMoveEvent) => {
+  board = reduceRenderTree(board, event);
+};
+```
+
+### `onItemInsert`
+
+```ts
+onItemInsert?: (event: ItemInsertEvent) => void;
+```
+
+Root callback for a primitive insertion and the fallback when `onItemMove` is
+absent. Framework mounting does not emit it; application code must resolve the
+value for a newly introduced ID.
+
+```ts
+const onItemInsert = (event: ItemInsertEvent) => {
+  insertKnownValue(event.itemId, event.container, event.index);
+};
+```
+
+### `onItemRemove`
+
+```ts
+onItemRemove?: (event: ItemRemoveEvent) => void;
+```
+
+Root callback for the imperative `removeItem` command. Application-state
+unmounting and the source half of an ordinary move do not emit it.
+
+```ts
+const onItemRemove = (event: ItemRemoveEvent) => {
+  board = reduceRenderTree(board, event);
+};
+```
+
+### `onItemSwap`
+
+```ts
+onItemSwap?: (event: ItemSwapEvent) => void;
+```
+
+Root callback for one atomic pairwise exchange in swap mode. It is required on
+a Svelte swap root.
+
+```ts
+const onItemSwap = (event: ItemSwapEvent) => {
+  board = reduceRenderTree(board, event);
+};
+```
+
+### `onDragStart`
+
+```ts
+onDragStart?: (event: DragStartEvent) => void | false;
+```
+
+Root callback before drag activation. Return `false` to veto the gesture, or
+set pending-session controls such as `dragVisual`.
+
+```ts
+const onDragStart = (event: DragStartEvent) => {
+  event.session.dragVisual = "preview";
+};
+```
+
+### `onDragEnd`
+
+```ts
+onDragEnd?: (event: DragEndEvent) => void;
+```
+
+Root callback when an activated drag ends, including cancellation or returning
+to the source. `destination` is the final resolved location or `null`.
+
+```ts
+const onDragEnd = (event: DragEndEvent) => {
+  console.log(event.destination);
+};
+```
+
+### `onDropTargetChange`
+
+```ts
+onDropTargetChange?: (event: DropTargetChangeEvent) => void;
+```
+
+Root callback when the prospective direct Container/index changes. It does not
+fire for presentation-only changes at the same location.
+
+```ts
+const onDropTargetChange = (event: DropTargetChangeEvent) => {
+  activeTarget = event.current;
+};
+```
+
+### `onDragItemEnter`
+
+```ts
+onDragItemEnter?: (event: DragItemHoverEvent) => void;
+```
+
+Local callback on the direct owner when the dragged pointer first matches an
+Item's hitbox.
+
+```ts
+const onDragItemEnter = (event: DragItemHoverEvent) => {
+  hoveredId = event.overItemId;
+};
+```
+
+### `onDragItemMove`
+
+```ts
+onDragItemMove?: (event: DragItemHoverEvent) => void;
+```
+
+Local callback on each pointer move while the same Item hitbox remains matched.
+
+```ts
+const onDragItemMove = (event: DragItemHoverEvent) => {
+  hoverPointer = event.pointer;
+};
+```
+
+### `onDragItemLeave`
+
+```ts
+onDragItemLeave?: (event: DragItemHoverEvent) => void;
+```
+
+Local callback when an Item's hitbox stops matching or the drag ends.
+
+```ts
+const onDragItemLeave = (event: DragItemHoverEvent) => {
+  if (hoveredId === event.overItemId) hoveredId = null;
+};
+```
+
+### `onVisualGeometryInvalidated`
+
+```ts
+onVisualGeometryInvalidated?: (
+  event: VisualGeometryInvalidationEvent,
+) => void;
+```
+
+Root, frame-coalesced notification that drag, ghost, animation, or settling may
+have changed rendered Item geometry.
+
+```ts
+const onVisualGeometryInvalidated = () => connectorLayer.invalidate();
+```
+
+### `getDropPriority`
+
+```ts
+getDropPriority?: (event: DropPriorityEvent) => number | undefined;
+```
+
+Local destination policy. Return a finite nonnegative priority, `-1` to reject,
+or `undefined` to keep `event.staticPriority`.
+
+```ts
+const getDropPriority = (event: DropPriorityEvent) =>
+  event.containerMetadata.disabled ? DROP_REJECT_PRIORITY : undefined;
+```
+
+See [Standard Callbacks](/docs/snapsort/reference/callbacks) for reusable
+policies.
+
+### `getItemHitbox`
+
+```ts
+getItemHitbox?: (event: ItemHitboxEvent) => ItemHitbox;
+```
+
+Local, synchronous geometry policy for direct-child hover and swap targeting.
+Return a world-space rectangle or circle.
+
+```ts
+const getItemHitbox = (event: ItemHitboxEvent): ItemHitbox => ({
+  shape: "rect",
+  rect: event.defaultRect,
+});
+```
+
+### `onGhostInsert`
+
+```ts
+onGhostInsert?: (event: GhostInsertEvent) => void;
+```
+
+Root callback when a ghost becomes present in framework render state.
+
+```ts
+const onGhostInsert = (event: GhostInsertEvent) => {
+  board = reduceRenderTree(board, event);
+};
+```
+
+### `onGhostMove`
+
+```ts
+onGhostMove?: (event: GhostMoveEvent) => void;
+```
+
+Root callback when an existing ghost changes location or insertion-marker
+presentation. `from` and `to` may be equal for a presentation-only update.
+
+```ts
+const onGhostMove = (event: GhostMoveEvent) => {
+  board = reduceRenderTree(board, event);
+};
+```
+
+### `onGhostRemove`
+
+```ts
+onGhostRemove?: (event: GhostRemoveEvent) => void;
+```
+
+Root callback when a rendered ghost becomes absent.
+
+```ts
+const onGhostRemove = (event: GhostRemoveEvent) => {
+  board = reduceRenderTree(board, event);
+};
+```
+
+## Core Container Object
+
+Capture the object with `bind:container`. A Container is also an Item; the
+entries below include the relevant inherited Item state as well as
+Container-specific APIs.
+
+### `container.itemId`
+
+**Type:** `ItemId` · **Read-only**
+
+Returns the stable identity supplied to the component.
+
+```ts
+console.log(container.itemId);
+```
+
+### `container.metadata`
+
+**Type:** `ItemMetadata` · **Read/write**
+
+Gets or replaces application metadata. Prefer the component property while
+Svelte owns the object.
+
+```ts
+container.metadata = { accepts: "task" };
+```
+
+### `container.locked`
+
+**Type:** `boolean` · **Read/write** · **Default for Container:** `true`
+
+Controls whether this Container can move as an Item in its parent.
+
+```ts
+container.locked = false;
+```
+
+### `container.selected`
+
+**Type:** `boolean` · **Read/write**
+
+Gets or sets the consumer-owned selection flag inherited from Item.
+
+```ts
+container.selected = true;
+```
+
+### `container.container`
+
+**Type:** `Container` · **Read-only**
+
+Returns the direct parent Container for a nested Container. A root has no
+usable parent-container value.
+
+```ts
+const parent = nested.container;
+```
+
+### `container.rootContainer`
+
+**Type:** `Container` · **Read-only for consumers**
+
+Returns the independent root that owns this Container's drag tree.
+
+```ts
+const root = container.rootContainer;
+```
+
+### `container.depth`
+
+**Type:** `number` · **Read-only**
+
+Returns the object-tree depth; the root is `0`.
+
+```ts
+console.log(container.depth);
+```
+
+### `container.isGhost`
+
+**Type:** `boolean` · **Read-only**
+
+Reports whether this is a transient engine-owned ghost. An application
+Container component exposes `false`.
+
+```ts
+console.log(container.isGhost);
+```
+
+### `container.dragSession`
+
+**Type:** `DragSession | null` · **Read-only**
+
+Returns the active public drag handle on the root Container. Nested Containers
+always return `null`.
+
+```ts
+const draggedIds = container.dragSession?.items.map((item) => item.itemId);
+```
+
+### `container.adapter`
+
+**Type:** `SnapSortAdapter` · **Read-only** · **Advanced**
+
+Returns the root-scoped renderer adapter. Framework components manage this
+object; every Container in one tree must share it.
+
+```ts
+console.log(container.adapter === nested.adapter);
+```
+
+### `container.name`
+
+**Type:** `string` · **Read-only accessor**
+
+Returns the current diagnostic name stored in `container.config.name`.
+
+```ts
+console.log(container.name);
+```
+
+### `container.mode`
+
+**Type:** `SortMode` · **Read/write**
+
+Gets or sets the built-in mode.
+
+```ts
+container.mode = "insertion";
+```
+
+### `container.direction`
+
+**Type:** `"column" | "row"` · **Read/write**
+
+Gets or sets the main layout direction.
+
+```ts
+container.direction = "row";
+```
+
+### `container.mainAxisAlign`
+
+**Type:** `"start" | "center"` · **Read/write**
+
+Gets or sets virtual main-axis alignment.
+
+```ts
+container.mainAxisAlign = "center";
+```
+
+### `container.wrap`
+
+**Type:** `"auto" | "nowrap"` · **Read/write**
+
+Gets or sets wrapped-line inference.
+
+```ts
+container.wrap = "nowrap";
+```
+
+### `container.stretchItems`
+
+**Type:** `boolean` · **Read/write**
+
+Gets or sets cross-axis stretching for projected entries.
+
+```ts
+container.stretchItems = true;
+```
+
+### `container.dropPriority`
+
+**Type:** `number` · **Read/write**
+
+Gets or sets the static destination priority.
+
+```ts
+container.dropPriority = DROP_REJECT_PRIORITY;
+```
+
+### `container.callbacks`
+
+**Type:** `Readonly<ContainerCallbacks>` · **Read/write**
+
+Gets or replaces the frozen callback set. Assigning root-dispatched callbacks
+to a descendant throws.
+
+```ts
+container.callbacks = { ...container.callbacks, getDropPriority };
+```
+
+### `container.config`
+
+**Type:** `ContainerRuntimeConfig` · **Read-only reference to live values**
+
+Returns the sealed live configuration object. It contains runtime config except
+`callbacks`; use `container.callbacks` for callback replacement. `animation`
+and the diagnostic `name` are accessed through this object.
+
+```ts
+container.config.animation = defaultAnimations;
+```
+
+### `container.itemList`
+
+**Type:** `Item[]` · **Read-only snapshot array**
+
+Returns direct ordinary Items in DOM order, excluding ghosts.
+
+```ts
+const ids = container.itemList.map((item) => item.itemId);
+```
+
+### `container.itemOrderedList`
+
+**Type:** `Item[]` · **Read-only usage**
+
+Returns the direct ordered Item list used by SnapSort, including live ghost
+Items. Do not mutate the returned array.
+
+```ts
+const renderedOrder = container.itemOrderedList.map((item) => item.itemId);
+```
+
+### `container.numberOfItems`
+
+**Type:** `number` · **Read-only**
+
+Returns the number of direct ordinary Items, excluding ghosts.
+
+```ts
+console.log(container.numberOfItems);
+```
+
+### `container.dragSnapshot`
+
+**Type:** `ItemSnapshot<Item> | null` · **Read-only**
+
+Returns this Container's frozen drag-tree snapshot while one exists.
+
+```ts
+const frozenChildren = container.dragSnapshot?.children;
+```
+
+### `container.dragPointerPosition`
+
+**Type:** `{ x: number; y: number } | null` · **Read-only**
+
+Returns the active pointer in world coordinates when this Container is being
+dragged as an Item and has a drag snapshot.
+
+```ts
+const pointer = container.dragPointerPosition;
+```
+
+### `container.dragPositionX`
+
+**Type:** `number` · **Read-only**
+
+Returns the projected world-space left edge while this Container is dragged.
+
+```ts
+const left = container.dragPositionX;
+```
+
+### `container.dragPositionY`
+
+**Type:** `number` · **Read-only**
+
+Returns the projected world-space top edge while this Container is dragged.
+
+```ts
+const top = container.dragPositionY;
+```
+
+### `container.getIndexAndContainer()`
+
+```ts
+getIndexAndContainer(): { index: number; container: Container | null }
+```
+
+Returns this Container's location as an Item in its parent. A root returns
+`{ index: -1, container: null }`.
+
+```ts
+const location = container.getIndexAndContainer();
+```
+
+### `container.attachItem(item)`
+
+```ts
+attachItem(item: Item): void
+```
+
+Advanced direct-object API that attaches an Item at the end and synchronizes
+the root snapshot. Framework collection rendering normally handles attachment.
+
+```ts
+container.attachItem(existingItem);
+```
+
+### `container.moveItem(itemId, targetContainer, index)`
+
+```ts
+moveItem(itemId: ItemId, targetContainer: Container, index: number): boolean
+```
+
+Authoritatively moves an Item within the same root, bypassing drop policy.
+Returns `false` when the ID is missing or that Item already has a pending
+programmatic mutation. The root `onItemMove`/`onItemInsert` callback must update
+Svelte state synchronously.
+
+```ts
+const accepted = source.moveItem("task-1", archive, 0);
+```
+
+### `container.removeItem(itemId)`
+
+```ts
+removeItem(itemId: ItemId): boolean
+```
+
+Requests removal of a direct ordinary Item. Returns `false` when it is missing
+or already pending and dispatches root `onItemRemove` when accepted.
+
+```ts
+const accepted = source.removeItem("task-1");
+```
+
+### `container.debugAllItems()`
+
+```ts
+debugAllItems(node?: Item): void
+```
+
+Draws debug circles at Item centers, color-coded by parent Container. It uses
+SnapEngine's debug renderer.
+
+```ts
+container.debugAllItems();
+```
+
+### `container.takeRootSnapshot()`
+
+```ts
+takeRootSnapshot(): void
+```
+
+Advanced adapter hook that reconciles tree state and queues the initial root
+DOM read. The Svelte root component calls it automatically after mount.
+
+```ts
+customRoot.takeRootSnapshot();
+```
+
+Inherited SnapEngine DOM, animation, scheduling, and destruction APIs are
+documented in [Objects](/docs/snapengine/reference/objects).
+
+## Appendix
+
+### Direct children and RenderTree entries
+
+Svelte owns the rendered collection. Fixed markup can sit before or after the
+keyed sortable loop and is never registered as an Item. Within the loop, render
+ghost entries as `Ghost`, entries with a `childTree` as nested `Container`, and
+ordinary leaves as `Item`. A nested Container is already an Item and must not
+be wrapped in another Item.
 
 ```svelte
 <script lang="ts">
@@ -150,15 +928,11 @@ model:
     type GhostLifecycleEvent,
     type ItemMoveEvent,
   } from "@snap-engine/snapsort";
-  import { rejectDrop } from "@snap-engine/snapsort/callbacks";
   import { Container, Ghost, Item } from "@snap-engine/snapsort/svelte";
 
   type BoardValue =
     | { kind: "column"; title: string }
     | { kind: "task"; label: string };
-
-  const taskEntry = (id: string, label: string) =>
-    createRenderEntry<BoardValue>({ kind: "task", label }, id);
 
   let board = $state.raw(
     createRenderTree<BoardValue>([
@@ -166,392 +940,93 @@ model:
         { kind: "column", title: "To do" },
         "todo",
         createRenderTree([
-          taskEntry("task-1", "Sketch layout"),
-          taskEntry("task-2", "Wire behavior"),
+          createRenderEntry({ kind: "task", label: "Sketch" }, "task-1"),
         ]),
-      ),
-      createRenderEntry(
-        { kind: "column", title: "Done" },
-        "done",
-        createRenderTree(),
       ),
     ]),
   );
 
-  function onItemMove(event: ItemMoveEvent) {
-    board = reduceRenderTree(board, event);
-  }
-
-  function onGhostMove(event: GhostLifecycleEvent) {
+  function applyTreeEvent(event: ItemMoveEvent | GhostLifecycleEvent) {
     board = reduceRenderTree(board, event);
   }
 
   const callbacks = {
-    onItemMove,
-    onGhostInsert: onGhostMove,
-    onGhostMove,
-    onGhostRemove: onGhostMove,
-    getDropPriority: rejectDrop,
+    onItemMove: applyTreeEvent,
+    onGhostInsert: applyTreeEvent,
+    onGhostMove: applyTreeEvent,
+    onGhostRemove: applyTreeEvent,
   } satisfies ContainerCallbacks;
 </script>
 
 <Container itemId="project-board-root" config={{ callbacks }}>
   <header>Project board</header>
-
   {#each board.entries as entry (entry.itemId)}
     {#if entry.isGhost}
       <Ghost ghost={entry.ghost} />
     {:else if entry.childTree}
-      <Container
-        itemId={entry.itemId}
-      >
-        {#if entry.value.kind === "column"}
-          <h2>{entry.value.title}</h2>
-        {/if}
-
-        {#each entry.childTree.entries as child (child.itemId)}
-          {#if child.isGhost}
-            <Ghost ghost={child.ghost} />
-          {:else if child.childTree}
-            <!-- Repeat this branch or extract an application-local recursive component. -->
-          {:else if child.value.kind === "task"}
-            <Item itemId={child.itemId}>{child.value.label}</Item>
-          {/if}
-        {/each}
+      <Container itemId={entry.itemId}>
+        <!-- Render entry.childTree.entries with the same three branches. -->
       </Container>
-    {:else if entry.value.kind === "task"}
+    {:else}
       <Item itemId={entry.itemId}>{entry.value.label}</Item>
     {/if}
   {/each}
-
   <footer>Board controls</footer>
 </Container>
 ```
 
-The outer container is the root and owns structural callbacks. The inner list
-containers receive no structural callbacks; they may still configure policy,
-geometry, or hover callbacks. `rejectDrop` keeps tasks out of the board's top
-level while the child trees remain eligible destinations. Moving a Container
-entry carries its complete `childTree`; its immutable `itemId` keeps the same
-mounted Container when the keyed loop moves it.
-
-`reduceRenderTree` accepts `ItemMoveEvent`, `ItemSwapEvent`, `ItemRemoveEvent`,
-and the three ghost lifecycle events. Those events completely describe the
-next state of existing application entries. It deliberately does not accept
-`ItemInsertEvent`: that event identifies a new core Item and its location but
-cannot provide the application value to store in `RenderEntry<T>`. An advanced
-`onItemInsert` integration must resolve that value and edit its own state.
+Item IDs are unique across one RenderTree root, including the root Container,
+nested Containers, ordinary Items, and live ghosts. Independent roots may
+reuse IDs. Keep the root mounted for the lifetime of its RenderTree state.
 
 ### Application-owned item lifetime
 
-An Add button or Delete button should edit the application-owned entries
-directly. Here the board updates one nested child tree while preserving that
-tree's entries:
+Application Add and Delete actions edit framework state directly. These are
+application functions, not SnapSort helpers:
 
 ```ts
 function addTaskToTodo(id: string, label: string) {
-  board = {
-    ...board,
-    entries: board.entries.map((entry) =>
-      !entry.isGhost && entry.itemId === "todo" && entry.childTree
-        ? {
-            ...entry,
-            childTree: {
-              ...entry.childTree,
-              entries: [...entry.childTree.entries, taskEntry(id, label)],
-            },
-          }
-        : entry,
-    ),
-  };
+  board = addTaskEntry(board, "todo", { id, label });
 }
 
 function deleteTasksFromTodo(itemIds: readonly string[]) {
-  const deleted = new Set(itemIds);
-  board = {
-    ...board,
-    entries: board.entries.map((entry) =>
-      !entry.isGhost && entry.itemId === "todo" && entry.childTree
-        ? {
-            ...entry,
-            childTree: {
-              ...entry.childTree,
-              entries: entry.childTree.entries.filter(
-                (child) => child.isGhost || !deleted.has(child.itemId),
-              ),
-            },
-          }
-        : entry,
-    ),
-  };
+  board = removeTaskEntries(board, "todo", new Set(itemIds));
 }
 ```
 
-These are application functions, not SnapSort helpers. Svelte reconciles the
-loop, and mounting or unmounting `Item` synchronizes the core registration. A
-drop-to-trash interface follows the same ownership rule: set
-`session.dropEffect = "none"` for the trash target, then delete all
-`event.itemIds` from application state only if `onDragEnd` reports the trash as
-its final `destination`. See
-[Give a Drop Application Meaning](/docs/snapsort/examples/advanced-settings-and-callbacks#give-a-drop-application-meaning)
-for a recursive, cancellation-safe recipe.
+Svelte reconciliation mounts or unmounts the corresponding Items. Framework
+mounting does not emit `onItemInsert` or `onItemRemove`. Calling the core
+`removeItem(id)` is the opposite synchronization direction: configure root
+`onItemRemove`, apply it synchronously, and do not expect `onItemRemove` for
+the source half of a move.
 
-The imperative command is a separate direction of synchronization. If code
-calls a core Container's `removeItem(id)`, SnapSort removes it from the core
-tree and emits root `onItemRemove`. Add that callback and reduce it
-synchronously:
+If `animation.move` is configured, accepted programmatic moves/removals commit
+in the coordinated animation transaction. Further commands for that Item
+return `false` while it is pending.
 
-```ts
-import type {
-  Container as SnapSortContainer,
-  ItemRemoveEvent,
-} from "@snap-engine/snapsort";
+### Drag visuals and ghost presentation
 
-function onItemRemove(event: ItemRemoveEvent) {
-  board = reduceRenderTree(board, event);
-}
+`DragSession.dragVisual` (`"item"`, `"preview"`, or `"none"`) controls what
+follows the pointer independently from placement feedback. Configure it while
+the session is pending, normally in `onDragStart`.
 
-const callbacksWithCoreRemove = {
-  onItemMove,
-  onItemRemove,
-  onGhostInsert: onGhostMove,
-  onGhostMove,
-  onGhostRemove: onGhostMove,
-} satisfies ContainerCallbacks;
-
-function removeThroughSnapSort(source: SnapSortContainer, itemId: string) {
-  source.removeItem(itemId);
-}
-```
-
-Use this imperative path only when SnapSort's core command is intended to lead
-the change. Do not call it after already deleting the same entry from Svelte
-state, and do not expect `onItemRemove` for the source half of a move.
-
-If the source Container has `animation.move`, `removeItem(id)` returns `true`
-when the request is accepted, commits `onItemRemove` in the next coordinated
-frame, and FLIP-animates the surviving layout. While any animated programmatic
-move or removal for that Item is pending, further move/remove commands return
-`false` and dragging it is temporarily disabled. Direct Svelte-state deletion
-bypasses this animation, and SnapSort does not retain the removed element for
-an exit effect.
-
-## Configuration
-
-| Option          | Default                        | Description                                                                                                     |
-| --------------- | ------------------------------ | --------------------------------------------------------------------------------------------------------------- |
-| `mode`          | `"euclidean"`                  | Drag/drop mode for this tree: `"euclidean"`, `"progressive"`, `"insertion"`, or `"swap"`.                       |
-| `direction`     | `"column"`                     | Main layout direction: `"column"` or `"row"`.                                                                   |
-| `mainAxisAlign` | `"start"`                      | Main-axis alignment for virtual placement. Supports `"start"` and `"center"`.                                   |
-| `wrap`          | `"auto"`                       | Infers wrapping from measured layout; `"nowrap"` keeps one visual line along the main axis.                     |
-| `stretchItems`  | `false`                        | Sizes entries to the destination's cross axis, analogous to CSS `align-items: stretch`.                         |
-| `name`          | Generated                      | Human-readable container name.                                                                                  |
-| `animation`     | `undefined`                    | Optional reorder, drop, and programmatic-move animation settings. Omit it or set it to `null` for no animation. |
-| `dropPriority`  | `0`                            | Base destination policy: `-1` rejects; nonnegative values rank candidates, with higher values considered first. |
-| `callbacks`     | No persistent mutation default | Root handlers for SnapSort-originated structure/lifecycle plus local policy, geometry, and hover hooks.         |
-
-Animations are opt-in. Use SnapSort's standard 100ms preset when you want the
-library's conventional motion:
+Insertion targeting owns a canonical zero-thickness gap and frozen neighbor
+geometry. `InsertionMarkerState.isCurrentPlacement` reports whether committing
+that candidate preserves the dragged run's current placement. Rendering
+options affect paint only:
 
 ```svelte
-<script lang="ts">
-  import { defaultAnimations } from "@snap-engine/snapsort";
-</script>
-
-<Container itemId="animated-list-root" config={{ animation: defaultAnimations }} />
-```
-
-Mode is resolved from the root container when a drag starts, so nested containers in one drag tree should use the same mode.
-
-## Callbacks
-
-Callbacks have two explicit ownership rules.
-
-Structural and lifecycle callbacks resolve on the **tree root**. Put them only
-in the root `Container`'s config; descendant structural callbacks are rejected.
-The event payload identifies the semantic containers, so one root handler can
-route state for the entire tree.
-
-| Root callback                        | Meaning                                                                                                                          |
-| ------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------- |
-| `onItemMove(event)`                  | Preferred persistent move. `from` and `to` identify the source and destination; the source does not also receive `onItemRemove`. |
-| `onItemInsert(event)`                | Lower-level core insertion and fallback when `onItemMove` is absent; framework mounting does not emit it.                        |
-| `onItemRemove(event)`                | Core `removeItem` command, not application-state unmounting or the source half of a move.                                        |
-| `onItemSwap(event)`                  | One atomic pairwise exchange; required for swap mode in Svelte.                                                                  |
-| `onGhostInsert/Move/Remove(event)`   | Explicit presence and relocation commands carrying `event.ghost`; an application may pass each one to `reduceRenderTree`.        |
-| `onDragStart/End(event)`             | Root lifecycle. Start may veto or choose `dragVisual`; end reports the final outcome.                                            |
-| `onDropTargetChange(event)`          | Reports a changed prospective destination.                                                                                       |
-| `onVisualGeometryInvalidated(event)` | Coalesced notification for dependent visuals after drag, ghost, FLIP, or settle geometry changes.                                |
-
-The following callbacks remain **per container** because they answer policy,
-geometry, or hover questions about that direct container:
-
-| Local callback               | Owner                                   |
-| ---------------------------- | --------------------------------------- |
-| `getDropPriority`            | Each candidate destination.             |
-| `getItemHitbox`              | The direct owner of the candidate item. |
-| `onDragItemEnter/Move/Leave` | The direct owner of `event.overItem`.   |
-
-Root structural callbacks run inside the root adapter's synchronous commit.
-Policy, geometry, and hover callbacks run directly. Missing framework
-structural callbacks fail clearly; SnapSort never falls back to Vanilla DOM
-mutation for a Svelte-owned tree.
-
-### Drag visuals
-
-`DragSession.dragVisual` separates pointer representation from placement mode:
-
-```svelte
-<Container
-  itemId="insertion-list-root"
-  config={{
-    mode: "insertion",
-    callbacks: {
-      onDragStart: (event) => {
-        event.session.dragVisual = "preview";
-      },
-    },
-  }}
->
-</Container>
-```
-
-The choices are `"item"`, `"preview"`, and `"none"`. A preview is one
-root-owned `pointer-preview` ghost for the complete dragged run; insertion's
-destination remains a separate `insertion-marker` ghost. Both appear in their
-owning tree node's `entries` sequence and render through `Ghost`. Set the
-property only while the session is pending, normally in `onDragStart`.
-
-### Insertion marker geometry and item hitboxes
-
-SnapSort owns insertion targeting geometry. The `insertion-marker` state
-contains a zero-thickness world-space `gap`, frozen `previous` and `next`
-neighbors for the chosen physical boundary, and `isCurrentPlacement`. Marker
-paint is deliberately separate from candidate ranking.
-
-The insertion-specific part of the public state is:
-
-```ts
-interface InsertionMarkerState {
-  readonly type: "insertion-marker";
-  readonly location: GhostSlotLocation;
-  readonly gap: InsertionGapSegment;
-  readonly previous: InsertionMarkerNeighbor | null;
-  readonly next: InsertionMarkerNeighbor | null;
-  readonly isCurrentPlacement: boolean;
-  // Plus the shared GhostState identity and dragged-run fields.
-}
-```
-
-Each neighbor contains its exact `Item`, `itemId`, frozen metadata, and frozen
-world-space border rectangle. A nested `Container` is also an `Item`, so no
-separate container-neighbor variant is needed.
-
-The built-in `Ghost` has an explicit 3px stock presentation. Pass all three
-marker options when the product needs another rectangle:
-
-```svelte
-<script lang="ts">
-  import {
-    type GhostState,
-    type InsertionMarkerRectOptions,
-  } from "@snap-engine/snapsort";
-  import { Ghost } from "@snap-engine/snapsort/svelte";
-
-  let { ghost }: { ghost: GhostState } = $props();
-
-  const markerOptions = {
-    thickness: 2,
-    startInset: 24,
-    endInset: 8,
-  } satisfies InsertionMarkerRectOptions;
-
-</script>
-
 {#if ghost.type === "insertion-marker"}
-  <Ghost {ghost} insertionMarker={markerOptions} />
+  <Ghost ghost={ghost} insertionMarker={markerOptions} />
 {:else}
   <Ghost {ghost} />
 {/if}
 ```
 
-Custom renderers and adapters use the same pure conversion instead of
-reimplementing coordinate projection:
-
 ```ts
-import { insertionMarkerRect } from "@snap-engine/snapsort";
-import type { InsertionMarkerState } from "@snap-engine/snapsort";
-
-function renderMarker(marker: InsertionMarkerState, element: HTMLElement) {
-  const rect = insertionMarkerRect(marker, markerOptions);
-  element.style.left = `${rect.x}px`;
-  element.style.top = `${rect.y}px`;
-  element.style.width = `${rect.width}px`;
-  element.style.height = `${rect.height}px`;
-}
+const rect = insertionMarkerRect(marker, markerOptions);
 ```
 
-`startInset` means left for a horizontal line and top for a vertical line;
-`endInset` means right or bottom. Insets and thickness alter only rendering.
-Both insets must be non-negative and their sum must not exceed `gap.length`.
-The returned rectangle is relative to `ghost.location.container`, including
-its border and scroll offset, and is ready for absolute positioning.
-
-`toContainerLocalRect(worldRect, container)` exposes the same border-, scroll-,
-and camera-aware projection for another world-space overlay. Vanilla can keep
-the stock adapter and choose marker presentation with
-`createVanillaAdapter({ insertionMarker: markerOptions })`.
-
-`getItemHitbox` remains a direct-container geometry callback because its return
-value intentionally changes hover/swap targeting. It receives the dragged
-item, candidate `overItem`, direct owner, pointer, and frozen `defaultRect`.
-Return either `{ shape: "rect", rect }` or
-`{ shape: "circle", center, radius }`.
-
-- Configure persistent and ghost structural callbacks once on the root.
-  Their event locations route updates to the source and destination records.
-- Configure `onItemSwap` on the root of every swap tree.
-- Keep priority, item-hitbox geometry, and hover callbacks on the
-  direct containers whose behavior they customize.
-
-Configure `onItemRemove` when application code can invoke `removeItem(id)`, and
-pass it through `reduceRenderTree` when using RenderTree state. Direct
-application-state deletion needs no callback. Ordinary moves emit only the
-root-dispatched `onItemMove`/`onItemInsert` event.
-
-Update Svelte state synchronously in every structural callback. The adapter
-uses its root `commit` boundary and `flushSync`, allowing SnapSort to read final
-DOM geometry before paint. Missing callbacks fail clearly instead of mutating
-framework-rendered DOM.
-
-### Drop policy events
-
-Drop targeting resolves one effective policy value, then runs the selected
-placement mode. `DropPriorityEvent` includes `itemMetadata`/`itemsMetadata`,
-destination `containerMetadata`, the primary `source`, `sources` parallel to
-the full multi-item drag, `staticPriority`, the representative `index`, pointer
-and frozen rectangle geometry, and destination depth. Effective `-1` rejects;
-nonnegative values rank candidates owned directly by this Container and do not
-propagate to nested Containers.
-
-See [Standard Callbacks](/docs/snapsort/reference/callbacks) for exact
-resolution rules and reusable policies from
-`@snap-engine/snapsort/callbacks`.
-
-## Core Object API
-
-After capturing the object with `bind:container`, these are the most commonly
-used core properties and methods.
-
-| API                                              | Description                                                                                                |
-| ------------------------------------------------ | ---------------------------------------------------------------------------------------------------------- |
-| `container.moveItem(id, targetContainer, index)` | Authoritatively moves an item into another container or index, bypassing drop policy.                      |
-| `container.removeItem(id)`                       | Requests core-led removal through root `onItemRemove`; `animation.move` animates the surviving layout.     |
-| `container.numberOfItems`                        | Number of tracked child items.                                                                             |
-| `container.dropPriority`                         | Gets or sets the base policy: `-1` rejects; nonnegative values rank the Container.                         |
-| `container.direction`                            | Gets or sets `"column"` or `"row"`.                                                                        |
-| `container.mainAxisAlign`                        | Gets or sets `"start"` or `"center"`.                                                                      |
-| `container.mode`                                 | Gets or sets the drag/drop mode.                                                                           |
-| `container.config`                               | Live `ContainerConfig` object.                                                                             |
-| `container.callbacks`                            | Configured callback object.                                                                                |
-| `container.dragSession`                          | Stable read-only `DragSession` handle on the root container while active; nested containers return `null`. |
+Use `getItemHitbox` only when hover/swap targeting itself needs different
+geometry. See [Drags and Ghosts](/docs/snapsort/guides/sessions/ghosts) for the
+full ghost lifecycle and insertion-marker model.

@@ -8,8 +8,9 @@ sectionTitle: Reference
 sectionOrder: 3
 ---
 
-SnapSort provides pure, framework-neutral drop-policy callbacks through the
-`@snap-engine/snapsort/callbacks` package subpath:
+SnapSort exports five pure, framework-neutral drop-priority functions from
+`@snap-engine/snapsort/callbacks`. Pass one to a destination Container's
+`getDropPriority` callback or call it from an application callback.
 
 ```ts
 import { DROP_REJECT_PRIORITY } from "@snap-engine/snapsort";
@@ -22,63 +23,279 @@ import {
 } from "@snap-engine/snapsort/callbacks";
 ```
 
-These functions can be passed directly to a destination Container's
-`getDropPriority` callback. They inspect the supplied event and return a
-decision without changing SnapSort, application state, or the DOM.
+Every helper receives a `DropPriorityEvent` and returns a priority without
+mutating SnapSort, application state, or the DOM.
 
-## Callback Summary
-
-| Callback                          | Result                                                                                 |
-| --------------------------------- | -------------------------------------------------------------------------------------- |
-| `rejectDrop`                      | Always returns `DROP_REJECT_PRIORITY` (`-1`).                                          |
-| `prioritizePointerContainer`      | Returns `1` when the pointer is inside `containerRect`; otherwise `undefined`.         |
-| `prioritizeIntersectingContainer` | Returns `1` when `dragRect` intersects `containerRect`; otherwise `undefined`.         |
-| `prioritizeNearestContainerEdge`  | Returns `1 / (1 + distance)`; inside scores `1`, and distant scores approach `0`.      |
-| `prioritizeTreeDepth`             | Returns `depth + 1` when the virtual tree probe is inside; otherwise `staticPriority`. |
-
-Containment is edge-inclusive. Geometry comes from the frozen world-space
-snapshot for the current target resolution, using the same collision
-primitives as SnapEngine.
-
-Priority results are absolute overrides for the current resolution, not values
-automatically added to `Container.dropPriority`. `-1` rejects the destination,
-finite nonnegative values rank it, and `undefined` preserves the configured
-priority. Other negative and nonfinite results throw. Helpers that need an
-explicit fallback return `event.staticPriority` themselves.
-
-Because rejection uses the final effective value, a callback can override a
-configured `dropPriority: -1` with a nonnegative result. Returning `undefined`
-leaves that configured rejection in place.
-
-## `rejectDrop`
+## `DropPriorityEvent`
 
 ```ts
-function rejectDrop(_event: DropPriorityEvent): typeof DROP_REJECT_PRIORITY;
-```
-
-Use `rejectDrop` on a structural Container that can own nested destinations but
-must never accept Items directly:
-
-```ts
-const callbacks = {
-  getDropPriority: rejectDrop,
-};
-```
-
-Rejection applies only to candidate positions owned directly by that
-Container. Nested Containers run their own `getDropPriority` policies.
-
-For conditional rejection, compose it with another priority rule:
-
-```ts
-function prioritizeMatchingGroup(event: DropPriorityEvent) {
-  const matches =
-    event.source?.containerMetadata.group === event.containerMetadata.group;
-  return matches ? prioritizeIntersectingContainer(event) : rejectDrop(event);
+interface DropPriorityEvent {
+  session: DragSession | null;
+  item: Item;
+  itemId: ItemId;
+  itemMetadata: ItemMetadata;
+  items: Item[];
+  itemIds: ItemId[];
+  itemsMetadata: ItemMetadata[];
+  source: DragLocation | null;
+  sources: readonly (DragLocation | null)[];
+  container: Container;
+  containerMetadata: Record<string, unknown>;
+  index: number;
+  staticPriority: number;
+  pointer: { x: number; y: number };
+  dragRect: DropPriorityRect;
+  containerRect: DropPriorityRect;
+  containerContentRect: DropPriorityRect;
+  depth: number;
 }
 ```
 
-## `prioritizePointerContainer`
+### `session`
+
+**Type:** `DragSession | null`
+
+The active drag handle. It is `null` when priority is evaluated without a
+pointer-driven drag, so narrow it before reading session state.
+
+```ts
+if (event.session?.dropEffect === "none") return DROP_REJECT_PRIORITY;
+```
+
+### `item`
+
+**Type:** `Item`
+
+The primary Item being evaluated. For a multi-item drag it is the first Item
+in the ordered run and equals `items[0]`.
+
+```ts
+const sourceItem = event.item;
+```
+
+### `itemId`
+
+**Type:** `ItemId`
+
+The stable identity of `item`. Prefer it to object identity when comparing
+against application state.
+
+```ts
+if (blockedIds.has(event.itemId)) return DROP_REJECT_PRIORITY;
+```
+
+### `itemMetadata`
+
+**Type:** `ItemMetadata`
+
+Read-only application metadata for `item`.
+
+```ts
+const kind = event.itemMetadata.kind;
+```
+
+### `items`
+
+**Type:** `Item[]`
+
+The complete dragged run in stable order. A single-item drag has one entry.
+
+```ts
+if (event.items.length > 10) return DROP_REJECT_PRIORITY;
+```
+
+### `itemIds`
+
+**Type:** `ItemId[]`
+
+Identities parallel to `items`: `itemIds[i]` identifies `items[i]`.
+
+```ts
+const includesLockedItem = event.itemIds.some((id) => lockedIds.has(id));
+```
+
+### `itemsMetadata`
+
+**Type:** `ItemMetadata[]`
+
+Application metadata parallel to `items`.
+
+```ts
+const allTasks = event.itemsMetadata.every((data) => data.kind === "task");
+```
+
+### `source`
+
+**Type:** `DragLocation | null`
+
+The primary Item's source location, or `null` when it has no source Container.
+It equals `sources[0]` when both are present.
+
+```ts
+const isSameContainer = event.source?.container === event.container;
+```
+
+### `sources`
+
+**Type:** `readonly (DragLocation | null)[]`
+
+Source locations parallel to `items`. An entry can be `null` for an Item that
+does not currently belong to a Container.
+
+```ts
+const crossesContainers = event.sources.some(
+  (source) => source && source.container !== event.container,
+);
+```
+
+### `container`
+
+**Type:** `Container`
+
+The candidate destination whose direct positions will receive the returned
+priority.
+
+```ts
+if (event.container.locked) return rejectDrop(event);
+```
+
+### `containerMetadata`
+
+**Type:** `Record<string, unknown>`
+
+Read-only application metadata for the candidate destination.
+
+```ts
+const accepts = event.containerMetadata.accepts;
+```
+
+### `index`
+
+**Type:** `number`
+
+The first candidate index generated for this Container. SnapSort calls policy
+once per candidate Container per resolution, so this value is representative
+only. Do not use it to allow or reject individual slots.
+
+```ts
+console.log("First candidate index", event.index);
+```
+
+### `staticPriority`
+
+**Type:** `number`
+
+The Container's configured `dropPriority` before `getDropPriority` overrides
+it. Return this value when an application condition does not apply but the
+configured priority should be preserved.
+
+```ts
+return matchesRule ? event.depth + 1 : event.staticPriority;
+```
+
+### `pointer`
+
+**Type:** `{ x: number; y: number }`
+
+Frozen world-space coordinates for the pointer used by this resolution.
+
+```ts
+const pointerY = event.pointer.y;
+```
+
+### `dragRect`
+
+**Type:** `DropPriorityRect`
+
+The primary dragged Item's virtual world-space rectangle. Its leading edge
+preserves the pointer-to-Item offset captured at drag start.
+
+```ts
+const leadingX = event.dragRect.x;
+```
+
+### `containerRect`
+
+**Type:** `DropPriorityRect`
+
+The destination Container's frozen world-space border box. All five standard
+callbacks use this rectangle when they need destination geometry.
+
+```ts
+const right = event.containerRect.x + event.containerRect.width;
+```
+
+### `containerContentRect`
+
+**Type:** `DropPriorityRect`
+
+The destination Container's frozen world-space content box. Standard helpers
+do not use it, but custom policies can use it when borders and padding should
+not count as the active region.
+
+```ts
+return pointInside(event.pointer, event.containerContentRect)
+  ? 1
+  : event.staticPriority;
+```
+
+### `depth`
+
+**Type:** `number`
+
+The candidate Container's zero-based depth within its independent SnapSort
+tree. `prioritizeTreeDepth` uses it to give deeper matching Containers larger
+scores.
+
+```ts
+const nestedPriority = event.depth + 1;
+```
+
+### `DropPriorityRect`
+
+**Type:** `{ x: number; y: number; width: number; height: number }`
+
+A frozen world-space rectangle captured for the current target resolution.
+
+## Priority Return Values
+
+### `DROP_REJECT_PRIORITY`
+
+**Type:** `-1`
+
+The one valid rejection result. A finite nonnegative number makes the
+Container eligible and ranks it; `undefined` preserves `staticPriority`.
+Other negative or nonfinite results throw.
+
+```ts
+return acceptsItem(event) ? 1 : DROP_REJECT_PRIORITY;
+```
+
+A callback result is an absolute override, not a value added to
+`dropPriority`. Returning a nonnegative number can therefore override a static
+`-1`; returning `undefined` preserves that static rejection.
+
+## Functions
+
+### `rejectDrop`
+
+```ts
+function rejectDrop(event: DropPriorityEvent): typeof DROP_REJECT_PRIORITY;
+```
+
+Always returns `DROP_REJECT_PRIORITY` (`-1`). Use it on a structural Container
+that may own nested destinations but must not directly accept Items.
+
+```ts
+const config = {
+  callbacks: { getDropPriority: rejectDrop },
+} satisfies ContainerConfig;
+```
+
+The rejection applies to positions owned directly by that Container. Nested
+Containers evaluate their own policies.
+
+### `prioritizePointerContainer`
 
 ```ts
 function prioritizePointerContainer(
@@ -86,17 +303,20 @@ function prioritizePointerContainer(
 ): number | undefined;
 ```
 
-This helper returns `1` when `event.pointer` is inside the destination's frozen
-border box. It is useful for overlapping or differently sized destinations
-when the pointer itself should determine which Container is preferred.
+Returns `1` when `event.pointer` is inside or on the edge of
+`event.containerRect`; otherwise returns `undefined`, preserving the
+Container's configured priority.
 
 ```ts
-const callbacks = {
-  getDropPriority: prioritizePointerContainer,
-};
+const config = {
+  callbacks: { getDropPriority: prioritizePointerContainer },
+} satisfies ContainerConfig;
 ```
 
-## `prioritizeIntersectingContainer`
+Use it when the pointer itself should select among overlapping or differently
+sized destinations.
+
+### `prioritizeIntersectingContainer`
 
 ```ts
 function prioritizeIntersectingContainer(
@@ -104,36 +324,45 @@ function prioritizeIntersectingContainer(
 ): number | undefined;
 ```
 
-This helper returns `1` when the primary virtual dragged Item's `dragRect`
-intersects the destination's `containerRect`. It preserves the initial
-pointer-to-Item grab offset and is useful for large canvases, bins, and nested
-drop zones where the dragged visual should enter the destination before it is
-preferred.
+Returns `1` when `event.dragRect` intersects or touches
+`event.containerRect`; otherwise returns `undefined`. The virtual dragged
+rectangle preserves the initial grab offset.
 
-The Clone Palette, Sentence Builder, and Trash It examples use this callback.
+```ts
+const config = {
+  callbacks: { getDropPriority: prioritizeIntersectingContainer },
+} satisfies ContainerConfig;
+```
 
-## `prioritizeNearestContainerEdge`
+Use it for bins, canvases, and drop zones that should be preferred when the
+dragged Item—not only the pointer—enters them.
+
+### `prioritizeNearestContainerEdge`
 
 ```ts
 function prioritizeNearestContainerEdge(event: DropPriorityEvent): number;
 ```
 
-This helper returns `1` while the pointer is inside a destination. Outside, it
-returns `1 / (1 + distance)`, where distance is the Euclidean distance to the
-nearest point on the destination's border box. The closest Container therefore
-receives the highest nonnegative score without colliding with rejection.
+Returns `1 / (1 + distance)`, where `distance` is the Euclidean distance from
+the pointer to the nearest point on `containerRect`. A pointer inside the box
+scores `1`; scores approach `0` as distance increases.
 
-Because every candidate receives a numeric result, the configured static
-priority is intentionally replaced rather than preserved.
+```ts
+const config = {
+  callbacks: { getDropPriority: prioritizeNearestContainerEdge },
+} satisfies ContainerConfig;
+```
 
-## `prioritizeTreeDepth`
+This helper always returns a number, so it replaces `staticPriority` for every
+candidate instead of preserving it outside the Container.
+
+### `prioritizeTreeDepth`
 
 ```ts
 function prioritizeTreeDepth(event: DropPriorityEvent): number;
 ```
 
-This helper targets vertically rendered file trees and layer lists. It builds
-an offset-aware virtual probe from:
+Builds this virtual probe for vertically rendered trees:
 
 ```ts
 const virtualProbe = {
@@ -142,48 +371,52 @@ const virtualProbe = {
 };
 ```
 
-When that probe is inside `event.containerRect`, the callback returns
-`event.depth + 1`; otherwise it returns `event.staticPriority`. Adding one
-ensures a matching root-depth Container outranks the default priority of zero,
-while increasing depth makes a matching nested Container more specific.
-
-Using the virtual Item's leading X edge instead of the raw pointer X preserves
-the original grab offset. The pointer Y still chooses the current row or
-vertical band. This contract is intentionally for vertical trees; horizontal
-tree layouts should provide an application callback with the axes exchanged.
-
-The insertion file-tree demo combines the standard rule with one
-application-specific exception for group headers:
+Returns `event.depth + 1` when the probe is inside `containerRect`; otherwise
+returns `event.staticPriority`. Using the virtual Item's leading X edge
+preserves the original grab offset while pointer Y selects the current row.
 
 ```ts
-function prioritizeFileTreeDepth(event: DropPriorityEvent): number {
-  const pointerHitsGroupHeader = isGroupHeader(event);
-  return pointerHitsGroupHeader ? event.depth + 1 : prioritizeTreeDepth(event);
+const config = {
+  callbacks: { getDropPriority: prioritizeTreeDepth },
+} satisfies ContainerConfig;
+```
+
+This helper is intentionally vertical. A horizontal tree should use an
+application callback with the axes exchanged.
+
+### Composing Helpers
+
+Standard callbacks are ordinary functions and can be combined with metadata
+or application geometry.
+
+```ts
+function prioritizeMatchingGroup(event: DropPriorityEvent) {
+  const matches =
+    event.source?.containerMetadata.group === event.containerMetadata.group;
+
+  return matches ? prioritizeIntersectingContainer(event) : rejectDrop(event);
 }
 ```
 
-Header height and group metadata remain application concerns rather than
-library conventions.
+## Appendix
 
-## Resolution Timing
+### Resolution Timing
 
-SnapSort invokes destination policy during every built-in mode's target
-resolution:
+During pointer-driven target resolution SnapSort:
 
-1. Generate candidates and group them by their direct Container.
-2. Resolve configured `dropPriority` and run `getDropPriority` once per
-   candidate Container.
-3. Remove effective `-1` values and keep candidates tied at the highest
+1. Generates positions and groups them by direct Container.
+2. Reads `dropPriority` and calls `getDropPriority` once per Container.
+3. Removes effective `-1` results and keeps Containers tied at the highest
    nonnegative priority.
-4. Let the active placement mode rank the remaining positions.
+4. Lets the active placement mode rank positions owned by those Containers.
 
-The callbacks run synchronously and may run repeatedly as the pointer moves,
-so keep them deterministic and inexpensive. They select eligibility and
-Container preference together, not an individual slot. Programmatic `moveItem` calls
-bypass these policies.
+Callbacks run synchronously and repeatedly as the pointer moves, so keep them
+deterministic and inexpensive. They choose Container eligibility and
+preference, not an individual slot. Programmatic `moveItem` calls bypass these
+policies.
 
-See [Drags and Ghosts](/docs/snapsort/guides/sessions/ghosts) for the complete
-drag-time resolution flow. See the
+For the overall target-resolution model, see
+[Drags and Ghosts](/docs/snapsort/guides/sessions/ghosts). See the
 [Svelte Container](/docs/snapsort/reference/svelte/container#callbacks) or
-[React Container](/docs/snapsort/reference/react/container#callbacks) reference
-for callback ownership and configuration.
+[React Container](/docs/snapsort/reference/react/container#callbacks)
+reference for callback ownership and configuration.
