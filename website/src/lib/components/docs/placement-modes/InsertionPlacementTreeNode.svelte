@@ -2,40 +2,53 @@
   export type InsertionTreeItem = {
     id: string;
     label: string;
-    kind: "container" | "item";
+    kind: "group" | "item";
   };
+
+  export const insertionTreeRowHeight = 30;
 </script>
 
 <script lang="ts">
   import type { ContainerCallbacks, RenderEntry } from "@snap-engine/snapsort";
   import { defaultAnimations } from "@snap-engine/snapsort";
   import { Container, Ghost, Item } from "@snap-engine/snapsort/svelte";
-  import { insertionTreeMarkerOptions } from "./insertionTreeMarker";
+  import InsertionTreeMarker from "./InsertionTreeMarker.svelte";
   import InsertionPlacementTreeNode from "./InsertionPlacementTreeNode.svelte";
 
   let {
     entry,
     depth = 0,
     callbacks,
+    highlightedGroupId = null,
   }: {
     entry: Extract<RenderEntry<InsertionTreeItem>, { isGhost: false }>;
     depth?: number;
-    callbacks: Pick<ContainerCallbacks, "canDrop" | "getDropPriority">;
+    callbacks: Pick<
+      ContainerCallbacks,
+      | "getDropPriority"
+      | "getItemHitbox"
+      | "onDragItemEnter"
+      | "onDragItemMove"
+      | "onDragItemLeave"
+    >;
+    highlightedGroupId?: string | null;
   } = $props();
 
   const value = $derived(entry.value);
   const nodeIndent = $derived(depth === 0 ? "0px" : "var(--size-20)");
   const guideOpacity = $derived(depth === 0 ? 0 : 1);
+  const isHighlighted = $derived(highlightedGroupId === entry.itemId);
 </script>
 
-{#if value.kind === "container"}
+{#if value.kind === "group"}
   <Container
     itemId={entry.itemId}
     data-placement-tree-id={entry.itemId}
-    className="insertion-tree-group"
+    data-tree-group-highlighted={isHighlighted ? "true" : "false"}
+    className={`insertion-tree-group${isHighlighted ? " is-highlighted" : ""}`}
     style={`--tree-node-indent: ${nodeIndent}; --tree-guide-opacity: ${guideOpacity}`}
     locked={false}
-    metadata={{ containerId: entry.itemId }}
+    metadata={{ containerId: entry.itemId, kind: "group", label: value.label }}
     config={{
       mode: "insertion",
       direction: "column",
@@ -54,10 +67,9 @@
       {#each entry.childTree.entries as child (child.itemId)}
         {#if child.isGhost}
           {#if child.ghost.type === "insertion-marker"}
-            <Ghost
+            <InsertionTreeMarker
               ghost={child.ghost}
-              className="insertion-tree-marker"
-              insertionMarker={insertionTreeMarkerOptions(child.ghost)}
+              hidden={highlightedGroupId !== null}
             />
           {:else}
             <Ghost ghost={child.ghost} />
@@ -67,6 +79,7 @@
             entry={child}
             depth={depth + 1}
             {callbacks}
+            {highlightedGroupId}
           />
         {/if}
       {/each}
@@ -75,7 +88,7 @@
 {:else}
   <Item
     itemId={entry.itemId}
-    metadata={{ label: value.label }}
+    metadata={{ kind: "item", label: value.label }}
     className="insertion-tree-row insertion-tree-item"
     style={`--tree-node-indent: ${nodeIndent}; --tree-guide-opacity: ${guideOpacity}`}
   >
@@ -108,7 +121,8 @@
     align-items: center !important;
     justify-content: initial !important;
     width: 100% !important;
-    min-height: 30px;
+    min-height: var(--tree-row-height);
+    height: var(--tree-row-height);
     margin: 0 !important;
     padding: 3px var(--size-8) !important;
     border: 0 !important;
@@ -127,6 +141,17 @@
 
   :global(.insertion-tree-row:hover) {
     background: color-mix(in srgb, var(--color-primary) 9%, transparent);
+  }
+
+  :global(.insertion-tree-group.is-highlighted > .insertion-tree-group-row) {
+    background: color-mix(
+      in srgb,
+      var(--color-primary) 14%,
+      var(--color-background)
+    );
+    box-shadow: inset 0 0 0 1px
+      color-mix(in srgb, var(--color-primary) 42%, transparent);
+    color: var(--color-action);
   }
 
   :global(.insertion-tree-item[data-snapsort-dragging="true"]),

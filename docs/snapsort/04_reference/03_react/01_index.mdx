@@ -99,6 +99,9 @@ cannot supply the application value for a new `RenderEntry<T>`.
 
 - [Container](/docs/snapsort/reference/react/container) — props, modes, callbacks, mutation timing, and the imperative ref API.
 - [Item](/docs/snapsort/reference/react/item) — props, identity, metadata, selection, refs, and drag handles.
+- [Ghost](/docs/snapsort/reference/react/ghost) — lifecycle state, rendering, geometry, customization, and DOM attributes.
+- [DragSession](/docs/snapsort/reference/drag-session) — shared gesture state, lifecycle phases, and mutable controls.
+- [Standard Callbacks](/docs/snapsort/reference/callbacks) — reusable destination policies.
 
 `Handle` belongs inside an `Item` and limits where a drag can begin.
 `Ghost` renders any lifecycle `GhostState` from the mixed entry sequence and
@@ -123,7 +126,6 @@ Import callback events, configuration, metadata, and core object types from the 
 ```ts
 import type { Engine as CoreEngine } from "@snap-engine/core";
 import type {
-  CanDropEvent,
   Container as SnapSortContainer,
   ContainerConfig,
   DragEndEvent,

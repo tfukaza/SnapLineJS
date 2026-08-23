@@ -132,7 +132,7 @@ its RenderTree state. If it is destroyed, discard that state and create a new
 tree for the replacement root.
 
 See [Custom Ghost Rendering](/docs/snapsort/examples/containers#custom-ghost-rendering)
-for an interactive renderer. The [Ghosts guide](/docs/snapsort/guides/sessions/ghosts)
+for an interactive renderer. The [Drags and Ghosts guide](/docs/snapsort/guides/sessions/ghosts)
 defines the closed `GhostState` union, the geometry each role carries, and
 which ghosts participate in flow.
 
@@ -191,7 +191,7 @@ model:
     onGhostInsert: onGhostMove,
     onGhostMove,
     onGhostRemove: onGhostMove,
-    canDrop: rejectDrop,
+    getDropPriority: rejectDrop,
   } satisfies ContainerCallbacks;
 </script>
 
@@ -293,7 +293,7 @@ drop-to-trash interface follows the same ownership rule: set
 `session.dropEffect = "none"` for the trash target, then delete all
 `event.itemIds` from application state only if `onDragEnd` reports the trash as
 its final `destination`. See
-[Give a Drop Application Meaning](/docs/snapsort/guides/sessions/advanced-settings-and-callbacks#give-a-drop-application-meaning)
+[Give a Drop Application Meaning](/docs/snapsort/examples/advanced-settings-and-callbacks#give-a-drop-application-meaning)
 for a recursive, cancellation-safe recipe.
 
 The imperative command is a separate direction of synchronization. If code
@@ -330,17 +330,17 @@ state, and do not expect `onItemRemove` for the source half of a move.
 
 ## Configuration
 
-| Option          | Default                        | Description                                                                                                                |
-| --------------- | ------------------------------ | -------------------------------------------------------------------------------------------------------------------------- |
-| `mode`          | `"euclidean"`                  | Drag/drop mode for this tree: `"euclidean"`, `"progressive"`, `"insertion"`, or `"swap"`.                                  |
-| `direction`     | `"column"`                     | Main layout direction: `"column"` or `"row"`.                                                                              |
-| `mainAxisAlign` | `"start"`                      | Main-axis alignment for virtual placement. Supports `"start"` and `"center"`.                                              |
-| `wrap`          | `"auto"`                       | Infers wrapping from measured layout; `"nowrap"` keeps one visual line along the main axis.                                |
-| `stretchItems`  | `false`                        | Sizes entries to the destination's cross axis, analogous to CSS `align-items: stretch`.                                    |
-| `name`          | Generated                      | Human-readable container name.                                                                                             |
-| `animation`     | `undefined`                    | Optional reorder, drop, and programmatic-move animation settings. Omit it or set it to `null` for no animation.            |
-| `dropPriority`  | `0`                            | Base preference for candidate positions owned directly by this container. Higher eligible priorities are considered first. |
-| `callbacks`     | No persistent mutation default | Root handlers for SnapSort-originated structure/lifecycle plus local policy, geometry, and hover hooks.                    |
+| Option          | Default                        | Description                                                                                                     |
+| --------------- | ------------------------------ | --------------------------------------------------------------------------------------------------------------- |
+| `mode`          | `"euclidean"`                  | Drag/drop mode for this tree: `"euclidean"`, `"progressive"`, `"insertion"`, or `"swap"`.                       |
+| `direction`     | `"column"`                     | Main layout direction: `"column"` or `"row"`.                                                                   |
+| `mainAxisAlign` | `"start"`                      | Main-axis alignment for virtual placement. Supports `"start"` and `"center"`.                                   |
+| `wrap`          | `"auto"`                       | Infers wrapping from measured layout; `"nowrap"` keeps one visual line along the main axis.                     |
+| `stretchItems`  | `false`                        | Sizes entries to the destination's cross axis, analogous to CSS `align-items: stretch`.                         |
+| `name`          | Generated                      | Human-readable container name.                                                                                  |
+| `animation`     | `undefined`                    | Optional reorder, drop, and programmatic-move animation settings. Omit it or set it to `null` for no animation. |
+| `dropPriority`  | `0`                            | Base destination policy: `-1` rejects; nonnegative values rank candidates, with higher values considered first. |
+| `callbacks`     | No persistent mutation default | Root handlers for SnapSort-originated structure/lifecycle plus local policy, geometry, and hover hooks.         |
 
 Animations are opt-in. Use SnapSort's standard 100ms preset when you want the
 library's conventional motion:
@@ -380,7 +380,7 @@ geometry, or hover questions about that direct container:
 
 | Local callback               | Owner                                   |
 | ---------------------------- | --------------------------------------- |
-| `canDrop`, `getDropPriority` | Each candidate destination.             |
+| `getDropPriority`            | Each candidate destination.             |
 | `getItemHitbox`              | The direct owner of the candidate item. |
 | `onDragItemEnter/Move/Leave` | The direct owner of `event.overItem`.   |
 
@@ -503,7 +503,7 @@ Return either `{ shape: "rect", rect }` or
 - Configure persistent and ghost structural callbacks once on the root.
   Their event locations route updates to the source and destination records.
 - Configure `onItemSwap` on the root of every swap tree.
-- Keep `canDrop`, priority, item-hitbox geometry, and hover callbacks on the
+- Keep priority, item-hitbox geometry, and hover callbacks on the
   direct containers whose behavior they customize.
 
 Configure `onItemRemove` when application code can invoke `removeItem(id)`, and
@@ -518,15 +518,16 @@ framework-rendered DOM.
 
 ### Drop policy events
 
-Drop targeting follows eligibility, priority, then the selected placement
-mode. `CanDropEvent` includes `itemMetadata`/`itemsMetadata`, destination
-`containerMetadata`, the primary `source`, and `sources` parallel to the full
-multi-item drag. `DropPriorityEvent` adds `staticPriority`, pointer and frozen
-rectangle geometry, and destination depth. Priority applies only to candidates
-owned directly by this container and does not propagate to nested containers.
+Drop targeting resolves one effective policy value, then runs the selected
+placement mode. `DropPriorityEvent` includes `itemMetadata`/`itemsMetadata`,
+destination `containerMetadata`, the primary `source`, `sources` parallel to
+the full multi-item drag, `staticPriority`, the representative `index`, pointer
+and frozen rectangle geometry, and destination depth. Effective `-1` rejects;
+nonnegative values rank candidates owned directly by this Container and do not
+propagate to nested Containers.
 
-See [Drop Policies](/docs/snapsort/guides/sessions/drop-policies) for
-metadata-driven grouping, exact resolution rules, and reusable callbacks from
+See [Standard Callbacks](/docs/snapsort/reference/callbacks) for exact
+resolution rules and reusable policies from
 `@snap-engine/snapsort/callbacks`.
 
 ## Core Object API
@@ -536,10 +537,10 @@ used core properties and methods.
 
 | API                                              | Description                                                                                                  |
 | ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------ |
-| `container.moveItem(id, targetContainer, index)` | Authoritatively moves an item into another container or index, bypassing drop eligibility and priority.      |
+| `container.moveItem(id, targetContainer, index)` | Authoritatively moves an item into another container or index, bypassing drop policy.                        |
 | `container.removeItem(id)`                       | Removes an item from the core tree and emits root `onItemRemove`; framework state must update synchronously. |
 | `container.numberOfItems`                        | Number of tracked child items.                                                                               |
-| `container.dropPriority`                         | Gets or sets the container's base candidate priority.                                                        |
+| `container.dropPriority`                         | Gets or sets the base policy: `-1` rejects; nonnegative values rank the Container.                           |
 | `container.direction`                            | Gets or sets `"column"` or `"row"`.                                                                          |
 | `container.mainAxisAlign`                        | Gets or sets `"start"` or `"center"`.                                                                        |
 | `container.mode`                                 | Gets or sets the drag/drop mode.                                                                             |

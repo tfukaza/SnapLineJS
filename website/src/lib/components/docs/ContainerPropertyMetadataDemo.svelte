@@ -102,7 +102,7 @@
     onGhostInsert: onGhostMove,
     onGhostMove,
     onGhostRemove: onGhostMove,
-    canDrop: rejectDrop,
+    getDropPriority: rejectDrop,
   } satisfies ContainerCallbacks;
 </script>
 

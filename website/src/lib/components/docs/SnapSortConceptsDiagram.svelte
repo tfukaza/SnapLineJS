@@ -6,11 +6,12 @@
     createRenderTree,
     defaultAnimations,
     reduceRenderTree,
-    type CanDropEvent,
     type ContainerCallbacks,
+    type DropPriorityEvent,
     type GhostLifecycleEvent,
     type ItemMoveEvent,
   } from "@snap-engine/snapsort";
+  import { rejectDrop } from "@snap-engine/snapsort/callbacks";
   import { Container, Ghost, Item } from "@snap-engine/snapsort/svelte";
   import ClientDemoFrame from "$lib/components/ClientDemoFrame.svelte";
 
@@ -46,11 +47,11 @@
     diagram = reduceRenderTree(diagram, event);
   }
 
-  function canDrop(event: CanDropEvent) {
-    return !(
+  function getDropPriority(event: DropPriorityEvent) {
+    const rejected =
       event.itemIds.includes("4") &&
-      event.containerMetadata.zone === "nested"
-    );
+      event.containerMetadata.zone === "nested";
+    return rejected ? rejectDrop(event) : undefined;
   }
 
   const callbacks = {
@@ -58,7 +59,7 @@
     onGhostInsert: handleGhost,
     onGhostMove: handleGhost,
     onGhostRemove: handleGhost,
-    canDrop,
+    getDropPriority,
   } satisfies ContainerCallbacks;
 </script>
 
@@ -87,7 +88,7 @@
                   locked={false}
                   className="snapsort-concepts-container is-nested slot shallow"
                   metadata={{ zone: "nested" }}
-                  config={{ animation: defaultAnimations, mode: "progressive", direction: "column", callbacks: { canDrop } }}
+                  config={{ animation: defaultAnimations, mode: "progressive", direction: "column", callbacks: { getDropPriority } }}
                 >
                   <header><strong>Container</strong><code>itemId: {entry.itemId}</code></header>
                   {#each entry.childTree.entries as child (child.itemId)}

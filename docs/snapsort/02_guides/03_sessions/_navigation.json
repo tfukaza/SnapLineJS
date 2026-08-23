@@ -1,0 +1,9 @@
+{
+  "slug": "snapsort/guides/sessions",
+  "title": "Drag Sessions",
+  "order": 2,
+  "project": "snapsort",
+  "section": "guides",
+  "sectionOrder": 2,
+  "redirect": "snapsort/guides/sessions/drag-start"
+}

@@ -1,10 +1,13 @@
 <script lang="ts">
   import { Engine } from "@snap-engine/asset-base/svelte";
   import type {
-    CanDropEvent,
     ContainerCallbacks,
+    DragEndEvent,
+    DragItemHoverEvent,
     DropPriorityEvent,
+    DropTargetChangeEvent,
     GhostLifecycleEvent,
+    ItemHitboxEvent,
     ItemMoveEvent,
     RenderEntry,
     RenderTree,
@@ -15,10 +18,16 @@
     defaultAnimations,
     reduceRenderTree,
   } from "@snap-engine/snapsort";
+  import {
+    prioritizeTreeDepth,
+    rejectDrop,
+  } from "@snap-engine/snapsort/callbacks";
   import { Container, Ghost } from "@snap-engine/snapsort/svelte";
-  import { insertionTreeMarkerOptions } from "./insertionTreeMarker";
-  import InsertionPlacementTreeNode from "./InsertionPlacementTreeNode.svelte";
-  import type { InsertionTreeItem } from "./InsertionPlacementTreeNode.svelte";
+  import InsertionTreeMarker from "./InsertionTreeMarker.svelte";
+  import InsertionPlacementTreeNode, {
+    insertionTreeRowHeight,
+    type InsertionTreeItem,
+  } from "./InsertionPlacementTreeNode.svelte";
   import PlacementDemoShell from "./PlacementDemoShell.svelte";
 
   type TreeInput = InsertionTreeItem & { children?: TreeInput[] };
@@ -29,14 +38,14 @@
     {
       id: "three",
       label: "Item 3",
-      kind: "container",
+      kind: "group",
       children: [
         { id: "four", label: "Item 4", kind: "item" },
         { id: "five", label: "Item 5", kind: "item" },
         {
           id: "six",
           label: "Item 6",
-          kind: "container",
+          kind: "group",
           children: [{ id: "seven", label: "Item 7", kind: "item" }],
         },
       ],
@@ -50,7 +59,7 @@
         createRenderEntry(
           item,
           item.id,
-          item.kind === "container" ? createTree(children ?? []) : null,
+          item.kind === "group" ? createTree(children ?? []) : null,
         ),
       ),
     );
@@ -72,38 +81,84 @@
   }
 
   let tree = $state.raw(createTree(initialItems));
+  let hoveredGroupId = $state<string | null>(null);
+  let targetContainerId = $state<string | null>(null);
+  const highlightedGroupId = $derived(
+    hoveredGroupId === targetContainerId ? hoveredGroupId : null,
+  );
 
   function reduce(event: ItemMoveEvent | GhostLifecycleEvent) {
     tree = reduceRenderTree(tree, event);
   }
 
-  function canDropInTree(event: CanDropEvent): boolean {
+  function wouldCreateTreeCycle(event: DropPriorityEvent): boolean {
     const containerId = event.containerMetadata.containerId;
-    if (typeof containerId !== "string") return true;
+    if (typeof containerId !== "string") return false;
 
-    return event.itemIds.every((itemId) => {
+    return event.itemIds.some((itemId) => {
       const entry = findEntry(tree, String(itemId));
-      if (!entry) return true;
+      if (!entry) return false;
       return (
-        entry.itemId !== containerId &&
-        (!entry.childTree || !findEntry(entry.childTree, containerId))
+        entry.itemId === containerId ||
+        (entry.childTree && findEntry(entry.childTree, containerId) !== null)
       );
     });
   }
 
-  function prioritizePointerDepth(event: DropPriorityEvent): number {
-    const { pointer, containerRect, depth, staticPriority } = event;
-    const containsPointer =
+  function prioritizeFileTreeDepth(event: DropPriorityEvent): number {
+    if (wouldCreateTreeCycle(event)) return rejectDrop(event);
+    const { pointer, containerRect, depth } = event;
+    const pointerHitsGroupHeader =
+      event.containerMetadata.kind === "group" &&
       pointer.x >= containerRect.x &&
       pointer.x <= containerRect.x + containerRect.width &&
       pointer.y >= containerRect.y &&
-      pointer.y <= containerRect.y + containerRect.height;
-    return containsPointer ? depth + 1 : staticPriority;
+      pointer.y <= containerRect.y + insertionTreeRowHeight;
+    return pointerHitsGroupHeader ? depth + 1 : prioritizeTreeDepth(event);
+  }
+
+  function treeItemHitbox(event: ItemHitboxEvent) {
+    if (event.overItemMetadata.kind !== "group") {
+      return { shape: "rect" as const, rect: event.defaultRect };
+    }
+    return {
+      shape: "rect" as const,
+      rect: {
+        ...event.defaultRect,
+        height: insertionTreeRowHeight,
+      },
+    };
+  }
+
+  function trackHoveredItem(event: DragItemHoverEvent) {
+    hoveredGroupId =
+      event.overItemMetadata.kind === "group"
+        ? String(event.overItemId)
+        : null;
+  }
+
+  function clearHoveredItem(event: DragItemHoverEvent) {
+    if (hoveredGroupId === String(event.overItemId)) hoveredGroupId = null;
+  }
+
+  function trackDropTarget(event: DropTargetChangeEvent) {
+    const containerId = event.current?.containerMetadata.containerId;
+    targetContainerId =
+      typeof containerId === "string" ? containerId : null;
+    if (hoveredGroupId !== targetContainerId) hoveredGroupId = null;
+  }
+
+  function clearInteractionState(_event: DragEndEvent) {
+    hoveredGroupId = null;
+    targetContainerId = null;
   }
 
   const nestedCallbacks = {
-    canDrop: canDropInTree,
-    getDropPriority: prioritizePointerDepth,
+    getDropPriority: prioritizeFileTreeDepth,
+    getItemHitbox: treeItemHitbox,
+    onDragItemEnter: trackHoveredItem,
+    onDragItemMove: trackHoveredItem,
+    onDragItemLeave: clearHoveredItem,
   } satisfies ContainerCallbacks;
 
   const rootCallbacks = {
@@ -111,6 +166,8 @@
     onGhostInsert: reduce,
     onGhostMove: reduce,
     onGhostRemove: reduce,
+    onDropTargetChange: trackDropTarget,
+    onDragEnd: clearInteractionState,
     ...nestedCallbacks,
   } satisfies ContainerCallbacks;
 </script>
@@ -120,7 +177,8 @@
     <Container
       itemId="placement-insertion-default-root"
       className="insertion-demo-tree card"
-      metadata={{ containerId: "root" }}
+      style={`--tree-row-height: ${insertionTreeRowHeight}px`}
+      metadata={{ containerId: "root", kind: "root" }}
       config={{
         animation: defaultAnimations,
         mode: "insertion",
@@ -131,10 +189,9 @@
       {#each tree.entries as entry (entry.itemId)}
         {#if entry.isGhost}
           {#if entry.ghost.type === "insertion-marker"}
-            <Ghost
+            <InsertionTreeMarker
               ghost={entry.ghost}
-              className="insertion-tree-marker"
-              insertionMarker={insertionTreeMarkerOptions(entry.ghost)}
+              hidden={highlightedGroupId !== null}
             />
           {:else}
             <Ghost ghost={entry.ghost} />
@@ -143,6 +200,7 @@
           <InsertionPlacementTreeNode
             {entry}
             callbacks={nestedCallbacks}
+            {highlightedGroupId}
           />
         {/if}
       {/each}
@@ -170,16 +228,5 @@
     box-shadow: 0 10px 30px
       color-mix(in srgb, var(--color-background-dark) 8%, transparent);
     box-sizing: border-box;
-  }
-
-  :global(.insertion-demo-tree [data-snapsort-ghost="insertion"]) {
-    height: 0 !important;
-    min-height: 0;
-    padding: 0;
-    border: 0 !important;
-    border-top: 3px solid var(--color-primary) !important;
-    border-radius: 999px !important;
-    background: transparent !important;
-    color: var(--color-primary) !important;
   }
 </style>

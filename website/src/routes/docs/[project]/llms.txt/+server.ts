@@ -68,7 +68,11 @@ function appendNavigationNode(
   node: DocNavigationNode,
   depth: number,
 ): void {
-  appendEntryLinks(lines, node.entry, depth);
+  if (node.entry.kind === "group") {
+    lines.push(`${"  ".repeat(depth)}- ${node.entry.title}`);
+  } else {
+    appendEntryLinks(lines, node.entry, depth);
+  }
   for (const child of node.children) {
     appendNavigationNode(lines, child, depth + 1);
   }

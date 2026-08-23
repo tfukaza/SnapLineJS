@@ -76,7 +76,7 @@ own decision entry.
 | Move integration machinery out of `ContainerCallbacks`                  | **Blocked**  | A public advanced integration contract is approved in principle. Its exact discriminated shape, ownership scope, transaction model, and renderer responsibilities are decided in Phase 10.                                                                                                                                                                  |
 | Add `onGhostMove` as the semantic ghost-relocation primitive            | **Approved** | Match the item model: insertion means an absent ghost becomes present, movement means one existing ghost changes location, and removal means it ceases to be present. A relocation emits one `onGhostMove` with concrete `from` and `to` locations, never `onGhostRemove` plus `onGhostInsert`; receiver and integration routing are finalized in Phase 10. |
 | Separate insertion targeting from marker presentation                   | **Approved** | Core owns canonical gap segments, center-distance ranking, adjacent-item tie-breaking, and immutable marker state. Renderers choose line thickness and insets through explicit helper options. Presentation geometry never feeds candidate ranking, and the removed destination geometry callback has no alias.                                             |
-| Add or restore `groupID`                                                | **Rejected** | The API was removed. Eligibility remains expressible through explicit metadata and `canDrop`; do not add a second policy mechanism during cleanup.                                                                                                                                                                                                          |
+| Add or restore `groupID`                                                | **Rejected** | The API was removed. Eligibility remains expressible through explicit metadata and `getDropPriority`; do not add a second policy mechanism during cleanup.                                                                                                                                                                                                  |
 
 ## Preserved behavioral invariants
 
@@ -545,7 +545,7 @@ slot layout → algorithm call sites.
 **Preserve:** browser-jitter tolerances, wrapped/grid/stretch behavior,
 insertion marker geometry, callback order, and all resolved targets.
 
-**Not authorized:** evaluating `canDrop`/priority before geometry. That changes
+**Not authorized:** evaluating drop policy before geometry. That changes
 which consumer callbacks run and must receive a separate API/behavior review.
 
 **Verification:** deterministic subtree-visit counters plus the complete layout
@@ -719,10 +719,18 @@ geometry callback design.
 - Insertion candidates are canonical zero-thickness gaps between retained
   items. Rank Euclidean distance from the pointer to the gap center, not
   distance to an Item or a rendered ghost.
-- When candidates have the same score and exact center, compare distance to
-  their adjacent frozen Item rectangles. Preserve stable tree traversal order
-  for any remaining tie. Do not introduce a depth bonus or an arbitrary pixel
-  bias.
+- When candidates have the same score and exact center, compare the virtual
+  dragged Item's leading cross-axis edge with the leading edges of their
+  adjacent frozen Item rectangles. The virtual rectangle preserves the
+  pointer-to-item offset captured at drag start. Preserve stable tree traversal
+  order for any remaining tie, including candidates without neighbors. Do not
+  introduce a depth bonus or an arbitrary pixel bias.
+- Non-swap placement hover considers the resolved Container's direct children
+  and the resolved Container itself when nested. Resolve every hitbox and
+  callback through the hovered Item's actual direct owner; prefer smaller
+  hitboxes and direct children on equal-area ties. Root self-hover is invalid.
+  Swap hover/target resolution and direct `findHoveredItem` calls remain
+  direct-child-only.
 - Nested inside/outside choice follows real layout geometry. A file-explorer
   child Container should be physically inset so its gap center moves right;
   painted indentation over a full-width Container is insufficient.
@@ -756,7 +764,10 @@ geometry callback design.
 **Acceptance coverage:**
 
 - Flat, empty, nested, same-placement, cross-container, and multi-item gaps.
-- Identical-center adjacent-item tie-breaking and final stable-order ties.
+- Horizontal and vertical virtual-leading-edge tie-breaking, grab-offset
+  preservation, neighborless fallback, and final stable-order ties.
+- Nested destination self-hover, direct-child specificity, and actual-owner
+  hitbox/callback routing without changing swap target resolution.
 - Wrapped row/column boundaries, including next-line leading and append
   trailing bands.
 - Same-location marker moves when geometry or current-placement state changes.

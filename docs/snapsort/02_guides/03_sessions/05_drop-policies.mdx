@@ -1,0 +1,113 @@
+---
+title: Programmatic Moves
+order: 3
+parent: snapsort/guides/sessions
+project: snapsort
+projectTitle: SnapSort
+section: guides
+sectionTitle: Guides
+sectionOrder: 2
+---
+
+## The "Declarative" API
+
+Items are added and removed to containers in a declarative fashion.
+That is, to add or remove an item, you simply add or remove the
+component from the frontend framework. SnapSort will detect these
+events and run the necessary code to properly register or unregister
+the item from the container.
+
+This is not only convenient, but an important design to make it more
+explicit that the application, not SnapSort, is responsible for managing
+the items. Ghosts are an exception in that SnapSort itself has to
+create it upon drag start, hence the necessity for callbacks like
+`onGhostInsert` to ask the frontend to add it in to the DOM on its behalf.
+
+## The "Imperative API"
+
+There are, however, situations where you want to do more than just
+add or remove items. Situations where you want to trigger events like
+`onItemMove` that usually are reserved for humans manually moving
+the items with a mouse or a touch gesture.
+
+### moveItem
+
+`container.moveItem` is a function exactly for this purpose. It can be
+thought of as a two step process:
+
+1. Application code invokes `moveItem` to request SnapSort to run
+   the code necessary move an item to a new location.
+2. SnapSort does so, and replies back with a request to modify the
+   DOM accordingly.
+
+You might ask how this is different than just removing and adding the
+item yourself in the application code. As a matter of fact, we just
+said that SnapSort can handle such operations gracefully!
+
+The main benefit is that it makes it easier for both you the developer
+and SnapSort to keep track of which items are moving where. If a
+manual drag and drop triggered `onItemMove` while programmatic move
+invoked frontend code to add and remove and item, we now have two code paths
+to do the same thing.
+
+For SnapSort, using these imperative APIs allows items to be animated
+smoothly.
+
+<!--## Application-Owned Collection Changes
+
+Application-originated additions and deletions do not need to round-trip
+through SnapSort callbacks. SnapSort callbacks report changes that SnapSort
+originates.
+
+An Add button, a Delete button, or a server update originates in the
+application, so update the
+application collection directly and let the framework mount or unmount the
+matching SnapSort component. That reconciliation registers or unregisters the
+core Items without echoing the application's change through an Item callback.
+
+For the flat-list state from the
+[Quickstart](/docs/snapsort/introduction/setup), application commands can
+look like this:
+
+```ts framework=Svelte
+import { createRenderEntry, type ItemId } from "@snap-engine/snapsort";
+
+function addTask(task: Task) {
+  list = {
+    ...list,
+    entries: [...list.entries, createRenderEntry(task, task.id)],
+  };
+}
+
+function deleteTasks(itemIds: readonly ItemId[]) {
+  const deleted = new Set(itemIds);
+  list = {
+    ...list,
+    entries: list.entries.filter(
+      (entry) => entry.isGhost || !deleted.has(entry.itemId),
+    ),
+  };
+}
+```
+
+```tsx framework=React
+import { useCallback } from "react";
+import { createRenderEntry, type ItemId } from "@snap-engine/snapsort";
+
+const addTask = useCallback((task: Task) => {
+  setList((current) => ({
+    ...current,
+    entries: [...current.entries, createRenderEntry(task, task.id)],
+  }));
+}, []);
+
+const deleteTasks = useCallback((itemIds: readonly ItemId[]) => {
+  const deleted = new Set(itemIds);
+  setList((current) => ({
+    ...current,
+    entries: current.entries.filter(
+      (entry) => entry.isGhost || !deleted.has(entry.itemId),
+    ),
+  }));
+}, []);
+```-->

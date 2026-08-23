@@ -77,7 +77,7 @@
     onGhostInsert: handleRenderEvent,
     onGhostMove: handleRenderEvent,
     onGhostRemove: handleRenderEvent,
-    canDrop: rejectDrop,
+    getDropPriority: rejectDrop,
   } satisfies ContainerCallbacks;
 </script>
 

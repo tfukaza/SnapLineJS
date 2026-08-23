@@ -25,7 +25,8 @@ their bindings from `@snap-engine/snapsort/svelte` or
 - `DragVisual` - `"item"`, `"preview"`, or `"none"` pointer representation
 - `DropEffect` - `"move"` or `"none"` persistent mutation choice
 - `defaultAnimations` - opt-in 100ms reorder, drop, and programmatic-move animation preset
-- Event types: `ItemInsertEvent`, `ItemRemoveEvent`, `ItemMoveEvent`, `ItemSwapEvent`, `GhostCreateEvent`, `GhostInsertEvent`, `GhostMoveEvent`, `GhostRemoveEvent`, `DragStartEvent`, `DragEndEvent`, `DropTargetChangeEvent`, `CanDropEvent`, `DropPriorityEvent`, `ItemHitboxEvent`, `VisualGeometryInvalidationEvent`, `DragLocation`
+- Event types: `ItemInsertEvent`, `ItemRemoveEvent`, `ItemMoveEvent`, `ItemSwapEvent`, `GhostCreateEvent`, `GhostInsertEvent`, `GhostMoveEvent`, `GhostRemoveEvent`, `DragStartEvent`, `DragEndEvent`, `DropTargetChangeEvent`, `DropPriorityEvent`, `ItemHitboxEvent`, `VisualGeometryInvalidationEvent`, `DragLocation`
+- `DROP_REJECT_PRIORITY` - the `-1` effective priority that rejects a destination
 - Ghost and insertion render state: `GhostState`, `InsertionMarkerState`, `InsertionGapSegment`, and `InsertionMarkerNeighbor`
 - Framework render state: `RenderEntry`, `RenderTree`, `RenderTreeEvent`, `createRenderEntry`, `createRenderEntries`, `createRenderTree`, and `reduceRenderTree`
 - Insertion presentation: `InsertionMarkerRectOptions`, `ContainerLocalRect`, `insertionMarkerRect`, `toContainerLocalRect`, and `stockInsertionMarkerRectOptions`
@@ -55,24 +56,28 @@ component itself must stay mounted for the lifetime of its RenderTree state.
 If the root is destroyed, discard that state and create a fresh RenderTree for
 the replacement root.
 
-## Drop eligibility and priority
+## Drop policy
 
-Candidate selection has three stages. Destination `canDrop` callbacks first
-exclude containers, `getDropPriority` then assigns a per-resolution preference,
-and the selected placement mode ranks positions only within the
-highest-priority containers. `dropPriority` is `0` by default, so omitting
-policy keeps the normal global placement behavior.
+Destination `getDropPriority` callbacks assign one effective policy value per
+resolution. `-1` rejects the Container; nonnegative values remain eligible,
+and the selected placement mode ranks positions only within the highest
+priority. `dropPriority` defaults to `0`, so omitting policy keeps normal global
+placement behavior.
 
 Use item and container metadata for application-specific rules:
 
 ```ts
-import type { CanDropEvent } from "@snap-engine/snapsort";
+import {
+  DROP_REJECT_PRIORITY,
+  type DropPriorityEvent,
+} from "@snap-engine/snapsort";
 
-function canDropInSameLane(event: CanDropEvent) {
+function prioritizeSameLane(event: DropPriorityEvent) {
   const lane = event.containerMetadata.lane;
-  return event.sources.every(
+  const matches = event.sources.every(
     (source) => source?.containerMetadata.lane === lane,
   );
+  return matches ? undefined : DROP_REJECT_PRIORITY;
 }
 ```
 
@@ -83,13 +88,16 @@ import {
   prioritizeIntersectingContainer,
   prioritizeNearestContainerEdge,
   prioritizePointerContainer,
+  prioritizeTreeDepth,
   rejectDrop,
 } from "@snap-engine/snapsort/callbacks";
 ```
 
 These helpers are pure, use the core collision geometry, and work with Vanilla,
-Svelte, and React. Programmatic `moveItem` calls are authoritative and bypass
-drop eligibility and priority.
+Svelte, and React. `prioritizeTreeDepth` uses the virtual dragged Item's leading
+X edge with the pointer's Y position to prefer the deepest matching vertical
+tree Container. Programmatic `moveItem` calls are authoritative and bypass
+drop policy.
 
 ## Callback Routing
 
@@ -102,9 +110,14 @@ uses the root adapter. Descendants cannot configure root-dispatched callbacks.
 
 Drop policy, item hitbox geometry, and hover callbacks stay local to the
 Container they describe and do not bubble or inherit. Item hover is
-semantically separate from slot changes: hit-testing is scoped to the resolved
-target Container, then dispatched on the direct owner of the hovered item.
-That owner can customize its rectangle/circle through `getItemHitbox`.
+semantically separate from slot changes: non-swap placement hit-testing
+considers the resolved target's direct children and, when that target is
+nested, the target Container itself. The smallest matching hitbox wins, with a
+direct child winning an equal-area tie. Hitbox and hover callbacks dispatch on
+the hovered Item's actual direct owner, which can customize its
+rectangle/circle through `getItemHitbox`. The root has no self candidate; swap
+hover/target resolution and the direct `findHoveredItem` contract remain
+direct-child-only.
 Insertion targeting has no presentation callback: core owns the canonical gap,
 adjacent-item data, and current-placement flag, then exposes them as
 `InsertionMarkerState` through the ordinary ghost lifecycle. Rendering that
@@ -233,12 +246,15 @@ becomes application data.
 Insertion mode ranks zero-thickness gaps between retained items rather than
 ranking ghost rectangles or item centers. Each candidate is scored by the
 Euclidean distance from the pointer to the center of its gap segment. If two
-candidates have the same center and score, distance to their adjacent item
-rectangles breaks the tie; stable tree traversal order breaks any remaining
-tie. There is no depth preference. A nested destination becomes easier to
-select when its actual Container layout is physically inset, because its gap
-center moves with that layout. Painted indentation that leaves the Container
-box unchanged does not affect targeting.
+candidates have the same center and score, SnapSort compares the virtual
+dragged item's leading cross-axis edge with the leading edges of each
+candidate's adjacent item rectangles. The virtual rectangle preserves the
+initial pointer-to-item grab offset. Stable tree traversal order breaks any
+remaining tie, including candidates without neighbors. There is no depth
+preference. A nested destination becomes easier to select when its actual
+Container layout is physically inset, because its gap center moves with that
+layout. Painted indentation that leaves the Container box unchanged does not
+affect targeting.
 
 For wrapped rows or columns, a gap's cross-axis span is the measured band of
 the selected visual line. A boundary that wraps uses the next line's leading

@@ -71,7 +71,7 @@
           locked={!allowDrag}
           selected={selectedIds.has(entry.itemId)}
           className={`nested-card${selectedIds.has(entry.itemId) ? " is-selected" : ""}`}
-          config={{ animation: defaultAnimations, callbacks: { canDrop: rejectDrop } }}
+          config={{ animation: defaultAnimations, callbacks: { getDropPriority: rejectDrop } }}
         >
           <div class="nested-card-content">
             <strong>{entry.value.label}</strong>

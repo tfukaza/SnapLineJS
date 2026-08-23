@@ -93,7 +93,7 @@
     onGhostInsert: handleRenderEvent,
     onGhostMove: handleRenderEvent,
     onGhostRemove: handleRenderEvent,
-    canDrop: rejectDrop,
+    getDropPriority: rejectDrop,
     onDropTargetChange: handleDropTargetChange,
     onDragEnd: handleDragEnd,
   } satisfies ContainerCallbacks;

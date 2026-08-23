@@ -16,7 +16,8 @@ A single `Container`/`Item` class pair (per framework) whose drag/drop behavior 
 - `defaultAnimations` - Opt-in standard reorder, drop, and programmatic-move animation preset.
 - `Item` - The only ordinary item class. `new Item(engine, parent, { itemId })`; identity is required and construction-only. Ghosts/markers are created internally.
 - `DragSession` - Type-only public handle for one gesture. Callback events and `root.dragSession` expose the same stable handle; lifecycle/controller state remains internal.
-- Event types: `ItemInsertEvent`, `ItemRemoveEvent`, `ItemMoveEvent`, `ItemSwapEvent`, `GhostCreateEvent`, `GhostInsertEvent`, `GhostMoveEvent`, `GhostRemoveEvent`, `DragStartEvent`, `DragEndEvent`, `DropTargetChangeEvent`, `CanDropEvent`, `DropPriorityEvent`, `VisualGeometryInvalidationEvent`, `DragLocation`.
+- Event types: `ItemInsertEvent`, `ItemRemoveEvent`, `ItemMoveEvent`, `ItemSwapEvent`, `GhostCreateEvent`, `GhostInsertEvent`, `GhostMoveEvent`, `GhostRemoveEvent`, `DragStartEvent`, `DragEndEvent`, `DropTargetChangeEvent`, `DropPriorityEvent`, `VisualGeometryInvalidationEvent`, `DragLocation`.
+- `DROP_REJECT_PRIORITY` - the effective `-1` destination rejection value.
 - Drag presentation types: `DragVisual` (`"item" | "preview" | "none"`) and `DropEffect` (`"move" | "none"`).
 - Ghost/insertion render types: `GhostState`, `InsertionMarkerState`, `InsertionGapSegment`, and `InsertionMarkerNeighbor`.
 - Render-state types and helpers: `RenderEntry`, `RenderTree`, `RenderTreeEvent`, `createRenderEntry`, `createRenderEntries`, `createRenderTree`, and `reduceRenderTree`.
@@ -28,7 +29,7 @@ A single `Container`/`Item` class pair (per framework) whose drag/drop behavior 
 
 **Location:** `src/callbacks.ts`
 
-**Exports:** Pure, framework-neutral drop-policy callbacks: `prioritizePointerContainer`, `prioritizeIntersectingContainer`, `prioritizeNearestContainerEdge`, and `rejectDrop`.
+**Exports:** Pure, framework-neutral drop-policy callbacks: `prioritizePointerContainer`, `prioritizeIntersectingContainer`, `prioritizeNearestContainerEdge`, `prioritizeTreeDepth`, and `rejectDrop`.
 
 ### @snap-engine/snapsort/svelte
 
@@ -158,13 +159,17 @@ item/ghost structure.
   bubble.
 - Semantic: `onItemMove` (preferred — carries `from`/`to` `DragLocation`s).
 - Lifecycle: `onDragStart` (return `false` to veto before ghost or item lifecycle state changes), `onDragEnd`, `onDropTargetChange` (fires only when the prospective container/index actually changes).
-- Drop policy: `canDrop` first rejects an ineligible destination, then
-  `getDropPriority` can override its configured `dropPriority` for the current
-  resolution. Both are consulted once per container, not once per candidate
-  slot, and must be cheap. Only candidates tied at the highest priority reach
-  the active placement algorithm.
+- Drop policy: `getDropPriority` can override configured `dropPriority` once
+  per Container per resolution. Effective `-1` rejects the destination;
+  nonnegative values remain eligible, and only candidates tied at the highest
+  value reach the active placement algorithm. Other negative and nonfinite
+  values are invalid.
 - Geometry policy: hover candidates call `getItemHitbox` on the candidate
-  item's direct owner. Insertion targeting does not call renderer presentation
+  item's direct owner. Non-swap placement hover considers a resolved target's
+  direct children plus the nested target Container itself; the smaller hitbox
+  wins, with a direct child winning an equal-area tie. The root has no self
+  candidate. Swap hover/targeting and the public `findHoveredItem` helper
+  remain direct-child-only. Insertion targeting does not call renderer presentation
   code; core creates canonical gap and neighbor state, then ghost callbacks
   publish it through the adapter commit. Item metadata remains read-only
   application data.
@@ -211,10 +216,13 @@ no pre-mutation FLIP rectangle and must be ignored safely by animation code.
 - The insertion algorithm owns candidate geometry. It creates zero-thickness
   world-space gap segments between retained items and ranks pointer distance
   to each segment's center. It does not rank a rendered marker or ghost.
-- Exact center/score ties use distance to adjacent frozen item rectangles as a
-  second key, then preserve stable tree traversal order. There is no implicit
-  deepest-container preference. Nested file-tree targeting should use an
-  actual inset Container box so the nested gap center moves with the layout.
+- Exact center/score ties compare the virtual dragged item's leading
+  cross-axis edge with the leading edges of adjacent frozen item rectangles,
+  then preserve stable tree traversal order. The virtual rectangle retains the
+  initial pointer-to-item offset. There is no implicit deepest-container
+  preference. Nested file-tree targeting should use an actual inset Container
+  box so the nested gap center moves with the layout, then may opt into
+  `prioritizeTreeDepth` for an explicit virtual-X/pointer-Y depth preference.
 - Wrapped rows and columns use the selected visual line's measured cross-axis
   band. A boundary that wraps uses the next line's leading edge and band;
   append uses the previous line's trailing edge and band.
@@ -266,13 +274,12 @@ before mounting a replacement root.
 Containers that exchange items must belong to the same root tree. Eligibility
 within that tree is application-defined: put domain identifiers on item or
 container metadata, then inspect `itemMetadata`/`itemsMetadata`, `source`/
-`sources`, and destination `containerMetadata` in `canDrop`. Preference is
-separate from eligibility: configure `dropPriority` or return a per-drag value
-from `getDropPriority` before the active mode ranks candidate positions.
+`sources`, and destination `containerMetadata` in `getDropPriority`. Return
+`DROP_REJECT_PRIORITY` to reject or a nonnegative value to prefer a destination
+before the active mode ranks candidate positions.
 
-`moveItem` is an authoritative programmatic operation. It bypasses `canDrop`
-and priority resolution while still committing through the configured mutation
-callbacks.
+`moveItem` is an authoritative programmatic operation. It bypasses drop policy
+while still committing through the configured mutation callbacks.
 
 ### Mode is per-tree
 

@@ -4,9 +4,9 @@ import {
   docSlugFromPath,
   entries,
   findDocEntry,
+  findDocRedirect,
   getDocAncestors,
   getDocNavigation,
-  legacyDocRedirects,
   findDocProject,
 } from "$lib/docsCatalog";
 import type { DocMetadata } from "$lib/markdown/docMetadata";
@@ -25,7 +25,7 @@ function mobileDocsNavigationForSlug(slug: string) {
   return getDocNavigation(projectSlug);
 }
 
-export async function load({ params }) {
+export async function load({ params, url }) {
   const modules = import.meta.glob<DocsPageModule>("@docs/**/*.{md,mdx}");
 
   const slug = params.slug || "";
@@ -38,8 +38,9 @@ export async function load({ params }) {
   const project = findDocProject(slug);
   if (project) throw redirect(308, project.href);
 
-  if (legacyDocRedirects[slug]) {
-    throw redirect(308, `/docs/${legacyDocRedirects[slug]}`);
+  const redirectSlug = findDocRedirect(slug);
+  if (redirectSlug) {
+    throw redirect(308, `/docs/${redirectSlug}${url.search}`);
   }
 
   for (const [path, resolver] of Object.entries(modules)) {

@@ -1,7 +1,7 @@
 ---
 title: Advanced Session Settings and Callbacks
-order: 3
-parent: snapsort/guides/sessions
+order: 4
+parent: snapsort/examples
 project: snapsort
 projectTitle: SnapSort
 section: guides
@@ -9,6 +9,7 @@ sectionTitle: Guides
 sectionOrder: 2
 ---
 
+<!--
 The placement mode is only one part of a drag. Session settings control what
 follows the pointer and whether SnapSort commits its ordinary mutation, while
 callbacks let the application attach domain behavior to the resolved result.
@@ -19,7 +20,7 @@ Think about a drag as three independent axes:
 
 | Concern                | Question                              | API                                                            |
 | ---------------------- | ------------------------------------- | -------------------------------------------------------------- |
-| Target resolution      | Which Container and index wins?       | `config.mode`, eligibility, and priority callbacks             |
+| Target resolution      | Which Container and index wins?       | `config.mode` and `getDropPriority`                            |
 | Placement feedback     | How is that prospective result shown? | The mode's target ghost, insertion marker, or swap hover state |
 | Pointer representation | What follows the pointer?             | `session.dragVisual`                                           |
 
@@ -132,9 +133,9 @@ read directly from the candidate Container or Item owner they inspect.
 | Callback group                                         | Receiver                            | When it runs                                                                                        |
 | ------------------------------------------------------ | ----------------------------------- | --------------------------------------------------------------------------------------------------- |
 | `onDragStart`                                          | Root                                | Once while the session is pending; returning `false` vetoes startup.                                |
-| `canDrop`, `getDropPriority`                           | Each candidate destination          | During target resolution; priority runs only after eligibility accepts that Container.              |
+| `getDropPriority`                                      | Each candidate destination          | Once per Container during target resolution; `-1` rejects and nonnegative values rank it.            |
 | `getItemHitbox`                                        | Direct owner of the hover candidate | Synchronously while SnapSort calculates that Item's world-space hitbox.                             |
-| `onDragItemEnter`, `onDragItemMove`, `onDragItemLeave` | Direct owner of the hovered Item    | As pointer hit-testing begins, continues, or ends inside the currently resolved target Container.   |
+| `onDragItemEnter`, `onDragItemMove`, `onDragItemLeave` | Direct owner of the hovered Item    | As pointer hit-testing begins, continues, or ends for the currently resolved target.                |
 | `onDropTargetChange`                                   | Root                                | When the prospective direct Container or logical index changes.                                     |
 | `onGhostInsert`, `onGhostMove`, `onGhostRemove`        | Root                                | Synchronously when session-owned render state becomes present, changes, or becomes absent.          |
 | `onItemMove`                                           | Root                                | When a move-mode drop or programmatic move command commits its semantic persistent mutation.        |
@@ -146,6 +147,14 @@ read directly from the candidate Container or Item owner they inspect.
 An insertion marker can change physical `gap` presentation while its logical
 Container and index remain the same. That produces `onGhostMove`, with equal
 `from` and `to` locations, but not `onDropTargetChange`.
+
+Outside swap mode, placement hover tests the resolved Container's direct
+children and, when the resolved Container is nested, its own Item hitbox
+supplied by its parent. The smallest matching hitbox wins; a direct child wins
+an equal-area tie. This lets a folder header highlight itself without making
+the folder's descendants part of the header hitbox. The root cannot be hovered
+as its own Item. Swap hover/target selection and direct `findHoveredItem` calls
+remain limited to direct children.
 
 Structural callbacks run inside the adapter's synchronous commit boundary.
 Framework callbacks must publish their next render state before returning;
@@ -216,5 +225,5 @@ If an earlier implementation used `session.dropEffect = "copy"` and
 Do not swap the identities: keeping the old ID at the source and minting a new
 destination ID disconnects the dragged visual from its drop-animation target.
 
-Continue with [Drop Policies](/docs/snapsort/guides/sessions/drop-policies) for
-destination eligibility and priority.
+Continue with [Programmatic Moves](/docs/snapsort/guides/sessions/drop-policies)
+for authoritative commands and destination-policy bypass.-->

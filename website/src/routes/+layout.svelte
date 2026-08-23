@@ -36,6 +36,7 @@
 
   let activeMenu = $state<MenuName | null>(null);
   let mobileNavOpen = $state(false);
+  let collapsedMobileDocGroups = $state<string[]>([]);
   let navRoot = $state<HTMLElement | null>(null);
   let mobileNavTrigger = $state<HTMLButtonElement | null>(null);
   let projectsMenuTrigger = $state<HTMLButtonElement | null>(null);
@@ -74,6 +75,16 @@
   function closeNavigation() {
     activeMenu = null;
     mobileNavOpen = false;
+  }
+
+  function mobileDocGroupChildrenId(slug: string): string {
+    return `mobile-doc-group-${slug.replaceAll("/", "-")}`;
+  }
+
+  function toggleMobileDocGroup(slug: string) {
+    collapsedMobileDocGroups = !collapsedMobileDocGroups.includes(slug)
+      ? [...collapsedMobileDocGroups, slug]
+      : collapsedMobileDocGroups.filter((entry) => entry !== slug);
   }
 
   function handleMobileFrameworkChange(framework: Framework) {
@@ -118,23 +129,55 @@
   }
 </script>
 
-{#snippet mobileDocTree(nodes: DocNavigationNode[], depth: number)}
-  <ul>
+{#snippet mobileDocTree(nodes: DocNavigationNode[], depth: number, listId: string | undefined, listHidden: boolean)}
+  <ul id={listId} hidden={listHidden}>
     {#each nodes as node (node.entry.slug)}
       <li>
-        <a
-          href={`/docs/${node.entry.slug}`}
-          style={`--mobile-doc-indent: calc(${depth} * var(--size-16))`}
-          class:active={node.entry.slug === currentDocSlug}
-          class:ancestor={node.entry.slug !== currentDocSlug &&
-            docNavigationNodeContains(node, currentDocSlug)}
-          aria-current={node.entry.slug === currentDocSlug ? "page" : undefined}
-          onclick={closeNavigation}
-        >
-          {node.entry.title}
-        </a>
+        {#if node.entry.kind === "group"}
+          <button
+            type="button"
+            class="mobile-doc-group"
+            style={`--mobile-doc-indent: calc(${depth} * var(--size-16))`}
+            class:ancestor={docNavigationNodeContains(node, currentDocSlug)}
+            aria-expanded={!collapsedMobileDocGroups.includes(node.entry.slug)}
+            aria-controls={mobileDocGroupChildrenId(node.entry.slug)}
+            onclick={() => toggleMobileDocGroup(node.entry.slug)}
+          >
+            <span>{node.entry.title}</span>
+            <svg
+              class="mobile-doc-chevron"
+              width="12"
+              height="12"
+              viewBox="0 0 12 12"
+              fill="none"
+              aria-hidden="true"
+            >
+              <path d="m3 4.5 3 3 3-3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+          </button>
+        {:else}
+          <a
+            href={`/docs/${node.entry.slug}`}
+            style={`--mobile-doc-indent: calc(${depth} * var(--size-16))`}
+            class:active={node.entry.slug === currentDocSlug}
+            class:ancestor={node.entry.slug !== currentDocSlug &&
+              docNavigationNodeContains(node, currentDocSlug)}
+            aria-current={node.entry.slug === currentDocSlug ? "page" : undefined}
+            onclick={closeNavigation}
+          >
+            {node.entry.title}
+          </a>
+        {/if}
         {#if node.children.length > 0}
-          {@render mobileDocTree(node.children, depth + 1)}
+          {@render mobileDocTree(
+            node.children,
+            depth + 1,
+            node.entry.kind === "group"
+              ? mobileDocGroupChildrenId(node.entry.slug)
+              : undefined,
+            node.entry.kind === "group" &&
+              collapsedMobileDocGroups.includes(node.entry.slug)
+          )}
         {/if}
       </li>
     {/each}
@@ -280,7 +323,7 @@
             {#if section.name}
               <p class="mobile-doc-section-title">{section.title}</p>
             {/if}
-            {@render mobileDocTree(section.nodes, 0)}
+            {@render mobileDocTree(section.nodes, 0, undefined, false)}
           </div>
         {/each}
       </div>
@@ -681,7 +724,8 @@
         margin: 0;
       }
 
-      a {
+      a,
+      .mobile-doc-group {
         display: block;
         padding: var(--size-8) var(--size-12);
         padding-left: calc(var(--size-12) + var(--mobile-doc-indent, 0px));
@@ -693,19 +737,41 @@
         text-decoration: none;
 
         &:hover,
-        &:focus-visible,
-        &.active {
+        &:focus-visible {
           color: var(--color-action);
-        }
-
-        &.active {
-          font-weight: 600;
         }
 
         &.ancestor {
           color: var(--color-action);
           font-weight: 500;
         }
+      }
+
+      a.active {
+        color: var(--color-action);
+        font-weight: 600;
+      }
+
+      .mobile-doc-group {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--size-8);
+        width: 100%;
+        border: 0;
+        background: transparent;
+        font-family: inherit;
+        text-align: left;
+        cursor: pointer;
+      }
+
+      .mobile-doc-chevron {
+        flex: 0 0 auto;
+        transition: transform 0.15s ease;
+      }
+
+      .mobile-doc-group[aria-expanded="false"] .mobile-doc-chevron {
+        transform: rotate(-90deg);
       }
     }
 

@@ -164,7 +164,7 @@
     onGhostInsert: handleGhost,
     onGhostMove: handleGhost,
     onGhostRemove: handleGhost,
-    canDrop: rejectDrop,
+    getDropPriority: rejectDrop,
     onDragStart: handleDragStart,
   } satisfies ContainerCallbacks;
 </script>
@@ -206,7 +206,7 @@
                 animation: defaultAnimations,
                 direction: "column",
                 name: "clone-palette",
-                callbacks: { canDrop: rejectDrop },
+                callbacks: { getDropPriority: rejectDrop },
               }}
               locked={true}
               metadata={{ copyZone: "palette" }}

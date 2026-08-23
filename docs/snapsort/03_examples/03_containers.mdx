@@ -60,7 +60,7 @@ mount and becomes `null` after unmount.
 Clicking **Move →** calls `moveItem`. That command requests the move and emits
 the root structural callback; the callback still updates Svelte state
 synchronously because the core object does not own the rendered collection.
-The command is authoritative: it bypasses `canDrop`, `dropPriority`, and
+The command is authoritative: it bypasses `dropPriority` and
 `getDropPriority`, so application controls must enforce any equivalent policy
 before invoking it.
 
@@ -96,7 +96,7 @@ do not need equivalent callbacks when application code adds or removes them.
 
 <ContainerPropertyExample kind="ghost" />
 
-See [Ghosts](/docs/snapsort/guides/sessions/ghosts) for every ghost role,
+See [Drags and Ghosts](/docs/snapsort/guides/sessions/ghosts) for every ghost role,
 lifecycle transition, and the insertion-marker rendering API.
 
 ## Container Presentation and HTML Attributes

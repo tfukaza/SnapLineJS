@@ -79,8 +79,8 @@ sequence of its own. Give that Container the entry's `itemId`; set
 `locked={false}` only when the whole Container should be movable.
 
 The example remains one SnapSort tree. Its nested groups use application
-metadata and `canDrop` so their tasks can move between them while the parent
-rejects task drops into its top-level mixture.
+metadata and `getDropPriority` so their tasks can move between them while the
+parent rejects task drops into its top-level mixture.
 
 <ContainerIntroExample kind="mixed" />
 

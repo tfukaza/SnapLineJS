@@ -1,5 +1,5 @@
 ---
-title: Ghosts
+title: Drags and Ghosts
 order: 1
 parent: snapsort/guides/sessions
 project: snapsort
@@ -16,57 +16,75 @@ General session, mode specific session
   import GhostGuideDemo from "$lib/components/docs/GhostGuideDemo.svelte";
 </script>
 
-A ghost is passive, temporary render state owned by one drag session. It is
-not an application record or a clone that the application adds to its domain
-model.
+## Drag Start
 
-## Application Boundary
+When a drag starts, several things can happen depending on the current mode.
 
-A recurring pattern you will see a lot, including in this section,
-is how SnapSort splits responsibility with frontend frameworks.
-SnapSort is strictly designed to manage the logic necessary to
-move and animate items, containers, and ghosts; it
-is prohibited from making any permanent changes to the DOM or application state
-without first invoking callbacks to _commit_ a request to change the DOM.
+### Update Item
 
-Subsequently, the frontend framework is responsible for _applying_ these
-callbacks to update the DOM and application state as needed.
+If `session.dragVisual === "item"`, the dragged item must begin moving alongside
+the pointer. SnapSort will **directly** set the DOM element position to `absolute`,
+and begin applying CSS transforms to move the item to where the pointer is.
 
-## Drag Start and Ghost Creation
+If `session.dragVisual === "preview"`, the dragged item remains stationary in the DOM,
+while the visual representation of the drag is handled through ghost items.
 
-After an accepted drag activates, its placement mode and `dragVisual` may
-create one or more transient Ghost Items. Each `onGhostInsert` event tells the
-application that one state became present; it does not insert application data.
+### Ghost Creation
 
-`GhostState` is a closed union. Narrowing its `type` reveals the geometry and
-location data for that exact role:
+After an accepted drag activates, it may create a ghost item by calling the
+`onGhostInsert` callback. The frontend framework must handle this callback
+to add the ghost to the DOM with proper styling.
 
-- **`source-spacer`** preserves an old slot when insertion or swap mode hoists
-  the actual dragged Item. It is a full-size, flow-participating slot with one
-  anchor per dragged member.
-- **`target-spacer`** previews a full-size destination in euclidean and
-  progressive modes. It participates in flow and relocates with the
-  prospective placement.
-- **`insertion-marker`** identifies the exact gap selected by insertion mode.
-  It has a semantic slot location but renders as an absolute overlay, so it
-  never consumes list flow.
-- **`pointer-preview`** represents the complete dragged run at the pointer. It
-  is one root-owned overlay, independent from destination feedback.
+The callback passes a `GhostInsertEvent` with the following fields:
 
-Placement feedback and pointer representation are separate choices. Euclidean
-and progressive placement use a `target-spacer`; insertion uses an
-`insertion-marker`; and swap uses Item-hover feedback without a target ghost.
-Independently, `dragVisual = "item"` moves the actual Items and uses whichever
-slot-preserving role the active lifecycle requires: insertion and swap use
-source spacers, while euclidean and progressive relocate their target-spacer
-run. `"preview"` creates a `pointer-preview`, and `"none"` has no
-pointer-following visual.
+```
+type GhostInsertEvent = {
+  readonly operation: "insert";
+  readonly ghost: GhostState;
+  readonly to: GhostState["location"];
+  readonly beforeElement: HTMLElement | null;
+};
+```
 
-A session can therefore own several ghosts at once. For example, insertion
-mode with a preview uses an `insertion-marker` in the destination and a
-`pointer-preview` at the root.
+Of particular interest here is the `ghost.type` field, which can have
+the following values that indicate how the ghost should be placed.
 
-## Flow Target and Pointer Preview in Action
+- `target-spacer`: The ghost is placed where the item is about to be dropped,
+  in other words where the **drop target** is located. Used by euclidean and progressive modes.
+- `insertion-marker`: The ghost is a marker indicating the gap between
+  items where the dragged item will be dropped. Used by insertion mode.
+- `pointer-preview`: The ghost follows the pointer. Used by swap mode.
+- `source-spacer` the ghost stays in the original position of the item being dragged.
+  Currently not used by any mode.
+
+Application code must render the appropriate ghost item based on this field.
+For convenience, SnapSort also provides a `Ghost` components that can dynamically
+render each type. See [Ghost](/docs/snapsort/reference/svelte/ghost).
+
+## Item Drag
+
+As the pointer moves during the drag gesture, behind the scenes SnapSort
+is busy at work calculating the drop target based on the current position
+of the pointer and the item. Every mode uses a different algorithm, but
+they all eventually fire a predefined set of callbacks.
+
+### onGhostMove
+
+If the mode involves moving ghosts, SnapSort fires the `onGhostMove` callback
+with the updated ghost state. This requests the application to move
+ghosts between locations or update their visual representation.
+
+The application does not, however, need to handle animations;
+SnapSort handles that for you. This is not only for convenience
+(you're welcome) but also a necessity, as SnapSort, and the engine it's built on,
+SnapEngine, runs a carefully coordinated animation system to ensure
+smooth DOM updates. Under the hood, SnapSort takes a snapshot of the
+ghost before calling the callback. After the callback, another snapshot
+is taken, and an animation is played to interpolate between the two
+snapshots. Meaning, in fact, you _should_ avoid triggering custom animations
+as it can interfere with the animation system.
+
+<!--## Flow Target and Pointer Preview in Action
 
 Drag a task from one list toward the other and pause before releasing. The
 destination card labels the `target-spacer`, while a separate
@@ -119,12 +137,11 @@ Only `source-spacer`, `target-spacer`, and `pointer-preview` carry a `rect`.
 An `insertion-marker` instead carries its canonical `gap` and marker-specific
 context because marker thickness and insets are presentation, not targeting.
 An insertion neighbor may itself be a nested `Container`, because every
-Container is also an Item.
+Container is also an Item.-->
 
-## Explicit Lifecycle Callbacks
+### Ghost Lifecycle Callbacks
 
-All three structural callbacks are configured on the independent root and run
-synchronously inside its adapter commit:
+All in all, there are three flavors of callbacks for ghosts:
 
 - `onGhostInsert` reports absent → present with `ghost`, `to`, and
   `beforeElement`.
@@ -133,8 +150,11 @@ synchronously inside its adapter commit:
 - `onGhostRemove` reports present → absent with `ghost` and `from`.
 
 The callbacks remain separate because SnapSort owns all three transitions.
-They may still delegate to one function because `reduceRenderTree` understands
-the complete `GhostLifecycleEvent` union.
+It can understandably be a bit annoying to handle all yourself, so
+SnapSort ships with the `reduceRenderTree` helper which you can pass the
+`event` argument of all three callbacks directly. Combined with the
+aforementioned `Ghost` component, this should make it quick and easy
+to set up ghosts.
 
 ```svelte framework=Svelte
 <script lang="ts">
@@ -199,15 +219,8 @@ const children = tree.entries.map((entry) =>
 );
 ```
 
-`onGhostMove` is not a pointer-move stream. A mounted `pointer-preview` follows
-continuous pointer motion directly; its lifecycle callbacks report insertion
-and removal. Move events report structural relocation or changed marker
-presentation.
-
-`GhostCreateEvent` is also separate from these callbacks. It is supplied only
-to the Vanilla adapter's `createGhostElement` customization hook.
-
-## Rendering an Insertion Marker
+<!--
+### Rendering an Insertion Marker
 
 SnapSort chooses the canonical gap. The renderer chooses a visible rectangle
 with three explicit values:
@@ -271,9 +284,9 @@ const adapter = createVanillaAdapter({
 
 Framework callbacks must update framework state instead. Do not call
 `insertBefore`, `appendChild`, `remove`, or another structural DOM API for
-Svelte- or React-rendered ghosts.
+Svelte- or React-rendered ghosts.-->
 
-## Cleanup Rules
+<!--## Cleanup Rules
 
 - A normal drop removes every placement and pointer ghost before committing
   the persistent Item move or swap.
@@ -288,4 +301,98 @@ Svelte- or React-rendered ghosts.
 
 Continue with
 [Commit and Cleanup](/docs/snapsort/guides/sessions/commit-and-cleanup) for the
-persistent mutation and teardown that follow this temporary render state.
+persistent mutation and teardown that follow this temporary render state.-->
+
+### onDropTargetChange
+
+When the algorithm detects that a new drop target has been selected,
+SnapSort fires the `onDropTargetChange` callback with the new target location
+and relevant data.
+
+This is usually used by swap mode, which can update the styling of the hovered
+item to make it clear it has been selected as a drop target.
+
+## Resolution Order
+
+Each built-in SnapSort mode algorithm resolves a prospective
+drop target in this order:
+
+1. Generate the active mode's candidate positions and group them by their
+   directly owning container.
+2. Start with each container's configured `dropPriority`, then invoke
+   `getDropPriority` once. A returned number replaces the configured value;
+   `undefined` preserves it.
+3. Remove containers whose effective priority is `-1`, then keep only
+   candidates tied at the highest remaining priority.
+4. Let the active mode rank that candidate set and choose the exact
+   container and index.
+
+### Priority and Rejection
+
+By default, all items and containers have a `dropPriority` of `0`.
+The `getDropPriority` callback can replace it every time the item moves.
+Return `-1` to reject the destination, a nonnegative number to rank it, or
+`undefined` to preserve its configured value.
+
+```ts
+import {
+  DROP_REJECT_PRIORITY,
+  type DropPriorityEvent,
+} from "@snap-engine/snapsort";
+
+function prioritizeUrgentItems(event: DropPriorityEvent) {
+  if (event.containerMetadata.accepts !== event.itemMetadata.kind) {
+    return DROP_REJECT_PRIORITY;
+  }
+  return event.itemsMetadata.every((metadata) => metadata.urgent === true)
+    ? event.staticPriority + 1
+    : undefined;
+}
+```
+
+This is useful if you want to make exceptions to the mode's algorithm
+and prioritize specific containers, or use as tie breakers when the
+algorithm assigns multiple possible drop locations with the same preference.
+
+```svelte framework=Svelte
+<Container
+  itemId="words-root"
+  metadata={{ boardId: "sentence" }}
+  config={{ dropPriority: 2, callbacks }}
+>
+  {#each words.entries as entry (entry.itemId)}
+    {#if entry.isGhost}
+      <Ghost ghost={entry.ghost} />
+    {:else if entry.childTree}
+      <WordContainer {entry} />
+    {:else}
+      <Item itemId={entry.itemId}>{entry.value.label}</Item>
+    {/if}
+  {/each}
+</Container>
+```
+
+```tsx framework=React
+<Container
+  itemId="words-root"
+  metadata={{ boardId: "sentence" }}
+  config={{ dropPriority: 2, callbacks }}
+>
+  {words.entries.map((entry) =>
+    entry.isGhost ? (
+      <Ghost key={entry.itemId} ghost={entry.ghost} />
+    ) : entry.childTree ? (
+      <WordContainer key={entry.itemId} entry={entry} />
+    ) : (
+      <Item key={entry.itemId} itemId={entry.itemId}>
+        {entry.value.label}
+      </Item>
+    ),
+  )}
+</Container>
+```
+
+For the more common scenarios you would want to define priorities,
+SnapSort provided pre-made helpers you can use. See
+[Standard Callbacks reference](/docs/snapsort/reference/callbacks) for their
+exact signatures, geometry, return values, and import path.

@@ -2,6 +2,7 @@ import type { Framework } from "$lib/frameworks";
 import type { DocMetadata } from "$lib/markdown/docMetadata";
 
 export type DocEntry = {
+  kind: "page";
   slug: string;
   title: string;
   order: number;
@@ -16,8 +17,24 @@ export type DocEntry = {
   hidden: boolean;
 };
 
+export type DocNavigationGroup = {
+  kind: "group";
+  slug: string;
+  title: string;
+  order: number;
+  project: string;
+  projectTitle: string;
+  section: string;
+  sectionTitle: string;
+  sectionOrder: number;
+  parent: string | null;
+  redirect: string;
+};
+
+export type DocNavigationItem = DocEntry | DocNavigationGroup;
+
 export type DocNavigationNode = {
-  entry: DocEntry;
+  entry: DocNavigationItem;
   children: DocNavigationNode[];
 };
 
@@ -81,6 +98,25 @@ const metadataModules = import.meta.glob<DocMetadata>("@docs/**/*.{md,mdx}", {
   query: "?doc-catalog-metadata",
 });
 
+type DocNavigationGroupManifest = {
+  slug: string;
+  title: string;
+  order: number;
+  project: string;
+  section: string;
+  sectionOrder: number;
+  parent?: string;
+  redirect: string;
+};
+
+const navigationGroupModules = import.meta.glob<DocNavigationGroupManifest>(
+  "@docs/**/_navigation.json",
+  {
+    eager: true,
+    import: "default",
+  },
+);
+
 const formatTitle = (value: string) =>
   value.charAt(0).toUpperCase() + value.slice(1).replace(/_/g, " ");
 
@@ -92,7 +128,7 @@ export const projectDescriptions = Object.fromEntries(
   docProjects.map((project) => [project.slug, project.description]),
 );
 
-export const legacyDocRedirects: Record<string, string> = {
+const legacyDocRedirects: Record<string, string> = {
   "snapsort/reference/svelte": "snapsort/reference/svelte/container",
   "snapsort/reference/svelte-api": "snapsort/reference/svelte/container",
   "snapsort/reference/react-api": "snapsort/reference/react",
@@ -146,6 +182,7 @@ const allEntries = Object.entries(metadataModules)
       (framework ? sourceParts[3] ?? "overview" : null);
 
     return {
+      kind: "page",
       slug,
       title: metadata.title || slug || "Home",
       order: metadata.order ?? 999,
@@ -176,15 +213,60 @@ const allEntries = Object.entries(metadataModules)
       a.title.localeCompare(b.title),
   );
 
+const navigationGroups = Object.values(navigationGroupModules)
+  .map(
+    (manifest): DocNavigationGroup => ({
+      kind: "group",
+      slug: manifest.slug,
+      title: manifest.title,
+      order: manifest.order,
+      project: manifest.project,
+      projectTitle:
+        projectTitles[manifest.project] ?? formatTitle(manifest.project),
+      section: manifest.section,
+      sectionTitle: formatTitle(manifest.section),
+      sectionOrder: manifest.sectionOrder,
+      parent: manifest.parent ?? null,
+      redirect: manifest.redirect,
+    }),
+  )
+  .sort(
+    (a, b) =>
+      a.project.localeCompare(b.project) ||
+      a.sectionOrder - b.sectionOrder ||
+      a.section.localeCompare(b.section) ||
+      a.order - b.order ||
+      a.title.localeCompare(b.title),
+  );
+
 const allEntriesBySlug = new Map<string, DocEntry>(
   allEntries.map((entry): [string, DocEntry] => [entry.slug, entry]),
 );
 
-function validateParentRelationships(docEntries: readonly DocEntry[]): void {
-  for (const entry of docEntries) {
+const allNavigationItems = [...allEntries, ...navigationGroups];
+const allNavigationItemsBySlug = new Map<string, DocNavigationItem>();
+for (const item of allNavigationItems) {
+  if (allNavigationItemsBySlug.has(item.slug)) {
+    throw new Error(`Duplicate documentation navigation slug "${item.slug}".`);
+  }
+  allNavigationItemsBySlug.set(item.slug, item);
+}
+
+const navigationGroupsBySlug = new Map<string, DocNavigationGroup>(
+  navigationGroups.map((group) => [group.slug, group]),
+);
+
+export function findDocRedirect(slug: string): string | undefined {
+  return navigationGroupsBySlug.get(slug)?.redirect ?? legacyDocRedirects[slug];
+}
+
+function validateParentRelationships(
+  navigationItems: readonly DocNavigationItem[],
+): void {
+  for (const entry of navigationItems) {
     if (!entry.parent) continue;
 
-    const parent = allEntriesBySlug.get(entry.parent);
+    const parent = allNavigationItemsBySlug.get(entry.parent);
     if (!parent) {
       throw new Error(
         `Documentation entry "${entry.slug}" references missing parent "${entry.parent}".`,
@@ -205,7 +287,7 @@ function validateParentRelationships(docEntries: readonly DocEntry[]): void {
   const visited = new Set<string>();
   const visiting = new Set<string>();
 
-  const visit = (entry: DocEntry, ancestry: string[]): void => {
+  const visit = (entry: DocNavigationItem, ancestry: string[]): void => {
     if (visited.has(entry.slug)) return;
     if (visiting.has(entry.slug)) {
       const cycleStart = ancestry.indexOf(entry.slug);
@@ -215,7 +297,7 @@ function validateParentRelationships(docEntries: readonly DocEntry[]): void {
 
     visiting.add(entry.slug);
     if (entry.parent) {
-      const parent = allEntriesBySlug.get(entry.parent);
+      const parent = allNavigationItemsBySlug.get(entry.parent);
       if (!parent) {
         throw new Error(
           `Documentation entry "${entry.slug}" references missing parent "${entry.parent}".`,
@@ -227,12 +309,12 @@ function validateParentRelationships(docEntries: readonly DocEntry[]): void {
     visited.add(entry.slug);
   };
 
-  for (const entry of docEntries) visit(entry, []);
+  for (const entry of navigationItems) visit(entry, []);
 }
 
-validateParentRelationships(allEntries);
+validateParentRelationships(allNavigationItems);
 
-const compareEntries = (a: DocEntry, b: DocEntry): number =>
+const compareEntries = (a: DocNavigationItem, b: DocNavigationItem): number =>
   a.order - b.order ||
   a.title.localeCompare(b.title) ||
   a.slug.localeCompare(b.slug);
@@ -243,10 +325,11 @@ function sortNavigationNodes(nodes: DocNavigationNode[]): void {
 }
 
 function buildNavigationSections(
-  docEntries: readonly DocEntry[],
+  navigationItems: readonly DocNavigationItem[],
 ): DocNavigationSection[] {
-  const visibleEntries = docEntries.filter(
-    (entry) => !entry.hidden && entry.slug !== "index",
+  const visibleEntries = navigationItems.filter(
+    (entry) =>
+      entry.kind === "group" || (!entry.hidden && entry.slug !== "index"),
   );
   const nodesBySlug = new Map<string, DocNavigationNode>(
     visibleEntries.map((entry): [string, DocNavigationNode] => [
@@ -294,7 +377,7 @@ function buildNavigationSections(
   return orderedSections;
 }
 
-const navigationSections = buildNavigationSections(allEntries);
+const navigationSections = buildNavigationSections(allNavigationItems);
 
 function filterNavigationNodes(
   nodes: readonly DocNavigationNode[],
@@ -302,6 +385,9 @@ function filterNavigationNodes(
 ): DocNavigationNode[] {
   return nodes.flatMap((node) => {
     const children = filterNavigationNodes(node.children, framework);
+    if (node.entry.kind === "group") {
+      return children.length > 0 ? [{ entry: node.entry, children }] : [];
+    }
     if (!node.entry.framework || node.entry.framework === framework) {
       return [{ entry: node.entry, children }];
     }
@@ -366,7 +452,7 @@ function flattenNavigationSections(
 
   const visit = (nodes: readonly DocNavigationNode[]): void => {
     for (const node of nodes) {
-      flattened.push(node.entry);
+      if (node.entry.kind === "page") flattened.push(node.entry);
       visit(node.children);
     }
   };
@@ -389,12 +475,12 @@ export const entries = (): DocEntry[] =>
 export const findDocEntry = (slug: string): DocEntry | undefined =>
   allEntriesBySlug.get(slug);
 
-export function getDocAncestors(slug: string): DocEntry[] {
-  const ancestors: DocEntry[] = [];
-  let current = allEntriesBySlug.get(slug);
+export function getDocAncestors(slug: string): DocNavigationItem[] {
+  const ancestors: DocNavigationItem[] = [];
+  let current = allNavigationItemsBySlug.get(slug);
 
   while (current?.parent) {
-    current = allEntriesBySlug.get(current.parent);
+    current = allNavigationItemsBySlug.get(current.parent);
     if (current) ancestors.unshift(current);
   }
 

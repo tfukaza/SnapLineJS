@@ -9,42 +9,33 @@ sectionTitle: Guides
 sectionOrder: 2
 ---
 
-When an activated session ends, SnapSort removes its temporary presentation,
-commits any persistent move or swap, clears the root session, and reports the
-outcome. Framework applications must project structural callbacks into their
-own state synchronously so their rendered tree stays aligned with the core
-tree.
+When an activated session ends, usually by releasing the pointer,
+SnapSort officially "commits" to the drop. Ghosts are removed,
+and the item's DOM element is moved to its final position.
 
-## State Ownership
+## onItemMove
 
-Structural mutation callbacks are configured on and dispatched to the
-independent root Container. Event locations identify the direct source and
-destination involved in the change.
+To formalize the item drop, `onItemMove` is invoked on the root container
+with the container and index of the final position. As with the ghost item,
+the application must use this callback to update the list.
+And also as with ghosts, SnapSort will automatically handle
+animations, if enabled.
 
-An ordinary euclidean, progressive, or insertion drop is one semantic move,
+<!--An ordinary euclidean, progressive, or insertion drop is one semantic move,
 even when it crosses Containers or carries a selected run. Prefer a root
 `onItemMove` handler; its event contains the complete ordered `items`,
 `itemIds`, and `froms` arrays plus the shared `to` location. If no
 `onItemMove` exists, SnapSort falls back to root `onItemInsert`. Neither path
-also emits `onItemRemove` for the source.
+also emits `onItemRemove` for the source.-->
 
 Swap mode instead dispatches one atomic `onItemSwap`; `event.a` and `event.b`
-name the two pre-swap slots. If `session.dropEffect` is `"none"`, SnapSort
+name the two pre-swap slots.
+
+If `session.dropEffect` is `"none"`, SnapSort
 reports the resolved destination at drag end but suppresses the persistent
 move or swap callback.
 
-Ghosts are different because their presence is session-owned. The root
-receives explicit `onGhostInsert`, `onGhostMove`, and `onGhostRemove` events,
-which a framework can pass to the same `reduceRenderTree` function. The
-[Ghosts guide](/docs/snapsort/guides/sessions/ghosts) covers that temporary
-state in detail.
-
 ## Drop and Cleanup Order
-
-For a normal resolved drop, the mode removes its placement and pointer ghosts
-before it dispatches the persistent move or swap. SnapSort then clears hover
-state, transient session bookkeeping, frozen snapshots, and dragging flags
-before it invokes `onDragEnd`.
 
 The root's `onDragEnd` runs for every drag that reached active state,
 including a return to the original source and cancellation. It does not run
@@ -75,104 +66,6 @@ The session handle has status `"ended"` by the time `onDragEnd` runs, and
 ## Cancellation and Failed Drops
 
 Cancellation sets the effective drop behavior to `"none"`, removes temporary
-ghosts, restores the active Items, and skips `onItemMove` or `onItemSwap`.
+ghosts, and skips `onItemMove` or `onItemSwap`.
 `onDragEnd` still runs with `destination === null` if the gesture had already
 activated.
-
-A thrown structural callback is an integration fault, not a transaction veto.
-SnapSort propagates the original error and schedules cleanup for transient core
-state, but it cannot roll back arbitrary framework state or DOM side effects
-that already ran. Use `onDragStart` or `canDrop` for supported rejection, and
-keep structural callbacks synchronous and exception-free.
-
-## Application-Owned Collection Changes
-
-Application-originated additions and deletions do not need to round-trip
-through SnapSort callbacks. SnapSort callbacks report changes that SnapSort
-originates.
-
-An Add button, a Delete button, or a server update originates in the
-application, so update the
-application collection directly and let the framework mount or unmount the
-matching SnapSort component. That reconciliation registers or unregisters the
-core Items without echoing the application's change through an Item callback.
-
-For the flat-list state from the
-[Quickstart](/docs/snapsort/introduction/setup), application commands can
-look like this:
-
-```ts framework=Svelte
-import { createRenderEntry, type ItemId } from "@snap-engine/snapsort";
-
-function addTask(task: Task) {
-  list = {
-    ...list,
-    entries: [...list.entries, createRenderEntry(task, task.id)],
-  };
-}
-
-function deleteTasks(itemIds: readonly ItemId[]) {
-  const deleted = new Set(itemIds);
-  list = {
-    ...list,
-    entries: list.entries.filter(
-      (entry) => entry.isGhost || !deleted.has(entry.itemId),
-    ),
-  };
-}
-```
-
-```tsx framework=React
-import { useCallback } from "react";
-import { createRenderEntry, type ItemId } from "@snap-engine/snapsort";
-
-const addTask = useCallback((task: Task) => {
-  setList((current) => ({
-    ...current,
-    entries: [...current.entries, createRenderEntry(task, task.id)],
-  }));
-}, []);
-
-const deleteTasks = useCallback((itemIds: readonly ItemId[]) => {
-  const deleted = new Set(itemIds);
-  setList((current) => ({
-    ...current,
-    entries: current.entries.filter(
-      (entry) => entry.isGhost || !deleted.has(entry.itemId),
-    ),
-  }));
-}, []);
-```
-
-These functions are deliberately application code, not SnapSort exports. A
-nested application performs the same immutable edit in the selected child
-tree. Keep the root Container mounted for the lifetime of its `RenderTree`; if
-the root is destroyed, discard that state and call `createRenderTree` again
-for its replacement.
-
-Application-specific meanings such as “dropping here deletes these records”
-also belong in application lifecycle handlers rather than a SnapSort mutation
-callback. See
-[Advanced Session Settings and Callbacks](/docs/snapsort/guides/sessions/advanced-settings-and-callbacks#give-a-drop-application-meaning)
-for a cancellation-safe drop-to-delete recipe.
-
-## Imperative Insert and Remove Primitives
-
-There is a separate core-originated path. Calling
-`container.removeItem(itemId)` changes SnapSort's core tree first. Configure a
-root `onItemRemove` callback and apply its event with `reduceRenderTree` so
-framework state catches up synchronously. An ordinary move never emits this
-remove callback.
-
-`onItemInsert` is the lower-level insertion primitive and the fallback when a
-root has no `onItemMove`. It is intentionally outside `RenderTreeEvent`: its
-payload identifies the core Item and destination, but `reduceRenderTree`
-cannot invent the application value that a new render entry would need.
-
-Programmatic moves use the normal semantic move callback. Their relationship
-to eligibility and priority is covered in
-[Drop Policies](/docs/snapsort/guides/sessions/drop-policies#programmatic-moves).
-
-Continue with
-[Advanced Session Settings and Callbacks](/docs/snapsort/guides/sessions/advanced-settings-and-callbacks)
-for mode-independent controls and application-specific drop behavior.

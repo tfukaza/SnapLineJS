@@ -28,7 +28,7 @@
   }: {
     entry: Extract<RenderEntry<FileExplorerNodeData>, { isGhost: false }>;
     depth?: number;
-    callbacks: Pick<ContainerCallbacks, "canDrop">;
+    callbacks: Pick<ContainerCallbacks, "getDropPriority">;
     onToggleFolder: (nodeId: string) => void;
     selectedIds: Set<string>;
     onSelectNode: (nodeId: string, event: MouseEvent | KeyboardEvent) => void;
@@ -67,7 +67,8 @@
       direction: "column",
       name: `website-file-explorer-${node.id}`,
       callbacks: {
-        canDrop: node.open === false ? rejectDrop : callbacks.canDrop,
+        getDropPriority:
+          node.open === false ? rejectDrop : callbacks.getDropPriority,
       },
       animation: {
         reorder: fileTreeAnimation,

@@ -9,13 +9,66 @@ sectionTitle: Guides
 sectionOrder: 2
 ---
 
-When pointer input begins a drag, the root Container creates a pending
-`DragSession` and dispatches `onDragStart`.
+<script>
+  import SessionLifecycleDiagram from
+  "$lib/components/docs/SessionLifecycleDiagram.svelte";
+</script>
 
-## Configure or Veto Startup
+A `DragSession` is the temporary state SnapSort creates for one **drag gesture**,
+or the gesture starting with the pointer press, moving the item,
+and finally ending with the pointer release and placing the item in its final position.
+Sessions, for the duration of a gesture, manage various states like the
+item/ghost position, callbacks, etc.
 
-Return `false` from the root's `onDragStart` to veto a gesture before active
-session state, ghosts, or dragged-item visuals are created:
+<!--- **Source Container:** an Item's direct parent when the drag begins. In the
+  diagram this lane also represents the current owner for operations such as
+  when the drag ends. It may be the source again, or `null` when the lifecycle
+  ends without a resolved destination.
+- **Ghost Item:** passive temporary render state managed by the session. A
+  ghost does not ask to insert or remove itself.-->
+
+## Application Boundary
+
+Before we move on, we must cover how SnapSort separates the
+**application** from SnapSort **library**.
+SnapSort is strictly designed to manage the logic necessary to
+move and animate items, containers, and ghosts; it is prohibited
+from making any permanent changes to the DOM or application state
+without first invoking callbacks to **commit** a request to change the DOM.
+
+Subsequently, the frontend framework is responsible for applying
+these callbacks to update the DOM and application state as needed.
+
+<!--## Lifecycle at a Glance-->
+
+<!--<SessionLifecycleDiagram />-->
+
+<!--When pointer input begins a drag, the root Container creates a pending
+`DragSession` and dispatches `onDragStart`.-->
+
+## onDragStart
+
+Immediately upon starting a drag, the root container creates a **pending**
+`DragSession` and dispatches `onDragStart`. At this point, the drag
+has not officially started yet. The callback receives a `DragStartEvent`:
+
+```ts
+interface DragStartEvent {
+  session: DragSession;
+  item: Item;
+  itemId: ItemId;
+  itemMetadata: ItemMetadata;
+  items: Item[];
+  itemIds: ItemId[];
+  itemsMetadata: ItemMetadata[];
+  element: HTMLElement | null;
+  source: DragLocation;
+  sources: DragLocation[];
+}
+```
+
+Return `false` from `onDragStart`
+to veto a gesture before the session is officially **active**.
 
 ```ts
 import type { DragStartEvent } from "@snap-engine/snapsort";
@@ -29,7 +82,7 @@ function onDragStart(event: DragStartEvent) {
 }
 ```
 
-A vetoed startup clears the pending session and does not fire `onDragEnd`.
+A vetoed startup clears the pending session.
 In simple terms, it cancels the drag before it even begins.
 
 ## What's in a Session
@@ -74,57 +127,27 @@ For now, the key fields are:
   one pointer-preview ghost for the complete run.
 - `"none"` leaves the Items in layout without a pointer-following visual.
 
-Each placement mode selects its documented initial value. Change it only when
-the interface needs a different pointer representation; the
-[advanced settings guide](/docs/snapsort/guides/sessions/advanced-settings-and-callbacks#three-independent-decisions)
-explains how this choice differs from placement feedback and target resolution.
+This field is set automatically by the placement mode,
+so unless you are masking custom modifications, there is no need to override it.
 
 ### DropEffect
 
 `dropEffect` can change any time before the drop commits.
 The two options are:
 
-- `"move"` commits the active mode's ordinary move or swap.
-- `"none"` suppresses that persistent mutation while preserving resolved
-  destination reporting.
+- `"move"` commits the item upon drop, in other words actually moves the
+  item to its destination.
+- `"none"` suppresses that persistent mutation, effectively canceling the
+  drop gesture at the last minute.
 
-All four placement modes begin with `"move"`. Application-specific behavior,
-such as drop-to-delete, can temporarily select `"none"` and apply its own
-meaning after the session reports the final destination.
+All four placement modes default to `"move"`. Application-specific behavior
+can temporarily select `"none"` and apply its own logic as needed.
 
 ## Multi-Item Drag
 
-To drag multiple Items together in euclidean, progressive, or insertion mode,
-set each Item's consumer-owned `selected` flag. When a selected, unlocked Item
-starts a drag, SnapSort collects the unlocked selected run and treats it as one
-ordered operation. Swap mode exchanges only `primaryItem` with its target.
-This is why `items` and `sources` are arrays even for a single-Item drag.
-
-The public `items` array is ordered by the run's original document positions.
-`sources` is the parallel array of original locations. These sources remain
-the gesture origins throughout the session.
-
-`DragStartEvent` repeats the primary Item fields for convenient callback code
-and also supplies the complete run:
-
-```ts
-interface DragStartEvent {
-  session: DragSession;
-  item: Item;
-  itemId: ItemId;
-  itemMetadata: ItemMetadata;
-  items: Item[];
-  itemIds: ItemId[];
-  itemsMetadata: ItemMetadata[];
-  element: HTMLElement | null;
-  source: DragLocation;
-  sources: DragLocation[];
-}
-```
-
-`item === items[0]`, `itemId === itemIds[0]`, and
-`source === sources[0]`. The event is dispatched to the root even when
-`source.container` is nested.
-
-Continue with [Ghosts](/docs/snapsort/guides/sessions/ghosts) for the temporary
-render state created after an accepted session activates.
+To drag multiple Items together, set each Item's `selected` flag.
+When an Item starts a drag, SnapSort collects all selected items and
+treats them as one large item, but still exposes the list of all
+items. Conceptually, A regular drag of one item is treated as a special case
+where only one item is `selected`; this is why fields like `items` in `DragSession`
+are arrays.

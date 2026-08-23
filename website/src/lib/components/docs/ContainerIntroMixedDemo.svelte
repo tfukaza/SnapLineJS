@@ -1,11 +1,12 @@
 <script lang="ts">
   import { Engine } from "@snap-engine/asset-base/svelte";
   import type {
-    CanDropEvent,
     ContainerCallbacks,
+    DropPriorityEvent,
     GhostLifecycleEvent,
     ItemMoveEvent,
   } from "@snap-engine/snapsort";
+  import { rejectDrop } from "@snap-engine/snapsort/callbacks";
   import {
     createRenderEntry,
     createRenderTree,
@@ -53,11 +54,11 @@
     board = reduceRenderTree(board, event);
   }
 
-  function canDropWithinGroup(event: CanDropEvent) {
-    return (
+  function prioritizeWithinGroup(event: DropPriorityEvent) {
+    const matches =
       event.source?.containerMetadata.dropGroup ===
-      event.containerMetadata.dropGroup
-    );
+      event.containerMetadata.dropGroup;
+    return matches ? undefined : rejectDrop(event);
   }
 
   const callbacks = {
@@ -65,7 +66,7 @@
     onGhostInsert: onGhostMove,
     onGhostMove,
     onGhostRemove: onGhostMove,
-    canDrop: canDropWithinGroup,
+    getDropPriority: prioritizeWithinGroup,
   } satisfies ContainerCallbacks;
 </script>
 
@@ -83,7 +84,7 @@
           itemId={entry.itemId}
           locked={false}
           metadata={{ dropGroup: "group-tasks" }}
-          config={{ animation: defaultAnimations, callbacks: { canDrop: canDropWithinGroup } }}
+          config={{ animation: defaultAnimations, callbacks: { getDropPriority: prioritizeWithinGroup } }}
         >
           <strong>{entry.value.label}</strong>
           {#each entry.childTree.entries as child (child.itemId)}

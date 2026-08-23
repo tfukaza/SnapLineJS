@@ -11,10 +11,17 @@ hidden: true
 
 Choose a framework, then open the page for the component you are using.
 
-| Framework | Container                                              | Item                                         |
-| --------- | ------------------------------------------------------ | -------------------------------------------- |
-| Svelte    | [Container](/docs/snapsort/reference/svelte/container) | [Item](/docs/snapsort/reference/svelte/item) |
-| React     | [Container](/docs/snapsort/reference/react/container)  | [Item](/docs/snapsort/reference/react/item)  |
+| Framework | Container                                              | Item                                         | Ghost                                          |
+| --------- | ------------------------------------------------------ | -------------------------------------------- | ---------------------------------------------- |
+| Svelte    | [Container](/docs/snapsort/reference/svelte/container) | [Item](/docs/snapsort/reference/svelte/item) | [Ghost](/docs/snapsort/reference/svelte/ghost) |
+| React     | [Container](/docs/snapsort/reference/react/container)  | [Item](/docs/snapsort/reference/react/item)  | [Ghost](/docs/snapsort/reference/react/ghost)  |
+
+The framework-neutral [DragSession](/docs/snapsort/reference/drag-session)
+reference documents the stable handle exposed during a gesture, including its
+read-only state and mutable controls.
+
+[Standard Callbacks](/docs/snapsort/reference/callbacks) documents the reusable
+drop policies exported from the callbacks subpath.
 
 The framework selector in the sidebar keeps the current component selected when you switch between Svelte and React.
 
@@ -32,7 +39,7 @@ SnapSort ships one package with framework bindings exposed as subpaths.
 | Import path                       | Purpose                                                                     |
 | --------------------------------- | --------------------------------------------------------------------------- |
 | `@snap-engine/snapsort`           | Framework-agnostic SnapEngine objects and types used by framework bindings. |
-| `@snap-engine/snapsort/callbacks` | Reusable drop eligibility and priority callbacks.                           |
+| `@snap-engine/snapsort/callbacks` | Reusable destination-policy callbacks.                                      |
 | `@snap-engine/snapsort/svelte`    | Svelte components that wrap the core objects.                               |
 | `@snap-engine/snapsort/react`     | React components that wrap the core objects.                                |
 
@@ -80,7 +87,7 @@ function onItemMove(event) {
 
 const board = new Container(engine, null, {
   itemId: "task-board-root",
-  callbacks: { canDrop: rejectDrop, onItemMove },
+  callbacks: { getDropPriority: rejectDrop, onItemMove },
 });
 const todo = createTaskContainer(engine, board, "todo");
 const done = createTaskContainer(engine, board, "done");

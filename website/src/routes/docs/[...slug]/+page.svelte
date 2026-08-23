@@ -24,6 +24,7 @@
 	let { data } = $props();
 
 	const allEntries = entries();
+	let collapsedDocGroups = $state<string[]>([]);
 
 	const currentSlug = $derived($page.params.slug || "");
 	const isDocsHome = $derived(currentSlug.length === 0);
@@ -82,12 +83,22 @@
 			{ name: data.docEntry.sectionTitle, href: null, current: false },
 			...data.docAncestors.map((ancestor) => ({
 				name: ancestor.title,
-				href: `/docs/${ancestor.slug}`,
+				href: ancestor.kind === "page" ? `/docs/${ancestor.slug}` : null,
 				current: false
 			})),
 			{ name: data.docEntry.title, href: null, current: true }
 		];
 	});
+
+	function docGroupChildrenId(slug: string): string {
+		return `desktop-doc-group-${slug.replaceAll("/", "-")}`;
+	}
+
+	function toggleDocGroup(slug: string) {
+		collapsedDocGroups = !collapsedDocGroups.includes(slug)
+			? [...collapsedDocGroups, slug]
+			: collapsedDocGroups.filter((entry) => entry !== slug);
+	}
 
 	function handleFrameworkChange(framework: Framework) {
 		const currentEntry = allEntries.find((entry) => entry.slug === currentSlug);
@@ -119,21 +130,51 @@
 	});
 </script>
 
-{#snippet desktopDocTree(nodes: DocNavigationNode[], depth: number)}
-	<ul class:nested={depth > 0}>
+{#snippet desktopDocTree(nodes: DocNavigationNode[], depth: number, listId: string | undefined, listHidden: boolean)}
+	<ul id={listId} class:nested={depth > 0} hidden={listHidden}>
 		{#each nodes as node (node.entry.slug)}
 			<li>
-				<a
-					href={`/docs/${node.entry.slug}`}
-					class:active={node.entry.slug === currentSlug}
-					class:ancestor={node.entry.slug !== currentSlug &&
-						docNavigationNodeContains(node, currentSlug)}
-					aria-current={node.entry.slug === currentSlug ? "page" : undefined}
-				>
-					{node.entry.title}
-				</a>
+				{#if node.entry.kind === "group"}
+					<button
+						type="button"
+						class="doc-navigation-group"
+						class:ancestor={docNavigationNodeContains(node, currentSlug)}
+						aria-expanded={!collapsedDocGroups.includes(node.entry.slug)}
+						aria-controls={docGroupChildrenId(node.entry.slug)}
+						onclick={() => toggleDocGroup(node.entry.slug)}
+					>
+						<span>{node.entry.title}</span>
+						<svg
+							class="doc-navigation-chevron"
+							width="12"
+							height="12"
+							viewBox="0 0 12 12"
+							fill="none"
+							aria-hidden="true"
+						>
+							<path d="m3 4.5 3 3 3-3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+						</svg>
+					</button>
+				{:else}
+					<a
+						href={`/docs/${node.entry.slug}`}
+						class:active={node.entry.slug === currentSlug}
+						class:ancestor={node.entry.slug !== currentSlug &&
+							docNavigationNodeContains(node, currentSlug)}
+						aria-current={node.entry.slug === currentSlug ? "page" : undefined}
+					>
+						{node.entry.title}
+					</a>
+				{/if}
 				{#if node.children.length > 0}
-					{@render desktopDocTree(node.children, depth + 1)}
+					{@render desktopDocTree(
+						node.children,
+						depth + 1,
+						node.entry.kind === "group"
+							? docGroupChildrenId(node.entry.slug)
+							: undefined,
+						node.entry.kind === "group" && collapsedDocGroups.includes(node.entry.slug)
+					)}
 				{/if}
 			</li>
 		{/each}
@@ -169,7 +210,7 @@
 						{#if section.name}
 							<p class="section-title">{section.title}</p>
 						{/if}
-						{@render desktopDocTree(section.nodes, 0)}
+						{@render desktopDocTree(section.nodes, 0, undefined, false)}
 					</div>
 				{/each}
 			</nav>
@@ -282,7 +323,8 @@
 		margin-bottom: var(--size-2);
 	}
 
-	a {
+	a,
+	.doc-navigation-group {
 		display: block;
 		padding: var(--size-8) 0;
 		border-radius: calc(var(--ui-radius) - 2px);
@@ -302,15 +344,37 @@
 			text-decoration: none;
 		}
 
-		&.active {
-			color: var(--color-action);
-			font-weight: 600;
-		}
-
 		&.ancestor {
 			color: var(--color-background-dark);
 			font-weight: 500;
 		}
+	}
+
+	a.active {
+		color: var(--color-action);
+		font-weight: 600;
+	}
+
+	.doc-navigation-group {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: var(--size-8);
+		width: 100%;
+		border: 0;
+		background: transparent;
+		font-family: inherit;
+		text-align: left;
+		cursor: pointer;
+	}
+
+	.doc-navigation-chevron {
+		flex: 0 0 auto;
+		transition: transform 0.15s ease;
+	}
+
+	.doc-navigation-group[aria-expanded="false"] .doc-navigation-chevron {
+		transform: rotate(-90deg);
 	}
 }
 

@@ -6,13 +6,14 @@
     createRenderEntry,
     createRenderTree,
     reduceRenderTree,
-    type CanDropEvent,
     type ContainerCallbacks,
+    type DropPriorityEvent,
     type GhostLifecycleEvent,
     type ItemMoveEvent,
     type RenderEntry,
     type RenderTree,
   } from "@snap-engine/snapsort";
+  import { rejectDrop } from "@snap-engine/snapsort/callbacks";
   import FileExplorerNode from "./FileExplorerNode.svelte";
   import type { FileExplorerNodeData } from "./FileExplorerNode.svelte";
 
@@ -188,19 +189,23 @@
   }
 
   /** Block dropping a folder into its own descendant (or itself), for every dragged item. */
-  function canDropInFolder(event: CanDropEvent): boolean {
+  function getFolderDropPriority(
+    event: DropPriorityEvent,
+  ): number | undefined {
     const containerId = event.containerMetadata.containerId;
-    if (typeof containerId !== "string") return true;
+    if (typeof containerId !== "string") return undefined;
 
     for (const itemId of event.itemIds) {
       const draggedNode = findEntry(tree, itemId);
-      if (draggedNode && containsEntry(draggedNode, containerId)) return false;
+      if (draggedNode && containsEntry(draggedNode, containerId)) {
+        return rejectDrop(event);
+      }
     }
-    return true;
+    return undefined;
   }
 
   const nestedCallbacks = {
-    canDrop: canDropInFolder,
+    getDropPriority: getFolderDropPriority,
   } satisfies ContainerCallbacks;
 
   const rootCallbacks = {

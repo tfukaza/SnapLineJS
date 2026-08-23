@@ -1,0 +1,186 @@
+---
+title: Ghost
+order: 3
+project: snapsort
+projectTitle: SnapSort
+section: reference
+sectionTitle: Reference
+sectionOrder: 3
+framework: react
+frameworkKey: ghost
+---
+
+`Ghost` renders temporary SnapSort-owned visual state inside a React
+collection. The application owns the RenderTree and DOM projection, while
+SnapSort owns when each ghost appears, moves, and disappears.
+
+Import the component from the React binding and its state types from the
+framework-neutral package:
+
+```tsx
+import { Ghost } from "@snap-engine/snapsort/react";
+import type { GhostState } from "@snap-engine/snapsort";
+
+function RenderGhost({ ghost }: { ghost: GhostState }) {
+  return <Ghost ghost={ghost} />;
+}
+```
+
+## Component Properties
+
+```ts
+interface GhostProps extends HTMLAttributes<HTMLDivElement> {
+  ghost: GhostState;
+  insertionMarker?: InsertionMarkerRectOptions;
+}
+```
+
+| Prop              | Default                                        | Description                                                                 |
+| ----------------- | ---------------------------------------------- | --------------------------------------------------------------------------- |
+| `ghost`           | Required                                       | Immutable lifecycle state supplied by a ghost callback or RenderTree entry. |
+| `children`        | Empty                                          | Optional custom content rendered inside the ghost element.                  |
+| `className`       | `""`                                           | Extra class merged with `snapsort-ghost`.                                   |
+| `insertionMarker` | `{ thickness: 3, startInset: 0, endInset: 0 }` | Presentation used only for an insertion marker.                             |
+| `style`           | `undefined`                                    | Inline styles merged after SnapSort's calculated structural styles.         |
+
+The component renders a `div`, forwards standard React div attributes, and
+forwards its ref to the rendered `HTMLDivElement`. The ref is unavailable
+until the element mounts.
+
+## RenderTree Integration
+
+Ghost lifecycle callbacks update React state synchronously. Render the
+resulting ghost entry in the same keyed sequence as ordinary Items and nested
+Containers:
+
+```tsx
+import { useCallback, useMemo } from "react";
+import { Ghost, Item } from "@snap-engine/snapsort/react";
+import {
+  reduceRenderTree,
+  type ContainerCallbacks,
+  type GhostLifecycleEvent,
+} from "@snap-engine/snapsort";
+
+const applyGhostEvent = useCallback((event: GhostLifecycleEvent) => {
+  setTree((current) => reduceRenderTree(current, event));
+}, []);
+
+const callbacks = useMemo(
+  () =>
+    ({
+      onGhostInsert: applyGhostEvent,
+      onGhostMove: applyGhostEvent,
+      onGhostRemove: applyGhostEvent,
+    }) satisfies ContainerCallbacks,
+  [applyGhostEvent],
+);
+
+const children = tree.entries.map((entry) =>
+  entry.isGhost ? (
+    <Ghost key={entry.itemId} ghost={entry.ghost} />
+  ) : (
+    <Item key={entry.itemId} itemId={entry.itemId}>
+      {entry.value.label}
+    </Item>
+  ),
+);
+```
+
+Use `entry.itemId` as the React key. For a ghost entry it is the generated,
+root-unique `ghostItemId`. Do not derive a key from the original application
+Item or the array index.
+
+Callbacks must update React state and let reconciliation change the DOM. Do
+not call `insertBefore`, `appendChild`, `remove`, or another structural DOM API
+for a React-rendered ghost.
+
+## Ghost Roles
+
+`GhostState` is a closed discriminated union. Test `ghost.type` when a role
+needs different content or styling.
+
+| `ghost.type`       | Meaning                                                         | Geometry and location                                           |
+| ------------------ | --------------------------------------------------------------- | --------------------------------------------------------------- |
+| `source-spacer`    | Preserves a vacated source slot when the real Item is hoisted.  | `rect` and a slot `location` with `container` and `index`.      |
+| `target-spacer`    | Reserves the prospective flow-layout destination.               | `rect` and a slot `location` with `container` and `index`.      |
+| `insertion-marker` | Paints the resolved gap used by insertion placement.            | `gap`, neighbors, current-placement state, and a slot location. |
+| `pointer-preview`  | Represents the dragged run in an overlay following the pointer. | `rect` and an overlay `location` without an index.              |
+
+Pointer representation and placement feedback are independent. A session can,
+for example, own both a `pointer-preview` and an `insertion-marker` at the same
+time. `onGhostMove` reports structural relocation or changed marker
+presentation; it is not a continuous pointer-move stream.
+
+## Shared Identity and Provenance
+
+Every role carries the same base state:
+
+```ts
+interface GhostStateBase {
+  readonly session: DragSession;
+  readonly original: Item;
+  readonly originalItemId: ItemId;
+  readonly originalMetadata: ItemMetadata;
+  readonly items: readonly Item[];
+  readonly itemIds: readonly ItemId[];
+  readonly ghostItem: Item;
+  readonly ghostItemId: ItemId;
+  readonly ghostMetadata: ItemMetadata;
+}
+```
+
+`original` identifies the ordinary Item represented by this ghost anchor,
+while `items` describes the complete ordered dragged run. `ghostItem` is an
+already-created transient core Item. `Ghost` binds its rendered element to
+that object when mounted, rebinds if the state identifies another ghost Item,
+and detaches it on unmount. Never render the same state through `Item` or
+persist a ghost as application data.
+
+## Positioning Behavior
+
+Source and target spacers remain in the collection's normal flow. `Ghost`
+applies their measured width, height, and original Item margins so they occupy
+the intended slot.
+
+Pointer previews and insertion markers are overlays. `Ghost` positions them
+absolutely in their owning Container's local coordinate space, disables
+pointer events, and assigns the overlay z-index. A pointer preview converts its
+world-space `rect` with `toContainerLocalRect`.
+
+An insertion marker instead expands SnapSort's zero-thickness world-space
+`gap` with `insertionMarkerRect`. Customize that painted rectangle explicitly:
+
+```tsx
+import type { InsertionMarkerRectOptions } from "@snap-engine/snapsort";
+
+const markerOptions = {
+  thickness: 4,
+  startInset: 8,
+  endInset: 8,
+} satisfies InsertionMarkerRectOptions;
+
+<Ghost ghost={entry.ghost} insertionMarker={markerOptions} />;
+```
+
+The insets mean left/right for a horizontal gap and top/bottom for a vertical
+gap. They affect presentation only and never feed back into drop-target
+ranking. Each value must be finite and non-negative, and the two insets must
+not exceed `ghost.gap.length` when added together.
+
+## DOM Contract
+
+The rendered element always includes:
+
+- `snapsort-ghost`
+- `data-snapsort-ghost-entry={ghost.type}`
+- `data-snapsort-ghost-item-count={ghost.items.length}`
+
+Pointer previews additionally use `data-snapsort-ghost="pointer"`; insertion
+markers use `data-snapsort-ghost="insertion"`. The default `id` is `spacer`,
+and callers may override it through ordinary attributes.
+
+For the callback lifecycle that creates and removes these entries, continue to
+[Drags and Ghosts](/docs/snapsort/guides/sessions/ghosts). See
+[DragSession](/docs/snapsort/reference/drag-session) for the independent
+`dragVisual` control.

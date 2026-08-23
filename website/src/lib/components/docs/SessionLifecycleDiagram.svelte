@@ -281,7 +281,7 @@
           message(
             "2.2",
             "Policy + hover",
-            "canDrop · getDropPriority · onDragItem*",
+            "getDropPriority · onDragItem*",
             "root",
             "target",
             "The session directly invokes policy callbacks on candidate owners and hover callbacks on the hovered item's direct owner. These callbacks are outside the root adapter commit.",
@@ -842,7 +842,7 @@
           message(
             "2.2",
             "Policy + hover",
-            "canDrop · getDropPriority · onDragItem*",
+            "getDropPriority · onDragItem*",
             "root",
             "target",
             "The session directly invokes policy callbacks on candidates and hover callbacks on the hovered item's direct owner.",
@@ -1110,7 +1110,7 @@
     if (route.kind !== "sync") return [];
 
     const matches = route.code?.match(
-      /\b(?:on[A-Z][A-Za-z0-9]*|canDrop|getDropPriority|adapter)\*?/g,
+      /\b(?:on[A-Z][A-Za-z0-9]*|getDropPriority|adapter)\*?/g,
     );
     return [...new Set(matches ?? [])];
   }
