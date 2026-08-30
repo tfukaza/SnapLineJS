@@ -9,6 +9,8 @@ import type { CollisionEngine } from "./collision";
 import type { AnimationInterface } from "./animation";
 import type { DebugRenderer } from "./debug";
 import type { FrameStats } from "./object";
+import { EngineFrameController } from "./frame-controller";
+import type { FrameController, FrameInfo } from "./frame-controller";
 
 export interface EngineConfig {}
 
@@ -93,6 +95,7 @@ class Engine {
   #engineConfig: EngineConfig; // Engine configuration options
   #global: GlobalManager | null = null; // Reference to the global manager
   #input: InputControl;
+  #frameController: EngineFrameController;
 
   #containerElement: HTMLElement | null = null; // The DOM element for the engine's container.
   #containerBounds: ContainerBounds | null = null; // Cached bounding rect of the container
@@ -128,6 +131,7 @@ class Engine {
   constructor(config: EngineConfig = {}) {
     this.#global = GlobalManager.getInstance();
     this.#input = new InputControl(this.#global, this);
+    this.#frameController = new EngineFrameController();
     this.#global.registerEngine(this);
     this.#engineConfig = {
       ...DEFAULT_ENGINE_CONFIG,
@@ -157,6 +161,10 @@ class Engine {
 
   set input(input: InputControl) {
     this.#input = input;
+  }
+
+  get frameController(): FrameController {
+    return this.#frameController;
   }
 
   get containerElement(): HTMLElement | null {
@@ -410,6 +418,15 @@ class Engine {
   }
 
   /**
+   * Runs this engine's beginning-of-frame subscribers synchronously.
+   * Called by GlobalManager before any render-stage queue is snapshotted.
+   * @internal
+   */
+  processFrame(frame: FrameInfo): void {
+    this.#frameController.processFrame(frame);
+  }
+
+  /**
    * Internal method to process animations.
    * Called by GlobalManager's render loop between WRITE_2 and READ_3.
    * @internal
@@ -491,6 +508,7 @@ class Engine {
     this.#resizeObserver?.disconnect();
     this.#resizeObserver = null;
     window.removeEventListener("scroll", this.#scrollHandler);
+    this.#frameController.destroy();
     this.#input.destroy();
 
     // Unregister from global manager

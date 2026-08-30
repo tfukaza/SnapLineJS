@@ -70,6 +70,7 @@ class EventCallback {
   constructor(object: BaseObject) {
     this.#object = object;
     this.#global = {
+      keyDown: null,
       pointerDown: null,
       pointerMove: null,
       pointerUp: null,
@@ -100,6 +101,7 @@ class EventCallback {
       },
     });
     this.#input = {
+      keyDown: null,
       pointerDown: null,
       pointerMove: null,
       pointerUp: null,
@@ -467,6 +469,7 @@ export class BaseObject extends CoreObject {
     this.event = new EventCallback(this);
 
     this.#globalInput = {
+      keyDown: null,
       pointerDown: null,
       pointerMove: null,
       pointerUp: null,

@@ -148,9 +148,11 @@ export class Item extends ElementObject {
   /**
    * Remove an item from a container
    * @param itemId Item ID of the item to remove
-   * @returns True when removal was accepted; false when missing or already pending
+   * @returns True when removal was accepted; false when missing, already
+   * pending, or blocked by this root's drag session
    */
   removeItem(itemId: ItemId) {
+    if (getDragSessionController(this.rootContainer)) return false;
     const item =
       this.#itemOrderedList.find(
         (item) => !item.isGhost && item.itemId === itemId,
@@ -197,6 +199,15 @@ export class Item extends ElementObject {
     return null;
   }
 
+  /** @internal True when this attached subtree has queued programmatic work. */
+  #hasPendingProgrammaticMutation(): boolean {
+    if (this.#programmaticMutationPending) return true;
+    return this.children.some(
+      (child) =>
+        child instanceof Item && child.#hasPendingProgrammaticMutation(),
+    );
+  }
+
   /**
    * Move an item into a target container.
    *
@@ -207,10 +218,13 @@ export class Item extends ElementObject {
    * @param itemId Stable item id from `itemId`.
    * @param container Destination SnapSort container.
    * @param index Destination index in the target container.
-   * @returns True when the move was accepted; false when missing or already pending.
+   * @returns True when the move was accepted; false when missing, already
+   * pending, or blocked by this root's drag session.
    */
   moveItem(itemId: ItemId, container: Container, index: number) {
-    const root = this.#rootContainer as unknown as Item;
+    const rootContainer = this.rootContainer;
+    if (getDragSessionController(rootContainer)) return false;
+    const root = rootContainer as unknown as Item;
     const item = root.findItemById(itemId);
     if (!item || item.#programmaticMutationPending) return false;
     assertCanPlaceItems([{ container, item }]);
@@ -1080,7 +1094,15 @@ export class Item extends ElementObject {
    */
   dragStart(prop: dragStartProp) {
     if (prop.objectId !== this.id) return;
-    if (this.#locked || this.#programmaticMutationPending) return;
+    const rootContainer = this.rootContainer;
+    const root = rootContainer as unknown as Item;
+    if (
+      this.#locked ||
+      getDragSessionController(rootContainer) ||
+      root.#hasPendingProgrammaticMutation()
+    ) {
+      return;
+    }
     beginItemDrag(this, prop);
   }
 

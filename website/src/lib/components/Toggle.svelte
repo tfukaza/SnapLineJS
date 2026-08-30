@@ -3,7 +3,7 @@
   import Circle from "./Circle.svelte";
   import Slot from "./Slot.svelte";
   import {
-    defaultCreviceFreeMaterialSettings,
+    defaultToggleMaterialSettings,
     type MaterialSettings,
   } from "./materialSurface";
 
@@ -23,7 +23,7 @@
     class: classValue = "",
     className = "",
     accentColor = "var(--color-primary)",
-    material = defaultCreviceFreeMaterialSettings,
+    material = defaultToggleMaterialSettings,
     disabled = false,
     type = "button",
     onclick,

@@ -47,7 +47,6 @@ import { reconcileRootTreeState } from "../internal/tree-state";
 import {
   animationConfigFor,
   playDropAnimation,
-  withReorderAnimation,
 } from "../internal/flip-animation";
 import {
   flowSlotBeforeEntry,
@@ -358,6 +357,20 @@ function commitFlowGhostRun(
   }
 }
 
+async function commitFlowRepresentationMutation(
+  session: DragSession,
+  mutate: () => void,
+): Promise<void> {
+  const animation = session.consumePreparedFlowReorderAnimation();
+  if (animation) {
+    await animation.commit(mutate);
+    return;
+  }
+
+  mutate();
+  await settleMutation();
+}
+
 async function syncFlowPlacement(
   session: DragSession,
   placement: DropPlacement,
@@ -385,22 +398,13 @@ async function syncFlowPlacement(
 
   session.pendingPlacement = placement;
 
-  const doMove = () => {
+  await commitFlowRepresentationMutation(session, () => {
     if (session.pendingPlacement !== placement || !container.element) {
       return;
     }
 
     commitFlowGhostRun(session, container, index, run, rects);
-  };
-
-  // If any anchor is already placed, animate the whole run's move; otherwise
-  // this is the initial placement, which needs no FLIP.
-  if (run.some((ghost) => ghost.parent)) {
-    withReorderAnimation(container, container, session.items, doMove);
-  } else {
-    doMove();
-    await settleMutation();
-  }
+  });
 }
 
 async function clearFlowPlacement(session: DragSession): Promise<void> {
@@ -408,12 +412,13 @@ async function clearFlowPlacement(session: DragSession): Promise<void> {
   const run = session.flowGhostRun;
   if (run.length === 0) return;
 
-  fireMutation(session.root, () => {
-    for (const ghost of run) {
-      ghost.removeGhost();
-    }
+  await commitFlowRepresentationMutation(session, () => {
+    fireMutation(session.root, () => {
+      for (const ghost of run) {
+        ghost.removeGhost();
+      }
+    });
   });
-  await settleMutation();
   for (const ghost of run) {
     ghost.destroy(false);
   }

@@ -96,8 +96,10 @@ import {
 These helpers are pure, use the core collision geometry, and work with Vanilla,
 Svelte, and React. `prioritizeTreeDepth` uses the virtual dragged Item's leading
 X edge with the pointer's Y position to prefer the deepest matching vertical
-tree Container. Programmatic `moveItem` calls are authoritative and bypass
-drop policy.
+tree Container. That depth preference is opt-in: default insertion targeting
+does not prioritize depth or require the pointer to hover a destination Item or
+Container. Programmatic `moveItem` calls are authoritative and bypass drop
+policy.
 
 ## Callback Routing
 
@@ -139,10 +141,12 @@ When the source Container configures `animation.move`, `removeItem(id)` is
 accepted immediately and committed in SnapEngine's next coordinated frame.
 SnapSort removes the requested Item through `onItemRemove`, then FLIP-animates
 the surviving layout. Until an animated programmatic move or removal commits,
-further move/remove commands for that Item return `false` and a drag cannot
-start from it. Directly deleting framework state remains synchronous and does
-not use SnapSort animation; the departing element itself is never retained for
-an exit animation.
+further move/remove commands for that Item return `false`, and no drag can
+start within the same SnapSort root. Conversely, `moveItem` and `removeItem`
+return `false` while that root has a drag session. Independent roots remain
+unblocked. Directly deleting framework state remains synchronous and does not
+use SnapSort animation; the departing element itself is never retained for an
+exit animation.
 
 Structural callback commands run through the root's `SnapSortAdapter.commit`
 boundary. The Svelte and React bindings use it to publish framework state and
@@ -253,17 +257,21 @@ becomes application data.
 ## Insertion targeting and marker presentation
 
 Insertion mode ranks zero-thickness gaps between retained items rather than
-ranking ghost rectangles or item centers. Each candidate is scored by the
-Euclidean distance from the pointer to the center of its gap segment. If two
-candidates have the same center and score, SnapSort compares the virtual
-dragged item's leading cross-axis edge with the leading edges of each
+ranking ghost rectangles or item centers. Eligible gaps are considered without
+requiring the pointer to hover their destination Item or Container. Each
+candidate is scored first by absolute distance on its Container's main axis:
+pointer Y for a column and pointer X for a row. Cross-axis center distance does
+not affect this primary rank.
+
+When candidates have the same main-axis distance, SnapSort compares the
+virtual dragged item's leading cross-axis edge with the leading edges of each
 candidate's adjacent item rectangles. The virtual rectangle preserves the
 initial pointer-to-item grab offset. Stable tree traversal order breaks any
-remaining tie, including candidates without neighbors. There is no depth
-preference. A nested destination becomes easier to select when its actual
-Container layout is physically inset, because its gap center moves with that
-layout. Painted indentation that leaves the Container box unchanged does not
-affect targeting.
+remaining tie, including candidates without neighbors. Default insertion has
+no implicit depth preference; `getDropPriority` and helpers such as
+`prioritizeTreeDepth` remain available when an application explicitly wants
+depth-based destination policy. Physical indentation can affect the
+leading-edge tie-breaker, but never candidate eligibility or primary distance.
 
 For wrapped rows or columns, a gap's cross-axis span is the measured band of
 the selected visual line. A boundary that wraps uses the next line's leading

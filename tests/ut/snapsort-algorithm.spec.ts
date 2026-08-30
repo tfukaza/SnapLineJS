@@ -7,7 +7,10 @@ import {
   type ResolvedDropTarget,
   virtualLayoutRecursive,
 } from "../../assets/snapsort/src/algorithm";
-import type { InsertionMarkerPresentation } from "../../assets/snapsort/src/events";
+import {
+  DROP_REJECT_PRIORITY,
+  type InsertionMarkerPresentation,
+} from "../../assets/snapsort/src/events";
 import type { ItemSnapshot } from "../../assets/snapsort/src/snapshot";
 import { makeBox } from "../helpers/layout-grid";
 
@@ -517,7 +520,7 @@ test("insertion reports disjoint selected items as a real placement change", () 
   expect(target.insertion.isCurrentPlacement).toBe(false);
 });
 
-test("insertion ranks nested and parent gaps strictly by gap-center distance", () => {
+test("column insertion ranks main-axis distance before horizontal offset", () => {
   const dragged = mockItem("dragged", {
     x: -40,
     y: 90,
@@ -531,24 +534,24 @@ test("insertion ranks nested and parent gaps strictly by gap-center distance", (
   );
   const previous = mockItem("previous", {
     x: 0,
-    y: 80,
+    y: 0,
     width: 300,
     height: 40,
   });
   const nested = mockItem(
     "nested",
-    { x: 80, y: 80, width: 120, height: 40 },
+    { x: 200, y: 80, width: 80, height: 40 },
     { children: [], container: true },
   );
   const root = mockItem(
     "root",
-    { x: 0, y: 0, width: 300, height: 200 },
+    { x: 0, y: 0, width: 300, height: 160 },
     { children: [previous, nested], container: true },
   );
   const session = mockInsertionSession(
     [dragged],
     [mockDragLocation(source, 0)],
-    { x: 141, y: 100 },
+    { x: 0, y: 95 },
   );
 
   const nestedTarget = requireInsertionTarget(
@@ -557,12 +560,12 @@ test("insertion ranks nested and parent gaps strictly by gap-center distance", (
   expect(nestedTarget.container).toBe(nested);
   expect(nestedTarget.insertion.gap).toEqual({
     orientation: "horizontal",
-    x: 80,
+    x: 200,
     y: 100,
-    length: 120,
+    length: 80,
   });
 
-  session.pointer = { x: 147, y: 100 };
+  session.pointer = { x: 240, y: 65 };
   const parentTarget = requireInsertionTarget(
     resolveMockInsertionTarget(dragged, root, session),
   );
@@ -571,12 +574,132 @@ test("insertion ranks nested and parent gaps strictly by gap-center distance", (
   expect(parentTarget.insertion.gap).toEqual({
     orientation: "horizontal",
     x: 0,
-    y: 100,
+    y: 60,
     length: 300,
   });
 });
 
-test("identical horizontal insertion centers align the virtual dragged leading edge", () => {
+test("empty nested rows preserve parent edge zones around their center", () => {
+  const dragged = mockItem("dragged", {
+    x: -40,
+    y: 80,
+    width: 20,
+    height: 20,
+  });
+  const source = mockItem(
+    "source",
+    { x: -50, y: 70, width: 30, height: 40 },
+    { children: [dragged], container: true },
+  );
+  const first = mockItem(
+    "first",
+    { x: 0, y: 0, width: 200, height: 36 },
+    { children: [], container: true },
+  );
+  const second = mockItem(
+    "second",
+    { x: 0, y: 36, width: 200, height: 36 },
+    { children: [], container: true },
+  );
+  const root = mockItem(
+    "root",
+    { x: 0, y: 0, width: 200, height: 72 },
+    { children: [first, second], container: true },
+  );
+  const session = mockInsertionSession(
+    [dragged],
+    [mockDragLocation(source, 0)],
+    { x: 100, y: 4 },
+  );
+
+  const before = requireInsertionTarget(
+    resolveMockInsertionTarget(dragged, root, session),
+  );
+  expect(before.container).toBe(root);
+  expect(before.index).toBe(0);
+  expect(before.insertion.gap.y).toBe(0);
+
+  session.pointer = { x: 100, y: 18 };
+  const inside = requireInsertionTarget(
+    resolveMockInsertionTarget(dragged, root, session),
+  );
+  expect(inside.container).toBe(first);
+  expect(inside.index).toBe(0);
+  expect(inside.insertion.gap.y).toBe(18);
+
+  session.pointer = { x: 100, y: 32 };
+  const after = requireInsertionTarget(
+    resolveMockInsertionTarget(dragged, root, session),
+  );
+  expect(after.container).toBe(root);
+  expect(after.index).toBe(1);
+  expect(after.insertion.gap.y).toBe(36);
+});
+
+test("row insertion ranks main-axis distance before vertical offset", () => {
+  const dragged = mockItem("dragged", {
+    x: 90,
+    y: -40,
+    width: 20,
+    height: 20,
+  });
+  const source = mockItem(
+    "source",
+    { x: 80, y: -50, width: 40, height: 30 },
+    { children: [dragged], container: true },
+  );
+  const previous = mockItem("previous", {
+    x: 0,
+    y: 0,
+    width: 40,
+    height: 300,
+  });
+  const nested = mockItem(
+    "nested",
+    { x: 80, y: 200, width: 40, height: 80 },
+    { children: [], container: true, direction: "row" },
+  );
+  const root = mockItem(
+    "root",
+    { x: 0, y: 0, width: 160, height: 300 },
+    {
+      children: [previous, nested],
+      container: true,
+      direction: "row",
+    },
+  );
+  const session = mockInsertionSession(
+    [dragged],
+    [mockDragLocation(source, 0)],
+    { x: 95, y: 0 },
+  );
+
+  const nestedTarget = requireInsertionTarget(
+    resolveMockInsertionTarget(dragged, root, session),
+  );
+  expect(nestedTarget.container).toBe(nested);
+  expect(nestedTarget.insertion.gap).toEqual({
+    orientation: "vertical",
+    x: 100,
+    y: 200,
+    length: 80,
+  });
+
+  session.pointer = { x: 65, y: 240 };
+  const parentTarget = requireInsertionTarget(
+    resolveMockInsertionTarget(dragged, root, session),
+  );
+  expect(parentTarget.container).toBe(root);
+  expect(parentTarget.index).toBe(1);
+  expect(parentTarget.insertion.gap).toEqual({
+    orientation: "vertical",
+    x: 60,
+    y: 0,
+    length: 300,
+  });
+});
+
+test("equal column-axis distances align the virtual dragged leading edge", () => {
   const dragged = mockItem("dragged", {
     x: 90,
     y: 90,
@@ -591,18 +714,18 @@ test("identical horizontal insertion centers align the virtual dragged leading e
   const nearPrevious = mockItem("near-previous", {
     x: 100,
     y: 90,
-    width: 100,
+    width: 80,
     height: 6,
   });
   const nearNext = mockItem("near-next", {
     x: 100,
     y: 104,
-    width: 100,
+    width: 80,
     height: 6,
   });
   const nested = mockItem(
     "nested",
-    { x: 100, y: 80, width: 100, height: 40 },
+    { x: 100, y: 80, width: 80, height: 40 },
     { children: [nearPrevious, nearNext], container: true },
   );
   const farPrevious = mockItem("far-previous", {
@@ -637,7 +760,7 @@ test("identical horizontal insertion centers align the virtual dragged leading e
     orientation: "horizontal",
     x: 100,
     y: 100,
-    length: 100,
+    length: 80,
   });
   expect(target.insertion.previous?.item).toBe(nearPrevious);
   expect(target.insertion.next?.item).toBe(nearNext);
@@ -652,7 +775,7 @@ test("identical horizontal insertion centers align the virtual dragged leading e
   expect(differentGrabOffsetTarget.index).toBe(1);
 });
 
-test("identical vertical insertion centers align the virtual dragged leading edge", () => {
+test("equal row-axis distances align the virtual dragged leading edge", () => {
   const dragged = mockItem("dragged", {
     x: 90,
     y: 90,
@@ -668,17 +791,17 @@ test("identical vertical insertion centers align the virtual dragged leading edg
     x: 90,
     y: 100,
     width: 6,
-    height: 100,
+    height: 80,
   });
   const nearNext = mockItem("near-next", {
     x: 104,
     y: 100,
     width: 6,
-    height: 100,
+    height: 80,
   });
   const nested = mockItem(
     "nested",
-    { x: 80, y: 100, width: 40, height: 100 },
+    { x: 80, y: 100, width: 40, height: 80 },
     {
       children: [nearPrevious, nearNext],
       container: true,
@@ -721,7 +844,7 @@ test("identical vertical insertion centers align the virtual dragged leading edg
     orientation: "vertical",
     x: 100,
     y: 100,
-    length: 100,
+    length: 80,
   });
 
   // Keep the pointer fixed while modeling a different pointer-to-item grab
@@ -734,7 +857,7 @@ test("identical vertical insertion centers align the virtual dragged leading edg
   expect(differentGrabOffsetTarget.index).toBe(1);
 });
 
-test("neighborless identical insertion centers preserve traversal order", () => {
+test("neighborless equal-axis candidates preserve traversal order", () => {
   const dragged = mockItem("dragged", {
     x: -40,
     y: 40,
@@ -761,6 +884,9 @@ test("neighborless identical insertion centers preserve traversal order", () => 
     { x: 0, y: 0, width: 200, height: 200 },
     { children: [first, second], container: true },
   );
+  // Isolate the two empty child destinations from the root's own
+  // neighbor-backed gaps so this fixture exercises the stable fallback.
+  root.dropPriority = DROP_REJECT_PRIORITY;
   const session = mockInsertionSession(
     [dragged],
     [mockDragLocation(source, 0)],

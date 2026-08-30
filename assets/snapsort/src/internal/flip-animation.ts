@@ -59,6 +59,15 @@ function parentItem(item: Item): Item | null {
   return item.parent instanceof Item ? item.parent : null;
 }
 
+function isSameLogicalItem(
+  first: Item | null | undefined,
+  last: Item | null | undefined,
+): boolean {
+  // Framework adapters may replace the Item object while preserving the
+  // stable logical identity used to reconnect a FLIP snapshot.
+  return Boolean(first && last && first.itemId === last.itemId);
+}
+
 function visualAnimationOffset(item: Item): TransformOffset {
   return visualAnimationOffsets.get(item) ?? { x: 0, y: 0 };
 }
@@ -161,7 +170,7 @@ function rectAnimationDelta(
   if (
     firstParent &&
     lastParent &&
-    options.firstParentItem === options.lastParentItem
+    isSameLogicalItem(options.firstParentItem, options.lastParentItem)
   ) {
     return {
       dx: first.x - firstParent.x - (last.x - lastParent.x),
@@ -423,6 +432,91 @@ export function playDropAnimation(
     animationConfig,
     targetElement === item.element ? item : animationOwner,
   );
+}
+
+/**
+ * A root-wide reorder snapshot captured before a synchronous WRITE_1
+ * representation mutation.
+ *
+ * @internal Flow ghost placement owns this earlier frame slice. Programmatic
+ * mutations continue to use the deferred READ_2/WRITE_2 transaction below.
+ */
+export interface PreparedReorderAnimation {
+  commit(mutate: () => void): Promise<void>;
+}
+
+/**
+ * Capture the visual state for a flow placement change during READ_1.
+ * The returned transaction commits framework-owned structure synchronously in
+ * WRITE_1, then measures and animates the surviving siblings in READ_2/WRITE_2.
+ *
+ * @internal
+ */
+export function prepareReorderAnimation(
+  item: Item,
+  container: Container,
+  excludedItem: Item | readonly Item[] | null,
+): PreparedReorderAnimation | null {
+  const animationConfig = animationConfigFor(container, "reorder");
+  if (!animationConfig) return null;
+
+  const root = container.rootContainer;
+  if (root.global.currentStage !== "READ_1") {
+    throw new Error(
+      "SnapSort: a flow reorder animation must be prepared during READ_1.",
+    );
+  }
+  const excludedSet = excludedItem
+    ? new Set(Array.isArray(excludedItem) ? excludedItem : [excludedItem])
+    : null;
+  const snapshot = captureFlipSnapshot(root, excludedSet);
+  const queuePrefix = `snapsort-flow-flip-${root.id}-${item.id}`;
+  let committed = false;
+
+  return Object.freeze({
+    async commit(mutate: () => void): Promise<void> {
+      if (committed) {
+        throw new Error(
+          "SnapSort: a prepared flow reorder animation can only commit once.",
+        );
+      }
+      if (root.global.currentStage !== "WRITE_1") {
+        throw new Error(
+          "SnapSort: a prepared flow reorder animation must commit during WRITE_1.",
+        );
+      }
+      committed = true;
+
+      for (const entry of snapshot) {
+        entry.item.cancelAnimations();
+        if (entry.item.element) entry.item.element.style.transform = "";
+      }
+      mutate();
+      await settleMutation();
+
+      let lastCaptureComplete = false;
+      root.schedule(
+        () => {
+          captureFlipLast(snapshot, root);
+          lastCaptureComplete = true;
+        },
+        {
+          stage: "READ_2",
+          queueId: `${queuePrefix}-read-last`,
+        },
+      );
+      root.schedule(
+        () => {
+          if (!lastCaptureComplete) return;
+          playFlipAnimations(snapshot, animationConfig, root, excludedItem);
+        },
+        {
+          stage: "WRITE_2",
+          queueId: `${queuePrefix}-play`,
+        },
+      );
+    },
+  });
 }
 
 function withConfiguredAnimation(

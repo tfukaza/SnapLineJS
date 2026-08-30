@@ -859,8 +859,8 @@ moveItem(itemId: ItemId, targetContainer: Container, index: number): boolean
 
 Authoritatively moves an Item within the same root, bypassing drop policy.
 Returns `false` when the ID is missing or that Item already has a pending
-programmatic mutation. The root `onItemMove`/`onItemInsert` callback must update
-Svelte state synchronously.
+programmatic mutation, or when the root has a drag session. The root
+`onItemMove`/`onItemInsert` callback must update Svelte state synchronously.
 
 ```ts
 const accepted = source.moveItem("task-1", archive, 0);
@@ -873,7 +873,8 @@ removeItem(itemId: ItemId): boolean
 ```
 
 Requests removal of a direct ordinary Item. Returns `false` when it is missing
-or already pending and dispatches root `onItemRemove` when accepted.
+or already pending, or when the root has a drag session, and dispatches root
+`onItemRemove` when accepted.
 
 ```ts
 const accepted = source.removeItem("task-1");
@@ -1002,7 +1003,9 @@ the source half of a move.
 
 If `animation.move` is configured, accepted programmatic moves/removals commit
 in the coordinated animation transaction. Further commands for that Item
-return `false` while it is pending.
+return `false` while it is pending, and no drag can start in that root until
+all pending programmatic mutations commit. Conversely, programmatic
+move/removal commands return `false` while the root has a drag session.
 
 ### Drag visuals and ghost presentation
 

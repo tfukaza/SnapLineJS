@@ -1,7 +1,14 @@
 import { entries } from "../docs/[...slug]/+page";
 import { absoluteUrl, canonicalPath } from "$lib/seo";
 
-const staticPaths = ["/", "/snapsort", "/about", "/docs"];
+const staticPaths = [
+  "/",
+  "/snapsort",
+  "/snapdesign",
+  "/snapdesign/gallery",
+  "/about",
+  "/docs",
+];
 
 function xmlEscape(value: string) {
   return value

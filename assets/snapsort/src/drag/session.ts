@@ -8,6 +8,10 @@ import type {
 import type { Container } from "../container";
 import type { Item } from "../item";
 import { reconcileRootTreeState, rootHasItemId } from "../internal/tree-state";
+import {
+  prepareReorderAnimation,
+  type PreparedReorderAnimation,
+} from "../internal/flip-animation";
 import { stageVisualRectBeforeMutation } from "../internal/visual-rect";
 import {
   findHoveredItem,
@@ -75,6 +79,18 @@ export interface GroupDimensions {
   maxH: number;
   sumW: number;
   sumH: number;
+}
+
+interface DropTargetUpdate {
+  readonly target: ResolvedDropTarget | null;
+  readonly previousPlacement: Readonly<{
+    container: Container;
+    index: number;
+  }> | null;
+  readonly placement: DropPlacement | null;
+  readonly logicalChanged: boolean;
+  readonly presentationChanged: boolean;
+  readonly shouldClear: boolean;
 }
 
 function freezePoint(point: { x: number; y: number }) {
@@ -179,6 +195,8 @@ export class DragSessionController {
   /** @internal True when a lifecycle is dropping only to unwind a failed drag. */
   cancelled = false;
   #runningScheduledPointerMove = false;
+  #preparedFlowDropTargetUpdate: DropTargetUpdate | null = null;
+  #preparedFlowReorderAnimation: PreparedReorderAnimation | null = null;
 
   /** Status exposed through the public handle during a logically pre-drop move. */
   get publicStatus(): DragSessionStatus {
@@ -563,9 +581,18 @@ export class DragSessionController {
     item.schedule(
       () => {
         if (!this.#acceptsScheduledPointerMove()) return;
-        this.pointer = freezePoint(prop.position);
-        const ghostItem = this.ghostsByChannel.get("target");
-        if (ghostItem) stageVisualRectBeforeMutation(ghostItem);
+        let completed = false;
+        try {
+          this.pointer = freezePoint(prop.position);
+          const ghostItem = this.ghostsByChannel.get("target");
+          if (ghostItem) stageVisualRectBeforeMutation(ghostItem);
+          if (this.strategy.lifecycle.placementOccupiesFlowSlots) {
+            this.#prepareFlowDropTargetUpdate();
+          }
+          completed = true;
+        } finally {
+          if (!completed) this.scheduleErrorFinalizer();
+        }
       },
       { stage: "READ_1", queueId: `drag-read-${item.id}` },
     );
@@ -577,7 +604,11 @@ export class DragSessionController {
           this.pointer = freezePoint(prop.position);
           this.#runningScheduledPointerMove = true;
           try {
-            await this.updateDropTarget();
+            if (this.strategy.lifecycle.placementOccupiesFlowSlots) {
+              await this.#applyPreparedFlowDropTargetUpdate();
+            } else {
+              await this.updateDropTarget();
+            }
             await this.strategy.lifecycle.dragMove(this);
           } finally {
             this.#runningScheduledPointerMove = false;
@@ -660,6 +691,8 @@ export class DragSessionController {
     this.dragVisualStart.clear();
     this.groupVisualOffsets.clear();
     this.groupDims = null;
+    this.#preparedFlowDropTargetUpdate = null;
+    this.#preparedFlowReorderAnimation = null;
     this.pendingPlacement = null;
     this.resolvedDropTarget = null;
     this.hoveredItem = null;
@@ -738,24 +771,73 @@ export class DragSessionController {
    * `onDropTargetChange` callback.
    */
   async updateDropTarget(): Promise<void> {
+    const update = this.#resolveDropTargetUpdate();
+    if (!update) return;
+    await this.#applyDropTargetUpdate(update);
+  }
+
+  #resolveDropTargetUpdate(): DropTargetUpdate | null {
     const item = this.primaryItem;
     const root = this.root;
     // Defensive guard for a drag-start/drag race: the deeper fix should live in
     // the engine scheduler as built-in debounce/coalescing support for input
     // updates that depend on earlier READ/WRITE phases.
     if (!root.hasDragSnapshotTree() || !item.dragSnapshot) {
-      return;
+      return null;
     }
 
     const lifecycle = this.strategy.lifecycle;
     const target = this.strategy.dropTarget.resolve(item, root, this);
+    const previousPlacement = lifecycle.currentPlacement(this);
     if (!target) {
+      return {
+        target: null,
+        previousPlacement,
+        placement: null,
+        logicalChanged: previousPlacement !== null,
+        presentationChanged: false,
+        shouldClear: Boolean(previousPlacement || this.resolvedDropTarget),
+      };
+    }
+
+    const placement = freezePlacement(
+      target.container,
+      lifecycle.placementIndexFor(this, target),
+      target.insertion ?? null,
+    );
+
+    const logicalChanged =
+      !previousPlacement ||
+      placement.container !== previousPlacement.container ||
+      placement.index !== previousPlacement.index;
+    const previousInsertion = this.pendingPlacement?.insertion ?? null;
+    const presentationChanged =
+      previousInsertion === null || placement.insertion === null
+        ? previousInsertion !== placement.insertion
+        : !sameInsertionMarkerPresentation(
+            previousInsertion,
+            placement.insertion,
+          );
+
+    return {
+      target,
+      previousPlacement,
+      placement,
+      logicalChanged,
+      presentationChanged,
+      shouldClear: false,
+    };
+  }
+
+  async #applyDropTargetUpdate(update: DropTargetUpdate): Promise<void> {
+    const lifecycle = this.strategy.lifecycle;
+    const { previousPlacement, placement } = update;
+    if (!placement) {
       // No valid candidate anywhere (e.g. the pointer left every drop-eligible
       // container). The target ghost should not linger over a target that no
       // longer exists — clear it and report the loss, same as any other
       // drop-target change.
-      const previousPlacement = lifecycle.currentPlacement(this);
-      if (previousPlacement || this.resolvedDropTarget) {
+      if (update.shouldClear) {
         this.resolvedDropTarget = null;
         await lifecycle.clearPlacement(this);
         this.#invalidateVisualGeometry(
@@ -767,45 +849,60 @@ export class DragSessionController {
       this.#updateHoveredItem(null);
       return;
     }
-    this.resolvedDropTarget = target;
 
-    const currentPlacement = lifecycle.currentPlacement(this);
-    const placement = freezePlacement(
-      target.container,
-      lifecycle.placementIndexFor(this, target),
-      target.insertion ?? null,
-    );
-
+    this.resolvedDropTarget = update.target;
     this.#updateHoveredItem(placement.container);
-
-    const logicalChanged =
-      !currentPlacement ||
-      placement.container !== currentPlacement.container ||
-      placement.index !== currentPlacement.index;
-    const previousInsertion = this.pendingPlacement?.insertion ?? null;
-    const presentationChanged =
-      previousInsertion === null || placement.insertion === null
-        ? previousInsertion !== placement.insertion
-        : !sameInsertionMarkerPresentation(
-            previousInsertion,
-            placement.insertion,
-          );
-    if (logicalChanged || presentationChanged) {
+    if (update.logicalChanged || update.presentationChanged) {
       await lifecycle.syncPlacement(this, placement);
       this.#invalidateVisualGeometry(
-        currentPlacement
-          ? [currentPlacement.container, placement.container]
+        previousPlacement
+          ? [previousPlacement.container, placement.container]
           : [placement.container],
         "ghost",
       );
-      if (logicalChanged) {
-        this.#fireDropTargetChange(currentPlacement, {
+      if (update.logicalChanged) {
+        this.#fireDropTargetChange(previousPlacement, {
           container: placement.container,
           index: placement.index,
         });
       }
     }
     lifecycle.afterPlacementSync(this);
+  }
+
+  #prepareFlowDropTargetUpdate(): void {
+    this.#preparedFlowDropTargetUpdate = null;
+    this.#preparedFlowReorderAnimation = null;
+
+    const update = this.#resolveDropTargetUpdate();
+    if (!update) return;
+    this.#preparedFlowDropTargetUpdate = update;
+    if (!update.logicalChanged) return;
+
+    const animationContainer =
+      update.placement?.container ??
+      update.previousPlacement?.container ??
+      null;
+    if (!animationContainer) return;
+    this.#preparedFlowReorderAnimation = prepareReorderAnimation(
+      this.primaryItem,
+      animationContainer,
+      this.items,
+    );
+  }
+
+  async #applyPreparedFlowDropTargetUpdate(): Promise<void> {
+    const update = this.#preparedFlowDropTargetUpdate;
+    this.#preparedFlowDropTargetUpdate = null;
+    if (!update) return;
+    await this.#applyDropTargetUpdate(update);
+  }
+
+  /** @internal Consume the READ_1 FLIP capture for this flow mutation. */
+  consumePreparedFlowReorderAnimation(): PreparedReorderAnimation | null {
+    const prepared = this.#preparedFlowReorderAnimation;
+    this.#preparedFlowReorderAnimation = null;
+    return prepared;
   }
 
   #invalidateVisualGeometry(

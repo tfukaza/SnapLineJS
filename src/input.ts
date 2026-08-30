@@ -62,6 +62,12 @@ export interface mouseWheelProp {
   delta: number;
 }
 
+export interface keyDownProp {
+  event: KeyboardEvent;
+  /** DOM-backed object associated with the element focused for this key event. */
+  focusedObject: ElementObject<DomElement> | null;
+}
+
 export interface dragStartProp extends GestureHandoffControl {
   objectId: string | null;
   pointerId: number;
@@ -117,6 +123,8 @@ export interface pinchEndProp {
 }
 
 export interface InputEventCallback {
+  keyDown: null | ((prop: keyDownProp) => void);
+
   pointerDown: null | ((prop: pointerDownProp) => void);
   pointerMove: null | ((prop: pointerMoveProp) => void);
   pointerUp: null | ((prop: pointerUpProp) => void);
@@ -152,9 +160,19 @@ export type pointerData = {
 };
 
 const INPUT_CONTROL_EVENT_SUBSCRIPTION_ID = "__input_control_event__";
-const DRAG_START_THRESHOLD_PX = 0;
+const DRAG_START_THRESHOLD_PX = 3;
+
+function isNotFoundError(error: unknown): boolean {
+  return (
+    error !== null &&
+    typeof error === "object" &&
+    "name" in error &&
+    error.name === "NotFoundError"
+  );
+}
 
 type InputEventPayloadMap = {
+  keyDown: keyDownProp;
   pointerDown: pointerDownProp;
   pointerMove: pointerMoveProp;
   pointerUp: pointerUpProp;
@@ -223,6 +241,7 @@ const DEFAULT_INPUT_CONTROL_CONFIG: InputControlConfig = {
 };
 
 const inputEventKeys: Array<keyof InputEventCallback> = [
+  "keyDown",
   "pointerDown",
   "pointerMove",
   "pointerUp",
@@ -321,6 +340,9 @@ class InputControl {
       signal: this.#containerController.signal,
     });
     container.addEventListener("wheel", this.#onWheel, {
+      signal: this.#containerController.signal,
+    });
+    container.addEventListener("keydown", this.#onKeyDown, {
       signal: this.#containerController.signal,
     });
 
@@ -481,7 +503,16 @@ class InputControl {
     ) {
       return;
     }
-    element.setPointerCapture(pointer.id);
+    try {
+      element.setPointerCapture(pointer.id);
+    } catch (error) {
+      if (pointer.lastEvent.isTrusted !== false || !isNotFoundError(error)) {
+        throw error;
+      }
+      // Constructed PointerEvents are not active in the browser's native
+      // pointer registry, so capture can reject even though SnapEngine owns a
+      // valid synthetic stream. Retain that ownership internally.
+    }
     pointer.captureElement = element;
   }
 
@@ -489,10 +520,7 @@ class InputControl {
    * Call setPointerCapture for the given element,
    * and update the pointer's captureElement
    */
-  #capturePointer(
-    pointer: TrackedPointer,
-    element: DomElement | null,
-  ): void {
+  #capturePointer(pointer: TrackedPointer, element: DomElement | null): void {
     if (
       !element?.isConnected ||
       typeof element.setPointerCapture !== "function"
@@ -547,11 +575,7 @@ class InputControl {
     objectOrId: ElementObject<DomElement> | string,
   ): void {
     const pointer = this.#pointers.get(pointerId);
-    if (
-      !pointer ||
-      pointer.finalizing ||
-      pointer.dragState !== "drag"
-    ) {
+    if (!pointer || pointer.finalizing || pointer.dragState !== "drag") {
       throw new Error(
         `InputControl.handoffTo: drag gesture ${pointerId} is no longer active.`,
       );
@@ -584,12 +608,7 @@ class InputControl {
     }
     const pointer0 = this.#pointers.get(gesture.pointerId0);
     const pointer1 = this.#pointers.get(gesture.pointerId1);
-    if (
-      !pointer0 ||
-      !pointer1 ||
-      pointer0.finalizing ||
-      pointer1.finalizing
-    ) {
+    if (!pointer0 || !pointer1 || pointer0.finalizing || pointer1.finalizing) {
       throw new Error(
         `InputControl.handoffTo: pinch gesture ${gestureKey} is no longer active.`,
       );
@@ -630,16 +649,9 @@ class InputControl {
    */
   #finalizePointer(
     pointer: TrackedPointer,
-    {
-      event,
-      cancelled,
-      dispatchTerminal = true,
-    }: FinalizePointerOptions,
+    { event, cancelled, dispatchTerminal = true }: FinalizePointerOptions,
   ): void {
-    if (
-      pointer.finalizing ||
-      this.#pointers.get(pointer.id) !== pointer
-    ) {
+    if (pointer.finalizing || this.#pointers.get(pointer.id) !== pointer) {
       return;
     }
     pointer.finalizing = true;
@@ -773,7 +785,7 @@ class InputControl {
       currentOwner: owner,
       captureElement: null,
       originElement: owner
-        ? (this.#elementByObjectId.get(owner.id) ?? null)
+        ? this.#elementByObjectId.get(owner.id) ?? null
         : null,
       lastEvent: event,
       finalizing: false,
@@ -952,6 +964,21 @@ class InputControl {
     }
   };
 
+  #onKeyDown = (event: KeyboardEvent) => {
+    if (!this.#isEventInsideContainer(event)) {
+      return;
+    }
+
+    const focusedObject = this.#getTargetOwner(event);
+    const prop: keyDownProp = {
+      event,
+      focusedObject,
+    };
+
+    this.#dispatchObjectEvent(focusedObject, "keyDown", prop);
+    this.#dispatchGlobalEvent("keyDown", prop);
+  };
+
   #getCoordinates(screenX: number, screenY: number): eventPosition {
     if (this.#engine == null || this.#engine.camera == null) {
       return {
@@ -1009,7 +1036,7 @@ class InputControl {
   #startDragGesture(pointer: TrackedPointer) {
     pointer.dragState = "drag";
     const ownerElement = pointer.owner
-      ? (this.#elementByObjectId.get(pointer.owner.id) ?? null)
+      ? this.#elementByObjectId.get(pointer.owner.id) ?? null
       : null;
     this.#capturePointer(pointer, ownerElement);
     this.#enforceMaxDragLimit();
@@ -1120,7 +1147,7 @@ class InputControl {
         gesture = {
           member: pointer0.owner,
           memberElement: pointer0.owner
-            ? (this.#elementByObjectId.get(pointer0.owner.id) ?? null)
+            ? this.#elementByObjectId.get(pointer0.owner.id) ?? null
             : null,
           pointerId0: pointer0.id,
           pointerId1: pointer1.id,
@@ -1353,6 +1380,7 @@ class InputControl {
 
   #createInputEventCallback(): InputEventCallback {
     return {
+      keyDown: null,
       pointerDown: null,
       pointerMove: null,
       pointerUp: null,

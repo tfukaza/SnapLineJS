@@ -163,7 +163,9 @@ item/ghost structure.
   per Container per resolution. Effective `-1` rejects the destination;
   nonnegative values remain eligible, and only candidates tied at the highest
   value reach the active placement algorithm. Other negative and nonfinite
-  values are invalid.
+  values are invalid. Depth preference is application policy, not an insertion
+  default; consumers may opt into `prioritizeTreeDepth` through
+  `getDropPriority`.
 - Geometry policy: hover candidates call `getItemHitbox` on the candidate
   item's direct owner. Non-swap placement hover considers a resolved target's
   direct children plus the nested target Container itself; the smaller hitbox
@@ -186,8 +188,11 @@ item/ghost structure.
   `moveItem`: move and removal keep separate mutation workflows, while
   same-owner commits coalesce between one root snapshot and final layout read.
   An Item with a pending animated programmatic mutation rejects another
-  move/removal and cannot start a drag until the commit finishes. Direct
-  framework-state deletion bypasses this command and animation path.
+  move/removal, and any pending programmatic mutation blocks drag start within
+  that root until the commit finishes. While a root owns a drag session,
+  programmatic move/removal commands in that root are rejected. Independent
+  roots remain concurrent. Direct framework-state deletion bypasses this
+  command and animation path.
 - Different Containers keep independent programmatic FLIP transactions. Each
   transaction snapshots the root, so a later Container's pass may replace
   animations started by an earlier pass in the same frame; mutation commits
@@ -224,15 +229,19 @@ no pre-mutation FLIP rectangle and must be ignored safely by animation code.
 ### Insertion geometry ownership
 
 - The insertion algorithm owns candidate geometry. It creates zero-thickness
-  world-space gap segments between retained items and ranks pointer distance
-  to each segment's center. It does not rank a rendered marker or ghost.
-- Exact center/score ties compare the virtual dragged item's leading
+  world-space gap segments between retained items. Eligible gaps do not
+  require pointer hover over their destination Item or Container. It does not
+  rank a rendered marker or ghost.
+- Rank candidates first by absolute main-axis distance from the pointer to the
+  gap: pointer Y for a column and pointer X for a row. Cross-axis center
+  distance is not part of the primary score.
+- Exact main-axis-distance ties compare the virtual dragged item's leading
   cross-axis edge with the leading edges of adjacent frozen item rectangles,
-  then preserve stable tree traversal order. The virtual rectangle retains the
-  initial pointer-to-item offset. There is no implicit deepest-container
-  preference. Nested file-tree targeting should use an actual inset Container
-  box so the nested gap center moves with the layout, then may opt into
-  `prioritizeTreeDepth` for an explicit virtual-X/pointer-Y depth preference.
+  then preserve stable tree traversal order if that helper cannot decide. The
+  virtual rectangle retains the initial pointer-to-item offset. There is no
+  implicit deepest-container preference; an application may opt into
+  `prioritizeTreeDepth` through `getDropPriority` when it wants explicit
+  virtual-X/pointer-Y depth policy.
 - Wrapped rows and columns use the selected visual line's measured cross-axis
   band. A boundary that wraps uses the next line's leading edge and band;
   append uses the previous line's trailing edge and band.

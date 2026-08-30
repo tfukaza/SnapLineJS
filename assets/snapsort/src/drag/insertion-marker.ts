@@ -148,7 +148,8 @@ function drop(session: DragSession): void {
   const items = session.items;
   const root = session.root;
   const dropItemIds = items.map((member) => member.itemId);
-  const dropRects = items.map(() => ({
+  const dropRects = items.map((member) => ({
+    item: member,
     first: null as DOMRect | null,
     last: null as DOMRect | null,
     element: null as HTMLElement | null,
@@ -229,6 +230,7 @@ function drop(session: DragSession): void {
         const element = currentItem.element?.isConnected
           ? currentItem.element
           : null;
+        dropRects[i].item = currentItem;
         dropRects[i].element = element;
         dropRects[i].last = readVisualRect(currentItem);
       });
@@ -241,10 +243,9 @@ function drop(session: DragSession): void {
 
   root.schedule(
     () => {
-      items.forEach((member, i) => {
-        const { first, last, element } = dropRects[i];
+      dropRects.forEach(({ item: currentItem, first, last, element }) => {
         playDropAnimation(
-          member,
+          currentItem,
           first,
           last,
           element,

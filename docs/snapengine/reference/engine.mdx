@@ -79,11 +79,48 @@ engine.subscribeEvent("containerResized", "layout", ({ bounds }) => {
 engine.unsubscribeEvent("containerResized", "layout");
 ```
 
-| Event | Description |
-|-------|-------------|
-| `containerAssigned` | Fired after the container element is assigned. |
-| `containerResized` | Fired when the container or document body is resized. |
-| `containerMoved` | Fired when scrolling changes the container's viewport position. |
+| Event               | Description                                                     |
+| ------------------- | --------------------------------------------------------------- |
+| `containerAssigned` | Fired after the container element is assigned.                  |
+| `containerResized`  | Fired when the container or document body is resized.           |
+| `containerMoved`    | Fired when scrolling changes the container's viewport position. |
+
+## Frame Controller
+
+`engine.frameController` runs application controllers from SnapEngine's shared
+`requestAnimationFrame` loop. Each callback runs synchronously at the start of
+the frame, while the engine is `IDLE` and before the `READ_1` queue is
+snapshotted. Work queued by the callback can therefore participate in every
+stage of that same frame.
+
+```ts
+const controller = new AbortController();
+
+const unsubscribe = engine.frameController.subscribe(
+  ({ timestamp }) => {
+    updateInteraction(timestamp);
+  },
+  { signal: controller.signal },
+);
+
+controller.abort(); // Removes the subscription.
+unsubscribe(); // An explicit cleanup is also available.
+```
+
+`timestamp` is the timestamp supplied by the browser for that shared animation
+frame. Callbacks run in subscription order from a stable snapshot. A callback
+added during a tick starts on the next tick, while a callback removed or
+aborted before its turn is skipped.
+
+Frame callbacks are synchronous and are not awaited. Keep frame-critical state
+changes inside the callback, and use `object.schedule()` for staged DOM reads
+and writes. A thrown error or a returned thenable rejection is reported without
+preventing later subscribers from running; a promise continuation cannot join
+the current frame.
+
+The controller's `signal` represents the Engine lifetime. `engine.destroy()`
+aborts it and removes all frame subscriptions before input listeners are torn
+down, so controllers that own an active gesture can perform terminal cleanup.
 
 ## Feature Hooks
 
@@ -99,16 +136,19 @@ engine.disableDebug();
 
 ## Public API
 
-| API | Description |
-|-----|-------------|
-| `new Engine(config?)` | Creates an engine instance. |
-| `engine.element = element` | Assigns the engine container. |
-| `engine.assignDom(element)` | Assigns the engine container explicitly. |
-| `engine.destroy()` | Cleans up input, debug, resize observation, and global registration. |
-| `engine.getObject(id)` | Returns a registered object by id. |
-| `engine.subscribeEvent(event, id, callback)` | Adds an engine event callback. |
-| `engine.unsubscribeEvent(event, id)` | Removes an engine event callback. |
-| `engine.enableAnimationEngine()` | Enables animation processing in the frame loop. |
-| `engine.setCollisionEngine(collisionEngine)` | Installs a collision engine. |
-| `engine.setDebugRenderer(renderer)` | Enables a debug renderer. |
-| `engine.disableDebug()` | Disables and removes the debug renderer. |
+| API                                                    | Description                                                                      |
+| ------------------------------------------------------ | -------------------------------------------------------------------------------- |
+| `new Engine(config?)`                                  | Creates an engine instance.                                                      |
+| `engine.element = element`                             | Assigns the engine container.                                                    |
+| `engine.assignDom(element)`                            | Assigns the engine container explicitly.                                         |
+| `engine.destroy()`                                     | Cleans up input, debug, resize observation, and global registration.             |
+| `engine.getObject(id)`                                 | Returns a registered object by id.                                               |
+| `engine.subscribeEvent(event, id, callback)`           | Adds an engine event callback.                                                   |
+| `engine.unsubscribeEvent(event, id)`                   | Removes an engine event callback.                                                |
+| `engine.frameController`                               | Returns the Engine-owned shared-frame controller.                                |
+| `engine.frameController.signal`                        | Aborts when the Engine destroys the controller.                                  |
+| `engine.frameController.subscribe(callback, options?)` | Subscribes a synchronous pre-`READ_1` callback and returns its cleanup function. |
+| `engine.enableAnimationEngine()`                       | Enables animation processing in the frame loop.                                  |
+| `engine.setCollisionEngine(collisionEngine)`           | Installs a collision engine.                                                     |
+| `engine.setDebugRenderer(renderer)`                    | Enables a debug renderer.                                                        |
+| `engine.disableDebug()`                                | Disables and removes the debug renderer.                                         |

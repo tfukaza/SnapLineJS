@@ -5,8 +5,9 @@
   import FrameworkSelect from "$lib/components/FrameworkSelect.svelte";
   import {
     findProjectForPath,
-    projectDestination,
     projectNavigationEntries,
+    projectSwitcherEntries,
+    topNavigationItemIsCurrent,
   } from "$lib/projectNavigation";
   import {
     docNavigationNodeContains,
@@ -26,9 +27,6 @@
   let { children } = $props();
 
   const repositoryUrl = "https://github.com/tfukaza/SnapEngineJS";
-  const engineProjects = projectNavigationEntries.filter(
-    (project) => project.group === "engine",
-  );
   const assetProjects = projectNavigationEntries.filter(
     (project) => project.group === "asset",
   );
@@ -42,16 +40,8 @@
   let projectsMenuTrigger = $state<HTMLButtonElement | null>(null);
   const currentPath = $derived(page.url.pathname);
   const currentProject = $derived(findProjectForPath(currentPath));
-  const isHomePath = $derived(currentPath === "/");
-  const isDocsContext = $derived(currentPath.startsWith("/docs"));
-  const isDocsPath = $derived(currentPath.startsWith("/docs"));
-  const isAboutPath = $derived(currentPath === "/about");
-  const projectSwitchLabel = $derived(currentProject?.title ?? "Explore");
-  const contextualDocsHref = $derived(
-    currentProject?.status === "available" && currentProject.docsHref
-      ? currentProject.docsHref
-      : "/docs",
-  );
+  const projectSwitchLabel = $derived(currentProject.title);
+  const currentProjectHomeHref = $derived(currentProject.marketingHref ?? "/");
   const mobileDocsNavigation = $derived(
     page.data.mobileDocsNavigation ?? null,
   );
@@ -188,148 +178,122 @@
 
 <a class="skip-link button primary small" href="#main-content">Skip to content</a>
 
-<nav class="nav-bar" aria-label="Primary navigation" bind:this={navRoot}>
-  <div class="nav-identity">
-    <a
-      href="/"
-      class="wordmark"
-      aria-current={isHomePath ? "page" : undefined}
-      onclick={closeNavigation}
-    >
-      SnapEngine
-    </a>
-
-    <div class="nav-menu project-menu" class:is-open={activeMenu === "projects"}>
-      <button
-        bind:this={projectsMenuTrigger}
-        type="button"
-        class="project-menu-trigger"
-        class:current={Boolean(currentProject)}
-        aria-label={`Switch project. Current project: ${projectSwitchLabel}`}
-        aria-haspopup="true"
-        aria-expanded={activeMenu === "projects"}
-        aria-controls="project-nav-menu"
-        onclick={() => toggleMenu("projects")}
-      >
-        <span>{projectSwitchLabel}</span>
-        <svg
-          class="nav-chevron"
-          width="12"
-          height="12"
-          viewBox="0 0 12 12"
-          fill="none"
-          aria-hidden="true"
+<header class="site-header">
+  <nav class="nav-bar" aria-label="Primary navigation" bind:this={navRoot}>
+    <div class="nav-identity">
+      <div class="nav-menu project-menu" class:is-open={activeMenu === "projects"}>
+        <a
+          class="wordmark"
+          href={currentProjectHomeHref}
+          aria-current={currentPath === currentProjectHomeHref ? "page" : undefined}
+          onclick={closeNavigation}
         >
-          <path d="m3 4.5 3 3 3-3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
-        </svg>
-      </button>
-      <div id="project-nav-menu" class="nav-dropdown project-nav-dropdown card">
-        <p class="project-group-label">Engine</p>
-        {#each engineProjects as entry}
-          {@const destination = projectDestination(entry, isDocsContext)}
-          <a
-            class="project-nav-link"
-            href={destination ?? undefined}
-            aria-current={currentProject?.slug === entry.slug ? "page" : undefined}
-            onclick={closeNavigation}
+          {projectSwitchLabel}
+        </a>
+        <button
+          bind:this={projectsMenuTrigger}
+          type="button"
+          class="project-menu-trigger"
+          aria-label={`Switch project. Current project: ${projectSwitchLabel}`}
+          aria-haspopup="true"
+          aria-expanded={activeMenu === "projects"}
+          aria-controls="project-nav-menu"
+          onclick={() => toggleMenu("projects")}
+        >
+          <svg
+            class="nav-chevron"
+            width="12"
+            height="12"
+            viewBox="0 0 12 12"
+            fill="none"
+            aria-hidden="true"
           >
-            <span>{entry.title}</span>
-          </a>
-        {/each}
-        <p class="project-group-label asset-group-label">Assets</p>
-        {#each assetProjects as entry}
-          {@const destination = projectDestination(entry, isDocsContext)}
-          {#if entry.status === "available" && destination}
+            <path d="m3 4.5 3 3 3-3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+        </button>
+        <div id="project-nav-menu" class="nav-dropdown project-nav-dropdown">
+          {#each projectSwitcherEntries as entry}
             <a
               class="project-nav-link"
-              href={destination}
-              aria-current={currentProject?.slug === entry.slug ? "page" : undefined}
+              href={entry.marketingHref}
+              aria-current={currentProject.slug === entry.slug ? "true" : undefined}
               onclick={closeNavigation}
             >
               <span>{entry.title}</span>
+              {#if currentProject.slug === entry.slug}
+                <span class="project-nav-check" aria-hidden="true">✓</span>
+              {/if}
             </a>
-          {:else}
-            <span class="project-nav-link project-nav-link-disabled" aria-disabled="true">
-              <span>{entry.title}</span>
-              <small>Coming soon</small>
-            </span>
-          {/if}
-        {/each}
+          {/each}
+        </div>
       </div>
     </div>
-  </div>
 
-  <button
-    bind:this={mobileNavTrigger}
-    type="button"
-    class="mobile-nav-trigger"
-    aria-label="Toggle navigation"
-    aria-expanded={mobileNavOpen}
-    aria-controls="primary-nav-links"
-    onclick={toggleMobileNav}
-  >
-    <span class="mobile-nav-icon" aria-hidden="true">{mobileNavOpen ? "×" : "≡"}</span>
-  </button>
-
-  <div id="primary-nav-links" class="nav-right" class:is-open={mobileNavOpen}>
-    <a
-      href={contextualDocsHref}
-      class="nav-link"
-      class:current={isDocsPath}
-      aria-current={isDocsPath ? "page" : undefined}
-      onclick={closeNavigation}
+    <button
+      bind:this={mobileNavTrigger}
+      type="button"
+      class="mobile-nav-trigger"
+      aria-label="Toggle navigation"
+      aria-expanded={mobileNavOpen}
+      aria-controls="primary-nav-links"
+      onclick={toggleMobileNav}
     >
-      Docs
-    </a>
+      <span class="mobile-nav-icon" aria-hidden="true">{mobileNavOpen ? "×" : "≡"}</span>
+    </button>
 
-    <a
-      href="/about"
-      class="nav-link"
-      class:current={isAboutPath}
-      aria-current={isAboutPath ? "page" : undefined}
-      onclick={closeNavigation}
-    >
-      About
-    </a>
-    <a
-      href={repositoryUrl}
-      class="nav-link github-link"
-      aria-label="SnapEngine on GitHub"
-      target="_blank"
-      rel="noopener noreferrer"
-      onclick={closeNavigation}
-    >
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-        <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/>
-      </svg>
-    </a>
-
-    {#if mobileDocsNavigation}
-      <div
-        class="mobile-doc-navigation"
-        role="group"
-        aria-label={`${mobileDocsNavigation.projectTitle} documentation`}
+    <div id="primary-nav-links" class="nav-right" class:is-open={mobileNavOpen}>
+      {#each currentProject.topNavigation as item}
+        {@const isCurrent = topNavigationItemIsCurrent(item, currentPath)}
+        <a
+          href={item.href}
+          class="nav-link"
+          class:current={isCurrent}
+          aria-current={isCurrent ? "page" : undefined}
+          onclick={closeNavigation}
+        >
+          {item.label}
+        </a>
+      {/each}
+      <a
+        href={repositoryUrl}
+        class="nav-link github-link"
+        aria-label="SnapEngine on GitHub"
+        target="_blank"
+        rel="noopener noreferrer"
+        onclick={closeNavigation}
       >
-        <p class="mobile-doc-project-title">{mobileDocsNavigation.projectTitle} docs</p>
-        {#if mobileDocsNavigation.frameworks.length > 1}
-          <FrameworkSelect
-            id="mobile-header-doc-framework"
-            value={$selectedFramework}
-            onFrameworkChange={handleMobileFrameworkChange}
-          />
-        {/if}
-        {#each visibleMobileDocSections as section}
-          <div class="mobile-doc-section">
-            {#if section.name}
-              <p class="mobile-doc-section-title">{section.title}</p>
-            {/if}
-            {@render mobileDocTree(section.nodes, 0, undefined, false)}
-          </div>
-        {/each}
-      </div>
-    {/if}
-  </div>
-</nav>
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+          <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/>
+        </svg>
+      </a>
+
+      {#if mobileDocsNavigation}
+        <div
+          class="mobile-doc-navigation"
+          role="group"
+          aria-label={`${mobileDocsNavigation.projectTitle} documentation`}
+        >
+          <p class="mobile-doc-project-title">{mobileDocsNavigation.projectTitle} docs</p>
+          {#if mobileDocsNavigation.frameworks.length > 1}
+            <FrameworkSelect
+              id="mobile-header-doc-framework"
+              value={$selectedFramework}
+              onFrameworkChange={handleMobileFrameworkChange}
+            />
+          {/if}
+          {#each visibleMobileDocSections as section}
+            <div class="mobile-doc-section">
+              {#if section.name}
+                <p class="mobile-doc-section-title">{section.title}</p>
+              {/if}
+              {@render mobileDocTree(section.nodes, 0, undefined, false)}
+            </div>
+          {/each}
+        </div>
+      {/if}
+    </div>
+  </nav>
+</header>
 
 <main id="main-content" class="page-content" tabindex="-1">
   {@render children()}
@@ -395,6 +359,12 @@
     outline: none;
   }
 
+  .site-header {
+    width: 100%;
+    border-bottom: 1px solid #d7d7d7;
+    background: #f6f6f6;
+  }
+
   .nav-bar {
     --page-gutter: clamp(var(--size-16), 5vw, var(--size-64));
 
@@ -404,27 +374,11 @@
     justify-content: space-between;
     align-items: center;
     gap: var(--size-32);
-    width: min(1200px, calc(100% - (var(--page-gutter) * 2)));
+    width: min(1400px, calc(100% - (var(--page-gutter) * 2)));
     margin: 0 auto;
     padding: var(--size-16) 0;
     box-sizing: border-box;
-    background: rgba(255, 255, 255, 0.92);
-    border-radius: 0 0 var(--size-8) var(--size-8);
-    backdrop-filter: blur(12px);
-  }
-
-  .wordmark {
-    color: #3a2a22;
-    font-family: var(--font-display);
-    font-size: 1.25rem;
-    font-weight: 700;
-    letter-spacing: -0.02em;
-    line-height: 1;
-    text-decoration: none;
-
-    &:hover {
-      color: var(--color-action);
-    }
+    background: transparent;
   }
 
   .nav-identity {
@@ -464,9 +418,17 @@
   }
 
   .nav-menu {
+    --project-wordmark-color: #080808;
+    --project-wordmark-font-family: "Geist", sans-serif;
+    --project-wordmark-font-size: 1.25rem;
+    --project-wordmark-font-weight: 500;
+    --project-wordmark-letter-spacing: -0.04em;
+    --project-wordmark-line-height: 1;
+
     position: relative;
     display: flex;
     align-items: center;
+    gap: var(--size-2);
     padding-block: var(--size-8);
     margin-block: calc(var(--size-8) * -1);
 
@@ -482,7 +444,7 @@
       .nav-dropdown {
         opacity: 1;
         visibility: visible;
-        transform: translate(-50%, 0);
+        transform: translateY(0);
         pointer-events: auto;
       }
     }
@@ -503,16 +465,36 @@
   }
 
   .project-menu-trigger {
-    color: #5e4d44;
-    font-family: var(--font-body);
-    font-size: 0.9rem;
-    font-weight: 600;
-    line-height: 1.3;
+    justify-content: center;
+    width: 24px;
+    color: var(--project-wordmark-color);
     transition: color 160ms ease;
 
     &:hover,
-    &:focus-visible,
-    &.current {
+    &:focus-visible {
+      color: var(--color-action);
+    }
+  }
+
+  .wordmark,
+  .project-nav-link {
+    color: var(--project-wordmark-color);
+    font-family: var(--project-wordmark-font-family);
+    font-size: var(--project-wordmark-font-size);
+    font-weight: var(--project-wordmark-font-weight);
+    letter-spacing: var(--project-wordmark-letter-spacing);
+    line-height: var(--project-wordmark-line-height);
+  }
+
+  .wordmark {
+    display: inline-flex;
+    align-items: center;
+    min-height: 36px;
+    text-decoration: none;
+    transition: color 160ms ease;
+
+    &:hover,
+    &:focus-visible {
       color: var(--color-action);
     }
   }
@@ -524,20 +506,15 @@
   }
 
   .nav-dropdown {
-    --card-color: #fff;
-    --card-radius: var(--size-12);
-
     position: absolute;
     z-index: 40;
-    top: 100%;
-    left: 50%;
+    top: calc(100% + var(--size-4));
+    left: 0;
     display: flex;
-    min-width: 17rem;
     flex-direction: column;
-    gap: var(--size-2);
     opacity: 0;
     visibility: hidden;
-    transform: translate(-50%, calc(var(--size-4) * -1));
+    transform: translateY(calc(var(--size-4) * -1));
     pointer-events: none;
     transition:
       opacity 150ms ease,
@@ -547,25 +524,12 @@
 
   .project-nav-dropdown {
     min-width: 14rem;
-    padding: var(--size-12);
-  }
-
-  .project-group-label {
-    margin: 0;
-    padding: var(--size-4) var(--size-12) var(--size-8);
-    color: var(--color-text-subtle);
-    font-family: var(--font-label);
-    font-size: 0.72rem;
-    font-weight: 600;
-    letter-spacing: 0.06em;
-    line-height: 1.2;
-    text-transform: uppercase;
-  }
-
-  .asset-group-label {
-    margin-top: var(--size-8);
-    padding-top: var(--size-12);
-    border-top: 1px solid rgba(58, 42, 34, 0.08);
+    padding-block: var(--size-8);
+    box-sizing: border-box;
+    border: 1px solid rgb(0 0 0 / 24%);
+    border-radius: var(--ui-radius);
+    background: #fff;
+    box-shadow: 0 3px 10px rgb(36 38 39 / 5%);
   }
 
   .project-nav-link {
@@ -573,36 +537,23 @@
     align-items: center;
     justify-content: space-between;
     gap: var(--size-16);
-    margin: 0;
-    padding: var(--size-8) var(--size-12);
-    border-radius: var(--size-8);
-    color: #5e4d44;
-    font-size: 0.9rem;
-    font-weight: 600;
-    line-height: 1.3;
+    margin: var(--size-4);
+    padding: var(--size-4) var(--size-12);
+    border-radius: var(--ui-radius);
     text-decoration: none;
-    transition:
-      color 150ms ease,
-      background-color 150ms ease;
-
-    small {
-      color: var(--color-text-subtle);
-      font-size: 0.72rem;
-      font-weight: 400;
-      white-space: nowrap;
-    }
+    transition: background-color 150ms ease;
   }
 
   a.project-nav-link:hover,
-  a.project-nav-link:focus-visible,
-  a.project-nav-link[aria-current="page"] {
-    color: var(--color-action);
-    background: rgba(58, 42, 34, 0.05);
+  a.project-nav-link:focus-visible {
+    color: var(--project-wordmark-color);
+    background: #ececeb;
+    outline: none;
   }
 
-  .project-nav-link-disabled {
-    opacity: 0.72;
-    cursor: default;
+  .project-nav-check {
+    flex: 0 0 auto;
+    font: inherit;
   }
 
   .github-link {
@@ -681,14 +632,16 @@
       justify-content: flex-start;
     }
 
-    .project-menu-trigger {
+    .wordmark {
       max-width: 9.5rem;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
 
-      span {
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-      }
+    .project-menu-trigger {
+      width: 44px;
+      min-height: 44px;
     }
 
     .mobile-doc-navigation {

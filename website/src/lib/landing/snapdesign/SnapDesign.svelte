@@ -2,13 +2,26 @@
   import MaterialControlPanel, {
     type MaterialControlTarget,
   } from "$lib/components/MaterialControlPanel.svelte";
+  import Checkbox from "$lib/components/Checkbox.svelte";
+  import Dial from "$lib/components/Dial.svelte";
   import MaterialSurface from "$lib/components/MaterialSurface.svelte";
+  import Radio from "$lib/components/Radio.svelte";
   import SnapButton from "$lib/components/SnapButton.svelte";
   import Slider from "$lib/components/Slider.svelte";
   import Toggle from "$lib/components/Toggle.svelte";
-  import type { MaterialSettings } from "$lib/components/materialSurface";
+  import {
+    defaultButtonMaterialSettings,
+    defaultDialMaterialSettings,
+    defaultInsetSlotMaterialSettings,
+    defaultRaisedCardMaterialSettings,
+    defaultSliderMaterialSettings,
+    defaultToggleMaterialSettings,
+    type MaterialSettings,
+  } from "$lib/components/materialSurface";
+  import SnapDesignCodeTabs, {
+    type SnapDesignCodeTab,
+  } from "./SnapDesignCodeTabs.svelte";
 
-  type ShowcaseStyle = "existing" | "dev";
   type MaterialTargetId =
     | "dial"
     | "button"
@@ -17,16 +30,31 @@
     | "raisedCard"
     | "insetSlot";
 
-  let checkboxChecked = $state(false);
-  // let radioValue = $state("option1");
+  let {
+    codeExamples,
+  }: {
+    codeExamples: {
+      standalone: string;
+      tabs: SnapDesignCodeTab[];
+    };
+  } = $props();
+
+  let materialCheckboxChecked = $state(true);
+  let materialRadioValue = $state("first");
   let rangeValue = $state(50);
+  let precisionRangeValue = $state(50);
+  let minimalCheckboxChecked = $state(true);
+  let minimalRadioValue = $state("first");
+  let minimalRangeValue = $state(50);
   let textValue = $state("");
   let numberValue = $state(42);
   let selectValue = $state("option1");
   let dateValue = $state("");
-  let progressValue = $state(65);
-  let showcaseStyle = $state<ShowcaseStyle>("existing");
+  const minimalProgressValue = 65;
+  let dialValue = $state(320);
+  let minimalDialValue = $state(40);
   let toggleEnabled = $state(true);
+  let minimalToggleEnabled = $state(true);
   const materialTargets = [
     { id: "dial", label: "Dial" },
     { id: "button", label: "Button" },
@@ -36,90 +64,26 @@
     { id: "insetSlot", label: "Inset Slot" },
   ] satisfies MaterialControlTarget[];
   const materialDefaultConfigurations: Record<MaterialTargetId, MaterialSettings> = {
-    dial: {
-      lightAngle: 315,
-      ambientBrightness: 0,
-      shadowDistance: 14,
-      shadowBlur: 11.25,
-      shadowStrength: 1,
-      specularIntensity: 0.34,
-      specularPower: 31,
-      rimWidth: 1.75,
-      rimBlur: 0.7,
-      creviceBrightness: 0.41,
-      shadedRim: true,
-      creviceOutline: true,
-    },
-    button: {
-      lightAngle: 325,
-      ambientBrightness: 0,
-      shadowDistance: 6.5,
-      shadowBlur: 6.25,
-      shadowStrength: 1,
-      specularIntensity: 0.85,
-      specularPower: 10,
-      rimWidth: 1,
-      rimBlur: 0.1,
-      creviceBrightness: 0.14,
-      shadedRim: true,
-      creviceOutline: true,
-    },
-    toggle: {
-      lightAngle: 325,
-      ambientBrightness: 0.1,
-      shadowDistance: 6,
-      shadowBlur: 5,
-      shadowStrength: 1,
-      specularIntensity: 0.85,
-      specularPower: 10,
-      rimWidth: 0.75,
-      rimBlur: 0.75,
-      creviceBrightness: 0,
-      shadedRim: true,
-      creviceOutline: false,
-    },
-    slider: {
-      lightAngle: 325,
-      ambientBrightness: 0.1,
-      shadowDistance: 3.5,
-      shadowBlur: 9,
-      shadowStrength: 1,
-      specularIntensity: 0.85,
-      specularPower: 10,
-      rimWidth: 0.75,
-      rimBlur: 0.5,
-      creviceBrightness: 0,
-      shadedRim: true,
-      creviceOutline: false,
-    },
-    raisedCard: {
-      lightAngle: 325,
-      ambientBrightness: 0.1,
-      shadowDistance: 3.75,
-      shadowBlur: 5.25,
-      shadowStrength: 1,
-      specularIntensity: 0.85,
-      specularPower: 10,
-      rimWidth: 0.5,
-      rimBlur: 0.1,
-      creviceBrightness: 0,
-      shadedRim: true,
-      creviceOutline: false,
-    },
-    insetSlot: {
-      lightAngle: 325,
-      ambientBrightness: 0,
-      shadowDistance: 2.25,
-      shadowBlur: 7.75,
-      shadowStrength: 1,
-      specularIntensity: 0.85,
-      specularPower: 10,
-      rimWidth: 0.5,
-      rimBlur: 0.1,
-      creviceBrightness: 0,
-      shadedRim: true,
-      creviceOutline: false,
-    },
+    dial: { ...defaultDialMaterialSettings },
+    button: { ...defaultButtonMaterialSettings },
+    toggle: { ...defaultToggleMaterialSettings },
+    slider: { ...defaultSliderMaterialSettings },
+    raisedCard: { ...defaultRaisedCardMaterialSettings },
+    insetSlot: { ...defaultInsetSlotMaterialSettings },
+  };
+  const minimalDialMaterial: MaterialSettings = {
+    lightAngle: 0,
+    ambientBrightness: 1,
+    shadowDistance: 0,
+    shadowBlur: 0,
+    shadowStrength: 0,
+    specularIntensity: 0,
+    specularPower: 1,
+    rimWidth: 0,
+    rimBlur: 0,
+    creviceBrightness: 0,
+    shadedRim: false,
+    creviceOutline: true,
   };
   let materialConfigurations = $state<Record<MaterialTargetId, MaterialSettings>>({
     dial: { ...materialDefaultConfigurations.dial },
@@ -130,467 +94,300 @@
     insetSlot: { ...materialDefaultConfigurations.insetSlot },
   });
   let selectedMaterialTarget = $state<MaterialTargetId>("button");
-  let devStyleLoaded = false;
   const progressCellCount = 20;
+  const progressCellIndexes = Array.from(
+    { length: progressCellCount },
+    (_, index) => index,
+  );
+  const brailleCellCount = 40;
+  const brailleCellIndexes = Array.from(
+    { length: brailleCellCount },
+    (_, index) => index,
+  );
 
-  function filledProgressCells(value: number, max = 100) {
+  function filledProgressCells(value: number, max = 100, cellCount = progressCellCount) {
     const ratio = Math.max(0, Math.min(value / max, 1));
-    return Math.round(ratio * progressCellCount);
+    return Math.round(ratio * cellCount);
   }
 
-  function progressCells(character: string, count: number) {
-    return character.repeat(Math.max(0, count));
-  }
-
-  async function setShowcaseStyle(style: ShowcaseStyle) {
-    showcaseStyle = style;
-
-    if (style === "dev" && !devStyleLoaded) {
-      await import("./style.dev.scss");
-      devStyleLoaded = true;
-    }
-  }
 </script>
 
-<div class="css-showcase" data-showcase-style={showcaseStyle}>
-    <section class="showcase-section showcase-header col-12">
+<div class="css-showcase">
+    <section class="showcase-section showcase-header">
       <div class="showcase-hero-copy">
         <h1 class="showcase-title">Snap<br />Design</h1>
       </div>
-      <div class="hero-specimen">
-        <p class="hero-description">
-          A working inventory of type, color, controls, and interface states.
-        </p>
-        <div class="style-selector" aria-label="Style">
-          <SnapButton
-            material={materialConfigurations.button}
-            className={`small ${showcaseStyle === "existing" ? "active" : ""}`}
-            onclick={() => setShowcaseStyle("existing")}
-          >
-            Default
-          </SnapButton>
-          <SnapButton
-            material={materialConfigurations.button}
-            className={`small ${showcaseStyle === "dev" ? "active" : ""}`}
-            onclick={() => setShowcaseStyle("dev")}
-          >
-            Dev
-          </SnapButton>
-        </div>
-        <span class="hero-kicker">Design System</span>
-      </div>
+      <div class="hero-specimen" aria-hidden="true"></div>
     </section>
 
-    <!-- Foundations Section -->
-    <section class="showcase-section foundation-section col-12">
+    <section class="showcase-section foundation-section">
+      <aside class="color-aside" id="colors">
+        <h2>Color</h2>
+        <div class="color-grid">
+          <div class="color-swatch background"><span>Gray 01</span><code>#f6f6f6</code></div>
+          <div class="color-swatch background-tint"><span>Gray 02</span><code>#ececeb</code></div>
+          <div class="color-swatch black"><span>Black</span><code>#000000</code></div>
+          <div class="color-swatch primary"><span>Primary</span><code>#ff5d0f</code></div>
+        </div>
+      </aside>
+
       <div class="foundation-main">
         <article class="type-article prose">
-          <div class="type-column">
-            <p class="type-group-label">Headings</p>
-            <div class="heading-stack">
-              <h1>Heading 1</h1>
-              <h2>Heading 2</h2>
-              <h3>Heading 3</h3>
-              <h4>Heading 4</h4>
-              <h5>Heading 5</h5>
-              <h6>Heading 6</h6>
+          <div class="type-grid">
+            <div class="type-column primary-type-column">
+              <p class="type-group-label">Heading</p>
+              <div class="heading-stack">
+                <h1>Heading 1</h1>
+                <h2>Heading 2</h2>
+                <h3>Heading 3</h3>
+                <h4>Heading 4</h4>
+                <h5>Heading 5</h5>
+                <h6>Heading 6</h6>
+              </div>
+
+              <p class="number-specimen" aria-label="Number specimen: zero through nine">0123456789</p>
+              <hr />
+              <p class="type-group-label">Paragraph & Quote</p>
+              <p>
+                Body copy should remain calm and readable across documentation,
+                product interfaces, and longer explanations. A second sentence
+                demonstrates the rhythm of a typical paragraph.
+              </p>
+              <blockquote>
+                <p>Useful details should support the interaction, never obscure it.</p>
+                <cite>SnapDesign principle</cite>
+              </blockquote>
             </div>
 
-            <hr />
+            <div class="type-column code-column">
+              <p class="type-group-label">Inline Elements</p>
+              <p class="inline-elements">
+                <a href="#ui-elements">Link</a>, <strong>strong</strong>,
+                <em>emphasis</em>, <mark>highlight</mark>,
+                <abbr title="Snap Design System">abbreviation</abbr>,
+                <code>inlineCode()</code>, <kbd>⌘ K</kbd>,
+                <samp>sample output</samp>, <del>deleted</del>,
+                <ins>inserted</ins>, H<sub>2</sub>O, x<sup>2</sup>, and
+                <small>small print</small>.
+              </p>
 
-            <p class="type-group-label">Paragraph & Quote</p>
-            <p>
-              Body copy should remain calm and readable across documentation,
-              product interfaces, and longer explanations. A second sentence
-              demonstrates the rhythm of a typical paragraph.
-            </p>
-            <blockquote>
-              <p>Useful details should support the interaction, never obscure it.</p>
-              <cite>SnapDesign principle</cite>
-            </blockquote>
-
-            <details>
-              <summary>Details and summary</summary>
-              <p>Expandable content stays available without dominating the page.</p>
-            </details>
-          </div>
-
-          <div class="type-column">
-            <p class="type-group-label">Inline Elements</p>
-            <p class="inline-elements">
-              <a href="#buttons">Link</a>, <strong>strong</strong>,
-              <em>emphasis</em>, <mark>highlight</mark>,
-              <abbr title="Snap Design System">abbreviation</abbr>,
-              <code>inlineCode()</code>, <kbd>⌘ K</kbd>,
-              <samp>sample output</samp>, <del>deleted</del>,
-              <ins>inserted</ins>, H<sub>2</sub>O, x<sup>2</sup>, and
-              <small>small print</small>.
-            </p>
-
-            <div class="list-grid">
-              <div>
-                <p class="type-group-label">Unordered List</p>
-                <ul>
-                  <li>Direct interaction</li>
-                  <li>Clear hierarchy</li>
-                  <li>Purposeful motion</li>
-                </ul>
-              </div>
-              <div>
-                <p class="type-group-label">Ordered List</p>
-                <ol>
-                  <li>Read the state</li>
-                  <li>Apply the change</li>
-                  <li>Show feedback</li>
-                </ol>
+              <div class="code-specimens">
+                <div>
+                  <p class="type-group-label">Code Block</p>
+                  <div class="specimen-code" aria-label="Light code display example">
+                    {@html codeExamples.standalone}
+                  </div>
+                </div>
+                <div>
+                  <p class="type-group-label">Tabbed Code</p>
+                  <SnapDesignCodeTabs tabs={codeExamples.tabs} />
+                </div>
               </div>
             </div>
-
-            <dl>
-              <dt>Definition term</dt>
-              <dd>A short explanation associated with the term.</dd>
-            </dl>
-
-            <p class="type-group-label">Code Block</p>
-            <pre class="display shiki specimen-code" aria-label="Code display example"><code><span class="line" data-line="1"><span class="code-keyword">const</span> snap = create();</span><span class="line" data-line="2">snap.mount();</span><span class="line" data-line="3"><span class="code-comment">// Ready for input</span></span></code></pre>
           </div>
         </article>
       </div>
     </section>
 
-    <!-- Color, Cards & Slots Section -->
-    <section class="showcase-section palette-components-section col-12">
-      <aside class="color-aside" id="colors">
-        <h2>Color</h2>
-        <div class="color-grid">
-          <div class="color-swatch background">
-            <span>Gray 01</span>
-            <code>#f6f6f6</code>
-          </div>
-          <div class="color-swatch background-tint">
-            <span>Gray 02</span>
-            <code>#ececeb</code>
-          </div>
-          <div class="color-swatch black">
-            <span class="light">Black</span>
-            <code>#000000</code>
-          </div>
-          <div class="color-swatch primary">
-            <span class="light">Primary</span>
-            <code>#ff5d0f</code>
-          </div>
-        </div>
-      </aside>
+    <section class="showcase-section elements-section" id="ui-elements">
+      <div class="elements-grid">
+        <header class="oversized-section-title">
+          <h2>UI<br />Elements</h2>
+        </header>
 
-      <div class="cards-slots-aside">
-        <h2>Container</h2>
-        <div class="cards-slots-stage">
-          <MaterialSurface depth="raised" shape="rounded" radius={16} material={materialConfigurations.raisedCard} className="specimen-card">
-            <h3>Raised Card</h3>
-            <p>Emphasizes important content with depth. Use it sparingly so the emphasis keeps its meaning.</p>
-          </MaterialSurface>
-          <MaterialSurface depth="recessed" shape="rounded" radius={16} material={materialConfigurations.insetSlot} className="specimen-slot">
-            <div class="slot-content">
-              <h3>Inset Slot</h3>
-              <p>Emphasizes an important drop zone or recessed area. Use it sparingly so it remains distinct.</p>
+        <article class="element-card control-card buttons-card">
+          <header class="control-card-heading"><span class="control-index" aria-hidden="true">01</span><h3>Buttons</h3></header>
+          <div class="control-stage variant-stage">
+            <div class="control-variant button-stack" role="group" aria-label="Skeuomorphic buttons">
+              <SnapButton material={materialConfigurations.button}>Default</SnapButton>
+              <SnapButton material={materialConfigurations.button} className="primary">Primary</SnapButton>
+              <SnapButton material={materialConfigurations.button} className="active" aria-pressed="true">Active</SnapButton>
             </div>
-          </MaterialSurface>
-          <div class="compact-specimen">
-            <div class="compact-card">
-              <h3>Compact Card</h3>
-              <p>A toned-down card for repeated UI such as list items, rows, and closely grouped controls.</p>
+            <div class="control-variant button-stack" role="group" aria-label="Minimal buttons">
+              <button type="button" class="minimal-button">Default</button>
+              <button type="button" class="minimal-button primary">Primary</button>
+              <button type="button" class="minimal-button active" aria-pressed="true">Active</button>
             </div>
           </div>
-          <div class="compact-specimen">
-            <div class="compact-slot">
-              <h3>Compact Slot</h3>
-              <p>A toned-down slot for interfaces where drop zones or containers need to repeat.</p>
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
+        </article>
 
-    <section class="material-panel-section col-12">
-      <MaterialControlPanel
-        targets={materialTargets}
-        defaults={materialDefaultConfigurations}
-        bind:configurations={materialConfigurations}
-        bind:selectedTarget={selectedMaterialTarget}
-      />
-    </section>
-
-    <!-- Buttons & Form Elements Section -->
-    <section class="showcase-section elements-section col-12" id="buttons">
-      <h2 class="oversized-section-title">UI<br />Elements</h2>
-      <div class="controls-stack">
-        <div class="controls-top">
-          <div>
-            <h3>Buttons</h3>
-            <div class="button-row">
-              <SnapButton material={materialConfigurations.button}>Default Button</SnapButton>
-              <SnapButton material={materialConfigurations.button} className="primary">Primary Button</SnapButton>
-              <SnapButton material={materialConfigurations.button} className="active">Active State</SnapButton>
-              <SnapButton material={materialConfigurations.button} className="primary" disabled>Disabled</SnapButton>
+        <article class="element-card control-card dial-card">
+          <header class="control-card-heading"><span class="control-index" aria-hidden="true">05</span><h3>Dial</h3></header>
+          <div class="control-stage variant-stage dial-stage">
+            <div class="control-variant dial-stack" role="group" aria-label="Skeuomorphic dial">
+              <Dial size={88} step={10} bind:value={dialValue} material={materialConfigurations.dial} aria-label="Skeuomorphic dial" />
+            </div>
+            <div class="control-variant dial-stack" role="group" aria-label="Minimal dial">
+              <Dial size={88} step={10} bind:value={minimalDialValue} material={minimalDialMaterial} aria-label="Minimal dial" />
             </div>
           </div>
-          <div class="toggle-range-card">
-            <div class="toggle-range-half">
-              <h3>Toggles</h3>
-              <div class="toggle-examples">
-                <div class="toggle-demo">
-                  <Toggle bind:checked={toggleEnabled} material={materialConfigurations.toggle} aria-label="Toggle example" />
-                  <span>{toggleEnabled ? "On" : "Off"}</span>
-                </div>
-              </div>
+        </article>
+
+        <article class="element-card control-card sliders-card">
+          <header class="control-card-heading"><span class="control-index" aria-hidden="true">02</span><h3>Sliders</h3></header>
+          <div class="control-stage variant-stage slider-variants-stage">
+            <div class="control-variant slider-stack" role="group" aria-label="Skeuomorphic sliders">
+              <Slider id="material-range" min={0} max={100} step={10} markers="dots" width={150} bind:value={rangeValue} material={materialConfigurations.slider} aria-label="Skeuomorphic slider" />
             </div>
-            <div class="toggle-range-half">
-              <h3>Range</h3>
-              <div class="range-demo">
-                <Slider id="range-default" min={0} max={100} bind:value={rangeValue} material={materialConfigurations.slider} />
-                <span class="range-value">{rangeValue}</span>
-              </div>
+            <div class="control-variant slider-stack" role="group" aria-label="Minimal sliders">
+              <input id="minimal-range" class="minimal-range" type="range" min="0" max="100" bind:value={minimalRangeValue} aria-label="Minimal slider" />
+            </div>
+            <div class="control-variant precision-slider-stack">
+              <Slider id="precision-range" min={0} max={100} step={1} markers="precision" fluid bind:value={precisionRangeValue} material={materialConfigurations.slider} aria-label="Precision slider" />
             </div>
           </div>
-        </div>
+        </article>
 
-        <div class="form-grid">
-          <div class="form-control-group">
-            <h3>Checkboxes</h3>
-            <div class="form-group">
-              <label class="checkbox-label">
-                <input type="checkbox" bind:checked={checkboxChecked} />
-                <span></span>
-                Unchecked by default
-              </label>
+        <article class="element-card control-card selection-card">
+          <header class="control-card-heading"><span class="control-index" aria-hidden="true">03</span><h3>Selection</h3></header>
+          <div class="control-stage variant-stage">
+            <div class="control-variant choice-stack" role="group" aria-label="Skeuomorphic selection controls">
+              <div class="toggle-demo"><Toggle bind:checked={toggleEnabled} material={materialConfigurations.toggle} aria-label="Skeuomorphic toggle" /><span>{toggleEnabled ? "On" : "Off"}</span></div>
+              <label class="checkbox-label"><Checkbox bind:checked={materialCheckboxChecked} material={materialConfigurations.toggle} />Checkbox</label>
+              <label class="radio-label"><Radio name="material-radio" value="first" bind:group={materialRadioValue} material={materialConfigurations.toggle} />First</label>
+              <label class="radio-label"><Radio name="material-radio" value="second" bind:group={materialRadioValue} material={materialConfigurations.toggle} />Second</label>
             </div>
-            <div class="form-group">
-              <label class="checkbox-label">
-                <input type="checkbox" checked />
-                <span></span>
-                Checked by default
-              </label>
-            </div>
-            <div class="form-group">
-              <label class="checkbox-label">
-                <input type="checkbox" />
-                <span></span>
-                Another option
-              </label>
+            <div class="control-variant choice-stack minimal-choices" role="group" aria-label="Minimal selection controls">
+              <label class="minimal-toggle"><input type="checkbox" bind:checked={minimalToggleEnabled} /><span aria-hidden="true"></span><span>{minimalToggleEnabled ? "On" : "Off"}</span></label>
+              <label class="minimal-checkbox"><input type="checkbox" bind:checked={minimalCheckboxChecked} /><span class="minimal-checkbox-box" aria-hidden="true"></span><span>Checkbox</span></label>
+              <label class="minimal-radio"><input type="radio" name="minimal-radio" value="first" bind:group={minimalRadioValue} /><span class="minimal-radio-ring" aria-hidden="true"></span><span>First</span></label>
+              <label class="minimal-radio"><input type="radio" name="minimal-radio" value="second" bind:group={minimalRadioValue} /><span class="minimal-radio-ring" aria-hidden="true"></span><span>Second</span></label>
             </div>
           </div>
+        </article>
 
-          <div class="form-control-group">
-            <h3>Radio Buttons</h3>
-            <div class="form-group">
-              <label class="radio-label">
-                <input type="radio" name="demo-radio" value="option1"  />
-                <span></span>
-                Option One
-              </label>
-            </div>
-            <div class="form-group">
-              <label class="radio-label">
-                <input type="radio" name="demo-radio" value="option2" />
-                <span></span>
-                Option Two
-              </label>
-            </div>
-            <div class="form-group">
-              <label class="radio-label">
-                <input type="radio" name="demo-radio" value="option3"  />
-                <span></span>
-                Option Three
-              </label>
-            </div>
-          </div>
-
-          <div class="form-control-group">
-            <h3>Dropdowns</h3>
-            <div class="form-group">
-              <label for="select-default">Default Select</label>
-              <select id="select-default" bind:value={selectValue}>
-                <option value="option1">Option One</option>
-                <option value="option2">Option Two</option>
-                <option value="option3">Option Three</option>
-                <option value="option4">Option Four</option>
-              </select>
-            </div>
-            <div class="form-group">
-              <label for="select-grouped">Grouped Options</label>
-              <select id="select-grouped">
-                <optgroup label="Category A">
-                  <option value="a1">Item A1</option>
-                  <option value="a2">Item A2</option>
-                </optgroup>
-                <optgroup label="Category B">
-                  <option value="b1">Item B1</option>
-                  <option value="b2">Item B2</option>
-                </optgroup>
-              </select>
-            </div>
-            <div class="form-group">
-              <label for="select-icons">Options with Logos</label>
-              <select id="select-icons" class="select-with-icons">
-                <button>
-                  <selectedcontent></selectedcontent>
-                </button>
-                <option value="javascript">
-                  <img src="/icon/javascript.svg" alt="" />
-                  <span>JavaScript</span>
-                </option>
-                <option value="svelte">
-                  <img src="/icon/svelte.svg" alt="" />
-                  <span>Svelte</span>
-                </option>
-                <option value="react">
-                  <img src="/icon/react.svg" alt="" />
-                  <span>React</span>
-                </option>
-                <option value="vue">
-                  <img src="/icon/vue.svg" alt="" />
-                  <span>Vue</span>
-                </option>
-              </select>
-            </div>
-            <div class="form-group">
-              <label for="select-disabled">Disabled Select</label>
-              <select id="select-disabled" disabled>
-                <option>Cannot change this</option>
-              </select>
-            </div>
-          </div>
-
-          <div class="form-control-group">
-            <h3>Date Selectors</h3>
-            <div class="form-group">
-              <label for="date-input">Date Input</label>
-              <input type="date" id="date-input" bind:value={dateValue} />
-            </div>
-            <div class="form-group">
-              <label for="datetime-input">DateTime Input</label>
-              <input type="datetime-local" id="datetime-input" />
-            </div>
-            <div class="form-group">
-              <label for="time-input">Time Input</label>
-              <input type="time" id="time-input" />
-            </div>
-          </div>
-
-          <div class="form-control-group">
-            <h3>Progress Bars</h3>
-            <div class="form-group">
-              <label for="progress-default">Default Progress ({progressValue}%)</label>
+        <article class="element-card control-card progress-card">
+          <header class="control-card-heading"><span class="control-index" aria-hidden="true">04</span><h3>Progress</h3></header>
+          <div class="control-stage progress-stage">
+            <div class="progress-stack" role="group" aria-label="Minimal progress">
               <div class="ascii-progress">
-                <progress
-                  class="ascii-progress-native"
-                  id="progress-default"
-                  value={progressValue}
-                  max="100"
-                ></progress>
+                <progress class="ascii-progress-native" id="minimal-progress" value={minimalProgressValue} max="100"></progress>
                 <span class="ascii-progress-visual" aria-hidden="true">
-                  <span class="ascii-progress-bracket">├</span><span class="ascii-progress-cells"><span class="ascii-progress-filled">{progressCells("■", filledProgressCells(progressValue))}</span><span class="ascii-progress-empty">{progressCells("□", progressCellCount - filledProgressCells(progressValue))}</span></span><span class="ascii-progress-bracket">┤</span>
-                  <span class="ascii-progress-value">{progressValue}%</span>
+                  <span>├</span>
+                  <span class="ascii-progress-cells">
+                    {#each progressCellIndexes as index}
+                      <span class:ascii-progress-filled={index < filledProgressCells(minimalProgressValue)} class:ascii-progress-empty={index >= filledProgressCells(minimalProgressValue)}>{index < filledProgressCells(minimalProgressValue) ? "■" : "□"}</span>
+                    {/each}
+                  </span>
+                  <span>┤</span>
+                </span>
+                <span class="ascii-progress-value" aria-hidden="true">{minimalProgressValue}%</span>
+              </div>
+              <div class="ascii-progress loading-progress">
+                <progress class="ascii-progress-native" id="loading-progress" max="100" aria-label="Loading"></progress>
+                <span class="ascii-loading-visual" aria-hidden="true">
+                  <span>├</span>
+                  <span class="ascii-loading-cells">
+                    {#each progressCellIndexes as index}
+                      <span class="ascii-loading-cell" style:animation-delay={`${index * -55}ms`}>│</span>
+                    {/each}
+                  </span>
+                  <span>┤</span>
+                </span>
+              </div>
+              <div class="ascii-progress braille-progress">
+                <progress class="ascii-progress-native" id="braille-progress" value={minimalProgressValue} max="100" aria-label="Braille progress"></progress>
+                <span class="ascii-progress-visual braille-progress-visual" aria-hidden="true">
+                  <span>⡇</span>
+                  <span class="ascii-progress-cells braille-progress-cells">
+                    {#each brailleCellIndexes as index}
+                      <span class:ascii-progress-filled={index < filledProgressCells(minimalProgressValue, 100, brailleCellCount)} class:ascii-progress-empty={index >= filledProgressCells(minimalProgressValue, 100, brailleCellCount)}>{index < filledProgressCells(minimalProgressValue, 100, brailleCellCount) ? "⣿" : "⣀"}</span>
+                    {/each}
+                  </span>
+                  <span>⢸</span>
+                </span>
+                <span class="ascii-progress-value" aria-hidden="true">{minimalProgressValue}%</span>
+              </div>
+              <div class="ascii-progress braille-loading-progress">
+                <progress class="ascii-progress-native" id="braille-loading-progress" max="100" aria-label="Braille loading"></progress>
+                <span class="ascii-loading-visual braille-loading-visual" aria-hidden="true">
+                  <span>⡇</span>
+                  <span class="ascii-loading-cells braille-loading-cells">
+                    {#each brailleCellIndexes as index}
+                      <span class="braille-loading-cell" style:animation-delay={`${index * -28}ms`}></span>
+                    {/each}
+                  </span>
+                  <span>⢸</span>
                 </span>
               </div>
             </div>
-            <div class="form-group">
-              <label for="progress-complete">Complete (100%)</label>
-              <div class="ascii-progress">
-                <progress
-                  class="ascii-progress-native"
-                  id="progress-complete"
-                  value="100"
-                  max="100"
-                ></progress>
-                <span class="ascii-progress-visual" aria-hidden="true">
-                  <span class="ascii-progress-bracket">├</span><span class="ascii-progress-cells"><span class="ascii-progress-filled">{progressCells("■", progressCellCount)}</span></span><span class="ascii-progress-bracket">┤</span>
-                  <span class="ascii-progress-value">100%</span>
-                </span>
-              </div>
-            </div>
-            <div class="form-group">
-              <label for="progress-indeterminate">Indeterminate</label>
-              <div class="ascii-progress">
-                <progress class="ascii-progress-native" id="progress-indeterminate"></progress>
-                <span class="ascii-progress-visual" aria-hidden="true">
-                  <span class="ascii-progress-bracket">├</span><span class="ascii-progress-cells ascii-progress-indeterminate"><span class="ascii-progress-empty">{progressCells("□", progressCellCount)}</span><span class="ascii-progress-scanner">■■■■</span></span><span class="ascii-progress-bracket">┤</span>
-                  <span class="ascii-progress-value">···</span>
-                </span>
-              </div>
-            </div>
-            <div class="form-group">
-              <label for="progress-adjust">Adjust Progress</label>
-              <Slider id="progress-adjust" min={0} max={100} bind:value={progressValue} material={materialConfigurations.slider} />
-            </div>
           </div>
+        </article>
 
-          <div class="form-control-group">
-            <h3>Text Inputs</h3>
-            <div class="form-group">
-              <label for="text-input">Text Input</label>
-              <input type="text" id="text-input" bind:value={textValue} placeholder="Enter text..." />
-            </div>
-            <div class="form-group">
-              <label for="number-input">Number Input</label>
-              <input type="number" id="number-input" bind:value={numberValue} />
-            </div>
-            <div class="form-group">
-              <label for="disabled-input">Disabled Text Input</label>
-              <input type="text" id="disabled-input" value="Cannot edit this" disabled />
-            </div>
-            <div class="form-group">
-              <label for="disabled-number">Disabled Number Input</label>
-              <input type="number" id="disabled-number" value="100" disabled />
-            </div>
+        <article class="element-card form-control-group dropdown-card">
+          <header class="control-card-heading"><span class="control-index" aria-hidden="true">06</span><h3>Dropdowns</h3></header>
+          <div class="form-group">
+            <label for="select-default">Default Select</label>
+            <select id="select-default" bind:value={selectValue}>
+              <option value="option1">Option One</option>
+              <option value="option2">Option Two</option>
+              <option value="option3">Option Three</option>
+            </select>
           </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- UI Elements Section -->
-    <section class="showcase-section col-12">
-      <h2>UI Elements</h2>
-      <div class="ui-elements-grid">
-        <div class="ui-example">
-          <h3>Table</h3>
-          <div class="table-shell">
-            <table>
-              <thead>
-                <tr>
-                  <th>Asset</th>
-                  <th>Status</th>
-                  <th>Package</th>
-                  <th>Updated</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td>SnapSort</td>
-                  <td><span class="chip chip-ready">Ready</span></td>
-                  <td><code>@snap-engine/snapsort</code></td>
-                  <td>Today</td>
-                </tr>
-                <tr>
-                  <td>SnapLine</td>
-                  <td><span class="chip chip-draft">Draft</span></td>
-                  <td><code>@snap-engine/snapline</code></td>
-                  <td>This week</td>
-                </tr>
-                <tr>
-                  <td>SnapZap</td>
-                  <td><span class="chip chip-muted">Queued</span></td>
-                  <td><code>@snap-engine/snapzap</code></td>
-                  <td>Later</td>
-                </tr>
-              </tbody>
-            </table>
+          <div class="form-group">
+            <label for="select-grouped">Grouped Options</label>
+            <select id="select-grouped">
+              <optgroup label="Category A"><option>Item A1</option><option>Item A2</option></optgroup>
+              <optgroup label="Category B"><option>Item B1</option><option>Item B2</option></optgroup>
+            </select>
           </div>
-        </div>
+          <div class="form-group">
+            <label for="select-icons">Dropdown with Icons</label>
+            <select id="select-icons" class="select-with-icons">
+              <button>
+                <selectedcontent></selectedcontent>
+              </button>
+              <option value="palette" selected>
+                <span class="material-symbols-rounded" aria-hidden="true">palette</span>
+                <span>Design</span>
+              </option>
+              <option value="code">
+                <span class="material-symbols-rounded" aria-hidden="true">code</span>
+                <span>Development</span>
+              </option>
+              <option value="animation">
+                <span class="material-symbols-rounded" aria-hidden="true">animation</span>
+                <span>Motion</span>
+              </option>
+            </select>
+          </div>
+        </article>
 
-        <div class="ui-example">
-          <h3>Chips</h3>
-          <div class="chip-board">
+        <article class="element-card form-control-group">
+          <header class="control-card-heading"><span class="control-index" aria-hidden="true">07</span><h3>Date Selectors</h3></header>
+          <div class="form-group">
+            <label for="date-input">Date Input</label>
+            <input type="date" id="date-input" bind:value={dateValue} />
+          </div>
+          <div class="form-group">
+            <label for="datetime-input">DateTime Input</label>
+            <input type="datetime-local" id="datetime-input" />
+          </div>
+          <div class="form-group">
+            <label for="time-input">Time Input</label>
+            <input type="time" id="time-input" />
+          </div>
+        </article>
+
+        <article class="element-card form-control-group">
+          <header class="control-card-heading"><span class="control-index" aria-hidden="true">08</span><h3>Text Inputs</h3></header>
+          <div class="form-group">
+            <label for="text-input">Text Input</label>
+            <input type="text" id="text-input" bind:value={textValue} placeholder="Enter text..." />
+          </div>
+          <div class="form-group">
+            <label for="number-input">Number Input</label>
+            <input type="number" id="number-input" bind:value={numberValue} />
+          </div>
+          <div class="form-group">
+            <label for="disabled-input">Disabled Text Input</label>
+            <input type="text" id="disabled-input" value="Cannot edit this" disabled />
+          </div>
+        </article>
+
+        <article class="element-card control-card chips-card">
+          <header class="control-card-heading"><span class="control-index" aria-hidden="true">09</span><h3>Chips</h3></header>
+          <div class="control-stage shared-stage chip-board">
             <span class="chip chip-ready">Ready</span>
             <span class="chip chip-active">Active</span>
             <span class="chip chip-warning">Needs read</span>
@@ -598,10 +395,61 @@
             <span class="chip chip-muted">Disabled</span>
             <span class="chip chip-code">READ_1</span>
           </div>
-        </div>
+        </article>
+
       </div>
     </section>
 
+    <section class="showcase-section layout-section">
+      <header class="section-heading">
+        <h2>Layout</h2>
+      </header>
+      <div class="layout-grid">
+        <article class="layout-card container-card">
+          <div class="cards-slots-stage">
+            <MaterialSurface depth="raised" shape="rounded" radius={16} material={materialConfigurations.raisedCard} className="specimen-card">
+              <h3>Raised<br />cards</h3>
+            </MaterialSurface>
+            <MaterialSurface depth="recessed" shape="rounded" radius={16} material={materialConfigurations.insetSlot} className="specimen-slot">
+              <div class="slot-content">
+                <h3>Inset Slot</h3>
+              </div>
+            </MaterialSurface>
+            <div class="compact-specimen"><div class="compact-card"><h3>Simple<br />card</h3></div></div>
+            <div class="compact-specimen"><div class="compact-slot"><h3>Simple<br />slot</h3></div></div>
+          </div>
+        </article>
+
+        <article class="layout-card table-card">
+          <h3>Table</h3>
+          <div class="table-shell">
+            <table>
+              <thead><tr><th>Asset</th><th>Status</th><th>Updated</th></tr></thead>
+              <tbody>
+                <tr><td>SnapSort</td><td><span class="chip chip-ready">Ready</span></td><td>Today</td></tr>
+                <tr><td>SnapLine</td><td><span class="chip chip-draft">Draft</span></td><td>This week</td></tr>
+                <tr><td>SnapZap</td><td><span class="chip chip-muted">Queued</span></td><td>Later</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <details class="material-editor">
+      <summary>
+        <span>Material editor</span>
+        <small>Advanced surface controls</small>
+      </summary>
+      <div class="material-panel-section">
+        <MaterialControlPanel
+          targets={materialTargets}
+          defaults={materialDefaultConfigurations}
+          bind:configurations={materialConfigurations}
+          bind:selectedTarget={selectedMaterialTarget}
+        />
+      </div>
+    </details>
 </div>
 
 
@@ -609,122 +457,109 @@
   .css-showcase {
     width: 100%;
     min-height: 100%;
-    position: relative;
     box-sizing: border-box;
     padding: clamp(18px, 3vw, 44px);
     background: #f6f6f6;
   }
 
+  .showcase-section,
+  .material-editor {
+    width: min(1400px, 100%);
+    margin-inline: auto;
+    margin-bottom: clamp(32px, 5vw, 60px);
+    box-sizing: border-box;
+  }
+
+  .showcase-section {
+    border: 1px solid #d7d7d7;
+  }
+
   .showcase-header {
     display: grid;
-    grid-template-columns: minmax(0, 0.85fr) minmax(420px, 1.15fr);
+    grid-template-columns: minmax(0, 0.85fr) minmax(380px, 1.15fr);
+    min-height: clamp(300px, 43vw, 520px);
     align-items: stretch;
-    text-align: left;
-    min-height: 496px;
   }
 
   .showcase-hero-copy {
     display: flex;
-    align-items: flex-start;
-    padding: clamp(48px, 6vw, 72px);
+    min-width: 0;
+    align-items: center;
+    padding: clamp(40px, 7vw, 96px);
+  }
+
+  .hero-specimen {
+    min-width: 0;
+    margin: clamp(18px, 2.5vw, 34px);
+    border-radius: var(--size-16);
+    background: #ececeb;
   }
 
   .showcase-title {
     margin: 0;
     color: #080808;
     font-family: "Geist", sans-serif;
-    font-size: clamp(84px, 9vw, 132px);
+    font-size: clamp(72px, 11vw, 156px);
     font-weight: 500;
     letter-spacing: -0.075em;
-    line-height: 0.9;
-  }
-
-  .hero-specimen {
-    position: relative;
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: var(--size-24);
-    margin: 32px;
-    padding: 28px;
-    overflow: hidden;
-    border-radius: 16px;
-    background: #ececeb;
-  }
-
-  .hero-description {
-    width: min(300px, 55%);
-    margin: 0;
-    color: #6b6867;
-    font-size: 0.9rem;
-    line-height: 1.45;
-  }
-
-  .hero-kicker {
-    position: absolute;
-    right: 28px;
-    bottom: 24px;
-    color: var(--color-primary);
-    font-family: "Bitcount Grid Single", monospace;
-    font-size: 18px;
-    text-transform: uppercase;
-  }
-
-  .style-selector {
-    display: flex;
-    align-items: center;
-    gap: var(--size-8);
-  }
-
-  .showcase-section {
-    width: min(1400px, 100%);
-    margin-inline: auto;
-    margin-bottom: 60px;
-    border: 1px solid #d7d7d7;
-    border-radius: 0;
-    background: transparent;
-
-    > h2 {
-      font-family: "Bitcount Grid Single", monospace;
-      font-size: 18px;
-      font-weight: 300;
-      color: var(--color-background-dark);
-      margin-bottom: var(--size-24);
-    }
-  }
-
-  .showcase-section:not(.showcase-header):not(.foundation-section):not(.palette-components-section):not(.elements-section) {
-    display: block;
+    line-height: 0.86;
   }
 
   .foundation-section {
     display: grid;
-    grid-template-columns: 1fr;
-    min-height: 420px;
+    grid-template-columns: minmax(240px, 0.62fr) minmax(0, 2.38fr);
+    gap: 0;
+    align-items: stretch;
+  }
+
+  .foundation-main,
+  .color-aside {
+    min-width: 0;
+    box-sizing: border-box;
   }
 
   .foundation-main {
-    display: flex;
-    align-items: center;
-    padding: clamp(46px, 6vw, 72px);
+    padding: clamp(36px, 4.5vw, 64px);
+  }
+
+  .color-aside {
+    padding: clamp(24px, 2.5vw, 36px) clamp(18px, 2vw, 28px);
   }
 
   .type-article {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: clamp(32px, 4vw, 64px);
-    align-items: start;
     width: 100%;
     margin: 0;
+  }
 
-    h1,
-    h2,
-    h3,
-    h4,
-    h5,
-    h6,
-    pre {
-      break-inside: avoid;
+  .number-specimen {
+    margin: clamp(40px, 5vw, 64px) 0 var(--size-32) !important;
+    overflow-wrap: anywhere;
+    color: #080808;
+    font-family: "Zen Dots", sans-serif;
+    font-size: clamp(1.65rem, 3vw, 3.25rem);
+    font-weight: 400;
+    line-height: 1;
+  }
+
+  .type-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 0.82fr) minmax(420px, 1.18fr);
+    gap: clamp(40px, 5vw, 72px);
+    align-items: start;
+  }
+
+  .code-specimens {
+    display: flex;
+    flex-direction: column;
+    gap: var(--size-24);
+    margin-top: clamp(36px, 4vw, 52px);
+  }
+
+  .type-column {
+    min-width: 0;
+
+    > :last-child {
+      margin-bottom: 0;
     }
 
     h1,
@@ -733,6 +568,7 @@
     h4,
     h5,
     h6 {
+      margin: 0;
       font-family: var(--font-label);
       font-weight: 400;
       letter-spacing: 0;
@@ -740,12 +576,11 @@
     }
 
     h1 {
-      margin-bottom: var(--size-16);
-      font-size: clamp(48px, 5vw, 72px);
+      font-size: clamp(44px, 4.5vw, 68px);
     }
 
     h2 {
-      font-size: clamp(36px, 4vw, 52px);
+      font-size: clamp(34px, 3.5vw, 50px);
     }
 
     h3 {
@@ -757,7 +592,7 @@
     }
 
     h5 {
-      font-size: 20px;
+      font-size: 19px;
     }
 
     h6 {
@@ -765,19 +600,11 @@
     }
   }
 
-  .type-column {
-    min-width: 0;
-
-    > :last-child {
-      margin-bottom: 0;
-    }
-  }
-
   .type-group-label {
-    margin-bottom: 12px !important;
+    margin: 0 0 var(--size-12) !important;
     color: var(--color-primary);
     font-family: var(--font-label);
-    font-size: 15px;
+    font-size: 0.86rem;
     line-height: 1;
     text-transform: uppercase;
   }
@@ -785,48 +612,29 @@
   .heading-stack {
     display: flex;
     flex-direction: column;
-    gap: 12px;
-
-    > :where(h1, h2, h3, h4, h5, h6) {
-      margin: 0;
-    }
+    gap: var(--size-12);
   }
 
   .type-column > hr {
-    margin: 32px 0;
+    margin: var(--size-32) 0;
     border: 0;
     border-top: 1px solid #d7d7d7;
   }
 
   .type-column blockquote {
-    margin: 24px 0 28px;
-    padding-left: 20px;
+    margin: var(--size-24) 0;
+    padding-left: var(--size-20);
     border-left: 2px solid var(--color-primary);
 
     p {
-      margin-bottom: 8px;
+      margin-bottom: var(--size-8);
     }
 
     cite {
       color: var(--color-text-muted);
       font-family: var(--font-code);
-      font-size: 12px;
+      font-size: 0.75rem;
       font-style: normal;
-    }
-  }
-
-  .type-column details {
-    padding: 14px 0;
-    border-top: 1px solid #d7d7d7;
-    border-bottom: 1px solid #d7d7d7;
-
-    summary {
-      cursor: pointer;
-      font-family: var(--font-label);
-    }
-
-    p {
-      margin: 12px 0 0;
     }
   }
 
@@ -858,365 +666,85 @@
     }
   }
 
-  .list-grid {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 24px;
-    margin: 28px 0;
+  .specimen-code {
+    min-width: 0;
+    overflow: hidden;
+    border: 1px solid #d7d7d7;
+    border-radius: var(--ui-radius);
+    background: #fff;
 
-    ul,
-    ol {
+    :global(pre.shiki.display) {
       margin: 0;
-      padding-left: 22px;
-    }
-  }
-
-  .type-column dl {
-    display: grid;
-    grid-template-columns: minmax(120px, 0.35fr) minmax(0, 1fr);
-    gap: 12px;
-    margin: 0 0 28px;
-
-    dt {
-      font-family: var(--font-label);
+      padding: 0;
+      overflow: hidden;
+      border: 0;
+      border-radius: 0;
+      background: #fff !important;
+      box-shadow: none;
     }
 
-    dd {
-      margin: 0;
+    :global(pre.shiki.display::before),
+    :global(pre.shiki.display::after) {
+      display: none;
     }
-  }
 
-  .palette-components-section {
-    display: grid;
-    grid-template-columns: minmax(280px, 0.65fr) minmax(0, 1.35fr);
-    align-items: stretch;
-    gap: 0;
-    min-height: 500px;
+    :global(pre.shiki.display code) {
+      display: block;
+      box-sizing: border-box;
+      padding: var(--size-16) 0;
+      overflow-x: auto;
+      background: transparent !important;
+      line-height: 1.6;
+    }
+
+    :global(.line::before) {
+      content: attr(data-line);
+      display: inline-block;
+      width: 3ch;
+      margin-right: var(--size-16);
+      padding: 0 var(--size-12);
+      border-right: 1px solid #d7d7d7;
+      color: var(--color-text-subtle);
+      font-variant-numeric: tabular-nums;
+      text-align: right;
+      user-select: none;
+    }
   }
 
   .color-aside {
     display: flex;
-    min-width: 0;
     flex-direction: column;
-    padding: 28px 24px 24px;
-    border-left: 0;
+    border-right: 1px solid #d7d7d7;
 
     > h2 {
-      margin: 0 0 16px;
-      padding-left: var(--ui-radius);
-      font-family: "Bitcount Grid Single", monospace;
-      font-size: 28px;
-      font-weight: 400;
-    }
-  }
-
-  .cards-slots-aside {
-    min-width: 0;
-    box-sizing: border-box;
-    display: flex;
-    flex-direction: column;
-    padding: 28px 24px 24px;
-    border-left: 1px solid #d7d7d7;
-
-    > h2 {
-      margin: 0 0 20px;
+      margin: 0 0 var(--size-20);
       padding-left: var(--ui-radius);
       font-family: var(--font-label);
       font-size: 28px;
       font-weight: 400;
     }
-
-    .cards-slots-stage {
-      flex: 1;
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: clamp(28px, 3vw, 48px);
-      box-sizing: border-box;
-      min-height: 0;
-      padding: clamp(44px, 5vw, 72px);
-      border-radius: 16px;
-      background: #ececeb;
-    }
-  }
-
-  :global(.specimen-slot) {
-    display: flex;
-    width: 100%;
-    min-height: 0;
-    align-items: stretch;
-  }
-
-  .cards-slots-stage .slot-content {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-    width: 100%;
-    align-items: center;
-    justify-content: center;
-    box-sizing: border-box;
-    padding: clamp(36px, 4vw, 60px);
-  }
-
-  :global(.specimen-card) {
-    --material-content-direction: column;
-    --material-content-gap: 12px;
-    --material-content-padding: clamp(28px, 3vw, 44px);
-    box-sizing: border-box;
-  }
-
-  .cards-slots-stage :global(.specimen-card h3) {
-    padding-left: var(--ui-radius);
-    font-weight: 400;
-  }
-
-  .cards-slots-stage :global(.specimen-slot h3) {
-    padding-left: var(--ui-radius);
-    font-weight: 400;
-  }
-
-  .compact-specimen {
-    display: flex;
-    min-width: 0;
-    flex-direction: column;
-    justify-content: center;
-
-    h3 {
-      margin: 0;
-      padding-left: var(--ui-radius);
-      font-weight: 400;
-    }
-
-    p {
-      margin: 0;
-      color: color-mix(in srgb, #000 58%, transparent);
-      font-size: 0.9rem;
-      line-height: 1.45;
-    }
-  }
-
-  .compact-card {
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    gap: 16px;
-    min-height: 108px;
-    padding: 20px;
-    box-sizing: border-box;
-    border: 1px solid color-mix(in srgb, #000 24%, transparent);
-    border-radius: 8px;
-    background: #f6f6f6;
-    box-shadow: 0 3px 10px rgb(36 38 39 / 5%);
-  }
-
-  .compact-slot {
-    display: flex;
-    min-height: 108px;
-    flex-direction: column;
-    justify-content: center;
-    gap: 16px;
-    padding: 20px;
-    box-sizing: border-box;
-    border: 1px solid #d7d7d7;
-    border-radius: 8px;
-    color: color-mix(in srgb, #000 52%, transparent);
-  }
-
-  .material-panel-section {
-    display: block;
-    width: 100%;
-    margin: 0 0 60px;
-    border: 0;
-  }
-
-  .material-panel-section > :global(.material-control-panel) {
-    width: 100%;
-    margin: 0;
-    box-sizing: border-box;
-  }
-
-  .controls-stack {
-    display: contents;
-  }
-
-  .elements-section {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 0;
-    align-items: stretch;
-    border: 0;
-  }
-
-  .oversized-section-title {
-    display: flex;
-    align-items: center;
-    margin: 0 !important;
-    padding: clamp(50px, 6vw, 74px);
-    color: #080808 !important;
-    font-family: "Geist", sans-serif !important;
-    font-size: clamp(72px, 7.5vw, 116px) !important;
-    font-weight: 500 !important;
-    letter-spacing: -0.07em;
-    line-height: 0.9;
-    grid-row: span 2;
-    min-height: 560px;
-    box-sizing: border-box;
-    border: 1px solid #d7d7d7;
-  }
-
-  .controls-top {
-    display: contents;
-  }
-
-  .form-grid {
-    display: contents;
-  }
-
-  .controls-top > div,
-  .form-control-group {
-    margin: 0;
-    min-width: 0;
-    box-sizing: border-box;
-    padding: 24px;
-    border: 0;
-    background: transparent;
-  }
-
-  // Each adjoining tile owns only one side of a shared seam, keeping it 1px.
-  .controls-top > div:first-child,
-  .controls-top > div:last-child {
-    border-top: 1px solid #d7d7d7;
-    border-right: 1px solid #d7d7d7;
-    border-bottom: 1px solid #d7d7d7;
-  }
-
-  .form-control-group:nth-child(1),
-  .form-control-group:nth-child(2),
-  .form-control-group:nth-child(4),
-  .form-control-group:nth-child(5) {
-    border-right: 1px solid #d7d7d7;
-    border-bottom: 1px solid #d7d7d7;
-  }
-
-  .form-control-group:nth-child(3),
-  .form-control-group:nth-child(6) {
-    border-right: 1px solid #d7d7d7;
-    border-bottom: 1px solid #d7d7d7;
-    border-left: 1px solid #d7d7d7;
-  }
-
-  .toggle-range-card {
-    display: grid;
-    grid-template-rows: repeat(2, minmax(0, 1fr));
-    padding: 0 !important;
-  }
-
-  .toggle-range-half {
-    min-width: 0;
-    padding: 16px 24px;
-
-    & + & {
-      border-top: 1px solid #d7d7d7;
-    }
-  }
-
-  .form-control-group h3,
-  .controls-stack h3 {
-    margin-bottom: var(--size-16);
-    padding-left: var(--ui-radius);
-    font-weight: 400;
-  }
-
-  .form-group {
-    input[type="text"],
-    input[type="number"] {
-      height: var(--size-32);
-    }
-  }
-
-  .toggle-demo {
-    display: flex;
-    align-items: center;
-    gap: var(--size-12);
-
-    span {
-      font-family: var(--font-code);
-      font-size: 1rem;
-      color: var(--color-background-dark);
-    }
-  }
-
-  .toggle-examples {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: var(--size-16);
-    justify-content: center;
-    min-height: 88px;
-    box-sizing: border-box;
-    padding: 16px 24px;
-    border-radius: 16px;
-    background: #ececeb;
-  }
-
-  .range-demo {
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    gap: var(--size-12);
-    min-height: 88px;
-    box-sizing: border-box;
-    padding: 16px 24px;
-    border-radius: 16px;
-    background: #ececeb;
-  }
-
-  .button-row {
-    display: flex;
-    flex-direction: column;
-    gap: var(--size-16);
-    align-items: flex-start;
-    justify-content: center;
-    min-height: 180px;
-    box-sizing: border-box;
-    padding: 32px;
-    border-radius: 16px;
-    background: #ececeb;
   }
 
   .color-grid {
-    min-height: 0;
-    flex: 1;
-    width: 100%;
-    box-sizing: border-box;
     display: grid;
-    grid-template-columns: 1fr;
-    grid-template-rows: 46% 27% 15% 12%;
-    gap: 0;
+    flex: 1;
+    min-height: 520px;
+    grid-template-rows: 42% 28% 16% 14%;
     overflow: hidden;
     border: 1px solid #d7d7d7;
-    border-radius: 16px;
-  }
-
-  @media (max-width: 640px) {
-    .controls-top {
-      grid-template-columns: 1fr;
-    }
+    border-radius: var(--size-16);
   }
 
   .color-swatch {
-    min-height: 0;
-    padding: 10px 16px;
-    border-radius: 0;
-    text-align: left;
     display: flex;
-    flex-direction: row;
+    min-height: 0;
     align-items: flex-end;
     justify-content: space-between;
-    gap: 12px;
+    gap: var(--size-12);
+    padding: var(--size-12) var(--size-16);
 
     span {
       font-family: var(--font-code);
-      font-size: 1rem;
       font-weight: 600;
     }
 
@@ -1225,115 +753,608 @@
       opacity: 0.8;
     }
 
-    &.primary {
-      background-color: #ff5d0f;
-      color: white;
-    }
     &.background {
-      background-color: #f6f6f6;
       color: var(--color-text);
+      background: #f6f6f6;
     }
+
     &.background-tint {
-      background-color: #ececeb;
       color: var(--color-text);
+      background: #ececeb;
     }
+
     &.black {
-      background-color: #000;
-      color: white;
+      color: #fff;
+      background: #000;
     }
 
-    &.primary code,
-    &.black code {
-      color: white;
+    &.primary {
+      color: #fff;
+      background: var(--color-primary);
+    }
+
+    &.black code,
+    &.primary code {
+      color: #fff;
     }
   }
 
-  .showcase-section:not(.showcase-header):not(.foundation-section):not(.elements-section) > h2 {
-    margin: 0;
-    padding: 28px clamp(28px, 4vw, 48px);
+  .elements-section {
+    border: 0;
   }
 
-  .specimen-code {
+  .elements-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 1px;
+    padding: 1px;
+    background: #d7d7d7;
+  }
+
+  .oversized-section-title,
+  .element-card {
     min-width: 0;
-    min-height: 180px;
-    margin: 0;
-    padding: 0;
+    box-sizing: border-box;
+    background: #f6f6f6;
+  }
+
+  .oversized-section-title {
+    container-type: inline-size;
+    display: flex;
+    min-height: 390px;
+    align-items: center;
+    padding: clamp(28px, 4vw, 64px);
     overflow: hidden;
-    border: 1px solid
-      color-mix(in srgb, var(--color-background-dark) 22%, transparent);
-    border-radius: var(--ui-radius);
-    background: #050708;
-    box-shadow: none;
 
-    &::before,
-    &::after {
-      display: none;
-    }
-
-    code {
-      display: block;
-      box-sizing: border-box;
-      padding: var(--size-16) 0;
-      overflow-x: auto;
-      color: #e8e6dc;
-      background: transparent;
-      font-family: var(--font-code);
-      line-height: 1.6;
-      white-space: pre;
-    }
-
-    .line {
-      display: block;
-      min-height: 1.6em;
-      padding-right: var(--size-16);
-    }
-
-    .line::before {
-      content: attr(data-line);
-      display: inline-block;
-      width: 3ch;
-      margin-right: var(--size-16);
-      padding: 0 var(--size-12);
-      border-right: 1px solid rgb(255 255 255 / 14%);
-      color: #777d81;
-      font-variant-numeric: tabular-nums;
-      text-align: right;
-      user-select: none;
-    }
-
-    .code-keyword {
-      color: #ff7a3c;
-    }
-
-    .code-comment {
-      color: #8a9296;
+    h2 {
+      max-width: 100%;
+      margin: 0;
+      color: #080808;
+      font-family: "Geist", sans-serif;
+      font-size: clamp(3.1rem, 18cqi, 7rem);
+      font-weight: 500;
+      letter-spacing: -0.07em;
+      line-height: 0.88;
     }
   }
 
-  .range-value {
-    font-family: var(--font-code);
-    font-size: 1rem;
+  .element-card {
+    padding: clamp(22px, 2.5vw, 34px);
+  }
+
+  .control-card {
+    container-type: inline-size;
+    min-height: 390px;
+  }
+
+  .sliders-card {
+    grid-column: span 2;
+  }
+
+  .control-card-heading {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--size-12);
+    margin-bottom: var(--size-20);
+
+    h3 {
+      margin: 0;
+      font-family: var(--font-label);
+      font-size: 1.05rem;
+      font-weight: 400;
+      letter-spacing: 0;
+      line-height: 1;
+    }
+  }
+
+  .control-index {
+    color: #080808;
+    font-family: "Zen Dots", sans-serif;
+    font-size: clamp(2.25rem, 3vw, 3rem);
+    font-weight: 400;
+    line-height: 0.8;
+  }
+
+  .control-stage {
+    min-height: 270px;
+    padding: clamp(20px, 6cqi, 32px);
+    border-radius: var(--size-16);
+    background: #ececeb;
+    box-sizing: border-box;
+  }
+
+  .variant-stage {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: clamp(18px, 5cqi, 30px);
+  }
+
+  .control-variant {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    justify-content: center;
+    gap: var(--size-12);
+  }
+
+  .button-stack {
+    align-items: center;
+  }
+
+  .slider-stack {
+    align-items: flex-start;
+  }
+
+  .slider-variants-stage {
+    align-items: center;
+  }
+
+  .precision-slider-stack {
+    grid-column: span 1;
+    width: 100%;
+    padding-top: clamp(18px, 4cqi, 28px);
+    border-top: 1px solid color-mix(
+      in srgb,
+      var(--color-background-dark) 18%,
+      transparent
+    );
+    box-sizing: border-box;
+  }
+
+  .toggle-demo > span {
     color: var(--color-background-dark);
+    font-family: var(--font-code);
+    font-size: 0.9rem;
+  }
+
+  .dial-stage {
+    align-items: center;
+  }
+
+  .dial-stack {
+    align-items: center;
+  }
+
+  .toggle-demo,
+  .choice-stack label,
+  .minimal-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--size-8);
   }
 
   .checkbox-label,
   .radio-label {
+    padding: 2px var(--size-4);
+  }
+
+  .radio-label {
     cursor: pointer;
   }
 
-  .ui-elements-grid {
-    display: grid;
-    grid-template-columns: minmax(0, 1.45fr) minmax(240px, 0.55fr);
-    gap: var(--size-32);
-    align-items: start;
-    padding: 0 clamp(28px, 4vw, 48px) clamp(28px, 4vw, 48px);
+  .minimal-button {
+    --minimal-button-background: #fff;
+    --minimal-button-interaction-color: #000;
+
+    min-height: 38px;
+    padding: 10px 14px 8px;
+    border: 1px solid #d7d7d7;
+    border-radius: 8px;
+    background: var(--minimal-button-background);
+    color: #000;
+    font: inherit;
+    font-family: var(--font-label);
+    font-weight: 400;
+    cursor: pointer;
+    transition: background-color 120ms ease;
+
+    &.primary {
+      --minimal-button-background: var(--color-primary);
+      --minimal-button-interaction-color: #fff;
+      color: #fff;
+    }
+
+    &.active {
+      --minimal-button-background: #000;
+      --minimal-button-interaction-color: #fff;
+      color: #fff;
+    }
+
+    &:hover:not(:disabled) {
+      background: color-mix(
+        in srgb,
+        var(--minimal-button-background) 92%,
+        var(--minimal-button-interaction-color) 8%
+      );
+    }
+
+    &:active:not(:disabled) {
+      background: color-mix(
+        in srgb,
+        var(--minimal-button-background) 84%,
+        var(--minimal-button-interaction-color) 16%
+      );
+    }
+
+    &.primary:hover:not(:disabled),
+    &.active:hover:not(:disabled) {
+      background: color-mix(in srgb, var(--minimal-button-background) 84%, #fff 16%);
+    }
+
+    &.primary:active:not(:disabled),
+    &.active:active:not(:disabled) {
+      background: color-mix(in srgb, var(--minimal-button-background) 72%, #fff 28%);
+    }
+
+    &:disabled {
+      border-color: #8a8a8a;
+      color: #737373;
+      cursor: not-allowed;
+    }
   }
 
-  .ui-example {
-    min-width: 0;
+  .minimal-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--size-8);
 
-    h3 {
-      margin-bottom: var(--size-16);
+    input + span {
+      width: 42px !important;
+      height: 22px !important;
+      box-sizing: border-box;
+      border: 1px solid #b8b8b8 !important;
+      border-radius: 999px !important;
+      background: transparent !important;
+      box-shadow: none !important;
+
+      &::before {
+        content: "" !important;
+        top: 2px !important;
+        left: 2px !important;
+        width: 18px !important;
+        height: 18px !important;
+        border: 0 !important;
+        border-radius: 50% !important;
+        background: var(--color-primary) !important;
+        box-shadow: none !important;
+        transform: none !important;
+        transition: left 120ms ease !important;
+      }
+
+      &::after {
+        display: none !important;
+      }
+    }
+
+    input:checked + span::before {
+      left: 22px !important;
+    }
+  }
+
+  .minimal-range {
+    width: 100%;
+    height: 12px;
+    box-sizing: border-box;
+    padding: 1px;
+    appearance: none;
+    border: 1px solid #b8b8b8;
+    border-radius: 999px;
+    background: transparent;
+    box-shadow: none;
+
+    &::-webkit-slider-thumb {
+      width: 8px;
+      height: 8px;
+      appearance: none;
+      border: 0;
+      border-radius: 50%;
+      background: var(--color-primary);
+      box-shadow: none;
+    }
+
+    &::-moz-range-thumb {
+      width: 8px;
+      height: 8px;
+      border: 0;
+      border-radius: 50%;
+      background: var(--color-primary);
+      box-shadow: none;
+    }
+
+    &:disabled {
+      opacity: 0.42;
+      cursor: not-allowed;
+    }
+  }
+
+  .minimal-choices {
+    label {
+      display: inline-grid;
+      grid-template-columns: 42px auto;
+      align-items: center;
+      gap: var(--size-8);
+    }
+
+    .minimal-checkbox-box,
+    .minimal-radio-ring {
+      display: inline-grid !important;
+      width: 18px !important;
+      height: 18px !important;
+      box-sizing: border-box;
+      justify-self: center;
+      place-items: center;
+      border: 1px solid #b8b8b8 !important;
+      background: transparent !important;
+      box-shadow: none !important;
+      position: relative;
+    }
+
+    .minimal-checkbox-box {
+      border-radius: 3px !important;
+    }
+
+    .minimal-radio-ring {
+      border-radius: 50% !important;
+    }
+
+    .minimal-checkbox-box::before,
+    .minimal-radio-ring::after {
+      display: none !important;
+    }
+
+    .minimal-checkbox-box::after,
+    .minimal-radio-ring::before {
+      content: "" !important;
+      position: static !important;
+      inset: auto !important;
+      display: block !important;
+      width: 14px !important;
+      height: 14px !important;
+      border: 0 !important;
+      border-radius: 2px !important;
+      background: var(--color-primary) !important;
+      box-shadow: none !important;
+      opacity: 0;
+      transform: none !important;
+    }
+
+    .minimal-radio-ring::before {
+      border-radius: 50% !important;
+    }
+
+    .minimal-checkbox input:checked + .minimal-checkbox-box::after,
+    .minimal-radio input:checked + .minimal-radio-ring::before {
+      opacity: 1;
+    }
+  }
+
+  .form-control-group {
+    .form-group:last-child {
+      margin-bottom: 0;
+    }
+
+    input[type="text"],
+    input[type="number"],
+    input[type="date"],
+    input[type="datetime-local"],
+    input[type="time"],
+    select {
+      width: 100%;
+      min-height: 38px;
+    }
+  }
+
+  :global(.css-showcase .dropdown-card select::picker(select)) {
+    padding-block: var(--size-8);
+    border: 1px solid rgb(0 0 0 / 24%);
+    border-radius: var(--ui-radius);
+    background: #fff;
+    box-shadow: 0 3px 10px rgb(36 38 39 / 5%);
+  }
+
+  .dropdown-card select {
+    padding-inline-start: var(--size-16);
+  }
+
+  :global(.css-showcase .dropdown-card #select-grouped::picker(select)) {
+    padding-block: var(--size-16);
+  }
+
+  .dropdown-card select option {
+    background: transparent;
+    color: var(--color-text);
+    font-family: "Geist", sans-serif;
+    font-size: 1rem;
+    font-weight: 400;
+    text-indent: 0;
+  }
+
+  .dropdown-card select option:hover,
+  .dropdown-card select option:focus-visible {
+    background: #ececeb;
+  }
+
+  .dropdown-card select optgroup {
+    color: rgb(0 0 0 / 58%);
+    font-family: var(--font-label);
+    font-size: 0.9rem;
+    font-weight: 400;
+    text-indent: var(--size-8);
+  }
+
+  .dropdown-card select optgroup + optgroup {
+    margin-top: var(--size-24);
+  }
+
+  .dropdown-card .select-with-icons .material-symbols-rounded {
+    flex: 0 0 auto;
+    color: var(--color-primary);
+    font-family: "Material Symbols Rounded";
+    font-size: 1.15rem;
+    font-style: normal;
+    font-weight: 500;
+    line-height: 1;
+  }
+
+  .progress-card .control-stage {
+    display: flex;
+    min-height: 240px;
+    align-items: center;
+  }
+
+  .progress-stack {
+    display: flex;
+    width: 100%;
+    flex-direction: column;
+    gap: clamp(34px, 8cqi, 48px);
+  }
+
+  .ascii-progress {
+    position: relative;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .ascii-progress-native {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .ascii-progress-visual {
+    display: grid;
+    width: 100%;
+    min-width: 0;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 3px;
+    color: #000;
+    font-family: var(--font-code);
+    font-size: clamp(0.62rem, 2.6cqi, 0.92rem);
+    white-space: nowrap;
+  }
+
+  .ascii-progress-cells {
+    display: grid;
+    width: 100%;
+    min-width: 0;
+    grid-template-columns: repeat(20, minmax(0, 1fr));
+    align-items: center;
+    text-align: center;
+  }
+
+  .ascii-progress-filled {
+    color: #000;
+  }
+
+  .ascii-progress-empty,
+  .ascii-progress-value {
+    color: #777;
+  }
+
+  .ascii-progress-value {
+    position: absolute;
+    z-index: 1;
+    top: 50%;
+    left: 50%;
+    margin: 0;
+    padding: 0 5px;
+    background: #ececeb;
+    color: #000;
+    font-family: var(--font-code);
+    font-size: 0.78rem;
+    line-height: 1;
+    transform: translate(-50%, -50%);
+  }
+
+  .ascii-loading-visual {
+    display: grid;
+    width: 100%;
+    min-width: 0;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 3px;
+    color: #000;
+    font-family: var(--font-code);
+    font-size: clamp(0.62rem, 2.6cqi, 0.92rem);
+    line-height: 1;
+    white-space: nowrap;
+  }
+
+  .ascii-loading-cells {
+    display: grid;
+    height: 1.5em;
+    grid-template-columns: repeat(20, minmax(0, 1fr));
+    align-items: center;
+    text-align: center;
+  }
+
+  .ascii-loading-cell {
+    display: inline-block;
+    line-height: 1;
+    transform: scaleY(0.18);
+    transform-origin: center;
+    animation: ascii-loading-wave 1.1s ease-in-out infinite;
+  }
+
+  .braille-progress-cells,
+  .braille-loading-cells {
+    grid-template-columns: repeat(40, minmax(0, 1fr));
+    gap: 0;
+    letter-spacing: -0.1em;
+  }
+
+  .braille-loading-cell {
+    display: inline-block;
+    line-height: 1;
+    text-align: center;
+  }
+
+  .braille-loading-cell::before {
+    content: "⠒";
+    animation: braille-loading-wave 1.1s steps(1, end) infinite;
+    animation-delay: inherit;
+  }
+
+  @keyframes ascii-loading-wave {
+    0%,
+    100% {
+      opacity: 0.38;
+      transform: scaleY(0.18);
+    }
+
+    50% {
+      opacity: 1;
+      transform: scaleY(1.35);
+    }
+  }
+
+  @keyframes braille-loading-wave {
+    0%,
+    100% {
+      content: "⠒";
+      opacity: 0.38;
+    }
+
+    20%,
+    80% {
+      content: "⠛";
+      opacity: 0.58;
+    }
+
+    38%,
+    62% {
+      content: "⠿";
+      opacity: 0.78;
+    }
+
+    50% {
+      content: "⣿";
+      opacity: 1;
     }
   }
 
@@ -1342,110 +1363,334 @@
     flex-wrap: wrap;
     gap: var(--size-8);
     align-content: flex-start;
-    padding: var(--size-16);
-    border-radius: var(--ui-radius);
-    background: var(--color-background);
   }
 
-  @media (max-width: 900px) {
-    .ui-elements-grid {
-      grid-template-columns: 1fr;
+  .shared-stage {
+    align-items: flex-start;
+  }
+
+  .layout-section {
+    min-height: clamp(680px, 68vw, 940px);
+    padding: clamp(32px, 4vw, 64px);
+  }
+
+  .section-heading {
+    display: flex;
+    min-height: clamp(220px, 25vw, 360px);
+    align-items: flex-start;
+
+    h2 {
+      margin: 0;
+      color: #080808;
+      font-family: "Geist", sans-serif;
+      font-size: clamp(76px, 10vw, 148px);
+      font-weight: 500;
+      letter-spacing: -0.065em;
+      line-height: 0.9;
     }
+  }
+
+  .layout-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.28fr);
+    gap: clamp(28px, 4vw, 64px);
+    align-items: stretch;
+  }
+
+  .layout-card {
+    min-width: 0;
+    min-height: clamp(340px, 32vw, 470px);
+
+    > h3 {
+      margin: 0 0 var(--size-20);
+      font-family: var(--font-label);
+      font-weight: 400;
+    }
+  }
+
+  .container-card {
+    display: flex;
+  }
+
+  .cards-slots-stage {
+    display: grid;
+    width: 100%;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-rows: repeat(2, minmax(0, 1fr));
+    gap: var(--size-16);
+  }
+
+  :global(.specimen-slot) {
+    display: flex;
+    width: 100%;
+    min-height: 0;
+    align-items: flex-start !important;
+    justify-content: flex-start !important;
+  }
+
+  :global(.specimen-card) {
+    --material-content-direction: column;
+    --material-content-gap: 12px;
+    --material-content-padding: clamp(22px, 2.5vw, 34px);
+    align-items: flex-start !important;
+    justify-content: flex-start !important;
+    box-sizing: border-box;
+  }
+
+  .cards-slots-stage .slot-content {
+    display: flex;
+    width: 100%;
+    flex-direction: column;
+    justify-content: flex-start;
+    gap: var(--size-12);
+    box-sizing: border-box;
+    padding: clamp(22px, 2.5vw, 34px);
+  }
+
+  .cards-slots-stage :global(h3),
+  .compact-specimen h3 {
+    margin: 0;
+    padding-left: var(--ui-radius);
+    font-weight: 400;
+  }
+
+  .compact-specimen {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    justify-content: stretch;
+  }
+
+  .compact-card,
+  .compact-slot {
+    display: flex;
+    min-height: 100%;
+    flex-direction: column;
+    justify-content: flex-start;
+    gap: var(--size-12);
+    padding: clamp(22px, 2.5vw, 34px);
+    box-sizing: border-box;
+    border-radius: var(--size-16);
+  }
+
+  .compact-card {
+    border: 0;
+    background: #ececeb;
+    box-shadow: none;
+  }
+
+  .compact-slot {
+    border: 0;
+    background: #ececeb;
+  }
+
+  .table-card {
+    display: flex;
+    flex-direction: column;
+    padding: clamp(22px, 2.5vw, 34px);
+    border-radius: var(--size-16);
+    background: #ececeb;
+  }
+
+  .table-card .table-shell {
+    flex: 1;
+    border: 1px solid #e2e2e2;
+  }
+
+  .table-card table {
+    min-width: 430px;
+  }
+
+  .material-editor {
+    border: 1px solid #d7d7d7;
+    background: #f6f6f6;
+
+    > summary {
+      display: flex;
+      min-height: 68px;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--size-16);
+      padding: var(--size-16) clamp(20px, 3vw, 36px);
+      box-sizing: border-box;
+      cursor: pointer;
+      list-style: none;
+      font-family: var(--font-label);
+      font-size: 1.1rem;
+
+      &::-webkit-details-marker {
+        display: none;
+      }
+
+      &::after {
+        content: "+";
+        color: var(--color-primary);
+        font-family: var(--font-code);
+        font-size: 1.5rem;
+      }
+
+      small {
+        margin-left: auto;
+        color: var(--color-text-muted);
+        font-family: var(--font-code);
+        font-size: 0.75rem;
+        font-weight: 400;
+      }
+    }
+
+    &[open] > summary {
+      border-bottom: 1px solid #d7d7d7;
+
+      &::after {
+        content: "−";
+      }
+    }
+  }
+
+  .material-panel-section {
+    padding: clamp(16px, 2vw, 28px);
+  }
+
+  .material-panel-section > :global(.material-control-panel) {
+    width: 100%;
+    margin: 0;
+    box-sizing: border-box;
   }
 
   @media (max-width: 1050px) {
-    .showcase-header,
-    .elements-section {
+    .showcase-header {
       grid-template-columns: 1fr;
     }
 
-    .showcase-header {
-      min-height: auto;
-    }
-
     .hero-specimen {
-      min-height: 320px;
+      min-height: 260px;
+      margin-top: 0;
     }
 
-    .foundation-section,
-    .palette-components-section {
+    .foundation-section {
       grid-template-columns: 1fr;
     }
 
     .color-aside {
-      border-left: 0;
-    }
-
-    .cards-slots-aside {
-      border-top: 1px solid #d7d7d7;
-      border-left: 0;
+      border-right: 0;
+      border-bottom: 1px solid #d7d7d7;
     }
 
     .color-grid {
-      min-height: 220px;
+      min-height: 230px;
       grid-template-columns: repeat(4, 1fr);
       grid-template-rows: 1fr;
     }
 
-    .oversized-section-title {
-      min-height: 300px;
-      grid-row: auto;
+    .elements-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
-    .controls-top > div:first-child,
-    .controls-top > div:last-child,
-    .form-control-group:nth-child(n) {
-      border: 1px solid #d7d7d7;
-      border-top: 0;
+    .oversized-section-title {
+      grid-column: 1 / -1;
+      min-height: 320px;
+    }
+
+    .layout-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .container-card {
+      grid-column: auto;
+    }
+  }
+
+  @media (max-width: 850px) {
+    .type-grid {
+      grid-template-columns: 1fr;
     }
   }
 
   @media (max-width: 700px) {
     .css-showcase {
-      padding: 12px;
+      padding: var(--size-12);
     }
 
-    .showcase-section {
-      margin-bottom: 32px;
+    .showcase-header {
+      min-height: 0;
     }
 
-    .showcase-hero-copy,
-    .foundation-main,
-    .oversized-section-title {
-      padding: 32px 24px;
+    .showcase-hero-copy {
+      padding: var(--size-32) var(--size-24);
     }
 
-    .showcase-title,
-    .oversized-section-title {
-      font-size: clamp(64px, 22vw, 96px) !important;
+    .showcase-title {
+      font-size: clamp(64px, 23vw, 96px);
     }
 
     .hero-specimen {
-      min-height: 260px;
-      margin: 12px;
-      padding: 20px;
+      min-height: 200px;
+      margin: 0 var(--size-12) var(--size-12);
     }
 
-    .hero-description {
-      display: none;
-    }
-
-    .type-article {
+    .type-grid,
+    .elements-grid {
       grid-template-columns: 1fr;
+    }
+
+    .sliders-card {
+      grid-column: auto;
+    }
+
+    .foundation-main,
+    .color-aside {
+      padding: var(--size-24);
     }
 
     .color-grid {
+      min-height: 360px;
       grid-template-columns: 1fr;
-      grid-template-rows: none;
+      grid-template-rows: repeat(4, minmax(80px, 1fr));
+    }
+
+    .oversized-section-title {
+      min-height: 250px;
+    }
+
+    .variant-stage {
+      grid-template-columns: 1fr;
     }
 
     .cards-slots-stage {
       grid-template-columns: 1fr;
-      padding: 28px;
+      padding: var(--size-24);
     }
 
-    .controls-stack {
-      display: contents;
+    .section-heading {
+      align-items: start;
+      flex-direction: column;
+      gap: var(--size-4);
+    }
+
+    .material-editor > summary small {
+      display: none;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .ascii-loading-cell {
+      animation: none;
+      opacity: 0.72;
+      transform: scaleY(0.5);
+    }
+
+    .braille-loading-cell::before {
+      content: "⠿";
+      animation: none;
+      opacity: 0.72;
+    }
+
+    .minimal-toggle input + span::before {
+      transition: none !important;
+    }
+
+    .minimal-button {
+      transition: none;
     }
   }
 </style>

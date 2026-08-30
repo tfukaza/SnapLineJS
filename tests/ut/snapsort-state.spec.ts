@@ -836,6 +836,62 @@ test("same-destination programmatic moves share one animation transaction", asyn
   }
 });
 
+test("programmatic transactions and drag sessions exclude each other within one root", async () => {
+  const harness = createStateHarness();
+  try {
+    const root = mountRoot(harness);
+    const source = mountContainer(harness, root, "source");
+    const destination = mountContainer(
+      harness,
+      root,
+      "destination",
+      undefined,
+      { animation: { move: { duration: 100 } } },
+    );
+    const queued = mountItem(harness, source, "queued");
+    const dragged = mountItem(harness, source, "dragged");
+    const blocked = mountItem(harness, source, "blocked");
+
+    expect(source.moveItem(queued.itemId, destination, 0)).toBe(true);
+    attemptItemDrag(dragged);
+    expect(getDragSessionController(root)).toBeNull();
+
+    const independentRoot = mountRoot(harness, "independent-root");
+    const independentItem = mountItem(
+      harness,
+      independentRoot,
+      "independent-item",
+    );
+    attemptItemDrag(independentItem);
+    const independentSession = getDragSessionController(independentRoot);
+    expect(independentSession).not.toBeNull();
+    independentSession?.cancel();
+
+    await drainFrames(harness.global);
+    expect(source.itemList).toEqual([dragged, blocked]);
+    expect(destination.itemList).toEqual([queued]);
+
+    attemptItemDrag(dragged);
+    const session = getDragSessionController(root);
+    expect(session).not.toBeNull();
+    expect(source.moveItem(blocked.itemId, destination, 1)).toBe(false);
+    expect(source.removeItem(blocked.itemId)).toBe(false);
+    expect(source.itemList).toEqual([dragged, blocked]);
+    expect(destination.itemList).toEqual([queued]);
+
+    session?.cancel();
+    await drainFrames(harness.global);
+    expect(source.moveItem(blocked.itemId, destination, 1)).toBe(true);
+    await drainFrames(harness.global);
+
+    expect(getDragSessionController(root)).toBeNull();
+    expect(source.itemList).toEqual([dragged]);
+    expect(destination.itemList).toEqual([queued, blocked]);
+  } finally {
+    harness.cleanup();
+  }
+});
+
 test("programmatic placement and removal share their animation owner transaction", async () => {
   const harness = createStateHarness();
   try {

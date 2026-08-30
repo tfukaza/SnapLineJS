@@ -976,8 +976,10 @@ function drawCandidateDebug(
   options: {
     topCandidates?: boolean;
     distanceOrigin?: { x: number; y: number };
+    distanceLabel?: string;
   } = {},
 ) {
+  const distanceLabel = options.distanceLabel ?? "d";
   for (let i = 0; i < 50; i++) {
     root.clearDebugMarker(`drop-candidate-marker-${i}`);
     root.clearDebugMarker(`drop-candidate-label-${i}`);
@@ -1011,7 +1013,7 @@ function drawCandidateDebug(
     root.addDebugText(
       candidate.candidateCenterX + 8,
       candidate.candidateCenterY + 4,
-      `${isBest ? ">> " : ""}[${candidate.target.container.id}:${candidate.target.index}] d=${Math.round(candidate.distance)}`,
+      `${isBest ? ">> " : ""}[${candidate.target.container.id}:${candidate.target.index}] ${distanceLabel}=${Math.round(candidate.distance)}`,
       color,
       true,
       `drop-candidate-label-${i}`,
@@ -1055,7 +1057,7 @@ function drawCandidateDebug(
       const candidate = topCandidates[i];
       const color = rankColors[i] ?? "rgba(250, 204, 21, 0.9)";
       const placementRect = candidate.placementRect;
-      const label = `#${i + 1} ${candidate.target.container.id}:${candidate.target.index} d=${Math.round(candidate.distance)}`;
+      const label = `#${i + 1} ${candidate.target.container.id}:${candidate.target.index} ${distanceLabel}=${Math.round(candidate.distance)}`;
 
       root.addDebugRect(
         placementRect.x,
@@ -1122,7 +1124,7 @@ function drawCandidateDebug(
     item.addDebugText(
       item.dragPositionX,
       item.dragPositionY - 20,
-      `DROP: container=${best.target.container.id} idx=${best.target.index} dist=${Math.round(best.distance)}`,
+      `DROP: container=${best.target.container.id} idx=${best.target.index} ${distanceLabel}=${Math.round(best.distance)}`,
       "rgba(250, 204, 21, 0.9)",
       true,
       `drop-result`,
@@ -1240,6 +1242,15 @@ function insertionGapRect(gap: InsertionGapSegment): Rect {
     : { x: gap.x, y: gap.y, width: 0, height: gap.length };
 }
 
+function insertionMainAxisDistance(
+  pointer: { x: number; y: number },
+  gap: InsertionGapSegment,
+): number {
+  return gap.orientation === "horizontal"
+    ? Math.abs(pointer.y - gap.y)
+    : Math.abs(pointer.x - gap.x);
+}
+
 function insertionVirtualLeadingEdgeDistance(
   dragRect: Rect,
   orientation: InsertionGapSegment["orientation"],
@@ -1265,8 +1276,6 @@ function collectInsertionCandidates(
   root: Container,
   context: ResolutionContext,
 ): InsertionCandidate[] {
-  const pointerX = context.pointer.x;
-  const pointerY = context.pointer.y;
   const excludeSet = context.session
     ? context.session.snapshotItemSet
     : new Set([item]);
@@ -1355,7 +1364,7 @@ function collectInsertionCandidates(
           },
           candidateCenterX: center.x,
           candidateCenterY: center.y,
-          distance: euclidean(pointerX, pointerY, center.x, center.y),
+          distance: insertionMainAxisDistance(context.pointer, gap),
           virtualLeadingEdgeDistance: insertionVirtualLeadingEdgeDistance(
             context.dragRect,
             gap.orientation,
@@ -1398,8 +1407,6 @@ function chooseInsertionCandidate(
 
     if (
       candidate.distance === best.distance &&
-      candidate.candidateCenterX === best.candidateCenterX &&
-      candidate.candidateCenterY === best.candidateCenterY &&
       candidate.virtualLeadingEdgeDistance !== null &&
       best.virtualLeadingEdgeDistance !== null &&
       candidate.virtualLeadingEdgeDistance < best.virtualLeadingEdgeDistance
@@ -1602,7 +1609,9 @@ export function determineInsertionDropTarget(
   const allowed = applyDropPolicy(candidates, () => context);
   const best = chooseInsertionCandidate(allowed);
   if (debugEnabled) {
-    drawCandidateDebug(root, item, allowed, best);
+    drawCandidateDebug(root, item, allowed, best, {
+      distanceLabel: "main-axis",
+    });
     debugDropTargetTree(root, item);
   }
   return best?.target ?? null;

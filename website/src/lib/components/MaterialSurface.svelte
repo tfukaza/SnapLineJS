@@ -2,7 +2,9 @@
   import type { Snippet } from "svelte";
   import type { HTMLAttributes } from "svelte/elements";
   import {
-    defaultMaterialSettings,
+    createMaterialStyle,
+    defaultInsetSlotMaterialSettings,
+    defaultRaisedCardMaterialSettings,
     type MaterialDepth,
     type MaterialSettings,
     type MaterialShape,
@@ -21,27 +23,25 @@
     width?: number;
     height?: number;
     radius?: number;
+    color?: string | null;
     class?: string;
     className?: string;
-  };
-
-  type MaterialRenderState = {
-    depth: MaterialDepth;
-    material: MaterialSettings;
   };
 
   let {
     children,
     depth,
     shape,
-    material = defaultMaterialSettings,
+    material,
     shadedRim,
     creviceOutline,
     width,
     height,
     radius = 8,
+    color,
     class: classValue = "",
     className = "",
+    style: styleValue,
     ...surfaceProps
   }: MaterialSurfaceProps = $props();
 
@@ -51,160 +51,33 @@
   const surfaceWidth = $derived(width === undefined ? undefined : `${Math.max(0, width)}px`);
   const surfaceHeight = $derived(height === undefined ? undefined : `${Math.max(0, height)}px`);
   const surfaceRadius = $derived(shape === "circle" ? "50%" : `${Math.max(0, radius)}px`);
-  const renderState = $derived<MaterialRenderState>({
-    depth,
-    material: {
-      lightAngle: material.lightAngle,
-      ambientBrightness: material.ambientBrightness,
-      shadowDistance: material.shadowDistance,
-      shadowBlur: material.shadowBlur,
-      shadowStrength: material.shadowStrength,
-      specularIntensity: material.specularIntensity,
-      specularPower: material.specularPower,
-      rimWidth: material.rimWidth,
-      rimBlur: material.rimBlur,
-      creviceBrightness: material.creviceBrightness,
-      shadedRim: shadedRim ?? material.shadedRim,
-      creviceOutline: creviceOutline ?? material.creviceOutline,
-    },
+  const baseMaterial = $derived(
+    material ??
+      (depth === "recessed"
+        ? defaultInsetSlotMaterialSettings
+        : defaultRaisedCardMaterialSettings),
+  );
+  const resolvedMaterial = $derived<MaterialSettings>({
+    ...baseMaterial,
+    shadedRim: shadedRim ?? baseMaterial.shadedRim,
+    creviceOutline: creviceOutline ?? baseMaterial.creviceOutline,
   });
-
-  function configureMaterial(node: HTMLSpanElement, state: MaterialRenderState) {
-    let currentState = state;
-
-    function clamp(value: number, minimum: number, maximum: number) {
-      return Math.min(maximum, Math.max(minimum, value));
-    }
-
-    function diffuseAtAlignment(alignment: number, settings: MaterialSettings) {
-      const wrappedLight = (alignment + 1) / 2;
-      const diffuseAmount = wrappedLight * wrappedLight * (3 - 2 * wrappedLight);
-      const ambient = clamp(settings.ambientBrightness, 0, 1);
-      const brightness = ambient + (1 - ambient) * diffuseAmount;
-      return `color-mix(in hsl, var(--material-diffuse-dark) ${((1 - brightness) * 100).toFixed(3)}%, var(--material-diffuse-light) ${(brightness * 100).toFixed(3)}%)`;
-    }
-
-    function shadedAtNormal(normal: number, settings: MaterialSettings, depthValue: MaterialDepth) {
-      const effectiveNormal = normal + (depthValue === "recessed" ? 180 : 0);
-      const difference = (effectiveNormal - settings.lightAngle) * Math.PI / 180;
-      const alignment = Math.cos(difference);
-      const diffuse = diffuseAtAlignment(alignment, settings);
-      const specular = clamp(
-        Math.pow(Math.max(0, alignment), Math.max(1, settings.specularPower)) *
-          settings.specularIntensity,
-        0,
-        1,
-      );
-
-      return specular <= 0.0001
-        ? diffuse
-        : `color-mix(in hsl, ${diffuse}, var(--material-specular-color) ${(specular * 100).toFixed(3)}%)`;
-    }
-
-    function updateMaterial() {
-      const settings = currentState.material;
-      const effectiveAngle = settings.lightAngle + (currentState.depth === "recessed" ? 180 : 0);
-      const lightRadians = settings.lightAngle * Math.PI / 180;
-      const lightX = Math.sin(lightRadians);
-      const lightY = -Math.cos(lightRadians);
-      const distance = Math.max(0, settings.shadowDistance);
-      const shadowBlur = Math.max(0, settings.shadowBlur);
-      const shadows = [
-        { name: "far", x: -lightX, y: -lightY, distance },
-        { name: "near", x: -lightX, y: -lightY, distance: distance / 2 },
-        { name: "light", x: lightX, y: lightY, distance: distance / 2 },
-      ] as const;
-
-      node.style.setProperty("--material-light-angle", `${effectiveAngle}deg`);
-      node.style.setProperty("--material-rim-width", `${Math.max(0, settings.rimWidth)}px`);
-      node.style.setProperty("--material-rim-half-width", `${Math.max(0, settings.rimWidth) / 2}px`);
-      node.style.setProperty("--material-rim-blur", `${Math.max(0, settings.rimBlur)}px`);
-      node.style.setProperty(
-        "--material-crevice-color",
-        `color-mix(in srgb, #000 ${((1 - clamp(settings.creviceBrightness, 0, 1)) * 100).toFixed(3)}%, #fff ${(clamp(settings.creviceBrightness, 0, 1) * 100).toFixed(3)}%)`,
-      );
-      node.style.setProperty("--material-shadow-far-blur", `${shadowBlur}px`);
-      node.style.setProperty("--material-shadow-near-blur", `${shadowBlur / 2}px`);
-      node.style.setProperty("--material-shadow-light-blur", `${shadowBlur * 0.8}px`);
-      node.style.setProperty("--material-shadow-strength", clamp(settings.shadowStrength, 0, 1).toFixed(3));
-      node.style.setProperty("--material-rim-visibility", settings.shadedRim ? "visible" : "hidden");
-      node.style.setProperty("--material-crevice-visibility", settings.creviceOutline ? "visible" : "hidden");
-
-      for (const shadow of shadows) {
-        node.style.setProperty(
-          `--material-shadow-${shadow.name}-x`,
-          `${(shadow.x * shadow.distance).toFixed(3)}px`,
-        );
-        node.style.setProperty(
-          `--material-shadow-${shadow.name}-y`,
-          `${(shadow.y * shadow.distance).toFixed(3)}px`,
-        );
-      }
-
-      const diffuseAnchors = [0, 45, 90, 135, 180] as const;
-      for (const offset of diffuseAnchors) {
-        node.style.setProperty(
-          `--material-diffuse-${offset}`,
-          diffuseAtAlignment(Math.cos(offset * Math.PI / 180), settings),
-        );
-      }
-
-      const roundedNormals = [0, 45, 90, 135, 180, 225, 270, 315] as const;
-      for (const normal of roundedNormals) {
-        node.style.setProperty(
-          `--material-normal-${normal}`,
-          shadedAtNormal(normal, settings, currentState.depth),
-        );
-      }
-
-      const sides = [
-        ["top", 0],
-        ["right", 90],
-        ["bottom", 180],
-        ["left", 270],
-      ] as const;
-      for (const [side, normal] of sides) {
-        node.style.setProperty(
-          `--material-side-${side}`,
-          shadedAtNormal(normal, settings, currentState.depth),
-        );
-      }
-
-      const power = Math.max(1, settings.specularPower);
-      const halfWidth = Math.acos(Math.pow(0.5, 1 / power)) * 180 / Math.PI;
-      node.style.setProperty("--material-specular-from", `${effectiveAngle - halfWidth * 2}deg`);
-      node.style.setProperty("--material-specular-stop-1", `${halfWidth}deg`);
-      node.style.setProperty("--material-specular-stop-2", `${halfWidth * 2}deg`);
-      node.style.setProperty("--material-specular-stop-3", `${halfWidth * 3}deg`);
-      node.style.setProperty("--material-specular-stop-4", `${halfWidth * 4}deg`);
-      node.style.setProperty(
-        "--material-specular-shoulder",
-        `hsl(from var(--material-specular-color) h s l / ${clamp(settings.specularIntensity * 0.25, 0, 1).toFixed(3)})`,
-      );
-      node.style.setProperty(
-        "--material-specular-peak",
-        `hsl(from var(--material-specular-color) h s l / ${clamp(settings.specularIntensity, 0, 1).toFixed(3)})`,
-      );
-    }
-
-    updateMaterial();
-
-    return {
-      update(nextState: MaterialRenderState) {
-        currentState = nextState;
-        updateMaterial();
-      },
-    };
-  }
+  const generatedStyle = $derived(createMaterialStyle(depth, resolvedMaterial));
+  const colorStyle = $derived(
+    color == null ? undefined : `--material-color: ${color}`,
+  );
+  const surfaceStyle = $derived(
+    [styleValue, generatedStyle, colorStyle].filter(Boolean).join("; "),
+  );
 </script>
 
 <span
   {...surfaceProps}
   class={mergedClass}
+  style={surfaceStyle}
   style:width={surfaceWidth}
   style:height={surfaceHeight}
   style:--material-radius={surfaceRadius}
-  use:configureMaterial={renderState}
 >
   <span class="material-surface-clip">
     <span class="material-surface-fill"></span>
@@ -233,8 +106,8 @@
     --material-rim-overscan: var(--material-rim-width);
     --material-rim-render-width: calc(var(--material-rim-width) + var(--material-rim-width));
     --material-rim-render-radius: var(--material-radius);
-    --material-diffuse-dark: hsl(from var(--material-color) h s calc(l - 46) / 0.9);
-    --material-diffuse-light: hsl(from var(--material-color) h s calc(l + 12) / 0.9);
+    --material-diffuse-dark: hsl(from var(--material-color) calc(h - 10) s calc(l - 20) / 0.9);
+    --material-diffuse-light: hsl(from var(--material-color) calc(h + 10) s calc(l + 20) / 0.9);
     --material-specular-color: #fff;
     --material-diffuse-0: var(--material-diffuse-light);
     --material-diffuse-45: color-mix(in hsl, var(--material-diffuse-dark), var(--material-diffuse-light) 85%);
@@ -333,8 +206,6 @@
 
   .material-surface.circle {
     --material-color: var(--circle-color, #ececeb);
-    --material-diffuse-dark: hsl(from var(--material-color) h s calc(l - 20) / 0.9);
-    --material-diffuse-light: hsl(from var(--material-color) h s calc(l + 10) / 0.9);
     --material-shadow-far-base: var(--circle-shadow-far, hsl(from var(--material-color) h s calc(l - 78) / 0.4));
     --material-shadow-near-base: var(--circle-shadow-near, hsl(from var(--material-color) h s calc(l - 70) / 0.4));
     --material-shadow-light-base: var(--circle-shadow-light, hsl(from var(--material-color) h s calc(l + 15) / 0.45));
@@ -436,7 +307,18 @@
   }
 
   .rounded .material-rim-specular {
-    display: none;
+    background-image:
+      conic-gradient(from var(--material-specular-from) at 100% 100%, var(--material-specular-stops)),
+      conic-gradient(from var(--material-specular-from) at 0% 100%, var(--material-specular-stops)),
+      conic-gradient(from var(--material-specular-from) at 0% 0%, var(--material-specular-stops)),
+      conic-gradient(from var(--material-specular-from) at 100% 0%, var(--material-specular-stops));
+    background-position: left top, right top, right bottom, left bottom;
+    background-size:
+      var(--material-rim-render-radius) var(--material-rim-render-radius),
+      var(--material-rim-render-radius) var(--material-rim-render-radius),
+      var(--material-rim-render-radius) var(--material-rim-render-radius),
+      var(--material-rim-render-radius) var(--material-rim-render-radius);
+    background-repeat: no-repeat;
   }
 
   .material-crevice {

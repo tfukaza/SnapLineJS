@@ -863,8 +863,8 @@ moveItem(itemId: ItemId, targetContainer: Container, index: number): boolean
 
 Authoritatively moves an Item within the same root, bypassing drop policy.
 Returns `false` when the ID is missing or that Item already has a pending
-programmatic mutation. The root `onItemMove`/`onItemInsert` callback must update
-React state synchronously.
+programmatic mutation, or when the root has a drag session. The root
+`onItemMove`/`onItemInsert` callback must update React state synchronously.
 
 ```ts
 const accepted = source.moveItem("task-1", archive, 0);
@@ -877,7 +877,8 @@ removeItem(itemId: ItemId): boolean
 ```
 
 Requests removal of a direct ordinary Item. Returns `false` when it is missing
-or already pending and dispatches root `onItemRemove` when accepted.
+or already pending, or when the root has a drag session, and dispatches root
+`onItemRemove` when accepted.
 
 ```ts
 const accepted = source.removeItem("task-1");
@@ -1201,10 +1202,11 @@ state, and do not expect `onItemRemove` for the source half of a move.
 If the source Container has `animation.move`, `removeItem(id)` returns `true`
 when the request is accepted, commits `onItemRemove` in the next coordinated
 frame, and FLIP-animates the surviving layout. While any animated programmatic
-move or removal for that Item is pending, further move/remove commands return
-`false` and dragging it is temporarily disabled. Direct React-state deletion
-bypasses this animation, and SnapSort does not retain the removed element for
-an exit effect.
+move or removal is pending, further move/remove commands for that Item return
+`false`, and no drag can start in that root. Conversely, programmatic
+move/removal commands return `false` while the root has a drag session. Direct
+React-state deletion bypasses this animation, and SnapSort does not retain the
+removed element for an exit effect.
 
 `Ghost` remains a thin lifecycle view: it binds the engine-owned `ghostItem` to
 the rendered element and applies ghost geometry plus the `snapsort-ghost` class.

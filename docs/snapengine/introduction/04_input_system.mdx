@@ -8,51 +8,59 @@ sectionTitle: Introduction
 sectionOrder: 1
 ---
 
-SnapEngine normalizes pointer, wheel, drag, and pinch input into one event
+SnapEngine normalizes keyboard, pointer, wheel, drag, and pinch input into one event
 model. DOM-backed objects use native pointer capture while SnapEngine retains
 gesture recognition, object routing, and engine-wide fan-out. Capture begins
 when a drag or pinch is recognized so pre-threshold controls retain native
 click targeting.
 
+`keyDown` events carry the registered `ElementObject` associated with the
+focused element. Input aliases such as drag handles resolve to the object that
+owns the alias.
+
 SnapEgnine objects can all listen to three types of events: pointer event, drag event, and gesture event.
 
-## Pointer Event 
+## Pointer Event
+
 > [!WARNING]
-> This is not directly related to the official Pointer Event 
+> This is not directly related to the official Pointer Event
 > Web API, although it is based on it.
 
 Pointer Events are the simplest type of events. Currently the engine defines these:
+
 - pointerDown
 - pointerMove
 - pointerUp
 - mouseWheel
 
 These events pass the position of the event in the engine's world coordinates.
-For touch devices, the mouseWheel event is never fires, and other pointer events are fired 
-for every touch input (multi touch support). pointerMove will continuously fire for 
+For touch devices, the mouseWheel event is never fires, and other pointer events are fired
+for every touch input (multi touch support). pointerMove will continuously fire for
 each touch input.
 
-## Drag Event 
+## Drag Event
 
-Drag events are designed to handle continuous interaction that persists 
-even when the pointer leaves the browser window or the original element. 
+Drag events are designed to handle continuous interaction that persists
+even when the pointer leaves the browser window or the original element.
 
 The engine defines these drag events:
+
 - dragStart
 - drag
 - dragEnd
 
-These events provide the same world coordinate positions as pointer events 
-but are specifically tailored for drag-and-drop interactions, panning, 
+These events provide the same world coordinate positions as pointer events
+but are specifically tailored for drag-and-drop interactions, panning,
 and other global gestures.
 
 ## Gesture Event
 
-Gesture events build on lower-level pointer events. They keep track of 
-starts, deltas, endings, and multi-touch state so interaction logic 
+Gesture events build on lower-level pointer events. They keep track of
+starts, deltas, endings, and multi-touch state so interaction logic
 can focus on behavior rather than browser event bookkeeping.
 
 The engine defines these gesture events:
+
 - pinchStart
 - pinch
 - pinchEnd
@@ -71,6 +79,5 @@ An active `dragStart`, `drag`, `pinchStart`, or `pinch` payload exposes
 pointer ownership to a connected DOM-backed object. Pinch handoff transfers
 only pinch delivery; each finger retains the capture and pointer/drag owner
 from where it started. Pointer and terminal payloads do not expose handoff.
-
 
 For event names, payload shapes, object-level handlers, global handlers, and gesture examples, see [Input System reference](/docs/snapengine/reference/input_system).

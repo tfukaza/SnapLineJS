@@ -34,6 +34,24 @@ object.event.input.mouseWheel = (props) => {
 };
 ```
 
+## Keyboard Events
+
+```ts
+object.event.input.keyDown = ({ event, focusedObject }) => {
+  console.log(event.key);
+  console.log(focusedObject);
+};
+```
+
+`focusedObject` is the nearest registered `ElementObject` in the focused
+element's composed event path. Input aliases resolve to their owning object, so
+a focused handle can deliver its Item directly. The same originating object is
+provided when the event bubbles through engine-object parents. It is `null` for
+a key event inside the engine that has no registered object owner.
+
+Call `event.preventDefault()` when an application handles a key whose browser
+behavior should be suppressed.
+
 ## Global Events
 
 ```ts
@@ -87,6 +105,14 @@ Native capture begins when a drag or pinch is recognized, not on
 `pointerDown`, so nested buttons and other pre-threshold controls retain their
 normal click targeting.
 
+Constructed `PointerEvent` objects are always untrusted and cannot create a
+browser-owned active pointer. If native `setPointerCapture()` rejects such an
+event with `NotFoundError`, SnapEngine retains logical capture internally so
+the synthetic pointer stream continues to route to its gesture owner until
+`pointerup` or `pointercancel`. This fallback does not make the event trusted.
+Trusted pointer events and every other capture failure keep the normal native
+capture and error-reporting behavior.
+
 `handoffTo` is intentionally absent from `pointerDown`, `pointerMove`,
 `pointerUp`, `dragEnd`, and `pinchEnd`.
 
@@ -121,23 +147,24 @@ so already-engaged listeners can clean up.
 
 ## Event Position
 
-| Property | Description |
-|----------|-------------|
-| `screenX`, `screenY` | Browser viewport coordinates. |
+| Property             | Description                                   |
+| -------------------- | --------------------------------------------- |
+| `screenX`, `screenY` | Browser viewport coordinates.                 |
 | `cameraX`, `cameraY` | Coordinates relative to the engine container. |
-| `x`, `y` | World coordinates after camera conversion. |
+| `x`, `y`             | World coordinates after camera conversion.    |
 
 ## Event Names
 
-| Event | Scope |
-|-------|-------|
+| Event         | Scope             |
+| ------------- | ----------------- |
+| `keyDown`     | Object and global |
 | `pointerDown` | Object and global |
 | `pointerMove` | Object and global |
-| `pointerUp` | Object and global |
-| `mouseWheel` | Object and global |
-| `dragStart` | Object and global |
-| `drag` | Object and global |
-| `dragEnd` | Object and global |
-| `pinchStart` | Object and global |
-| `pinch` | Object and global |
-| `pinchEnd` | Object and global |
+| `pointerUp`   | Object and global |
+| `mouseWheel`  | Object and global |
+| `dragStart`   | Object and global |
+| `drag`        | Object and global |
+| `dragEnd`     | Object and global |
+| `pinchStart`  | Object and global |
+| `pinch`       | Object and global |
+| `pinchEnd`    | Object and global |

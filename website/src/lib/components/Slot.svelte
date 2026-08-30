@@ -8,6 +8,7 @@
     children: Snippet;
     width?: number;
     height?: number;
+    radius?: number;
     material?: MaterialSettings;
     creviceOutline?: boolean;
     class?: string;
@@ -18,6 +19,7 @@
     children,
     width = 36,
     height = 22,
+    radius,
     material,
     creviceOutline,
     class: classValue = "",
@@ -26,7 +28,9 @@
   }: SlotProps = $props();
 
   const mergedClass = $derived(`snap-slot ${classValue} ${className}`.trim());
-  const radius = $derived(Math.min(Math.max(0, width), Math.max(0, height)) / 2);
+  const surfaceRadius = $derived(
+    radius ?? Math.min(Math.max(0, width), Math.max(0, height)) / 2,
+  );
 </script>
 
 <MaterialSurface
@@ -35,7 +39,7 @@
   shape="rounded"
   {width}
   {height}
-  {radius}
+  radius={surfaceRadius}
   {material}
   {creviceOutline}
   class={mergedClass}

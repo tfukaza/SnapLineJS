@@ -15,6 +15,7 @@ src/
 ├── index.ts          # Public API exports
 ├── engine.ts         # Engine class
 ├── global.ts         # GlobalManager singleton
+├── frame-controller.ts # Engine-owned frame callbacks
 ├── object.ts         # BaseObject & ElementObject
 ├── camera.ts         # Camera system
 ├── input.ts          # Input handling
@@ -47,7 +48,8 @@ Public API entry point. All external-facing exports.
 
 **Main exports:**
 
-- `Engine`, `BaseObject`, `ElementObject`, `Camera`
+- `Engine`, `BaseObject`, `ElementObject`, `Camera`, and the `FrameController`
+  interface
 - Input types (dragProp, pointerDownProp, etc.)
 - Utilities (getDomProperty, EventProxyFactory)
 
@@ -59,6 +61,7 @@ Engine class - main orchestrator for a container.
 
 - Manages container DOM and camera
 - Holds collision engine and debug renderer
+- Owns one `FrameController` for synchronous frame-start callbacks
 - Processes render stages
 
 ### `global.ts`
@@ -68,10 +71,27 @@ GlobalManager singleton - central coordinator.
 **Responsibilities:**
 
 - 6-stage render pipeline (READ_1, WRITE_1, READ_2, WRITE_2, READ_3, WRITE_3)
+- Frame-controller processing before each `READ_1` queue snapshot
 - requestAnimationFrame loop
 - Engine instance registry
 - Global object table
 - Shared state
+
+### `frame-controller.ts`
+
+Public callback interface and Engine-owned implementation for work that must
+share SnapEngine's single animation-frame clock. Consumers obtain it from
+`engine.frameController`; they do not construct or replace it.
+
+**FrameController:**
+
+- Runs callbacks synchronously at `IDLE`, before `READ_1` is snapshotted
+- Passes through the shared browser animation-frame timestamp
+- Uses snapshot iteration; new callbacks begin on the next tick
+- Supports explicit unsubscribe and `AbortSignal` cleanup
+- Aborts all callbacks before Engine input teardown
+- Reports thrown errors and returned thenable rejections without starving later
+  callbacks
 
 ### `object.ts`
 
@@ -118,12 +138,15 @@ Unified input handling.
 - Drag gesture detection
 - Object DOM ownership lookup
 - Native pointer capture for DOM-backed owners
+- Logical capture for untrusted constructed pointer streams only when native
+  capture rejects with `NotFoundError`
 - Drag `handoffTo(...)` for capture/owner transfer and pinch `handoffTo(...)`
   for pinch-recipient transfer while each pointer retains its origin capture
 - Targeted leaf-to-root object bubbling followed by global fan-out
 
 **Event types:**
 
+- keyDown
 - pointerDown, pointerMove, pointerUp
 - mouseWheel
 - dragStart, drag, dragEnd
@@ -178,14 +201,22 @@ Utility functions for DOM operations and transforms.
 
 ## Render Pipeline
 
-6-stage pipeline preventing layout thrashing:
+Frame-start controller processing followed by a 6-stage pipeline preventing
+layout thrashing:
 
+0. **FrameController** - Synchronous application updates while `IDLE`
 1. **READ_1** - Primary DOM reads
 2. **WRITE_1** - Primary DOM writes
 3. **READ_2** - Secondary reads
 4. **WRITE_2** - Transform updates
 5. **READ_3** - Final reads
 6. **WRITE_3** - Final writes
+
+Frame callbacks are deliberately not awaited. They must perform any
+frame-critical mutation synchronously; promise continuations enqueue future
+work rather than joining the current frame. Because callbacks run before the
+first queue snapshot, tasks they schedule may participate in all six stages of
+the current frame.
 
 **Usage:**
 
@@ -195,7 +226,7 @@ object.schedule(callback, { stage: "WRITE_2" });
 ```
 
 **Stage guards:** writes (`writeDom`, `writeTransform`, `writeTransformRecursive`)
-are legal in the three WRITE stages *and* at `IDLE` — the gap between frames,
+are legal in the three WRITE stages _and_ at `IDLE` — the gap between frames,
 where pointer handlers run — because a style write only invalidates layout.
 Reads (`readDom`, `readDomRecursive`) are frame-only: they force layout, so
 reading at `IDLE` thrashes. Calling a write synchronously from an input handler

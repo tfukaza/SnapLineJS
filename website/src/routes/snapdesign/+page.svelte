@@ -1,5 +1,7 @@
 <script lang="ts">
   import SnapDesign from "$lib/landing/snapdesign/SnapDesign.svelte";
+
+  let { data } = $props();
 </script>
 
-<SnapDesign />
+<SnapDesign codeExamples={data.codeExamples} />

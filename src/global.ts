@@ -1,6 +1,7 @@
 import { BaseObject, FrameTask } from "./object";
 import type { FrameStages } from "./object";
 import type { Engine } from "./engine";
+import type { FrameInfo } from "./frame-controller";
 
 type renderEntry = Map<string, Map<string, FrameTask>>;
 
@@ -126,10 +127,17 @@ class GlobalManager {
       return; // Already running
     }
 
-    const step = () => {
-      void (async () => {
-        const timestamp = Date.now();
+    const step = (frameTimestamp: number) => {
+      const timestamp = Date.now();
+      const engines = [...this.#engineObjectTables.keys()];
+      const frame: FrameInfo = Object.freeze({ timestamp: frameTimestamp });
+      for (const engine of engines) {
+        if (this.#engineObjectTables.has(engine)) {
+          engine.processFrame(frame);
+        }
+      }
 
+      void (async () => {
         const drain = async (stage: FrameStages) => {
           this.currentStage = stage;
           const batch = this.queue[stage];

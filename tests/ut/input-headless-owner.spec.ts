@@ -161,6 +161,81 @@ function trackPointerCapture(
   return { captures, releases };
 }
 
+test("ignores sub-threshold pointer jitter before starting a drag", () => {
+  const harness = createInputHarness("<div id='owner'></div>");
+  const ownerElement =
+    harness.dom.window.document.querySelector<HTMLElement>("#owner");
+  if (!ownerElement) throw new Error("Missing owner element");
+  const { captures } = trackPointerCapture([ownerElement]);
+
+  try {
+    const owner = new ElementObject(harness.engine);
+    harness.input.registerObjectElement(owner, ownerElement);
+    const received: string[] = [];
+    owner.event.input.dragStart = () => received.push("start");
+    owner.event.input.drag = () => received.push("drag");
+    owner.event.input.dragEnd = () => received.push("end");
+
+    ownerElement.dispatchEvent(
+      pointerEvent(harness.dom.window, "pointerdown", {
+        x: 10,
+        y: 10,
+        buttons: 1,
+        pointerId: 1,
+      }),
+    );
+    ownerElement.dispatchEvent(
+      pointerEvent(harness.dom.window, "pointermove", {
+        x: 11,
+        y: 11,
+        buttons: 1,
+        pointerId: 1,
+      }),
+    );
+    harness.dom.window.document.dispatchEvent(
+      pointerEvent(harness.dom.window, "pointerup", {
+        x: 11,
+        y: 11,
+        buttons: 0,
+        pointerId: 1,
+      }),
+    );
+
+    expect(received).toEqual([]);
+    expect(captures.size).toBe(0);
+
+    ownerElement.dispatchEvent(
+      pointerEvent(harness.dom.window, "pointerdown", {
+        x: 10,
+        y: 10,
+        buttons: 1,
+        pointerId: 2,
+      }),
+    );
+    ownerElement.dispatchEvent(
+      pointerEvent(harness.dom.window, "pointermove", {
+        x: 13,
+        y: 10,
+        buttons: 1,
+        pointerId: 2,
+      }),
+    );
+    harness.dom.window.document.dispatchEvent(
+      pointerEvent(harness.dom.window, "pointerup", {
+        x: 13,
+        y: 10,
+        buttons: 0,
+        pointerId: 2,
+      }),
+    );
+
+    expect(received).toEqual(["start", "drag", "end"]);
+    expect(captures.size).toBe(0);
+  } finally {
+    harness.cleanup();
+  }
+});
+
 test("dragStart handoff transfers capture and later delivery to a DOM-backed object", () => {
   const dom = new JSDOM(
     "<!doctype html><html><body><div id='engine'><div id='source'></div><div id='destination'></div></div></body></html>",
@@ -243,11 +318,7 @@ test("dragStart handoff transfers capture and later delivery to a DOM-backed obj
     destination.event.input.drag = ({ objectId }) => {
       received.push(`drag:${objectId}`);
     };
-    destination.event.input.pointerUp = ({
-      objectId,
-      event,
-      cancelled,
-    }) => {
+    destination.event.input.pointerUp = ({ objectId, event, cancelled }) => {
       received.push(`up:${objectId}:${event.type}:${cancelled}`);
     };
     destination.event.input.dragEnd = ({ objectId, event, cancelled }) => {
@@ -355,10 +426,7 @@ test("dragStart handoff transfers capture and later delivery to a DOM-backed obj
         pointerId: 9,
       }),
     );
-    expect(received).toEqual([
-      `start:${source.id}`,
-      `drag:${destination.id}`,
-    ]);
+    expect(received).toEqual([`start:${source.id}`, `drag:${destination.id}`]);
     expect(captures.get(9)).toBe(destinationElement);
     dom.window.document.dispatchEvent(
       pointerEvent(dom.window, "pointerup", {
@@ -379,6 +447,124 @@ test("dragStart handoff transfers capture and later delivery to a DOM-backed obj
   } finally {
     restoreGlobals();
     dom.window.close();
+  }
+});
+
+test("untrusted NotFoundError uses logical capture through drag handoff", () => {
+  const harness = createInputHarness(
+    "<div id='source'></div><div id='destination'></div>",
+  );
+  const sourceElement =
+    harness.dom.window.document.querySelector<HTMLElement>("#source");
+  const destinationElement =
+    harness.dom.window.document.querySelector<HTMLElement>("#destination");
+  if (!sourceElement || !destinationElement) {
+    throw new Error("Missing logical capture elements");
+  }
+
+  const captureAttempts: string[] = [];
+  for (const element of [sourceElement, destinationElement]) {
+    Object.defineProperties(element, {
+      setPointerCapture: {
+        value: (pointerId: number) => {
+          captureAttempts.push(`${element.id}:${pointerId}`);
+          const error = new Error("Synthetic pointer is not active");
+          error.name = "NotFoundError";
+          throw error;
+        },
+      },
+      hasPointerCapture: {
+        value: () => false,
+      },
+      releasePointerCapture: {
+        value: () => {
+          throw new Error("Logical capture must not attempt native release");
+        },
+      },
+    });
+  }
+
+  const reported: unknown[] = [];
+  const previousReportError = Object.getOwnPropertyDescriptor(
+    globalThis,
+    "reportError",
+  );
+  Object.defineProperty(globalThis, "reportError", {
+    configurable: true,
+    writable: true,
+    value: (error: unknown) => reported.push(error),
+  });
+
+  try {
+    const source = new ElementObject(harness.engine);
+    const destination = new ElementObject(harness.engine);
+    harness.input.registerObjectElement(source, sourceElement);
+    harness.input.registerObjectElement(destination, destinationElement);
+
+    const received: string[] = [];
+    source.event.input.dragStart = ({ handoffTo }) => {
+      received.push("start:source");
+      handoffTo(destination);
+    };
+    destination.event.input.pointerMove = ({ objectId }) => {
+      received.push(`move:${objectId}`);
+    };
+    destination.event.input.drag = ({ objectId }) => {
+      received.push(`drag:${objectId}`);
+    };
+    destination.event.input.dragEnd = ({ objectId, cancelled }) => {
+      received.push(`end:${objectId}:${cancelled}`);
+    };
+
+    sourceElement.dispatchEvent(
+      pointerEvent(harness.dom.window, "pointerdown", {
+        x: 10,
+        y: 10,
+        buttons: 1,
+        pointerId: 23,
+      }),
+    );
+    sourceElement.dispatchEvent(
+      pointerEvent(harness.dom.window, "pointermove", {
+        x: 30,
+        y: 10,
+        buttons: 1,
+        pointerId: 23,
+      }),
+    );
+    harness.dom.window.document.dispatchEvent(
+      pointerEvent(harness.dom.window, "pointermove", {
+        x: 60,
+        y: 20,
+        buttons: 1,
+        pointerId: 23,
+      }),
+    );
+    harness.dom.window.document.dispatchEvent(
+      pointerEvent(harness.dom.window, "pointerup", {
+        x: 60,
+        y: 20,
+        buttons: 0,
+        pointerId: 23,
+      }),
+    );
+
+    expect(captureAttempts).toEqual(["source:23", "destination:23"]);
+    expect(received).toEqual([
+      "start:source",
+      `drag:${destination.id}`,
+      `move:${destination.id}`,
+      `drag:${destination.id}`,
+      `end:${destination.id}:false`,
+    ]);
+    expect(reported).toEqual([]);
+  } finally {
+    if (previousReportError) {
+      Object.defineProperty(globalThis, "reportError", previousReportError);
+    } else {
+      delete (globalThis as Record<string, unknown>).reportError;
+    }
+    harness.cleanup();
   }
 });
 
@@ -579,21 +765,12 @@ test("pinch handoff keeps each pointer captured and owned by its origin", () => 
     dom.window.document.querySelector<HTMLElement>("#source-1");
   const destinationElement =
     dom.window.document.querySelector<SVGPathElement>("#destination");
-  if (
-    !container ||
-    !sourceElement0 ||
-    !sourceElement1 ||
-    !destinationElement
-  ) {
+  if (!container || !sourceElement0 || !sourceElement1 || !destinationElement) {
     throw new Error("Missing test elements");
   }
   const captures = new Map<number, Element>();
   const captureLog: string[] = [];
-  for (const element of [
-    sourceElement0,
-    sourceElement1,
-    destinationElement,
-  ]) {
+  for (const element of [sourceElement0, sourceElement1, destinationElement]) {
     Object.defineProperties(element, {
       setPointerCapture: {
         value: (pointerId: number) => {
@@ -910,10 +1087,7 @@ test("owner unregistration finalizes and releases capture once", () => {
     harness.input.unregisterObjectElement(owner);
     harness.input.unregisterObjectElement(owner);
 
-    expect(terminal).toEqual([
-      "up:pointermove:true",
-      "drag:pointermove:true",
-    ]);
+    expect(terminal).toEqual(["up:pointermove:true", "drag:pointermove:true"]);
     expect(captures.size).toBe(0);
     expect(releases).toEqual([2]);
   } finally {
@@ -1124,6 +1298,106 @@ test("drag limit cancels the oldest active pointer", () => {
       }),
     );
     expect(ended).toEqual(["first:1:true", "second:2:false"]);
+  } finally {
+    harness.cleanup();
+  }
+});
+
+test("keydown exposes the focused input-alias owner through targeted bubbling and global dispatch", () => {
+  const harness = createInputHarness(
+    '<div id="item"><div id="handle"><button id="focus">Focus</button></div></div>',
+  );
+  const handleElement =
+    harness.dom.window.document.querySelector<HTMLElement>("#handle");
+  const focusElement =
+    harness.dom.window.document.querySelector<HTMLButtonElement>("#focus");
+  if (!handleElement || !focusElement) {
+    throw new Error("Missing keyboard input elements");
+  }
+
+  try {
+    const root = new BaseObject(harness.engine);
+    const parent = new BaseObject(harness.engine, root);
+    const focusedObject = new ElementObject(harness.engine, parent);
+    focusedObject.addInputAlias(handleElement);
+
+    const deliveries: Array<{
+      scope: string;
+      focusedObject: ElementObject | null;
+      event: KeyboardEvent;
+    }> = [];
+    focusedObject.event.input.keyDown = (prop) => {
+      deliveries.push({ scope: "leaf", ...prop });
+    };
+    parent.event.input.keyDown = (prop) => {
+      deliveries.push({ scope: "parent", ...prop });
+    };
+    root.event.input.keyDown = (prop) => {
+      deliveries.push({ scope: "root", ...prop });
+    };
+    harness.input.subscribeGlobalCursorEvent(
+      "keyDown",
+      "keyboard-global",
+      (prop) => deliveries.push({ scope: "global", ...prop }),
+      harness.engine,
+    );
+
+    focusElement.focus();
+    const event = new harness.dom.window.KeyboardEvent("keydown", {
+      bubbles: true,
+      cancelable: true,
+      composed: true,
+      key: "Enter",
+    });
+    focusElement.dispatchEvent(event);
+
+    expect(harness.dom.window.document.activeElement).toBe(focusElement);
+    expect(deliveries.map(({ scope }) => scope)).toEqual([
+      "leaf",
+      "parent",
+      "root",
+      "global",
+    ]);
+    for (const delivery of deliveries) {
+      expect(delivery.focusedObject).toBe(focusedObject);
+      expect(delivery.event).toBe(event);
+      expect(delivery.event.key).toBe("Enter");
+    }
+
+    harness.input.destroy();
+    focusElement.dispatchEvent(
+      new harness.dom.window.KeyboardEvent("keydown", {
+        bubbles: true,
+        key: "Escape",
+      }),
+    );
+    expect(deliveries).toHaveLength(4);
+  } finally {
+    harness.cleanup();
+  }
+});
+
+test("global keydown receives null when the focused element has no registered owner", () => {
+  const harness = createInputHarness('<button id="focus">Focus</button>');
+  const focusElement =
+    harness.dom.window.document.querySelector<HTMLButtonElement>("#focus");
+  if (!focusElement) throw new Error("Missing keyboard input element");
+
+  try {
+    const deliveries: Array<ElementObject | null> = [];
+    harness.input.event.keyDown = ({ focusedObject }) => {
+      deliveries.push(focusedObject);
+    };
+
+    focusElement.focus();
+    focusElement.dispatchEvent(
+      new harness.dom.window.KeyboardEvent("keydown", {
+        bubbles: true,
+        key: "Enter",
+      }),
+    );
+
+    expect(deliveries).toEqual([null]);
   } finally {
     harness.cleanup();
   }

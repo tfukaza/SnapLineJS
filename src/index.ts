@@ -8,9 +8,16 @@ import {
 } from "./object";
 import type { DomElement, DomProperty } from "./object";
 import { GlobalManager } from "./global";
+import type {
+  FrameCallback,
+  FrameController,
+  FrameInfo,
+  FrameSubscribeOptions,
+} from "./frame-controller";
 import { InputControl, mouseButtonBitmap } from "./input";
 import type {
   pointerDownProp,
+  keyDownProp,
   pointerMoveProp,
   pointerUpProp,
   mouseWheelProp,
@@ -48,6 +55,7 @@ export {
   EventProxyFactory,
   mergeDefined,
   type pointerDownProp,
+  type keyDownProp,
   type pointerMoveProp,
   type pointerUpProp,
   type mouseWheelProp,
@@ -60,6 +68,10 @@ export {
   type PinchSnapshot,
   type GestureHandoffControl,
   type InputControlConfig,
+  type FrameCallback,
+  type FrameController,
+  type FrameInfo,
+  type FrameSubscribeOptions,
   type eventPosition,
   type EdgePanController,
   type DomElement,
