@@ -1,14 +1,18 @@
 import type { ElementBox } from "@snap-engine/core";
+import type {
+  LayoutDirection,
+  LayoutMainAxisAlign,
+  LayoutModel,
+  LayoutNode,
+  LayoutWrap,
+} from "@snap-engine/core/layout";
 
 export type ItemId = string;
-export type LayoutDirection = "column" | "row";
-export type LayoutMainAxisAlign = "start" | "center";
-export type LayoutModel = "flow" | "slots";
-export type LayoutWrap = "auto" | "nowrap";
 
 export type ItemMetadata = Readonly<Record<string, unknown>>;
 
-export interface ItemSnapshot<T> {
+/** A frozen item's measured box and layout, captured at drag start. */
+export interface ItemSnapshot<T> extends LayoutNode<ItemSnapshot<T>> {
   value: T;
   itemId: ItemId;
   metadata: ItemMetadata;

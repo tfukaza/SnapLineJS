@@ -21,6 +21,7 @@ src/
 ├── input.ts          # Input handling
 ├── collision.ts      # Collision detection (optional)
 ├── geometry.ts       # Shared geometry types and pure helpers
+├── layout.ts         # Layout simulation over measured box trees (optional)
 ├── animation.ts      # Animation system (optional)
 ├── debug.ts          # Debug renderer (optional)
 └── util.ts           # Utilities
@@ -41,6 +42,8 @@ Defined in `vite.config.mjs`:
 - **Geometry:** `geometry.ts` → `dist/geometry.mjs`
   - Point, Size, Rect, Edges, Bounds, BoxModel, ElementBox types
   - Pure rect/box-model helpers (intersection, content box, projection)
+- **Layout:** `layout.ts` → `dist/layout.mjs`
+  - createLayoutResolutionPlan, LayoutNode, flow and slot (grid) backends
 - **Debug:** `debug.ts` → `dist/debug.mjs`
   - DebugRenderer
 
@@ -164,6 +167,16 @@ describes points, rects, edges, and box models with these types instead of
 declaring its own shapes. The collision engine's allocation-free scalar
 kernels live here too, so collision and geometry share one implementation.
 
+### `layout.ts`
+
+Simulates CSS layout over a frozen tree of measured boxes (`LayoutNode`)
+without reading the DOM: infers gaps, line sizes, and wrap capacity from
+measured children, then re-lays them out with nodes excluded and virtual
+entries inserted. Two backends: `flow` (flexbox-style accumulation and
+wrapping) and `slots` (measured grid tracks, the basis for CSS grid
+simulation). Imports only `geometry.ts`. SnapSort's drop prediction is the
+main consumer.
+
 ### `collision.ts`
 
 Collision detection system. Geometric predicates (`rectsIntersect`,
@@ -253,6 +266,7 @@ is therefore supported; calling a recursive read there is not.
 - animation (optional)
 - collision (optional)
 - geometry (optional)
+- layout (optional)
 
 **TypeScript:** Declarations generated to `dist/` via vite-plugin-dts
 

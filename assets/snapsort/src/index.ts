@@ -65,7 +65,6 @@ export {
   createRenderTree,
   reduceRenderTree,
 } from "./render-state";
-export type { LayoutMainAxisAlign } from "./layout";
 export { Item } from "./item";
 export type { ItemOptions } from "./item";
 export type { ItemId, ItemMetadata, ItemSnapshot } from "./snapshot";

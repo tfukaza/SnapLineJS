@@ -85,6 +85,7 @@ const config = {
       "@snap-engine/core/debug": "../src/debug.ts",
       "@snap-engine/core/collision": "../src/collision.ts",
       "@snap-engine/core/geometry": "../src/geometry.ts",
+      "@snap-engine/core/layout": "../src/layout.ts",
       "@snap-engine/core": "../src/index.ts",
     },
   },

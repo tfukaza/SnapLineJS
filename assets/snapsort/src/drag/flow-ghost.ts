@@ -8,7 +8,7 @@ import {
   updateGhostState,
 } from "../event-builders";
 import type { DragLocation, GhostRect, GhostState } from "../events";
-import { virtualEntrySizeFor } from "../layout";
+import { virtualEntrySizeFor } from "@snap-engine/core/layout";
 import {
   assertCanFireGhostInsert,
   assertCanFireGhostMove,

@@ -66,7 +66,6 @@ snapsort/
     ├── insertion-geometry.ts # Marker rectangle and world/local projection helpers
     ├── algorithm.ts        # Candidate generation, drop policy, and placement
     ├── callbacks.ts        # Standard drop-policy callbacks
-    ├── layout.ts           # Pure flow-layout simulation
     ├── snapshot.ts         # ItemSnapshot / ItemMetadata types
     ├── drag/
     │   ├── session.ts

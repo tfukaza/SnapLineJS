@@ -1,11 +1,8 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
-import {
-  contentBoxOrigin,
-  flowLayoutPositions,
-  virtualEntrySizeFor,
-} from "../../assets/snapsort/src/layout";
+import { contentRect } from "../../src/geometry";
+import { virtualEntrySizeFor } from "../../src/layout";
 import type { ItemSnapshot } from "../../assets/snapsort/src/snapshot";
 import {
   determineDropTarget,
@@ -46,6 +43,7 @@ import {
   assertCanFireItemSwap,
 } from "../../assets/snapsort/src/mutation";
 import {
+  flowLayoutPositions,
   makeContainerSnapshot,
   makeItemSnapshot,
   rowCounts,
@@ -1430,7 +1428,7 @@ function virtualInsertionPosition<T>(
     },
   };
   const rect = flowLayoutPositions(container, startX, startY, {
-    filter: { excludeSnapshots: new Set([dragged]) },
+    exclude: (node) => node === dragged,
     insertions: [insertion],
   }).virtualRects.get(insertion);
   return rect ? { x: rect.x, y: rect.y } : null;
@@ -2044,7 +2042,7 @@ test("places append ghost on the short second row in a wrapped row layout", () =
     box: layoutBox({ x: 0, y: 0, width: 104, height: 92 }),
     children: [],
   });
-  const origin = contentBoxOrigin(container.box);
+  const origin = contentRect(container.box);
   const appendGhost = virtualInsertionPosition(
     container,
     dragged,
@@ -3128,7 +3126,7 @@ test.describe("Snapsort drag-start snapshot layout", () => {
         `dragged item should exist for ${measuredCase.name}`,
       ).toBeTruthy();
 
-      const origin = contentBoxOrigin(measuredCase.container);
+      const origin = contentRect(measuredCase.container);
       for (const actual of measuredCase.actualGhosts) {
         const simulated = virtualInsertionPosition(
           root,
@@ -3321,7 +3319,7 @@ test.describe("Snapsort drag-start snapshot layout", () => {
               margin: dragged.box.margin,
             },
           },
-          filter: { excludeSnapshots: new Set([dragged]) },
+          exclude: (node) => node === dragged,
         });
         if (rows.join() !== "4,4,4,4") {
           failures.push({ width: grid.width, index, rows });
@@ -3537,9 +3535,9 @@ test.describe("Snapsort drag-start snapshot layout", () => {
             margin: dragged.box.margin,
           },
         };
-        const origin = contentBoxOrigin(root.box);
+        const origin = contentRect(root.box);
         const result = flowLayoutPositions(root, origin.x, origin.y, {
-          filter: { excludeSnapshots: new Set([dragged]) },
+          exclude: (node) => node === dragged,
           insertions: [insertion],
         });
         const actualById = new Map(truth.items.map((item) => [item.id, item]));
@@ -3734,7 +3732,7 @@ test.describe("Snapsort drag-start snapshot layout", () => {
         "start",
         propertyCase.kind as "flow" | "slots",
       );
-      const origin = contentBoxOrigin(root.box);
+      const origin = contentRect(root.box);
       const record = (property: string, detail: string, delta: number) =>
         failures.push({
           caseSeed: propertyCase.caseSeed,
@@ -3768,7 +3766,7 @@ test.describe("Snapsort drag-start snapshot layout", () => {
           },
         };
         const roundTrip = flowLayoutPositions(root, origin.x, origin.y, {
-          filter: { excludeSnapshots: new Set([target]) },
+          exclude: (node) => node === target,
           insertions: [insertion],
         });
         for (const child of root.children) {
@@ -4208,7 +4206,7 @@ test.describe("Snapsort drag-start snapshot layout", () => {
         margin,
       },
     };
-    const origin = contentBoxOrigin(root.box);
+    const origin = contentRect(root.box);
     const result = flowLayoutPositions(root, origin.x, origin.y, {
       insertions: [insertion],
     });
@@ -4357,9 +4355,9 @@ test.describe("Snapsort drag-start snapshot layout", () => {
           margin: dragged.box.margin,
         },
       };
-      const origin = contentBoxOrigin(root.box);
+      const origin = contentRect(root.box);
       const result = flowLayoutPositions(root, origin.x, origin.y, {
-        filter: { excludeSnapshots: new Set([dragged]) },
+        exclude: (node) => node === dragged,
         insertions: [insertion],
       });
       const actualById = new Map(truth.items.map((item) => [item.id, item]));
@@ -5230,7 +5228,7 @@ test.describe("Snapsort drag-start snapshot layout", () => {
         children: [],
       })),
     });
-    const origin = contentBoxOrigin(measured.board);
+    const origin = contentRect(measured.board);
     const layout = flowLayoutPositions(boardSnapshot, origin.x, origin.y);
     const simulated = boardSnapshot.children.map((child) => {
       const position = layout.itemPositions.get(child);

@@ -1,22 +1,25 @@
 import { expect, test } from "@playwright/test";
+import { contentRect } from "../../src/geometry";
 import {
-  contentBoxOrigin,
   createLayoutResolutionPlan,
   flowAxesForDirection,
-  flowLayoutPositions,
   inferFlowLayoutMetrics,
-  virtualDimensions,
   virtualEntrySizeFor,
   type VirtualInsertion,
-} from "../../assets/snapsort/src/layout";
+} from "../../src/layout";
 import {
+  flowLayoutPositions,
   makeBox,
   makeContainerSnapshot,
   makeGrid,
   makeItemSnapshot,
   patchBox,
   simulatedRowCounts,
+  virtualDimensions,
 } from "../helpers/layout-grid";
+import type { ItemSnapshot } from "../../assets/snapsort/src/snapshot";
+
+type Insertion = VirtualInsertion<ItemSnapshot<string>>;
 
 /**
  * Unit tests for the flow-layout simulation (`layout.ts`), the pure core of
@@ -42,7 +45,7 @@ function ghostInsertion(
   grid: ReturnType<typeof makeGrid>,
   index: number,
   entry: { width: number; height: number },
-): VirtualInsertion<string> {
+): Insertion {
   return {
     container: grid,
     index,
@@ -83,14 +86,14 @@ test.describe("layout resolution plans", () => {
     );
     const visits = new Map<string, number>();
     const plan = createLayoutResolutionPlan(root, {
-      filter: { excludeSnapshots: new Set([excluded]) },
+      exclude: (node) => node === excluded,
       diagnostics: {
-        onSnapshotVisit: (snapshot) =>
+        onNodeVisit: (snapshot) =>
           visits.set(snapshot.itemId, (visits.get(snapshot.itemId) ?? 0) + 1),
       },
     });
 
-    const insertion = (index: number): VirtualInsertion<string> => ({
+    const insertion = (index: number): Insertion => ({
       container: nested,
       index,
       entry: {
@@ -193,7 +196,7 @@ test.describe("inferFlowLayoutMetrics", () => {
 test.describe("flowLayoutPositions wrap decisions", () => {
   test("reproduces measured positions for an exact-fill grid", () => {
     const grid = makeGrid({ rows: 4, cols: 4, itemW: 93, itemH: 93, gap: 4 });
-    const origin = contentBoxOrigin(grid.box);
+    const origin = contentRect(grid.box);
     const result = flowLayoutPositions(grid, origin.x, origin.y);
     for (const child of grid.children) {
       const position = result.itemPositions.get(child)!;
@@ -210,7 +213,7 @@ test.describe("flowLayoutPositions wrap decisions", () => {
         simulatedRowCounts(grid, {
           rowStep: 97,
           insertion: ghostInsertion(grid, index, { width: 93, height: 93 }),
-          filter: { excludeValues: new Set([dragged.value]) },
+          exclude: (node) => node.value === dragged.value,
         }),
         `insertion at ${index}`,
       ).toEqual([4, 4, 4, 4]);
@@ -224,7 +227,7 @@ test.describe("flowLayoutPositions wrap decisions", () => {
     const counts = simulatedRowCounts(grid, {
       rowStep: 97,
       insertion: ghostInsertion(grid, 0, { width: 190, height: 93 }),
-      filter: { excludeValues: new Set([dragged.value]) },
+      exclude: (node) => node.value === dragged.value,
     });
     expect(counts[0]).toBeLessThan(4);
   });
@@ -243,12 +246,12 @@ test.describe("flowLayoutPositions wrap decisions", () => {
     );
     // Content height (60) is smaller than the stack (3 x 26 + gaps), but a
     // single-line column must keep everything on one line (it grows instead).
-    const insertion: VirtualInsertion<string> = {
+    const insertion: Insertion = {
       container,
       index: 3,
       entry: { width: 100, height: 26, margin: children[0].box.margin },
     };
-    const origin = contentBoxOrigin(container.box);
+    const origin = contentRect(container.box);
     const result = flowLayoutPositions(container, origin.x, origin.y, {
       insertions: [insertion],
     });
@@ -263,7 +266,7 @@ test.describe("flowLayoutPositions wrap decisions", () => {
     const grid = makeGrid({ rows: 1, cols: 2, itemW: 40, itemH: 20, gap: 10 });
     grid.mainAxisAlign = "center";
     grid.box = patchBox(grid.box, { width: 150 }); // 60px slack
-    const origin = contentBoxOrigin(grid.box);
+    const origin = contentRect(grid.box);
     const result = flowLayoutPositions(grid, origin.x, origin.y);
     const first = result.itemPositions.get(grid.children[0])!;
     expect(first.x).toBeCloseTo((150 - 90) / 2, 4);
@@ -301,7 +304,7 @@ test.describe("wrap robustness against browser measurement noise", () => {
             width: dragged.box.width,
             height: dragged.box.height,
           }),
-          filter: { excludeValues: new Set([dragged.value]) },
+          exclude: (node) => node.value === dragged.value,
         }),
         `insertion at ${index}`,
       ).toEqual([4, 4, 4, 4]);
@@ -325,7 +328,7 @@ test.describe("wrap robustness against browser measurement noise", () => {
       simulatedRowCounts(grid, {
         rowStep: 64,
         insertion: ghostInsertion(grid, 3, { width: 90, height: 60 }),
-        filter: { excludeValues: new Set([dragged.value]) },
+        exclude: (node) => node.value === dragged.value,
       }),
     ).toEqual([4, 4]);
   });
@@ -339,7 +342,7 @@ test.describe("wrap robustness against browser measurement noise", () => {
       rowStep: 64,
       // 0.5px wider than the slot: genuinely overflows the zero-slack line.
       insertion: ghostInsertion(grid, 3, { width: 90.5, height: 60 }),
-      filter: { excludeValues: new Set([dragged.value]) },
+      exclude: (node) => node.value === dragged.value,
     });
     expect(counts[0]).toBe(3);
   });
@@ -370,7 +373,7 @@ test.describe("wrap robustness against browser measurement noise", () => {
             width: dragged.box.width,
             height: dragged.box.height,
           }),
-          filter: { excludeValues: new Set([dragged.value]) },
+          exclude: (node) => node.value === dragged.value,
         }),
         `fuzz round ${round}`,
       ).toEqual([4, 4, 4, 4]);
@@ -394,14 +397,14 @@ test.describe("slot layout model", () => {
   test("entries adopt measured slot geometry on an unequal-track grid", () => {
     const grid = unequalGrid();
     const dragged = grid.children[0];
-    const insertion: VirtualInsertion<string> = {
+    const insertion: Insertion = {
       container: grid,
       index: 3,
       entry: { width: 60, height: 40, margin: dragged.box.margin },
     };
-    const origin = contentBoxOrigin(grid.box);
+    const origin = contentRect(grid.box);
     const result = flowLayoutPositions(grid, origin.x, origin.y, {
-      filter: { excludeValues: new Set([dragged.value]) },
+      exclude: (node) => node.value === dragged.value,
       insertions: [insertion],
     });
     // Entries [item-1, item-2, item-3, ghost, item-4..item-7] -> slots 0..7.
@@ -427,9 +430,9 @@ test.describe("slot layout model", () => {
   test("remaining items compact into leading slots when one is dragged away", () => {
     const grid = unequalGrid();
     const dragged = grid.children[0];
-    const origin = contentBoxOrigin(grid.box);
+    const origin = contentRect(grid.box);
     const result = flowLayoutPositions(grid, origin.x, origin.y, {
-      filter: { excludeValues: new Set([dragged.value]) },
+      exclude: (node) => node.value === dragged.value,
     });
     const byValue = new Map(
       [...result.itemPositions].map(([snapshotItem, position]) => [
@@ -443,7 +446,7 @@ test.describe("slot layout model", () => {
 
   test("an appended insertion extrapolates one slot past the measured grid", () => {
     const grid = unequalGrid();
-    const insertion: VirtualInsertion<string> = {
+    const insertion: Insertion = {
       container: grid,
       index: 8,
       entry: {
@@ -452,7 +455,7 @@ test.describe("slot layout model", () => {
         margin: { top: 0, right: 0, bottom: 0, left: 0 },
       },
     };
-    const origin = contentBoxOrigin(grid.box);
+    const origin = contentRect(grid.box);
     const result = flowLayoutPositions(grid, origin.x, origin.y, {
       insertions: [insertion],
     });
@@ -487,13 +490,13 @@ test.describe("slot layout model", () => {
       "slots",
     );
     const dragged = children[0];
-    const insertion: VirtualInsertion<string> = {
+    const insertion: Insertion = {
       container,
       index: 2,
       entry: { width: 80, height: 40, margin: dragged.box.margin },
     };
     const result = flowLayoutPositions(container, 0, 0, {
-      filter: { excludeValues: new Set([dragged.value]) },
+      exclude: (node) => node.value === dragged.value,
       insertions: [insertion],
     });
     const byValue = new Map(
@@ -523,13 +526,13 @@ test.describe("slot layout model", () => {
       layoutModel: "slots",
     });
     const dragged = grid.children[0];
-    const insertion: VirtualInsertion<string> = {
+    const insertion: Insertion = {
       container: grid,
       index: 0,
       entry: { width: 40, height: 40, margin: dragged.box.margin },
     };
     const result = flowLayoutPositions(grid, 0, 0, {
-      filter: { excludeValues: new Set([dragged.value]) },
+      exclude: (node) => node.value === dragged.value,
       insertions: [insertion],
     });
     const byValue = new Map(
@@ -555,13 +558,13 @@ test.describe("slot layout model", () => {
       layoutModel: "slots",
     });
     const dragged = grid.children[1]; // the tall item
-    const insertion: VirtualInsertion<string> = {
+    const insertion: Insertion = {
       container: grid,
       index: 3,
       entry: { width: 40, height: 80, margin: dragged.box.margin },
     };
     const result = flowLayoutPositions(grid, 0, 0, {
-      filter: { excludeValues: new Set([dragged.value]) },
+      exclude: (node) => node.value === dragged.value,
       insertions: [insertion],
     });
     const byValue = new Map(
@@ -592,7 +595,7 @@ test.describe("slot layout model", () => {
       gap: 4,
       layoutModel: "slots",
     });
-    const insertion: VirtualInsertion<string> = {
+    const insertion: Insertion = {
       container: grid,
       index: 4,
       entry: {
@@ -611,7 +614,7 @@ test.describe("wrap and stretchItems declarations", () => {
   test("wrap: nowrap keeps an overflowing row list on one line", () => {
     // Zero-slack single-row list: an appended ghost overflows the container.
     const grid = makeGrid({ rows: 1, cols: 4, itemW: 88, itemH: 40, gap: 4 });
-    const insertion = (container: typeof grid): VirtualInsertion<string> => ({
+    const insertion = (container: typeof grid): Insertion => ({
       container,
       index: 4,
       entry: {
@@ -705,7 +708,7 @@ test.describe("wrap and stretchItems declarations", () => {
       "flow",
       { wrap: "nowrap", stretchItems: true },
     );
-    const insertion: VirtualInsertion<string> = {
+    const insertion: Insertion = {
       container,
       index: 1,
       entry: {
@@ -717,7 +720,7 @@ test.describe("wrap and stretchItems declarations", () => {
         margin: { top: 0, right: 0, bottom: 0, left: 0 },
       },
     };
-    const origin = contentBoxOrigin(container.box);
+    const origin = contentRect(container.box);
     const result = flowLayoutPositions(container, origin.x, origin.y, {
       insertions: [insertion],
     });

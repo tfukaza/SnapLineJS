@@ -7,15 +7,13 @@ import {
   type dragStartProp,
 } from "@snap-engine/core";
 import type { AnimationConfig, Container } from "./container";
+import type { ItemId, ItemSnapshot, ItemMetadata } from "./snapshot";
 import type {
-  ItemId,
-  ItemSnapshot,
-  ItemMetadata,
   LayoutDirection,
   LayoutMainAxisAlign,
   LayoutModel,
   LayoutWrap,
-} from "./snapshot";
+} from "@snap-engine/core/layout";
 import type {
   DragLocation,
   GhostState,

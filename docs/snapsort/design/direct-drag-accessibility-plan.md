@@ -241,14 +241,16 @@ type DirectCandidate =
 Use the layout engine's existing virtual-insertion model instead of building or
 splicing a second Item-order representation outside the layout module. A
 `VirtualInsertion` is the dragged member's stand-in in the hypothetical final
-order, and `FlowPositionResult.virtualRects` is the authoritative projected
+order, and `LayoutPositions.virtualRects` (from `@snap-engine/core/layout`)
+is the authoritative projected
 geometry.
 
 For each candidate:
 
 1. Start from the frozen root drag snapshot.
 2. Exclude every dragged participant through
-   `filter.excludeValues = session.itemSet`. Candidate indices therefore use
+   `exclude: (node) => session.itemSet.has(node.value)`. Candidate indices
+   therefore use
    the final post-removal coordinate system.
 3. Create one `VirtualInsertion` per dragged member at consecutive indices
    beginning at the candidate index. Size every entry with

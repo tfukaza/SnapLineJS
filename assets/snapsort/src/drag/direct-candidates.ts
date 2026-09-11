@@ -1,4 +1,14 @@
-import type { Rect } from "@snap-engine/core/geometry";
+import {
+  contentOffset,
+  contentRect,
+  type Rect,
+} from "@snap-engine/core/geometry";
+import {
+  virtualEntrySizeFor,
+  createLayoutResolutionPlan,
+  type VirtualInsertion,
+  type LayoutResolutionPlan,
+} from "@snap-engine/core/layout";
 import {
   createDirectInsertionTarget,
   type ResolvedDropTarget,
@@ -8,14 +18,6 @@ import type { ItemId, ItemSnapshot } from "../snapshot";
 import { Container } from "../container";
 import type { Item } from "../item";
 import { buildDragLocation } from "../event-builders";
-
-import {
-  contentBoxOrigin,
-  virtualEntrySizeFor,
-  createLayoutResolutionPlan,
-  type VirtualInsertion,
-  type LayoutResolutionPlan,
-} from "../layout";
 import type { DragSessionController } from "./session";
 
 interface DirectLayoutSnapshot {
@@ -175,7 +177,7 @@ function createDirectInsertionRun(
   session: DragSessionController,
   containerSnapshot: ItemSnapshot<Item>,
   index: number,
-): readonly VirtualInsertion<Item>[] {
+): readonly VirtualInsertion<ItemSnapshot<Item>>[] {
   return Object.freeze(
     session.items.map((item, offset) => {
       const box = session.dragBoxFor(item);
@@ -418,7 +420,7 @@ export function directCandidateGeometry(
 }
 
 function projectedContentOrigin(
-  layoutPlan: LayoutResolutionPlan<Item>,
+  layoutPlan: LayoutResolutionPlan<ItemSnapshot<Item>>,
   path: readonly ItemSnapshot<Item>[],
 ): Readonly<{ x: number; y: number }> {
   const rootSnapshot = path[0];
@@ -429,7 +431,8 @@ function projectedContentOrigin(
     );
   }
 
-  let origin = contentBoxOrigin(rootSnapshot.box);
+  const rootContent = contentRect(rootSnapshot.box);
+  let origin = { x: rootContent.x, y: rootContent.y };
 
   for (let index = 1; index < path.length; index += 1) {
     const parent = path[index - 1];
@@ -445,10 +448,8 @@ function projectedContentOrigin(
       );
     }
 
-    origin = {
-      x: childPosition.x + child.box.border.left + child.box.padding.left,
-      y: childPosition.y + child.box.border.top + child.box.padding.top,
-    };
+    const offset = contentOffset(child.box);
+    origin = { x: childPosition.x + offset.x, y: childPosition.y + offset.y };
   }
 
   return Object.freeze(origin);
@@ -474,9 +475,7 @@ function projectDirectRects(
   );
 
   const layoutPlan = createLayoutResolutionPlan(snapshot.root, {
-    filter: {
-      excludeValues: session.itemSet,
-    },
+    exclude: (node) => session.itemSet.has(node.value),
     insertions: insertionRun,
   });
 

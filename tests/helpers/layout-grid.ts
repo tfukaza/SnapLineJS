@@ -1,4 +1,4 @@
-// Shared helpers for layout-engine tests (tests/ut/layout.spec.ts and the
+// Shared helpers for layout-engine tests (tests/ut/core-layout.spec.ts and the
 // wrap-matrix e2e test in tests/e2e/snapsort-drag-snapshot.spec.ts): DOM-free
 // snapshot builders plus the row-shape assertions both suites make. Keeping
 // the grid construction and row counting here guarantees the unit tests and
@@ -8,12 +8,13 @@
 // serializes the closure into the browser), so in-page measurement helpers
 // like `boxOf` remain local to their spec.
 import type { Edges, ElementBox } from "../../src/geometry";
+import { contentRect } from "../../src/geometry";
 import {
-  contentBoxOrigin,
-  flowLayoutPositions,
-  type LayoutFilter,
+  createLayoutResolutionPlan,
+  type LayoutNode,
+  type LayoutPositions,
   type VirtualInsertion,
-} from "../../assets/snapsort/src/layout";
+} from "../../src/layout";
 import type { ItemSnapshot } from "../../assets/snapsort/src/snapshot";
 
 export type BoxInit = {
@@ -208,6 +209,42 @@ export function rowCounts(ys: number[], rowStep: number): number[] {
     .map(([, count]) => count);
 }
 
+/** Options for the one-shot layout wrappers below. */
+export interface LayoutRunOptions<N> {
+  exclude?: (node: N) => boolean;
+  insertions?: readonly VirtualInsertion<N>[];
+}
+
+/** Lay out one container with a throwaway plan and its local insertions. */
+export function flowLayoutPositions<N extends LayoutNode<N>>(
+  container: N,
+  startX: number,
+  startY: number,
+  options: LayoutRunOptions<N> = {},
+): LayoutPositions<N> {
+  const insertions = options.insertions ?? [];
+  const plan = createLayoutResolutionPlan(container, {
+    exclude: options.exclude,
+    insertions,
+  });
+  return plan.layoutPositions(
+    container,
+    startX,
+    startY,
+    insertions.filter((insertion) => insertion.container === container),
+  );
+}
+
+/** A container's simulated border-box size with a throwaway plan. */
+export function virtualDimensions<N extends LayoutNode<N>>(
+  container: N,
+  options: LayoutRunOptions<N> = {},
+) {
+  return createLayoutResolutionPlan(container, options).virtualDimensions(
+    container,
+  );
+}
+
 /**
  * Run the flow-layout simulation on a container snapshot and return the
  * per-line entry counts (items plus the ghost, when an insertion is given).
@@ -217,13 +254,13 @@ export function simulatedRowCounts<T>(
   container: ItemSnapshot<T>,
   options: {
     rowStep: number;
-    insertion?: VirtualInsertion<T>;
-    filter?: LayoutFilter<T>;
+    insertion?: VirtualInsertion<ItemSnapshot<T>>;
+    exclude?: (node: ItemSnapshot<T>) => boolean;
   },
 ): number[] {
-  const origin = contentBoxOrigin(container.box);
+  const origin = contentRect(container.box);
   const result = flowLayoutPositions(container, origin.x, origin.y, {
-    filter: options.filter,
+    exclude: options.exclude,
     insertions: options.insertion ? [options.insertion] : undefined,
   });
   const ys: number[] = [];

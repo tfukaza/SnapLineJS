@@ -1,29 +1,28 @@
 import type { ElementBox } from "@snap-engine/core";
 import {
   type Circle,
+  contentOffset,
+  contentRect,
   distanceToRect,
   pointIntersectsCircle,
   pointIntersectsRect,
   rectsIntersect,
 } from "@snap-engine/core/geometry";
-import type { Item as ItemBase } from "./item";
-import type { Container } from "./container";
 import {
   childRelativeOffset,
-  contentBoxOrigin,
-  contentBoxSize,
   createLayoutResolutionPlan,
   flowAxesForDirection,
   flowLayoutCanWrap,
-  inferSnapshotVisualLines,
+  inferVisualLines,
   virtualEntrySizeFor,
   pointFromAxes,
-  virtualDimensions as layoutVirtualDimensions,
   type LayoutPlanDiagnostics,
   type LayoutResolutionPlan,
-  type SnapshotVisualLine,
+  type VisualLine,
   type VirtualInsertion,
-} from "./layout";
+} from "@snap-engine/core/layout";
+import type { Item as ItemBase } from "./item";
+import type { Container } from "./container";
 import type { ItemSnapshot } from "./snapshot";
 import type { DragSessionController as DragSession } from "./drag/session";
 import {
@@ -47,17 +46,7 @@ type ResolvedItemHitbox =
   | { shape: "rect"; rect: Rect }
   | { shape: "circle"; circle: Circle };
 
-export interface VirtualGhost {
-  container: Container;
-  index: number;
-  width: number;
-  height: number;
-}
-
-export interface VirtualDimensions {
-  width: number;
-  height: number;
-}
+type Snapshot = ItemSnapshot<ItemBase>;
 
 export interface ResolvedDropTarget {
   container: Container;
@@ -482,30 +471,10 @@ function createLayoutSnapshot(root: ItemBase): {
   return { root: rootSnapshot, byItem };
 }
 
-function layoutInsertionFromGhost(
-  byItem: Map<ItemBase, ItemSnapshot<ItemBase>>,
-  ghost?: VirtualGhost,
-): VirtualInsertion<ItemBase> | undefined {
-  if (!ghost) return undefined;
-  const container = byItem.get(ghost.container);
-  if (!container) return undefined;
-  const margin = requireDragSnapshotBox(ghost.container).margin;
-  const size = virtualEntrySizeFor(container, {
-    width: ghost.width,
-    height: ghost.height,
-    margin,
-  });
-  return {
-    container,
-    index: ghost.index,
-    entry: { ...size, margin },
-  };
-}
-
 function activeFlowInsertionsFromPendingPlacement(
   byItem: Map<ItemBase, ItemSnapshot<ItemBase>>,
   session: DragSession | null,
-): VirtualInsertion<ItemBase>[] {
+): VirtualInsertion<Snapshot>[] {
   // Insertion and swap lifecycles use absolute marker/pointer ghosts. They do
   // not occupy a flow slot and must never influence virtual list layout.
   if (!session || !session.strategy.lifecycle.placementOccupiesFlowSlots) {
@@ -536,10 +505,7 @@ function activeFlowInsertionsFromPendingPlacement(
 }
 
 function containerContentRect(container: Container): Rect {
-  const prop = requireDragSnapshotBox(container);
-  const origin = contentBoxOrigin(prop);
-  const size = contentBoxSize(prop);
-  return { ...origin, ...size };
+  return contentRect(requireDragSnapshotBox(container));
 }
 
 function expandedChildHitRect(
@@ -586,21 +552,6 @@ function chooseByContentBox<T extends CandidateGeometry>(
   return a.distance <= b.distance ? a : b;
 }
 
-export function virtualDimensions(
-  container: Container,
-  draggedItem: ItemBase,
-  ghost?: VirtualGhost,
-): VirtualDimensions {
-  const snapshot = createLayoutSnapshot(container);
-  const insertions = [layoutInsertionFromGhost(snapshot.byItem, ghost)].filter(
-    (insertion): insertion is VirtualInsertion<ItemBase> => !!insertion,
-  );
-  return layoutVirtualDimensions(snapshot.root, {
-    filter: { excludeValues: new Set([draggedItem]) },
-    insertions,
-  });
-}
-
 export function virtualLayoutRecursive(
   container: Container,
   startX: number,
@@ -612,7 +563,7 @@ export function virtualLayoutRecursive(
   dragCenterY: number,
   session: DragSession | null = null,
   debugEnabled = false,
-  layoutDiagnostics?: LayoutPlanDiagnostics<ItemBase>,
+  layoutDiagnostics?: LayoutPlanDiagnostics<Snapshot>,
 ): { candidates: FlowCandidate[]; endX: number; endY: number } {
   const snapshot = createLayoutSnapshot(container);
   const draggedBox = requireDragSnapshotBox(draggedItem);
@@ -628,7 +579,7 @@ export function virtualLayoutRecursive(
   };
   const excludeValues = session ? session.itemSet : new Set([draggedItem]);
   const layoutPlan = createLayoutResolutionPlan(snapshot.root, {
-    filter: { excludeValues },
+    exclude: (node) => excludeValues.has(node.value),
     insertions: activeInsertions,
     diagnostics: layoutDiagnostics,
   });
@@ -654,7 +605,7 @@ function virtualLayoutRecursiveFromSnapshot(
   containerSnapshot: ItemSnapshot<ItemBase>,
   startX: number,
   startY: number,
-  layoutPlan: LayoutResolutionPlan<ItemBase>,
+  layoutPlan: LayoutResolutionPlan<Snapshot>,
   draggedBox: ElementBox,
   dragGhostW: number,
   dragGhostH: number,
@@ -737,7 +688,7 @@ function virtualLayoutRecursiveFromSnapshot(
     index: number,
     fallbackPosition: { x: number; y: number },
   ): FlowCandidate => {
-    const insertion: VirtualInsertion<ItemBase> = {
+    const insertion: VirtualInsertion<Snapshot> = {
       container: containerSnapshot,
       index,
       entry: {
@@ -821,14 +772,13 @@ function virtualLayoutRecursiveFromSnapshot(
     }
 
     if (isContainer) {
-      const childOrigin = {
-        x: simulatedPosition.x + prop.border.left + prop.padding.left,
-        y: simulatedPosition.y + prop.border.top + prop.padding.top,
-      };
-      const childContentSize = contentBoxSize(prop);
+      const childOffset = contentOffset(prop);
+      const childContent = contentRect(prop);
       const childContentRect = {
-        ...childOrigin,
-        ...childContentSize,
+        x: simulatedPosition.x + childOffset.x,
+        y: simulatedPosition.y + childOffset.y,
+        width: childContent.width,
+        height: childContent.height,
       };
       const childHitRect = expandedChildHitRect(
         childContentRect,
@@ -847,8 +797,8 @@ function virtualLayoutRecursiveFromSnapshot(
         const childResult = virtualLayoutRecursiveFromSnapshot(
           item,
           itemSnapshot,
-          childOrigin.x,
-          childOrigin.y,
+          childContentRect.x,
+          childContentRect.y,
           layoutPlan,
           draggedBox,
           dragGhostW,
@@ -893,7 +843,7 @@ function collectDropCandidates(
   const dragGhostH = dragProp.height;
   const dragCenterX = item.dragPositionX + dragProp.width / 2;
   const dragCenterY = item.dragPositionY + dragProp.height / 2;
-  const layoutOrigin = contentBoxOrigin(rootProp);
+  const layoutOrigin = contentRect(rootProp);
 
   const { candidates: virtualCandidates } = virtualLayoutRecursive(
     root,
@@ -1158,9 +1108,9 @@ function insertionVisualLine(
   snapshot: ItemSnapshot<ItemBase> | null,
   lineBySnapshot: ReadonlyMap<
     ItemSnapshot<ItemBase>,
-    SnapshotVisualLine<ItemBase>
+    VisualLine<Snapshot>
   >,
-): SnapshotVisualLine<ItemBase> | null {
+): VisualLine<Snapshot> | null {
   if (!snapshot) return null;
   const line = lineBySnapshot.get(snapshot);
   if (!line) {
@@ -1175,15 +1125,14 @@ function insertionGapSegment(
   next: ItemSnapshot<ItemBase> | null,
   lineBySnapshot: ReadonlyMap<
     ItemSnapshot<ItemBase>,
-    SnapshotVisualLine<ItemBase>
+    VisualLine<Snapshot>
   >,
   useVisualLineBand: boolean,
 ): InsertionGapSegment {
   const axes = flowAxesForDirection(containerSnapshot.direction);
-  const contentOrigin = contentBoxOrigin(containerSnapshot.box);
-  const contentSize = contentBoxSize(containerSnapshot.box);
-  const contentMainStart = contentOrigin[axes.main];
-  const contentMainSize = contentSize[axes.mainSize];
+  const content = contentRect(containerSnapshot.box);
+  const contentMainStart = content[axes.main];
+  const contentMainSize = content[axes.mainSize];
   const previousMainEnd = previous
     ? previous.box[axes.main] + previous.box[axes.mainSize]
     : null;
@@ -1210,12 +1159,12 @@ function insertionGapSegment(
 
   const crossStart =
     useVisualLineBand && visualLine
-      ? contentOrigin[axes.cross] + visualLine.crossStart
-      : contentOrigin[axes.cross];
+      ? content[axes.cross] + visualLine.crossStart
+      : content[axes.cross];
   const crossSize =
     useVisualLineBand && visualLine
       ? visualLine.crossSize
-      : contentSize[axes.crossSize];
+      : content[axes.crossSize];
 
   if (axes.direction === "column") {
     return Object.freeze({
@@ -1299,16 +1248,16 @@ function collectInsertionCandidates(
     const rawChildren = containerSnapshot.children.filter(
       (child) => !child.value.isGhost,
     );
-    const visualLines = inferSnapshotVisualLines(
+    const visualLines = inferVisualLines(
       containerSnapshot,
       flowAxesForDirection(containerSnapshot.direction),
     );
     const lineBySnapshot = new Map<
       ItemSnapshot<ItemBase>,
-      SnapshotVisualLine<ItemBase>
+      VisualLine<Snapshot>
     >();
     for (const line of visualLines) {
-      for (const snapshot of line.snapshots) {
+      for (const snapshot of line.nodes) {
         lineBySnapshot.set(snapshot, line);
       }
     }
@@ -1436,18 +1385,18 @@ export function createDirectInsertionTarget(
   const nextSnapshot =
     rawChildren[boundary] ?? null;
 
-  const visualLines = inferSnapshotVisualLines(
+  const visualLines = inferVisualLines(
     containerSnapshot,
     flowAxesForDirection(containerSnapshot.direction),
   );
 
   const lineBySnapshot = new Map<
     ItemSnapshot<ItemBase>,
-    SnapshotVisualLine<ItemBase>
+    VisualLine<Snapshot>
   >();
 
   for (const line of visualLines) {
-    for (const snapshot of line.snapshots) {
+    for (const snapshot of line.nodes) {
       lineBySnapshot.set(snapshot, line);
     }
   }

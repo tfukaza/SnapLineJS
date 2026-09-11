@@ -155,7 +155,7 @@ function requireInsertionTarget(
 function flowTargets(
   root: MockItem,
   dragged: MockItem,
-  onSnapshotVisit?: (snapshot: ItemSnapshot<MockItem>) => void,
+  onNodeVisit?: (snapshot: ItemSnapshot<MockItem>) => void,
 ) {
   return virtualLayoutRecursive(
     root as never,
@@ -168,7 +168,7 @@ function flowTargets(
     dragged.dragPositionY + dragged.dragSnapshot.box.height / 2,
     null,
     false,
-    onSnapshotVisit ? { onSnapshotVisit } : undefined,
+    onNodeVisit ? { onNodeVisit } : undefined,
   ).candidates.map((candidate) => candidate.target);
 }
 

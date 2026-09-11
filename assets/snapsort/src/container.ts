@@ -4,8 +4,10 @@ import type {
   ContainerCallbacks,
   VisualGeometryInvalidationReason,
 } from "./events";
-import type { LayoutMainAxisAlign } from "./layout";
-import type { LayoutWrap } from "./snapshot";
+import type {
+  LayoutMainAxisAlign,
+  LayoutWrap,
+} from "@snap-engine/core/layout";
 import type { SortMode } from "./drag/drop-strategy";
 import type { DragSession } from "./drag/session";
 import { getDragSession } from "./drag/session-store";
