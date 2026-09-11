@@ -207,7 +207,7 @@ function gestureHarness() {
   return { ...base, source, target };
 }
 
-function dragFrom(connector: ConnectorMirror, dropX: number, pointerId = 7) {
+function dragFrom(connector: ConnectorMirror, pointerId = 7) {
   const event = { button: 0, pointerId } as any;
   connector.onCursorDown({ position: pos(0, 0), event } as any);
 }
@@ -230,7 +230,7 @@ test("a controlled connect stages, proposes one atomic request, and settles in p
   const { engine, handle, requests, source, target } = gestureHarness();
   const mirror = getGraphRegistry(engine);
 
-  dragFrom(source, 100);
+  dragFrom(source);
   driveDrop(source, 100);
 
   expect(requests).toHaveLength(1);
@@ -269,7 +269,7 @@ test("rejection-by-inaction discards the staged line on the decisive pass", () =
   const { engine, handle, requests, source } = gestureHarness();
   const mirror = getGraphRegistry(engine);
 
-  dragFrom(source, 100);
+  dragFrom(source);
   driveDrop(source, 100);
   expect(requests).toHaveLength(1);
   expect(source.outgoingLines).toHaveLength(1);
@@ -301,7 +301,7 @@ test("a full replace-oldest target yields one atomic replace request with no loc
   handle.flush();
   const existing = mirror.line("line-a")!;
 
-  dragFrom(source, 100);
+  dragFrom(source);
   driveDrop(source, 100);
   expect(requests).toHaveLength(1);
   const request = requests[0];
@@ -378,7 +378,11 @@ test("controlled graphs on sibling engines are fully isolated, gestures included
   const sibling = createSiblingEngine(global);
   const siblingRequests: LineChangeRequest[] = [];
   const siblingHandle = attachControlledGraph(sibling, {
-    onLineChangeRequest: (request) => siblingRequests.push(request),
+    onLineChangeRequest: (request) => {
+      siblingRequests.push(request);
+      // The sibling document is never seeded, so it stays empty.
+      return [];
+    },
   });
 
   // Same connector ids on both engines: no conflict, independent settles.

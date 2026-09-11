@@ -149,7 +149,11 @@ function requireInsertionTarget(
   if (!target?.insertion) {
     throw new Error("Expected an insertion-marker drop target.");
   }
-  return target;
+  // The guard above proved `insertion` is present; optional chaining on
+  // `target` does not narrow the property type for the return.
+  return target as ResolvedDropTarget & {
+    insertion: InsertionMarkerPresentation;
+  };
 }
 
 function flowTargets(

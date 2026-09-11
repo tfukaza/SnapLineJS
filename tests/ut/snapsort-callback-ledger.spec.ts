@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { JSDOM } from "jsdom";
 import type { dragProp, dragStartProp } from "@snap-engine/core";
+import type { PointerPosition } from "../../src/geometry";
 import { Container } from "../../assets/snapsort/src/container";
 import { buildGhostSlotLocation } from "../../assets/snapsort/src/event-builders";
 import type { DragLifecycleStrategy } from "../../assets/snapsort/src/drag/lifecycle";
@@ -182,11 +183,16 @@ function location(item: Item) {
   return { container, containerMetadata: container.metadata, index };
 }
 
+/** A pointer position with identical world, camera, and screen coordinates. */
+function pointerAt(x: number, y: number): PointerPosition {
+  return { x, y, camera: { x, y }, screen: { x, y } };
+}
+
 function dragStartFor(item: Item, pointerId = 1): dragStartProp {
   return {
     objectId: item.id,
     pointerId,
-    start: { x: 20, y: 20 },
+    start: pointerAt(20, 20),
     button: 0,
     isWithinEngine: true,
     handoffTo() {},
@@ -197,9 +203,9 @@ function dragMoveFor(item: Item, x: number, y: number): dragProp {
   return {
     objectId: item.id,
     pointerId: 1,
-    start: { x: 20, y: 20 },
-    position: { x, y },
-    delta: { x: x - 20, y: y - 20 },
+    start: pointerAt(20, 20),
+    position: pointerAt(x, y),
+    delta: pointerAt(x - 20, y - 20),
     button: 0,
     handoffTo() {},
   };
@@ -296,8 +302,12 @@ test("activation and veto callbacks remain direct and preserve order", async () 
     let observedHandle: unknown = null;
     const lifecycle: DragLifecycleStrategy = {
       placementOccupiesFlowSlots: true,
-      validateStart: () => activationLedger.push("validate"),
-      dragStart: () => activationLedger.push("activate"),
+      validateStart: () => {
+        activationLedger.push("validate");
+      },
+      dragStart: () => {
+        activationLedger.push("activate");
+      },
       dragMove() {},
       currentPlacement: () => null,
       placementIndexFor: (_session, target) => target.index,
@@ -306,10 +316,10 @@ test("activation and veto callbacks remain direct and preserve order", async () 
       afterPlacementSync() {},
       drop() {},
     };
-    const strategy = {
+    const strategy: SortStrategy = {
+      mode: "euclidean",
       dropTarget: { resolve: () => null },
       lifecycle,
-      defaultDragVisual: "none" as const,
     };
     const root = mountRoot(harness, {
       onDragStart: (event) => {
@@ -640,9 +650,9 @@ test("error finalization skips DOM writes for disconnected participants", async 
       [item],
       [location(item)],
       {
+        mode: "euclidean",
         dropTarget: { resolve: () => null },
         lifecycle,
-        defaultDragVisual: "item",
       },
       {
         inputType: "pointer",

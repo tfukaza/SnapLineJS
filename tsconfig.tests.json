@@ -2,8 +2,24 @@
   "extends": "./tsconfig.json",
   "compilerOptions": {
     "noEmit": true,
-    "rootDirs": ["src", "demo", "tests"],
-    "types": ["node"]
+    "rootDirs": [
+      "src",
+      "demo",
+      "tests"
+    ],
+    "types": [
+      "node"
+    ],
+    "lib": [
+      "ESNext",
+      "DOM",
+      "DOM.Iterable"
+    ]
   },
-  "include": ["tests/**/*.ts"]
+  "include": [
+    "tests/**/*.ts"
+  ],
+  "exclude": [
+    "tests/types/**"
+  ]
 }

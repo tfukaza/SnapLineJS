@@ -42,7 +42,8 @@ async function overrideDragVisual(
       const containers =
         GlobalManager.getInstance().data.dragAndDropContainers ?? [];
       const container = containers.find(
-        (candidate) => candidate.element === element,
+        (candidate: { element: Element | null }) =>
+          candidate.element === element,
       );
       if (!container) {
         throw new Error(`Could not find SnapSort container ${selector}.`);

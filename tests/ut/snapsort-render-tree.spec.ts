@@ -14,6 +14,7 @@ import {
   buildGhostSlotLocation,
 } from "../../assets/snapsort/src/event-builders";
 import type {
+  DragInputController,
   DragSession,
   DragSessionController,
 } from "../../assets/snapsort/src/drag/session";
@@ -105,15 +106,19 @@ function createRenderTreeHarness(itemIds = ["dragged"]): RenderTreeHarness {
   const originals = [...items.values()];
   const sources = originals.map((_, index) => buildDragLocation(source, index));
   const session: DragSession = {
-    inputType: "pointer",
     root,
-    pointerId: 1,
+    // Render-state never reads the input controller; stub only its public
+    // pointer fields rather than constructing one against a real session.
+    input: {
+      inputType: "pointer",
+      pointerId: 1,
+      start: { x: 0, y: 0 },
+      pointer: { x: 0, y: 0 },
+    } as unknown as DragInputController,
     items: originals,
     sources,
     pressedItem: originals[0],
     primaryItem: originals[0],
-    start: { x: 0, y: 0 },
-    pointer: { x: 0, y: 0 },
     status: "active",
     dragVisual: "item",
     dropEffect: "move",
@@ -511,7 +516,7 @@ test("same-location insertion marker moves update presentation and replay idempo
     const rendered = childTree(updated, "destination").entries.find(
       (entry) => entry.itemId === marker.ghostItemId,
     );
-    if (!rendered?.isGhost) {
+    if (!rendered?.isGhost || rendered.ghost.type !== "insertion-marker") {
       throw new Error("Expected the moved insertion marker entry.");
     }
 

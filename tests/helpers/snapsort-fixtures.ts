@@ -33,6 +33,10 @@ export type MockSnapSortItem = {
   name?: string;
   config?: Record<string, unknown>;
   numberOfItems?: number;
+  getIndexAndContainer?: () => {
+    container: MockSnapSortItem | null | undefined;
+    index: number;
+  };
   addDebugRect: () => void;
   addDebugCircle: () => void;
   addDebugLine: () => void;

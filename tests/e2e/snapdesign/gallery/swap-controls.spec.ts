@@ -103,9 +103,13 @@ test("runs independent gallery drags concurrently", async ({ page }) => {
           () => sidewaysRoot.dragSession?.status === "active",
         );
 
+        const pointerIdOf = (session: any) =>
+          session?.input?.inputType === "pointer"
+            ? session.input.pointerId
+            : undefined;
         const activePointerIds = [
-          swapRoot.dragSession?.pointerId,
-          sidewaysRoot.dragSession?.pointerId,
+          pointerIdOf(swapRoot.dragSession),
+          pointerIdOf(sidewaysRoot.dragSession),
         ];
         const simultaneous = activePointerIds.every(
           (pointerId) => pointerId != null,

@@ -351,7 +351,9 @@ test("drop policy events preserve every source in a multi-item drag", () => {
   companion.metadata = { order: 2 };
   source.metadata = { dropGroup: "cards" };
   companionSource.metadata = { dropGroup: "cards" };
-  let event: DropPriorityEvent | null = null;
+  // Asserted (not annotated) so TS does not narrow to `null`: the callback
+  // assigns it inside a closure that control-flow analysis cannot see.
+  let event = null as DropPriorityEvent | null;
   near.callbacks = {
     getDropPriority: (nextEvent) => {
       event = nextEvent;

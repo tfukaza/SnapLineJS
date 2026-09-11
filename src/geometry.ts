@@ -275,6 +275,11 @@ export function rectsEqual(a: Rect, b: Rect, tolerance = 0): boolean {
 // Construction and mapping.
 // ---------------------------------------------------------------------------
 
+/** A frozen copy holding only the point fields of `point`. */
+export function freezePoint(point: Point): Point {
+  return Object.freeze({ x: point.x, y: point.y });
+}
+
 /** A frozen copy holding only the rectangle fields of `rect`. */
 export function freezeRect(rect: Rect): Rect {
   return Object.freeze({

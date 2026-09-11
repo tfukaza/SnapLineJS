@@ -436,7 +436,8 @@ for (const [direction, wheelDeltaY] of [
       hasText: "Resizable A",
     });
     const eastHandle = nodeA.locator(".resize-region[data-handle='e']");
-    const cssWidth = () => nodeA.evaluate((node) => node.offsetWidth);
+    const cssWidth = () =>
+      nodeA.evaluate((node) => (node as HTMLElement).offsetWidth);
     const zoom = async () =>
       (await nodeA.boundingBox())!.width / (await cssWidth());
 

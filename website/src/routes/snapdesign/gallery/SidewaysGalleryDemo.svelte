@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { sessionPointerId } from "./session-pointer";
   import clubsUrl from "$lib/assets/gallery/playing-cards/clubs.svg?url";
   import diamondsUrl from "$lib/assets/gallery/playing-cards/diamonds.svg?url";
   import heartsUrl from "$lib/assets/gallery/playing-cards/hearts.svg?url";
@@ -156,7 +157,7 @@
           : null;
     },
     onDragStart(event) {
-      if (event.session.pointerId !== SIDEWAYS_VIRTUAL_POINTER_ID) {
+      if (sessionPointerId(event.session) !== SIDEWAYS_VIRTUAL_POINTER_ID) {
         takeManualControl();
       }
     },
@@ -305,7 +306,8 @@
       () => {
         const session = sidewaysContainer?.dragSession;
         return (
-          session?.pointerId === SIDEWAYS_VIRTUAL_POINTER_ID &&
+          session != null &&
+          sessionPointerId(session) === SIDEWAYS_VIRTUAL_POINTER_ID &&
           session.primaryItem.itemId === options.itemId &&
           session.status === "active"
         );

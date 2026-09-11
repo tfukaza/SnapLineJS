@@ -187,6 +187,7 @@ test.describe("SnapSort adapter-rendered ghost entries", () => {
             const result = originalDragStart?.(event);
             if (result === false) return false;
             event.session.dragVisual = "preview";
+            return undefined;
           },
         };
       },

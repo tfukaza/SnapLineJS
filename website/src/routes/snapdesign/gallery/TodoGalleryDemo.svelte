@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { sessionPointerId } from "./session-pointer";
   import Toggle from "$lib/components/Toggle.svelte";
   import {
     Container,
@@ -314,7 +315,8 @@
           () => {
             const session = todoContainer?.dragSession;
             return (
-              session?.pointerId === pointer.pointerId &&
+              session != null &&
+              sessionPointerId(session) === pointer.pointerId &&
               session.status === "active"
             );
           },

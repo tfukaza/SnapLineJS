@@ -1,3 +1,4 @@
+import { freezePoint } from "@snap-engine/core/geometry";
 import type {
   dragEndProp,
   dragProp,
@@ -5,16 +6,6 @@ import type {
 } from "@snap-engine/core";
 import type { ResolvedDropTarget } from "../algorithm";
 import type { DragSessionController } from "./session";
-
-function freezePoint(point: {
-  x: number;
-  y: number;
-}): Readonly<{ x: number; y: number }> {
-  return Object.freeze({
-    x: point.x,
-    y: point.y,
-  });
-}
 
 export class PointerDragController {
   readonly inputType = "pointer" as const;

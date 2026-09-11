@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import type { Engine } from "@snap-engine/core";
 import {
   Container as SnapSortContainer,
   defaultAnimations,
@@ -19,9 +20,17 @@ import {
   assertCanFireItemSwap,
 } from "../../assets/snapsort/src/mutation";
 
+/**
+ * The constructors under test only touch `engine.global` and `engine.input`,
+ * so a minimal stub stands in for a full Engine.
+ */
+function mockEngine(stub: { global: object; input: object }): Engine {
+  return stub as unknown as Engine;
+}
+
 test("built-in modes choose composable drag visual defaults that can be overridden before activation", () => {
   let nextId = 0;
-  const engine = {
+  const engine = mockEngine({
     global: {
       data: {},
       queue: {},
@@ -33,7 +42,7 @@ test("built-in modes choose composable drag visual defaults that can be overridd
       subscribeGlobalCursorEvent: () => {},
       unsubscribeGlobalCursorEvent: () => {},
     },
-  };
+  });
   const expected = {
     euclidean: "item",
     progressive: "item",
@@ -82,17 +91,18 @@ test("built-in modes choose composable drag visual defaults that can be overridd
     expect(Object.isFrozen(handle.items)).toBe(true);
     expect(Object.isFrozen(handle.sources)).toBe(true);
     expect(Object.isFrozen(handle.sources[0])).toBe(true);
-    if (handle.input.inputType !== "pointer") {
+    const input = handle.input;
+    if (input.inputType !== "pointer") {
       throw new Error("Expected pointer input");
     }
-    expect(Object.isFrozen(handle.input.start)).toBe(true);
-    expect(Object.isFrozen(handle.input.pointer)).toBe(true);
+    expect(Object.isFrozen(input.start)).toBe(true);
+    expect(Object.isFrozen(input.pointer)).toBe(true);
     expect("strategy" in handle).toBe(true);
     expect("ghosts" in handle).toBe(false);
     expect("cancel" in handle).toBe(true);
     expect(() => (handle.items as any[]).push(item)).toThrow();
     expect(() => ((handle.sources[0] as any).index = 2)).toThrow();
-    expect(() => ((handle.input.pointer as any).x = 30)).toThrow();
+    expect(() => ((input.pointer as any).x = 30)).toThrow();
 
     expect(handle.dragVisual).toBe(expected[mode]);
     expect(() => {
@@ -131,7 +141,7 @@ test("built-in modes choose composable drag visual defaults that can be overridd
 
 test("container animations are opt-in and expose the standard preset", () => {
   let nextId = 0;
-  const engine = {
+  const engine = mockEngine({
     global: {
       data: {},
       queue: {},
@@ -142,7 +152,7 @@ test("container animations are opt-in and expose the standard preset", () => {
       subscribeGlobalCursorEvent: () => {},
       unsubscribeGlobalCursorEvent: () => {},
     },
-  };
+  });
 
   const immediate = new SnapSortContainer(engine, null, {
     itemId: "animation-immediate-root",
@@ -184,7 +194,7 @@ test("container animations are opt-in and expose the standard preset", () => {
 
 test("item drag snapshots freeze a shallow copy of current metadata", () => {
   let nextId = 0;
-  const engine = {
+  const engine = mockEngine({
     global: {
       data: {},
       queue: {},
@@ -196,8 +206,8 @@ test("item drag snapshots freeze a shallow copy of current metadata", () => {
       subscribeGlobalCursorEvent: () => {},
       unsubscribeGlobalCursorEvent: () => {},
     },
-  };
-  const item = new SnapSortItem(engine as never, null, {
+  });
+  const item = new SnapSortItem(engine, null, {
     itemId: "metadata-item",
   });
   const original = { version: 1 };
@@ -214,7 +224,7 @@ test("item drag snapshots freeze a shallow copy of current metadata", () => {
 
 test("custom adapters never inherit Vanilla DOM callbacks", () => {
   let nextId = 0;
-  const engine = {
+  const engine = mockEngine({
     global: {
       data: {},
       queue: {},
@@ -225,7 +235,7 @@ test("custom adapters never inherit Vanilla DOM callbacks", () => {
       subscribeGlobalCursorEvent: () => {},
       unsubscribeGlobalCursorEvent: () => {},
     },
-  };
+  });
   const onItemMove = () => {};
 
   const vanilla = new SnapSortContainer(engine, null, {
@@ -272,7 +282,7 @@ test("visual geometry invalidations coalesce at the root container", async () =>
     items: readonly unknown[];
     reasons: readonly string[];
   }> = [];
-  const engine = {
+  const engine = mockEngine({
     global: {
       data: {},
       queue,
@@ -283,7 +293,7 @@ test("visual geometry invalidations coalesce at the root container", async () =>
       subscribeGlobalCursorEvent: () => {},
       unsubscribeGlobalCursorEvent: () => {},
     },
-  };
+  });
   const root = new SnapSortContainer(engine, null, {
     itemId: "visual-geometry-root",
     adapter: { callbacks: {}, commit: (mutation) => mutation() },

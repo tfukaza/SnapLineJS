@@ -237,7 +237,10 @@ async function installGalleryTrace(
           ghostCount: demo.querySelectorAll("[data-snapsort-ghost-entry]")
             .length,
           sessionStatus: session?.status ?? null,
-          sessionPointerId: session?.pointerId ?? null,
+          sessionPointerId:
+            session?.input?.inputType === "pointer"
+              ? session.input.pointerId
+              : null,
         };
         const signature = JSON.stringify({ ...frame, timestamp: 0 });
         if (signature !== trace.lastFrameSignature) {
@@ -817,7 +820,10 @@ test("drives all three nested-container moves through real handle events", async
           dropItem: demo.dataset.nestedDropItem ?? null,
           ghostCount,
           sessionStatus: session?.status ?? null,
-          sessionPointerId: session?.pointerId ?? null,
+          sessionPointerId:
+            session?.input?.inputType === "pointer"
+              ? session.input.pointerId
+              : null,
           sessionItemId: session?.primaryItem.itemId ?? null,
         };
         const signature = JSON.stringify(frame);

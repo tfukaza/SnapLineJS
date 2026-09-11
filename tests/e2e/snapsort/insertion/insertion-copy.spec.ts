@@ -51,6 +51,7 @@ async function overrideInsertionDragVisual(
           const result = originalDragStart?.(event);
           if (result === false) return false;
           event.session.dragVisual = dragVisual;
+          return undefined;
         },
       };
     },

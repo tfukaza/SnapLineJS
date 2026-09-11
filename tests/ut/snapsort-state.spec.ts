@@ -1353,7 +1353,9 @@ test("swap lifecycle reconciles framework-owned replacement Items", async () => 
 test("DropPriorityEvent reports the real nested container depth", () => {
   const harness = createStateHarness();
   try {
-    let priorityEvent: DropPriorityEvent | null = null;
+    // Asserted (not annotated) so TS does not narrow to `null`: the callback
+    // assigns it inside a closure that control-flow analysis cannot see.
+    let priorityEvent = null as DropPriorityEvent | null;
     const root = mountRoot(harness, "root", { mode: "swap" });
     const dragged = mountItem(harness, root, "dragged", {
       x: 10,

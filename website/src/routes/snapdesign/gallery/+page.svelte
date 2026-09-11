@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { sessionPointerId } from "./session-pointer";
   import SeoHead from "$lib/components/SeoHead.svelte";
   import CodeLcdDisplay from "$lib/components/CodeLcdDisplay.svelte";
   import Dial from "$lib/components/Dial.svelte";
@@ -108,7 +109,7 @@
       swap = reduceRenderTree(swap, event);
     }),
     onDragStart(event) {
-      if (event.session.pointerId !== SWAP_VIRTUAL_POINTER_ID) {
+      if (sessionPointerId(event.session) !== SWAP_VIRTUAL_POINTER_ID) {
         takeSwapManualControl();
       }
     },
@@ -160,7 +161,8 @@
       () => {
         const session = swapContainer?.dragSession;
         return (
-          session?.pointerId === SWAP_VIRTUAL_POINTER_ID &&
+          session != null &&
+          sessionPointerId(session) === SWAP_VIRTUAL_POINTER_ID &&
           session.primaryItem.itemId === `swap-${sourceLabel.toLowerCase()}` &&
           session.status === "active"
         );

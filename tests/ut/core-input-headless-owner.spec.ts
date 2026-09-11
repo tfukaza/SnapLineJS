@@ -1,7 +1,11 @@
 import { expect, test } from "@playwright/test";
 import { JSDOM } from "jsdom";
 import { InputControl } from "../../src/input";
-import { BaseObject, ElementObject } from "../../src/object";
+import {
+  BaseObject,
+  ElementObject,
+  type DomElement,
+} from "../../src/object";
 
 type InstalledGlobal = {
   key: "window" | "document" | "HTMLElement" | "Node" | "AbortController";
@@ -1323,7 +1327,7 @@ test("keydown exposes the focused input-alias owner through targeted bubbling an
 
     const deliveries: Array<{
       scope: string;
-      focusedObject: ElementObject | null;
+      focusedObject: ElementObject<DomElement> | null;
       event: KeyboardEvent;
     }> = [];
     focusedObject.event.input.keyDown = (prop) => {
@@ -1384,7 +1388,7 @@ test("global keydown receives null when the focused element has no registered ow
   if (!focusElement) throw new Error("Missing keyboard input element");
 
   try {
-    const deliveries: Array<ElementObject | null> = [];
+    const deliveries: Array<ElementObject<DomElement> | null> = [];
     harness.input.event.keyDown = ({ focusedObject }) => {
       deliveries.push(focusedObject);
     };

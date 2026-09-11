@@ -1,6 +1,7 @@
 import type { AnimationObject } from "@snap-engine/core/animation";
 import type { ElementBox, dragStartProp } from "@snap-engine/core";
 import {
+  freezePoint,
   freezeRect,
   type BoxModel,
   type Rect,
@@ -100,16 +101,6 @@ interface DropTargetUpdate {
   readonly logicalChanged: boolean;
   readonly presentationChanged: boolean;
   readonly shouldClear: boolean;
-}
-
-function freezePoint(point: {
-  x: number;
-  y: number;
-}): Readonly<{ x: number; y: number }> {
-  return Object.freeze({
-    x: point.x,
-    y: point.y,
-  });
 }
 
 function freezeLocation(location: DragLocation): DragLocation {

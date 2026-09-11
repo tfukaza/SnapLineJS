@@ -179,8 +179,16 @@ npm run dev:react     # React demo
 
 **Run tests:**
 ```bash
-npm test
+npm test                  # every unit suite (tests/ut)
+npm run test:e2e          # every e2e project on Chromium
+npm run test:snapsort     # one project: core, asset-base, snapline,
+                          # snapsort, layout, snapdesign, or website
 ```
+
+End-to-end suites live in `tests/e2e/<project>/<feature>/`, one Playwright
+config per project (`tests/e2e/<project>/playwright.config.ts`). Servers and
+ports come from `tests/e2e/shared/servers.ts`. Tests that never open a page
+belong in `tests/ut/`.
 
 ## Release Workflow
 
