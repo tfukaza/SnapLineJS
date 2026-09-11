@@ -1,3 +1,4 @@
+import type { Rect } from "@snap-engine/core/geometry";
 import type { AnimationConfig, Container } from "../container";
 import type { ResolvedDropTarget } from "../algorithm";
 import {
@@ -103,7 +104,7 @@ async function syncInsertionPlacement(
   const ghostElement = ghostItem.element;
   if (!ghostElement) return;
 
-  let lastRect: DOMRect | null = null;
+  let lastRect: Rect | null = null;
   ghostItem.schedule(
     () => {
       lastRect = readVisualRect(ghostItem);
@@ -150,8 +151,8 @@ function drop(session: DragSession): void {
   const dropItemIds = items.map((member) => member.itemId);
   const dropRects = items.map((member) => ({
     item: member,
-    first: null as DOMRect | null,
-    last: null as DOMRect | null,
+    first: null as Rect | null,
+    last: null as Rect | null,
     element: null as HTMLElement | null,
   }));
   let dropAnimationConfig: AnimationConfig | null = null;

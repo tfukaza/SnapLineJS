@@ -194,8 +194,7 @@ class CameraControl extends ElementObject {
    */
   setCameraConfig(config: CameraConfig) {
     this.config = { ...this.config, camera: { ...this.config.camera, ...config } };
-    this.camera?.setConfig(config);
-    this.paintCamera();
+    this.#commitCamera(() => this.camera?.setConfig(config));
   }
 
   set element(_element: HTMLElement) {
@@ -210,31 +209,61 @@ class CameraControl extends ElementObject {
     // });
   }
 
+  /**
+   * Paint the camera transform. The paint happens in the same commit as the
+   * camera state change whenever the stage allows a write: a DOM read later
+   * in the frame must never see the new zoom against the old transform, or
+   * it would convert the old on-screen size with the new zoom.
+   */
   paintCamera() {
-    // this.engine.camera?.updateCameraProperty();
     this.engine.camera?.updateCamera();
     this.style.transform = this.engine.camera?.canvasStyle as string;
+    if (this.element && this.#canWriteNow()) {
+      this.writeTransform();
+      return;
+    }
     this.schedule(() => this.writeTransform(), {
       stage: "WRITE_2",
       queueId: `${this.id}-transform`,
     });
   }
 
+  #canWriteNow(): boolean {
+    const stage = this.global.currentStage;
+    return stage === "IDLE" || stage.startsWith("WRITE");
+  }
+
+  /**
+   * Apply a programmatic camera change and paint it as one commit. Requested
+   * during a read stage, both wait for the next write stage, so no read in
+   * this frame observes a camera the DOM does not show yet.
+   */
+  #commitCamera(mutate: (camera: Camera) => void): void {
+    const commit = () => {
+      const camera = this.engine.camera;
+      if (!camera) return;
+      mutate(camera);
+      this.paintCamera();
+    };
+    if (this.#canWriteNow()) {
+      commit();
+      return;
+    }
+    this.schedule(commit, { stage: "WRITE_2" });
+  }
+
   // Camera Methods
 
   updateCameraCenterPosition(x: number = 0, y: number = 0) {
-    this.engine.camera?.setCameraCenterPosition(x, y);
-    this.paintCamera();
+    this.#commitCamera((camera) => camera.setCameraCenterPosition(x, y));
   }
 
   setCameraPosition(x: number, y: number) {
-    this.engine.camera?.setCameraPosition(x, y);
-    this.paintCamera();
+    this.#commitCamera((camera) => camera.setCameraPosition(x, y));
   }
 
   setCameraCenterPosition(x: number, y: number) {
-    this.engine.camera?.setCameraCenterPosition(x, y);
-    this.paintCamera();
+    this.#commitCamera((camera) => camera.setCameraCenterPosition(x, y));
   }
 
   getCameraCenterPosition() {
@@ -245,20 +274,13 @@ class CameraControl extends ElementObject {
     if (this.config.zoomLock) {
       return;
     }
-    const camera = this.engine.camera;
-    if (!camera) {
-      return;
-    }
-
-    const targetX = originX ?? camera.cameraWidth / 2;
-    const targetY = originY ?? camera.cameraHeight / 2;
-
-    camera.handleScroll(deltaZoom, targetX, targetY);
-    this.style.transform = camera.canvasStyle as string;
-    this.schedule(() => this.writeTransform(), {
-      stage: "WRITE_2",
-      queueId: `${this.id}-transform`,
-    });
+    this.#commitCamera((camera) =>
+      camera.handleScroll(
+        deltaZoom,
+        originX ?? camera.cameraWidth / 2,
+        originY ?? camera.cameraHeight / 2,
+      ),
+    );
   }
 
   startEdgePan(
@@ -440,11 +462,7 @@ class CameraControl extends ElementObject {
     const dx = prop.position.screen.x - this.#mouseDownX;
     const dy = prop.position.screen.y - this.#mouseDownY;
     this.engine.camera?.handlePanDrag(dx, dy);
-    this.style.transform = this.engine.camera?.canvasStyle as string;
-    this.schedule(() => this.writeTransform(), {
-      stage: "WRITE_2",
-      queueId: `${this.id}-transform`,
-    });
+    this.paintCamera();
   }
 
   onCursorUp(prop: pointerUpProp) {
@@ -458,11 +476,7 @@ class CameraControl extends ElementObject {
     this.#state = "idle";
     this.#panPointerId = null;
     this.engine.camera?.handlePanEnd();
-    this.style.transform = this.engine.camera?.canvasStyle as string;
-    this.schedule(() => this.writeTransform(), {
-      stage: "WRITE_2",
-      queueId: `${this.id}-transform`,
-    });
+    this.paintCamera();
   }
 
   onZoom(prop: mouseWheelProp) {
@@ -521,11 +535,7 @@ class CameraControl extends ElementObject {
     // divides by zoom, giving 1:1 screen-pixel panning like a pointer drag.
     const event = prop.event as WheelEvent;
     camera.handlePan(event.deltaX * sensitivity, event.deltaY * sensitivity);
-    this.style.transform = camera.canvasStyle as string;
-    this.schedule(() => this.writeTransform(), {
-      stage: "WRITE_2",
-      queueId: `${this.id}-transform`,
-    });
+    this.paintCamera();
     prop.event.preventDefault();
   }
 
@@ -589,11 +599,7 @@ class CameraControl extends ElementObject {
         : center.y,
     });
 
-    this.style.transform = camera.canvasStyle as string;
-    this.schedule(() => this.writeTransform(), {
-      stage: "WRITE_2",
-      queueId: `${this.id}-transform`,
-    });
+    this.paintCamera();
   }
 
   onPinchEnd() {

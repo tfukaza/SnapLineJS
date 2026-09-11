@@ -1,3 +1,4 @@
+import type { Rect } from "@snap-engine/core/geometry";
 import type { AnimationConfig, Container } from "../container";
 import type { Item } from "../item";
 import type { ResolvedDropTarget } from "../algorithm";
@@ -42,16 +43,16 @@ function drop(session: DragSession): void {
   const root = session.root;
   const draggedItemId = item.itemId;
   const draggedAnimation: {
-    first: DOMRect | null;
-    last: DOMRect | null;
+    first: Rect | null;
+    last: Rect | null;
     element: HTMLElement | null;
     config: AnimationConfig | null;
   } = { first: null, last: null, element: null, config: null };
   const displacedAnimation: {
     item: Item | null;
     itemId: string | null;
-    first: DOMRect | null;
-    last: DOMRect | null;
+    first: Rect | null;
+    last: Rect | null;
     element: HTMLElement | null;
     config: AnimationConfig | null;
   } = {

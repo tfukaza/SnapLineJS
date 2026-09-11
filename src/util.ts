@@ -1,4 +1,4 @@
-import type { ScreenToWorldMapper } from "./camera";
+import { worldRectFromScreenRect, type ScreenToWorldMapper } from "./camera";
 import { ZERO_EDGES, type Edges, type ElementBox, type Rect } from "./geometry";
 import type { DomElement, TransformProperty } from "./object";
 
@@ -93,25 +93,23 @@ function readEdges(
  * Build an element box from a measured client rect and computed CSS edges.
  *
  * Pure: performs no DOM reads, so it can be exercised with a stub camera.
- * The box origin maps from screen to world space through `camera`; `screen`
- * keeps the client rect exactly as measured.
+ * The border box maps from screen to world space through `camera`: its
+ * origin through the camera transform and its size by the zoom. Computed
+ * CSS edges are already world-space for elements inside the camera layer
+ * (one world unit is one CSS pixel there), so they pass through unchanged.
+ * `screen` keeps the client rect exactly as measured.
  */
 function elementBoxFromMeasurement(
   camera: ScreenToWorldMapper | null,
   clientRect: Rect,
   edges: MeasuredEdges,
 ): ElementBox {
-  let x = clientRect.x;
-  let y = clientRect.y;
-  if (camera) {
-    const [cameraX, cameraY] = camera.getCameraFromScreen(x, y);
-    [x, y] = camera.getWorldFromCamera(cameraX, cameraY);
-  }
+  const world = worldRectFromScreenRect(camera, clientRect);
   return Object.freeze({
-    x,
-    y,
-    width: clientRect.width,
-    height: clientRect.height,
+    x: world.x,
+    y: world.y,
+    width: world.width,
+    height: world.height,
     screen: Object.freeze({
       x: clientRect.x,
       y: clientRect.y,
@@ -158,20 +156,76 @@ function generateTransformString(transform: TransformProperty) {
   return string;
 }
 
+const TRANSFORM_FUNCTION = /([a-zA-Z0-9]+)\(([^)]*)\)/g;
+
+/** A pixel length (`12px`, `-3.5px`, or a bare `0`), else `null`. */
+function parsePixelLength(value: string | undefined): number | null {
+  if (value === undefined) return null;
+  const trimmed = value.trim();
+  if (/^-?[\d.]+(e-?\d+)?px$/i.test(trimmed)) return parseFloat(trimmed);
+  return parseFloat(trimmed) === 0 ? 0 : null;
+}
+
 /**
- * Parses a CSS transform string to extract position values.
+ * Parses the translation and scale of a CSS transform string, such as the
+ * `translate3d(...) scale(...)` strings `generateTransformString` writes.
+ *
+ * Functions compose left to right, so a translate after a scale is scaled.
+ * Supported: `translate`, `translate3d`, `translateX`, `translateY` (pixel
+ * lengths only) and `scale`, `scaleX`, `scaleY`. Other functions, and
+ * translations in units other than `px`, are ignored.
  *
  * @param transform - A CSS transform string to parse.
- * @returns An object with x and y coordinates.
+ * @returns The composed translation (`x`, `y`, in pixels) and scale.
  */
-function parseTransformString(transform: string) {
-  const transformValues = transform.split("(")[1].split(")")[0].split(",");
-  return {
-    x: parseFloat(transformValues[0]),
-    y: parseFloat(transformValues[1]),
-    scaleX: parseFloat(transformValues[3]) || 1,
-    scaleY: parseFloat(transformValues[4]) || 1,
+function parseTransformString(transform: string): TransformProperty {
+  let x = 0;
+  let y = 0;
+  let scaleX = 1;
+  let scaleY = 1;
+  const translate = (dx: number | null, dy: number | null) => {
+    x += scaleX * (dx ?? 0);
+    y += scaleY * (dy ?? 0);
   };
+  for (const [, name, rawArgs] of transform.matchAll(TRANSFORM_FUNCTION)) {
+    const args = rawArgs.split(",");
+    switch (name) {
+      case "translate":
+      case "translate3d":
+        translate(parsePixelLength(args[0]), parsePixelLength(args[1] ?? "0"));
+        break;
+      case "translateX":
+        translate(parsePixelLength(args[0]), 0);
+        break;
+      case "translateY":
+        translate(0, parsePixelLength(args[0]));
+        break;
+      case "scale": {
+        const sx = parseFloat(args[0]);
+        const sy = args[1] === undefined ? sx : parseFloat(args[1]);
+        if (Number.isFinite(sx)) scaleX *= sx;
+        if (Number.isFinite(sy)) scaleY *= sy;
+        break;
+      }
+      case "scaleX": {
+        const sx = parseFloat(args[0]);
+        if (Number.isFinite(sx)) scaleX *= sx;
+        break;
+      }
+      case "scaleY": {
+        const sy = parseFloat(args[0]);
+        if (Number.isFinite(sy)) scaleY *= sy;
+        break;
+      }
+    }
+  }
+  return { x, y, scaleX, scaleY };
+}
+
+/** The pixel `transform-origin` offsets of a computed style value. */
+function parseTransformOrigin(origin: string): [number, number] {
+  const [x, y] = origin.trim().split(/\s+/);
+  return [parsePixelLength(x) ?? 0, parsePixelLength(y) ?? 0];
 }
 
 /**
@@ -239,5 +293,6 @@ export {
   elementBoxFromMeasurement,
   generateTransformString,
   parseTransformString,
+  parseTransformOrigin,
   mergeDefined,
 };

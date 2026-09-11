@@ -196,6 +196,12 @@ item/ghost structure.
   transaction snapshots the root, so a later Container's pass may replace
   animations started by an earlier pass in the same frame; mutation commits
   are still preserved in request order within each Container.
+- All drag, candidate, and FLIP geometry is world-space (`ElementBox` from
+  core, CSS pixels inside a Camera layer). FLIP deltas are therefore written
+  directly as `translate` pixels, spacer/marker sizes as CSS pixels, and the
+  layout wrap tolerance is scaled by `1 / zoom` (`layoutWrapToleranceFor`) so
+  it stays constant on screen. Never mix in `box.screen` except to draw
+  viewport overlays.
 
 Copying is an application recipe, not a lifecycle effect. The destination's
 ordinary `onItemMove` moves the original stable ID to the destination and, in

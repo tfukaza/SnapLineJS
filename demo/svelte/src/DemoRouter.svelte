@@ -13,6 +13,7 @@
   import SnapSortFileExplorerPage from "./demo/snapsort_file_explorer/SnapSortFileExplorerDemo.svelte";
   import SnapSortInsertionPage from "./demo/snapsort_insertion/SnapSortInsertionDemo.svelte";
   import SnapSortKeyboardPage from "./demo/snapsort_keyboard/SnapSortKeyboardDemo.svelte";
+  import SnapSortCameraPage from "./demo/snapsort_camera/SnapSortCameraDemo.svelte";
   import SnapSortWebsiteCorePage from "./demo/snapsort_website_core/SnapSortWebsiteCoreDemo.svelte";
   import CollisionPage from "./demo/collision/CollisionDemo.svelte";
   import CollisionStressPage from "./demo/collision/CollisionStressDemo.svelte";
@@ -111,6 +112,12 @@
       label: "SnapSort Keyboard",
       path: "/snapsort-keyboard",
       legacyDemoValues: ["snapsort_keyboard"],
+      usesDevNav: true,
+    },
+    {
+      label: "SnapSort Camera",
+      path: "/snapsort-camera",
+      legacyDemoValues: [],
       usesDevNav: true,
     },
     {
@@ -311,6 +318,8 @@
       <SnapSortInsertionPage />
     {:else if selectedPath === "/snapsort-keyboard"}
       <SnapSortKeyboardPage />
+    {:else if selectedPath === "/snapsort-camera"}
+      <SnapSortCameraPage />
     {:else if selectedPath === "/snapsort-website-core"}
       <SnapSortWebsiteCorePage />
     {:else if selectedPath === "/snapsort-file-explorer"}

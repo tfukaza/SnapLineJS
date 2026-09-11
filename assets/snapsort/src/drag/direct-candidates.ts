@@ -11,6 +11,7 @@ import {
 } from "@snap-engine/core/layout";
 import {
   createDirectInsertionTarget,
+  layoutWrapToleranceFor,
   type ResolvedDropTarget,
 } from "../algorithm";
 import type { DragLocation, InsertionMarkerPresentation } from "../events";
@@ -477,6 +478,7 @@ function projectDirectRects(
   const layoutPlan = createLayoutResolutionPlan(snapshot.root, {
     exclude: (node) => session.itemSet.has(node.value),
     insertions: insertionRun,
+    wrapTolerance: layoutWrapToleranceFor(target.container),
   });
 
   const path = snapshotPathTo(snapshot.root, targetSnapshot);

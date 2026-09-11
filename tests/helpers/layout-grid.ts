@@ -213,6 +213,7 @@ export function rowCounts(ys: number[], rowStep: number): number[] {
 export interface LayoutRunOptions<N> {
   exclude?: (node: N) => boolean;
   insertions?: readonly VirtualInsertion<N>[];
+  wrapTolerance?: number;
 }
 
 /** Lay out one container with a throwaway plan and its local insertions. */
@@ -226,6 +227,7 @@ export function flowLayoutPositions<N extends LayoutNode<N>>(
   const plan = createLayoutResolutionPlan(container, {
     exclude: options.exclude,
     insertions,
+    wrapTolerance: options.wrapTolerance,
   });
   return plan.layoutPositions(
     container,
@@ -256,12 +258,14 @@ export function simulatedRowCounts<T>(
     rowStep: number;
     insertion?: VirtualInsertion<ItemSnapshot<T>>;
     exclude?: (node: ItemSnapshot<T>) => boolean;
+    wrapTolerance?: number;
   },
 ): number[] {
   const origin = contentRect(container.box);
   const result = flowLayoutPositions(container, origin.x, origin.y, {
     exclude: options.exclude,
     insertions: options.insertion ? [options.insertion] : undefined,
+    wrapTolerance: options.wrapTolerance,
   });
   const ys: number[] = [];
   for (const [, position] of result.itemPositions) ys.push(position.y);

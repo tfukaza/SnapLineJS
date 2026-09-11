@@ -128,6 +128,15 @@ Camera and coordinate systems.
 - Camera (container-relative)
 - World (scene coordinates)
 
+Inside the camera layer one world unit is one CSS pixel, so computed CSS
+lengths (margins, padding, borders, inline `width`/`translate`) are already
+world-space. Only values read from `getBoundingClientRect()` are screen-space;
+`measureElementBox` maps the client rect's origin and size into world space
+and keeps the raw client rect as `ElementBox.screen`. A measurement divides by
+the camera's current zoom, so camera state and its painted transform must
+change in the same commit (CameraControl paints synchronously when a write is
+legal and defers programmatic changes requested during a read stage).
+
 **Features:**
 
 - Coordinate conversions

@@ -313,7 +313,7 @@ function expectOrderedChildren(container: Container): void {
   }
 }
 
-test("visual rectangles are immutable screen-space snapshots and cache reads", () => {
+test("visual rectangles are immutable world-space snapshots and cache reads", () => {
   const harness = createStateHarness();
   try {
     harness.engine.camera = {
@@ -347,15 +347,17 @@ test("visual rectangles are immutable screen-space snapshots and cache reads", (
 
     expect(first).toBe(repeated);
     expect(reads).toBe(1);
-    expect(first?.coordinateSpace).toBe("screen");
+    // The zoom-2 camera halves the viewport rect into world units, so a
+    // FLIP delta between two such rects is already in CSS pixels.
+    expect(first?.coordinateSpace).toBe("world");
     expect([first?.x, first?.y, first?.width, first?.height]).toEqual([
-      30, 45, 80, 50,
+      15, 22.5, 40, 25,
     ]);
     expect(Object.isFrozen(first)).toBe(true);
 
     setRect(element, { x: 90, y: 100, width: 20, height: 10 });
     expect([first?.x, first?.y, first?.width, first?.height]).toEqual([
-      30, 45, 80, 50,
+      15, 22.5, 40, 25,
     ]);
   } finally {
     harness.cleanup();

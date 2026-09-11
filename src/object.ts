@@ -9,6 +9,7 @@ import {
   EventProxyFactory,
   generateTransformString,
   measureElementBox,
+  parseTransformOrigin,
   parseTransformString,
   setDomStyle,
 } from "./util";
@@ -916,6 +917,39 @@ export function detachAnimationFromOwner(animation: AnimationInterface) {
   owner.removeAnimationReference(animation);
 }
 
+/**
+ * Remove an element's own inline translation and scale from its measured
+ * box, recovering its untransformed layout box.
+ *
+ * A point `p` of the layout box renders at `origin + t + s * (p - origin)`,
+ * so the layout left edge is `visual - t - origin * (1 - s)`. Translations
+ * are CSS pixels, which are world units inside the camera layer. The
+ * `screen` rect and edges stay as measured.
+ */
+function unapplyInlineTransform(
+  box: ElementBox,
+  element: DomElement,
+  transform: string,
+): ElementBox {
+  const applied = parseTransformString(transform);
+  const scaleX = applied.scaleX !== 0 ? applied.scaleX : 1;
+  const scaleY = applied.scaleY !== 0 ? applied.scaleY : 1;
+  let originX = 0;
+  let originY = 0;
+  if (scaleX !== 1 || scaleY !== 1) {
+    [originX, originY] = parseTransformOrigin(
+      window.getComputedStyle(element).transformOrigin,
+    );
+  }
+  return Object.freeze({
+    ...box,
+    x: box.x - applied.x - originX * (1 - scaleX),
+    y: box.y - applied.y - originY * (1 - scaleY),
+    width: box.width / scaleX,
+    height: box.height / scaleY,
+  });
+}
+
 function stageBoxIndex(stage: FrameReadStages | null): number {
   if (stage == "READ_1") return 0;
   if (stage == "READ_2") return 1;
@@ -1092,14 +1126,7 @@ export class ElementObject<
     let box = measureElementBox(this.engine.camera, this.#element, this.#box);
     const transform = this.#element.style.transform;
     if (transform && transform != "none" && config.unapplyTransform) {
-      const applied = parseTransformString(transform);
-      box = Object.freeze({
-        ...box,
-        x: box.x - applied.x,
-        y: box.y - applied.y,
-        width: box.width / applied.scaleX,
-        height: box.height / applied.scaleY,
-      });
+      box = unapplyInlineTransform(box, this.#element, transform);
     }
     this.#box = box;
 

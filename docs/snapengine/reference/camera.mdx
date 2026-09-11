@@ -52,6 +52,19 @@ const zoom = camera.zoom;
 canvasElement.style.transform = camera.canvasStyle;
 ```
 
+## Coordinate Spaces
+
+| Space | Origin | Units |
+|-------|--------|-------|
+| Screen | Browser viewport | Viewport (client) pixels |
+| Camera | Camera container's top-left corner | Viewport pixels |
+| World | Scene origin | CSS pixels inside the camera layer |
+
+Inside the camera layer, CSS lengths are world units: a `120px` wide element
+is 120 world units wide at any zoom, while its `getBoundingClientRect()` width
+is `120 * zoom`. `ElementObject.readDom()` reports world-space boxes and keeps
+the viewport rectangle as `box.screen`.
+
 ## Coordinate Methods
 
 ```ts
@@ -132,6 +145,11 @@ cameraControl.zoomBy(0.1);
 cameraControl.zoomBy(-0.1);
 cameraControl.zoomBy(0.1, 200, 150);
 ```
+
+Camera changes and their painted transform are one commit: CameraControl
+writes the transform immediately when a DOM write is allowed, and a
+programmatic change requested during a read stage waits for the next write
+stage. A DOM read therefore never sees a zoom that is not on screen yet.
 
 ### Edge panning for drag owners
 

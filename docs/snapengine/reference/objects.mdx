@@ -109,12 +109,16 @@ object.schedule(() => {
 
 | Field | Description |
 |-------|-------------|
-| `x`, `y`, `width`, `height` | The border box. `x` and `y` are world coordinates. |
-| `margin`, `padding`, `border` | Computed CSS edge thicknesses. |
+| `x`, `y`, `width`, `height` | The border box in world units (CSS pixels inside the camera layer, at any zoom). |
+| `margin`, `padding`, `border` | Computed CSS edge thicknesses, also world units. |
 | `screen` | The transformed viewport rectangle, exactly as `getBoundingClientRect()` reports it. |
 
 Every read produces a new frozen snapshot, so a box you keep never changes
 afterwards. `elementObject.box` always returns the latest one.
+
+`readDom({ unapplyTransform: true })` removes the element's own inline
+`translate` and `scale` (honoring its computed `transform-origin`) to report
+its untransformed layout box; `screen` still reports what is rendered.
 
 ## Public API
 

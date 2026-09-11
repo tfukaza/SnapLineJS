@@ -9,6 +9,7 @@ import {
   rectsIntersect,
 } from "@snap-engine/core/geometry";
 import {
+  LAYOUT_WRAP_TOLERANCE,
   childRelativeOffset,
   createLayoutResolutionPlan,
   flowAxesForDirection,
@@ -47,6 +48,16 @@ type ResolvedItemHitbox =
   | { shape: "circle"; circle: Circle };
 
 type Snapshot = ItemSnapshot<ItemBase>;
+
+/**
+ * The layout wrap tolerance for boxes measured under `item`'s camera: the
+ * CSS-pixel default scaled so it stays constant on screen at any zoom.
+ * @internal
+ */
+export function layoutWrapToleranceFor(item: ItemBase): number {
+  const zoom = item.engine?.camera?.zoom ?? 1;
+  return zoom > 0 ? LAYOUT_WRAP_TOLERANCE / zoom : LAYOUT_WRAP_TOLERANCE;
+}
 
 export interface ResolvedDropTarget {
   container: Container;
@@ -581,6 +592,7 @@ export function virtualLayoutRecursive(
   const layoutPlan = createLayoutResolutionPlan(snapshot.root, {
     exclude: (node) => excludeValues.has(node.value),
     insertions: activeInsertions,
+    wrapTolerance: layoutWrapToleranceFor(container),
     diagnostics: layoutDiagnostics,
   });
   return virtualLayoutRecursiveFromSnapshot(

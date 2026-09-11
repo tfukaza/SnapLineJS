@@ -1,3 +1,4 @@
+import type { Rect } from "@snap-engine/core/geometry";
 import { AnimationObject } from "@snap-engine/core/animation";
 import type { AnimationConfig, Container } from "../container";
 import { Item } from "../item";
@@ -20,9 +21,9 @@ interface TransformOffset {
 
 export interface ElementRectAnimationOptions {
   coordinateParent?: Item | null;
-  firstParent?: DOMRect | null;
+  firstParent?: Rect | null;
   firstParentItem?: Item | null;
-  lastParent?: DOMRect | null;
+  lastParent?: Rect | null;
   lastParentItem?: Item | null;
   subtractAncestorOffset?: boolean;
   initialOffset?: TransformOffset;
@@ -162,8 +163,8 @@ function captureFlipLast(
 }
 
 function rectAnimationDelta(
-  first: DOMRect,
-  last: DOMRect,
+  first: Rect,
+  last: Rect,
   options: ElementRectAnimationOptions,
 ) {
   const { firstParent, lastParent } = options;
@@ -198,8 +199,8 @@ function writeVisualAnimationTransform(
 
 export function playElementRectAnimation(
   item: Item,
-  first: DOMRect | null,
-  last: DOMRect | null,
+  first: Rect | null,
+  last: Rect | null,
   targetElement: HTMLElement | null,
   animationConfig: AnimationConfig | null,
   animationOwner: Item,
@@ -418,8 +419,8 @@ function playFlipAnimations(
 
 export function playDropAnimation(
   item: Item,
-  first: DOMRect | null,
-  last: DOMRect | null,
+  first: Rect | null,
+  last: Rect | null,
   targetElement: HTMLElement | null,
   animationConfig: AnimationConfig | null,
   animationOwner: Item,

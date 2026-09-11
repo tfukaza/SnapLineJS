@@ -1,3 +1,4 @@
+import type { Rect } from "@snap-engine/core/geometry";
 import type { Container } from "../container";
 import { buildGhostSlotLocation } from "../event-builders";
 import type { Item } from "../item";
@@ -200,7 +201,7 @@ export function updateDragVisual(session: DragSession): void {
 /** @internal Capture each dragged member's visible origin for drop FLIP. */
 export function captureDropOriginRects(
   session: DragSession,
-): Array<DOMRect | null> {
+): Array<Rect | null> {
   if (session.dragVisual === "preview") {
     return pointerPreviewMemberRects(session);
   }

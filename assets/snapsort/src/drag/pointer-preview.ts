@@ -1,3 +1,4 @@
+import { projectRect, type Rect } from "@snap-engine/core/geometry";
 import type { GhostRect } from "../events";
 import { buildGhostOverlayLocation, updateGhostState } from "../event-builders";
 import { toContainerLocalRect } from "../insertion-geometry";
@@ -149,7 +150,7 @@ export async function removePointerPreview(
  */
 export function pointerPreviewMemberRects(
   session: DragSession,
-): Array<DOMRect | null> {
+): Array<Rect | null> {
   const previewItem = session.ghostsByChannel.get("pointer");
   const preview = previewItem ? readVisualRect(previewItem) : null;
   if (!preview) return session.items.map(() => null);
@@ -157,8 +158,6 @@ export function pointerPreviewMemberRects(
   const directGroup =
     session.input.inputType === "direct" ? session.input.visualGroupRect : null;
   const group = directGroup ?? frozenGroupGeometry(session);
-  const scaleX = group.width > 0 ? preview.width / group.width : 1;
-  const scaleY = group.height > 0 ? preview.height / group.height : 1;
   return session.items.map((item) => {
     const directRect =
       session.input.inputType === "direct"
@@ -171,11 +170,10 @@ export function pointerPreviewMemberRects(
         `SnapSort: participant "${item.itemId}" has no captured visual start.`,
       );
     }
-    return new DOMRect(
-      preview.left + (start.x - group.x) * scaleX,
-      preview.top + (start.y - group.y) * scaleY,
-      box.width * scaleX,
-      box.height * scaleY,
+    return projectRect(
+      { x: start.x, y: start.y, width: box.width, height: box.height },
+      group,
+      preview,
     );
   });
 }

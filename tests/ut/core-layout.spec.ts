@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { contentRect } from "../../src/geometry";
 import {
+  LAYOUT_WRAP_TOLERANCE,
   createLayoutResolutionPlan,
   flowAxesForDirection,
   inferFlowLayoutMetrics,
@@ -748,5 +749,115 @@ test.describe("virtualDimensions", () => {
     const dims = virtualDimensions(grid);
     expect(dims.width).toBeCloseTo(grid.box.width, 4);
     expect(dims.height).toBeCloseTo(grid.box.height, 4);
+  });
+});
+
+test.describe("scale invariance", () => {
+  /** Every box scaled by `k`, as a zoomed camera reports world units. */
+  function scaleTree(
+    node: ItemSnapshot<string>,
+    k: number,
+  ): ItemSnapshot<string> {
+    const edges = (e: {
+      top: number;
+      right: number;
+      bottom: number;
+      left: number;
+    }) => ({
+      top: e.top * k,
+      right: e.right * k,
+      bottom: e.bottom * k,
+      left: e.left * k,
+    });
+    return {
+      ...node,
+      box: makeBox({
+        x: node.box.x * k,
+        y: node.box.y * k,
+        width: node.box.width * k,
+        height: node.box.height * k,
+        margin: edges(node.box.margin),
+        padding: edges(node.box.padding),
+        border: edges(node.box.border),
+      }),
+      children: node.children.map((child) => scaleTree(child, k)),
+    };
+  }
+
+  for (const k of [0.5, 2]) {
+    test(`scaling every box by ${k} scales every position by ${k}`, () => {
+      const grid = makeGrid({
+        rows: 3,
+        cols: 4,
+        itemW: 90,
+        itemH: 60,
+        gap: 4,
+        padding: 6,
+      });
+      const scaled = scaleTree(grid, k);
+      const dragged = grid.children[5];
+      const scaledDragged = scaled.children[5];
+
+      const at = (
+        root: ItemSnapshot<string>,
+        exclude: ItemSnapshot<string>,
+      ) => {
+        const origin = contentRect(root.box);
+        return flowLayoutPositions(root, origin.x, origin.y, {
+          exclude: (node) => node === exclude,
+        });
+      };
+      const base = at(grid, dragged);
+      const zoomed = at(scaled, scaledDragged);
+      grid.children.forEach((child, index) => {
+        if (child === dragged) return;
+        const position = base.itemPositions.get(child)!;
+        const scaledPosition = zoomed.itemPositions.get(
+          scaled.children[index],
+        )!;
+        expect(scaledPosition.x).toBeCloseTo(position.x * k, 6);
+        expect(scaledPosition.y).toBeCloseTo(position.y * k, 6);
+      });
+    });
+  }
+
+  test("a zoom-scaled wrap tolerance keeps exact-fill grids whole at zoom 0.2", () => {
+    // At zoom 0.2 one screen-pixel snap (1/64px) is 5/64 world units, above
+    // the CSS-pixel default tolerance; scaling the tolerance by the zoom
+    // keeps it constant on screen.
+    const zoom = 0.2;
+    const snap = 1 / 64 / zoom;
+    let seed = 7;
+    const rand = () => {
+      seed = (seed * 1664525 + 1013904223) % 4294967296;
+      return seed / 4294967296;
+    };
+    for (let round = 0; round < 50; round++) {
+      const noise = () => (rand() - 0.5) * snap;
+      const grid = scaleTree(
+        makeGrid({
+          rows: 4,
+          cols: 4,
+          itemW: 90.6,
+          itemH: 90.6,
+          gap: 4,
+          jitter: () => ({ w: noise() * zoom, x: noise() * zoom }),
+        }),
+        1 / zoom,
+      );
+      const dragged = grid.children[5];
+      expect(
+        simulatedRowCounts(grid, {
+          rowStep: 94.6 / zoom,
+          insertion: ghostInsertion(grid, Math.floor(rand() * 16), {
+            width: dragged.box.width,
+            height: dragged.box.height,
+          }),
+          exclude: (node) => node === dragged,
+          wrapTolerance: LAYOUT_WRAP_TOLERANCE / zoom,
+        }),
+        `round ${round}`,
+      ).toEqual([4, 4, 4, 4]);
+    }
   });
 });

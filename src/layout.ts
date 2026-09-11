@@ -174,6 +174,13 @@ export interface LayoutPlanOptions<N> {
   readonly exclude?: (node: N) => boolean;
   /** Virtual entries folded into each container's cached dimensions. */
   readonly insertions?: readonly VirtualInsertion<N>[];
+  /**
+   * Wrap comparison tolerance, in the tree's units. Defaults to
+   * `LAYOUT_WRAP_TOLERANCE`, which is calibrated for CSS pixels; for boxes
+   * measured under a zoomed camera, divide it by the zoom so the tolerance
+   * stays constant on screen, where browser measurement noise lives.
+   */
+  readonly wrapTolerance?: number;
   readonly diagnostics?: LayoutPlanDiagnostics<N>;
 }
 
@@ -438,6 +445,7 @@ interface FlowBackendPlan {
   readonly kind: "flow";
   readonly canWrap: boolean;
   readonly mainCapacity: number;
+  readonly wrapTolerance: number;
 }
 
 interface SlotBackendPlan {
@@ -692,7 +700,7 @@ function materializeFlowLayout<N extends LayoutNode<N>>(
         metrics.mainGap +
         entryMainSize +
         entryTrailingMainMargin >
-        backend.mainCapacity + LAYOUT_WRAP_TOLERANCE
+        backend.mainCapacity + backend.wrapTolerance
     ) {
       pushCurrentLine();
     }
@@ -790,6 +798,7 @@ export function createLayoutResolutionPlan<N extends LayoutNode<N>>(
   options: LayoutPlanOptions<N> = {},
 ): LayoutResolutionPlan<N> {
   const exclude = options.exclude;
+  const wrapTolerance = options.wrapTolerance ?? LAYOUT_WRAP_TOLERANCE;
   const insertions = Object.freeze([...(options.insertions ?? [])]);
   const plans = new Map<N, InternalContainerPlan<N>>();
 
@@ -836,6 +845,7 @@ export function createLayoutResolutionPlan<N extends LayoutNode<N>>(
               contentSize[axes.mainSize],
               metrics.measuredMainExtent,
             ),
+            wrapTolerance,
           });
 
     const geometry = {

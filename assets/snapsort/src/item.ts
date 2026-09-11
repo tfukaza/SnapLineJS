@@ -1,3 +1,4 @@
+import type { Rect } from "@snap-engine/core/geometry";
 import {
   ElementObject,
   type BaseObject,
@@ -648,8 +649,8 @@ export class Item extends ElementObject {
   /** @internal */
   playElementRectAnimation(
     item: Item,
-    first: DOMRect | null,
-    last: DOMRect | null,
+    first: Rect | null,
+    last: Rect | null,
     targetElement: HTMLElement | null,
     animationConfig: AnimationConfig | null,
     animationOwner: Item,
@@ -671,8 +672,8 @@ export class Item extends ElementObject {
    * @internal
    */
   playDropAnimation(
-    first: DOMRect | null,
-    last: DOMRect | null,
+    first: Rect | null,
+    last: Rect | null,
     targetElement: HTMLElement | null,
     animationConfig: AnimationConfig | null,
     animationOwner: Item,

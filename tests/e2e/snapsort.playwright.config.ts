@@ -21,7 +21,7 @@ const testMatch = [
 const keyboardDemoProjects = frameworkBrowserProjects({
   frameworks: ["svelte"],
   browsers: ["chromium"],
-  testMatch: ["snapsort-keyboard-demo.spec.ts"],
+  testMatch: ["snapsort-keyboard-demo.spec.ts", "snapsort-camera.spec.ts"],
 }).map((project) => ({
   ...project,
   name: `${project.name}-keyboard`,
