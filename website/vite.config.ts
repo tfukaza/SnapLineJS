@@ -36,6 +36,12 @@ function docCatalogMetadata(): Plugin {
 
 export default defineConfig({
 	plugins: [docCatalogMetadata(), sveltekit()],
+	optimizeDeps: {
+		// The startup scan misses CodeBlock's import, so a cold dev server found
+		// it on first visit to /about, re-optimized, and reloaded the page,
+		// dropping the in-flight navigation.
+		include: ['svhighlight']
+	},
 	server: {
 		fs: {
 			allow: ['..']

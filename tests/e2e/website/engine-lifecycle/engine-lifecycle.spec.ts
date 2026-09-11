@@ -17,9 +17,7 @@ test("owned Svelte engines survive page teardown without errors", async ({
   expect(collisionCanvas?.height).toBeGreaterThan(400);
 
   await page.getByRole("link", { name: "About", exact: true }).first().click();
-  // Client-side navigation loads the /about route before updating the URL;
-  // on a cold dev server that route compiles on first visit.
-  await expect(page).toHaveURL(/\/about$/, { timeout: 15_000 });
+  await expect(page).toHaveURL(/\/about$/);
 
   expect(pageErrors).toEqual([]);
 });
