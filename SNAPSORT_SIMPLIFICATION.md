@@ -443,7 +443,6 @@ npm run validate:packages
 npm run check:adapters
 npm run check:website
 npm run test:snapsort
-npm run test:website
 ```
 
 **Commit:** `refactor(snapsort): trim the 0.5 compatibility API`
@@ -701,11 +700,8 @@ or colliding application ID fails.
 npm run test:snapsort
 npm run test:snapsort-react
 npm run test:snapsort-svelte
-npm run test:snapsort-examples
 npm run check:adapters
 npm run check:website
-npm run test:website
-npm run test:snapdesign
 ```
 
 **Commit:** `refactor(snapsort): unify ghost transactions`
@@ -787,9 +783,6 @@ After all approved phases:
 npm run ci
 npm run test:snapsort
 npm run test:layout
-npm run test:snapsort-examples
-npm run test:website
-npm run test:snapdesign
 ```
 
 `npm run ci` does not run the Playwright suites, so it is necessary but not

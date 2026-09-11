@@ -41,8 +41,6 @@ export const PORTS = {
   snapsortSvelte: port("SNAPSORT_SVELTE_E2E_PORT", 3027),
   snapsortReact: port("SNAPSORT_REACT_E2E_PORT", 3031),
   snapsortLayout: port("SNAPSORT_LAYOUT_E2E_PORT", 3045),
-  snapdesign: port("SNAPDESIGN_E2E_PORT", 5192),
-  website: port("WEBSITE_E2E_PORT", 5191),
 } as const;
 
 /** Failure artifacts every suite keeps. */
@@ -65,16 +63,5 @@ export function demoServer(framework: FrameworkName, serverPort: number) {
     url: baseURL(serverPort),
     reuseExistingServer: false,
     timeout: 30_000,
-  };
-}
-
-/** The SvelteKit website's dev server (also renders SSR responses). */
-export function websiteServer(serverPort: number) {
-  return {
-    cwd: resolve(repoRoot, "website"),
-    command: `npx vite dev --host 127.0.0.1 --port ${serverPort} --strictPort`,
-    url: baseURL(serverPort),
-    reuseExistingServer: false,
-    timeout: 90_000,
   };
 }
