@@ -1,19 +1,11 @@
+import { rectsEqual, type Rect } from "@snap-engine/core/geometry";
 import type { Container } from "./container";
 import type {
-  GhostRect,
   InsertionGapSegment,
   InsertionMarkerNeighbor,
   InsertionMarkerPresentation,
   InsertionMarkerState,
 } from "./events";
-
-/** A rectangle positioned from a Container's padding-box outer edge. */
-export interface ContainerLocalRect {
-  readonly x: number;
-  readonly y: number;
-  readonly width: number;
-  readonly height: number;
-}
 
 /** Explicit presentation choices for turning an insertion gap into a line. */
 export interface InsertionMarkerRectOptions {
@@ -59,12 +51,6 @@ function insetGap(
   return { start: startInset, length: gap.length - startInset - endInset };
 }
 
-function sameRect(a: Readonly<GhostRect>, b: Readonly<GhostRect>): boolean {
-  return (
-    a.x === b.x && a.y === b.y && a.width === b.width && a.height === b.height
-  );
-}
-
 function sameInsertionNeighbor(
   a: InsertionMarkerNeighbor | null,
   b: InsertionMarkerNeighbor | null,
@@ -76,7 +62,7 @@ function sameInsertionNeighbor(
     a.item === b.item &&
     a.itemId === b.itemId &&
     a.itemMetadata === b.itemMetadata &&
-    sameRect(a.rect, b.rect)
+    rectsEqual(a.rect, b.rect)
   );
 }
 
@@ -96,11 +82,14 @@ export function sameInsertionMarkerPresentation(
   );
 }
 
-/** Convert a world-space rectangle into a Container's positioned local space. */
+/**
+ * Convert a world-space rectangle into a Container's positioned local space:
+ * relative to its padding-box outer edge, including its scroll offset.
+ */
 export function toContainerLocalRect(
-  worldRect: Readonly<GhostRect>,
+  worldRect: Rect,
   container: Container,
-): ContainerLocalRect {
+): Rect {
   const element = container.element;
   if (!element) {
     throw new Error(
@@ -108,7 +97,7 @@ export function toContainerLocalRect(
     );
   }
   const containerBox =
-    container.dragSnapshot?.box ?? container.currentDomProperty;
+    container.dragSnapshot?.box ?? container.box;
 
   return Object.freeze({
     x:
@@ -133,7 +122,7 @@ export function toContainerLocalRect(
 export function insertionMarkerRect(
   marker: InsertionMarkerState,
   options: InsertionMarkerRectOptions,
-): ContainerLocalRect {
+): Rect {
   assertFiniteNonnegative("thickness", options.thickness);
   assertFiniteNonnegative("startInset", options.startInset);
   assertFiniteNonnegative("endInset", options.endInset);

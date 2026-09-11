@@ -14,7 +14,7 @@ it with `new RectSelectController(engine, parent, { callbacks })`.
 `SelectChangeEvent` carries the selected nodes for the in-progress marquee.
 
 Bind a marquee element with `bindGeometryWriter(callback)`: the callback
-receives a `SelectRect` (`x`, `y`, `width`, `height`, `visible`) and writes
+receives a `SelectRect` (a core geometry `Rect` plus `visible`) and writes
 element geometry directly, returning a cleanup function. Destroy the
 controller with `destroy(false)` when tearing down.
 

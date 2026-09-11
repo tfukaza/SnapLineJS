@@ -1,0 +1,97 @@
+---
+title: Geometry
+order: 10
+project: snapengine
+projectTitle: SnapEngine
+section: reference
+sectionTitle: Reference
+sectionOrder: 2
+---
+
+## Imports
+
+```ts
+import type { Point, Rect, BoxModel } from "@snap-engine/core/geometry";
+import { contentRect, rectsIntersect } from "@snap-engine/core/geometry";
+```
+
+`@snap-engine/core/geometry` is the shared geometry vocabulary for core and
+every asset package. It never reads the DOM or depends on a Camera, so its
+helpers are safe in any frame stage. Import only what you use; unused
+helpers are tree-shaken.
+
+## Types
+
+| Type | Fields | Description |
+|------|--------|-------------|
+| `Point` | `x`, `y` | A 2D point. |
+| `Size` | `width`, `height` | A 2D extent. |
+| `Rect` | `Point & Size` | An axis-aligned rectangle anchored at its top-left corner. |
+| `Circle` | `Point & { radius }` | A circle anchored at its center. |
+| `Edges` | `top`, `right`, `bottom`, `left` | Per-side thicknesses, matching CSS `margin`, `padding`, and `border-width`. |
+| `Bounds` | `Rect & { left, top, right, bottom }` | A rectangle with precomputed edge coordinates (DOMRect-compatible). |
+| `BoxModel` | `Rect & { margin, padding, border }` | A CSS box model. The rectangle is the border box. |
+| `ElementBox` | `BoxModel & { screen: Rect }` | A measured element box (see [Objects](/docs/snapengine/reference/objects)). |
+| `PointerPosition` | `Point & { camera: Point, screen: Point }` | A pointer resolved in world, camera, and screen space. |
+| `Axis` | `"x" \| "y"` | A rectangle axis name. |
+| `Dimension` | `"width" \| "height"` | A rectangle dimension name. |
+
+All fields are `readonly`. Values are plain objects; `Rect` accepts any
+object with `x`, `y`, `width`, and `height`, including a `BoxModel` or a
+`DOMRect`.
+
+Types carry no coordinate space. A value's space comes from where it was
+produced: an `ElementBox` is world-space except for its `screen` rectangle.
+
+## Predicates
+
+| Function | Description |
+|----------|-------------|
+| `pointIntersectsRect(point, rect)` | Edge-inclusive point containment. |
+| `pointIntersectsCircle(point, circle)` | Edge-inclusive point containment. |
+| `circlesIntersect(a, b)` | Edge-inclusive tangency counts as intersecting. |
+| `rectIntersectsCircle(rect, circle)` | Edge-inclusive tangency counts as intersecting. |
+| `rectsIntersect(a, b)` | Requires positive overlap; touching edges do not intersect. |
+| `rectContainsRect(outer, inner)` | Whether `inner` lies entirely inside `outer`, edges inclusive. |
+| `rectsEqual(a, b, tolerance?)` | Component-wise equality within `tolerance` (default `0`). |
+
+## Measures
+
+| Function | Description |
+|----------|-------------|
+| `distance(a, b)` | Euclidean distance between two points. |
+| `distanceToRect(point, rect)` | Distance from a point to a rectangle; `0` inside it. |
+| `rectCenter(rect)` | The center point. |
+| `rectArea(size)` | `width * height`. |
+
+## Construction and Mapping
+
+| Function | Description |
+|----------|-------------|
+| `freezeRect(rect)` | A frozen copy holding only the rectangle fields. |
+| `boundsOf(rect)` | A frozen `Bounds` with edge coordinates precomputed. |
+| `boundingRect(rects)` | The smallest rectangle containing every input, or `null` for none. |
+| `translateRect(rect, dx, dy)` | The rectangle moved by an offset. |
+| `lerpRect(from, to, t)` | Linear interpolation; `t = 0` returns `from`. |
+| `projectRect(rect, from, to)` | Maps a rectangle from the `from` frame into the `to` frame by their size ratio. |
+| `projectRects(rects, from, to)` | `projectRect` over a list. |
+
+## Box Model
+
+```ts
+const box: BoxModel = element.box;
+const content = contentRect(box); // border box inset by border + padding
+const outer = marginRect(box); // border box grown by margin
+```
+
+| Function | Description |
+|----------|-------------|
+| `ZERO_EDGES` | Frozen zero-thickness edges. |
+| `addEdges(a, b)` | Per-side sum. |
+| `insetRect(rect, edges)` | Shrinks a rectangle; the size is clamped at zero. |
+| `outsetRect(rect, edges)` | Grows a rectangle. |
+| `paddingRect(box)` | The padding box. |
+| `contentRect(box)` | The content box. |
+| `marginRect(box)` | The margin box. |
+| `contentOffset(box)` | Offset of the content box from the border box's top-left corner. |
+| `edgesToCss(edges)` | CSS shorthand such as `"1px 2px 3px 4px"`. |

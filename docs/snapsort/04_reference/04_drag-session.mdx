@@ -8,9 +8,10 @@ sectionTitle: Reference
 sectionOrder: 3
 ---
 
-`DragSession` is the stable public handle for one drag gesture. It is a
-TypeScript interface, not a constructor; SnapSort supplies it through drag
-events and the root Container's `dragSession` property.
+`DragSession` is the public view of the one controller created for a drag
+gesture. It is a TypeScript interface, not a constructor; SnapSort supplies
+the same controller object through drag events and the root Container's
+`dragSession` property.
 
 ```ts
 import type { DragSession, DragStartEvent } from "@snap-engine/snapsort";
@@ -26,18 +27,14 @@ function onDragStart(event: DragStartEvent) {
 ```ts
 interface DragSession {
   readonly root: Container;
-  readonly pointerId: number;
+  readonly input: PointerDragController | DirectDragController;
   readonly items: readonly Item[];
   readonly sources: readonly DragLocation[];
   readonly pressedItem: Item;
   readonly primaryItem: Item;
-  readonly start: Readonly<{ x: number; y: number }>;
-  readonly pointer: Readonly<{ x: number; y: number }>;
   readonly status: DragSessionStatus;
   dragVisual: DragVisual;
   dropEffect: DropEffect;
-  /** @deprecated */
-  handoff(replacements: readonly Item[]): void;
 }
 ```
 
@@ -48,24 +45,28 @@ interface DragSession {
 **Type:** `Container` · **Read-only**
 
 The independent root Container that owns the gesture. It receives root
-lifecycle callbacks and exposes this handle as `root.dragSession` while the
+lifecycle callbacks and exposes this controller as `root.dragSession` while the
 session is active.
 
 ```ts
 const activeSession = event.session.root.dragSession;
 ```
 
-### `pointerId`
+### `input`
 
-**Type:** `number` · **Read-only**
+**Type:** `PointerDragController | DirectDragController` · **Read-only**
 
-The browser pointer identifier captured from the gesture that started the
-drag. Use it when correlating the session with application-level pointer
-state.
+The input-specific controller contained by this drag transaction. Narrow its
+`inputType` discriminant before reading pointer state or issuing direct
+navigation commands.
 
 ```ts
-if (event.pointerId === session.pointerId) {
-  // Both refer to the pointer driving this drag.
+if (session.input.inputType === "pointer") {
+  console.log(session.input.pointerId);
+  console.log(session.input.start, session.input.pointer);
+} else {
+  console.log(session.input.candidateLocations);
+  console.log(session.input.currentTarget);
 }
 ```
 
@@ -88,8 +89,7 @@ The array is frozen. Do not add, remove, or reorder its entries.
 **Type:** `readonly DragLocation[]` · **Read-only**
 
 The gesture-origin locations parallel to `items`: `sources[i]` describes
-`items[i]`. They remain the original locations when the prospective target
-changes and after a deprecated handoff.
+`items[i]`. They remain the original locations when the prospective target changes.
 
 ```ts
 const origins = session.items.map((item, index) => ({
@@ -122,30 +122,6 @@ uses this Item for singular event fields and swap placement.
 ```ts
 const isSingleDrag =
   session.items.length === 1 && session.primaryItem === session.pressedItem;
-```
-
-### `start`
-
-**Type:** `Readonly<{ x: number; y: number }>` · **Read-only**
-
-Frozen world-space pointer coordinates captured when the drag began.
-
-```ts
-const distanceX = session.pointer.x - session.start.x;
-```
-
-### `pointer`
-
-**Type:** `Readonly<{ x: number; y: number }>` · **Read-only**
-
-The latest world-space pointer coordinates processed by SnapSort. Each value
-is an immutable snapshot. Read it inside callbacks; do not use it as a
-continuous framework render signal.
-
-```ts
-function onDropTargetChange(event: DropTargetChangeEvent) {
-  console.log(event.session.pointer);
-}
 ```
 
 ### `status`
@@ -241,25 +217,6 @@ Container. DragSession uses this type for every entry in `sources`.
 const source: DragLocation = session.sources[0];
 console.log(source.container.name, source.index);
 ```
-
-## Methods
-
-### Deprecated `handoff`
-
-```ts
-/** @deprecated */
-session.handoff(replacements: readonly Item[]): void;
-```
-
-Transfers a pending gesture to an already-mounted parallel run of replacement
-Items. It may only run synchronously during `onDragStart`. Replacements must
-be a unique, equally sized run of non-ghost Items attached to the same root
-and engine, and must not include the current participants. Invalid input or a
-call after the pending phase throws without changing the current participants.
-
-This escape hatch predates the supported move-and-backfill copying recipe and
-has no recommended first-party use case. Do not add new integrations that use
-it; it may be removed in a future release.
 
 ## Appendix
 

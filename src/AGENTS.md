@@ -20,6 +20,8 @@ src/
 ├── camera.ts         # Camera system
 ├── input.ts          # Input handling
 ├── collision.ts      # Collision detection (optional)
+├── geometry.ts       # Shared geometry types and pure helpers
+├── layout.ts         # Layout simulation over measured box trees (optional)
 ├── animation.ts      # Animation system (optional)
 ├── debug.ts          # Debug renderer (optional)
 └── util.ts           # Utilities
@@ -37,6 +39,11 @@ Defined in `vite.config.mjs`:
   - AnimationObject, SequenceObject
 - **Collision:** `collision.ts` → `dist/collision.mjs`
   - CollisionEngine, RectCollider, CircleCollider, etc.
+- **Geometry:** `geometry.ts` → `dist/geometry.mjs`
+  - Point, Size, Rect, Edges, Bounds, BoxModel, ElementBox types
+  - Pure rect/box-model helpers (intersection, content box, projection)
+- **Layout:** `layout.ts` → `dist/layout.mjs`
+  - createLayoutResolutionPlan, LayoutNode, flow and slot (grid) backends
 - **Debug:** `debug.ts` → `dist/debug.mjs`
   - DebugRenderer
 
@@ -51,7 +58,7 @@ Public API entry point. All external-facing exports.
 - `Engine`, `BaseObject`, `ElementObject`, `Camera`, and the `FrameController`
   interface
 - Input types (dragProp, pointerDownProp, etc.)
-- Utilities (getDomProperty, EventProxyFactory)
+- Utilities (measureElementBox, EventProxyFactory)
 
 ### `engine.ts`
 
@@ -121,6 +128,15 @@ Camera and coordinate systems.
 - Camera (container-relative)
 - World (scene coordinates)
 
+Inside the camera layer one world unit is one CSS pixel, so computed CSS
+lengths (margins, padding, borders, inline `width`/`translate`) are already
+world-space. Only values read from `getBoundingClientRect()` are screen-space;
+`measureElementBox` maps the client rect's origin and size into world space
+and keeps the raw client rect as `ElementBox.screen`. A measurement divides by
+the camera's current zoom, so camera state and its painted transform must
+change in the same commit (CameraControl paints synchronously when a write is
+legal and defers programmatic changes requested during a read stage).
+
 **Features:**
 
 - Coordinate conversions
@@ -152,9 +168,28 @@ Unified input handling.
 - dragStart, drag, dragEnd
 - pinchStart, pinch, pinchEnd
 
+### `geometry.ts`
+
+The one geometry vocabulary for core and every asset package. Pure: no DOM
+reads, no Camera, no imports. Every other core module (and every asset)
+describes points, rects, edges, and box models with these types instead of
+declaring its own shapes. The collision engine's allocation-free scalar
+kernels live here too, so collision and geometry share one implementation.
+
+### `layout.ts`
+
+Simulates CSS layout over a frozen tree of measured boxes (`LayoutNode`)
+without reading the DOM: infers gaps, line sizes, and wrap capacity from
+measured children, then re-lays them out with nodes excluded and virtual
+entries inserted. Two backends: `flow` (flexbox-style accumulation and
+wrapping) and `slots` (measured grid tracks, the basis for CSS grid
+simulation). Imports only `geometry.ts`. SnapSort's drop prediction is the
+main consumer.
+
 ### `collision.ts`
 
-Collision detection system.
+Collision detection system. Geometric predicates (`rectsIntersect`,
+`pointIntersectsRect`, ...) are imported from `geometry.ts`.
 
 **CollisionEngine:**
 
@@ -167,7 +202,6 @@ Collision detection system.
 
 - RectCollider
 - CircleCollider
-- LineCollider
 - PointCollider
 
 ### `animation.ts`
@@ -240,6 +274,8 @@ is therefore supported; calling a recursive read there is not.
 - debug (optional)
 - animation (optional)
 - collision (optional)
+- geometry (optional)
+- layout (optional)
 
 **TypeScript:** Declarations generated to `dist/` via vite-plugin-dts
 
@@ -247,17 +283,12 @@ is therefore supported; calling a recursive read there is not.
 
 ## Package Structure
 
-```
-dist/
-├── snapengine.mjs     # Main bundle
-├── snapengine.d.ts    # Type declarations
-├── animation.mjs      # Animation module
-├── animation.d.ts
-├── collision.mjs      # Collision module
-├── collision.d.ts
-├── debug.mjs          # Debug module
-└── debug.d.ts
-```
+The published package ships raw TypeScript: `package.json` `exports` map each
+entry (`.`, `./animation`, `./collision`, `./debug`, `./geometry`,
+`./layout`) to its `src/*.ts` file, and `"sideEffects": false` lets bundlers
+drop unused modules. `npm run build` still produces ES bundles and rolled-up
+declarations in `dist/` (one `.mjs` + `.d.ts` per entry), which verifies the
+entries build cleanly.
 
 ## Import Patterns
 
@@ -267,6 +298,7 @@ dist/
 import { Engine, ElementObject } from "@snap-engine/core";
 import { AnimationObject } from "@snap-engine/core/animation";
 import { RectCollider } from "@snap-engine/core/collision";
+import { contentRect, type Rect } from "@snap-engine/core/geometry";
 import { DebugRenderer } from "@snap-engine/core/debug";
 ```
 
@@ -284,10 +316,10 @@ import { Engine } from "../../../src/index";
 ## Key Principles
 
 - **Framework-agnostic:** Works with vanilla JS, React, Svelte, etc.
-- **Built package:** Compiled to dist/, not raw source
+- **Raw-source package:** Exports `src/*.ts` directly; `dist/` is a build check
 - **Stage-based rendering:** Prevents layout thrashing
 - **Single render loop:** All engines share one RAF loop
-- **Optional features:** Collision, animation, debug are separate imports
+- **Optional features:** Collision, animation, debug, geometry, and layout are separate imports
 
 ## Notes
 

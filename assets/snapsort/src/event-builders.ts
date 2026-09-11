@@ -1,3 +1,4 @@
+import { freezeRect } from "@snap-engine/core/geometry";
 import type { Container } from "./container";
 import type { DragSessionController as DragSession } from "./drag/session";
 import type {
@@ -85,12 +86,7 @@ function freezeInsertionNeighbor(
   if (neighbor === null) return null;
   return Object.freeze({
     ...neighbor,
-    rect: Object.freeze({
-      x: neighbor.rect.x,
-      y: neighbor.rect.y,
-      width: neighbor.rect.width,
-      height: neighbor.rect.height,
-    }),
+    rect: freezeRect(neighbor.rect),
   });
 }
 
@@ -101,7 +97,7 @@ export function buildGhostState(
   ghostItem: Item,
 ): GhostState {
   const base: GhostStateBase = {
-    session: session.handle,
+    session,
     original,
     originalItemId: original.itemId,
     originalMetadata: original.metadata,
@@ -318,7 +314,7 @@ export function buildGhostRemoveEvent(state: GhostState): GhostRemoveEvent {
 
 export function buildDragStartEvent(session: DragSession): DragStartEvent {
   return {
-    session: session.handle,
+    session,
     ...buildItemRunEvent(session.items),
     element: session.primaryItem.element,
     source: session.sources[0],
@@ -331,7 +327,7 @@ export function buildDragEndEvent(
   destination: DragLocation | null,
 ): DragEndEvent {
   return {
-    session: session.handle,
+    session,
     ...buildItemRunEvent(session.items),
     element: session.primaryItem.element,
     source: session.sources[0],
@@ -346,7 +342,7 @@ export function buildDropTargetChangeEvent(
   current: DragLocation | null,
 ): DropTargetChangeEvent {
   return {
-    session: session.handle,
+    session,
     ...buildItemRunEvent(session.items),
     previous,
     current,

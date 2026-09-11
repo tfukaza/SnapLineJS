@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { NodeMirror } from "../../assets/snapline/src";
+import { ZERO_EDGES, type ElementBox } from "../../src/geometry";
 import {
   createEngineHarness,
   installObserverStubs,
@@ -30,24 +31,19 @@ class StubbedNode extends NodeMirror {
   measuredWidth = 0;
   measuredHeight = 0;
 
-  readDom(_config?: unknown, _stage?: unknown): any {
-    return {
-      width: this.measuredWidth,
-      height: this.measuredHeight,
+  readDom(_config?: unknown, _stage?: unknown): ElementBox {
+    const rect = {
       x: 0,
       y: 0,
-      marginTop: 0,
-      marginBottom: 0,
-      marginLeft: 0,
-      marginRight: 0,
-      paddingTop: 0,
-      paddingBottom: 0,
-      paddingLeft: 0,
-      paddingRight: 0,
-      borderTop: 0,
-      borderBottom: 0,
-      borderLeft: 0,
-      borderRight: 0,
+      width: this.measuredWidth,
+      height: this.measuredHeight,
+    };
+    return {
+      ...rect,
+      screen: rect,
+      margin: ZERO_EDGES,
+      padding: ZERO_EDGES,
+      border: ZERO_EDGES,
     };
   }
 }

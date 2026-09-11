@@ -1,6 +1,8 @@
 import type { GlobalManager } from "./global";
 import { BaseObject, ElementObject } from "./object";
 import type { DomElement } from "./object";
+import { pointIntersectsBounds, type PointerPosition } from "./geometry";
+import { pointerPositionFromScreen } from "./camera";
 import { reportConsumerError } from "./errors";
 
 export enum mouseButton {
@@ -19,19 +21,10 @@ export enum mouseButtonBitmap {
   FORWARD = 16,
 }
 
-export interface eventPosition {
-  x: number;
-  y: number;
-  cameraX: number;
-  cameraY: number;
-  screenX: number;
-  screenY: number;
-}
-
 export interface pointerDownProp {
   event: PointerEvent;
   objectId: string | null;
-  position: eventPosition;
+  position: PointerPosition;
   button: number;
   isWithinEngine: boolean;
 }
@@ -39,14 +32,14 @@ export interface pointerDownProp {
 export interface pointerMoveProp {
   event: PointerEvent | null;
   objectId: string | null;
-  position: eventPosition;
+  position: PointerPosition;
   button: number;
 }
 
 export interface pointerUpProp {
   event: PointerEvent;
   objectId: string | null;
-  position: eventPosition;
+  position: PointerPosition;
   button: number;
   cancelled: boolean;
 }
@@ -58,7 +51,7 @@ export interface GestureHandoffControl {
 export interface mouseWheelProp {
   event: WheelEvent;
   objectId: string | null;
-  position: eventPosition;
+  position: PointerPosition;
   delta: number;
 }
 
@@ -71,7 +64,7 @@ export interface keyDownProp {
 export interface dragStartProp extends GestureHandoffControl {
   objectId: string | null;
   pointerId: number;
-  start: eventPosition;
+  start: PointerPosition;
   button: number;
   isWithinEngine: boolean;
 }
@@ -79,9 +72,9 @@ export interface dragStartProp extends GestureHandoffControl {
 export interface dragProp extends GestureHandoffControl {
   objectId: string | null;
   pointerId: number;
-  start: eventPosition;
-  position: eventPosition;
-  delta: eventPosition;
+  start: PointerPosition;
+  position: PointerPosition;
+  delta: PointerPosition;
   button: number;
 }
 
@@ -89,14 +82,14 @@ export interface dragEndProp {
   event: PointerEvent;
   objectId: string | null;
   pointerId: number;
-  start: eventPosition;
-  end: eventPosition;
+  start: PointerPosition;
+  end: PointerPosition;
   button: number;
   cancelled: boolean;
 }
 
 export interface PinchSnapshot {
-  pointerList: eventPosition[];
+  pointerList: PointerPosition[];
   distance: number;
 }
 
@@ -979,33 +972,12 @@ class InputControl {
     this.#dispatchGlobalEvent("keyDown", prop);
   };
 
-  #getCoordinates(screenX: number, screenY: number): eventPosition {
-    if (this.#engine == null || this.#engine.camera == null) {
-      return {
-        x: screenX,
-        y: screenY,
-        cameraX: screenX,
-        cameraY: screenY,
-        screenX,
-        screenY,
-      };
-    }
-    const [cameraX, cameraY] = this.#engine.camera.getCameraFromScreen(
+  #getCoordinates(screenX: number, screenY: number): PointerPosition {
+    return pointerPositionFromScreen(
+      this.#engine?.camera ?? null,
       screenX,
       screenY,
     );
-    const [worldX, worldY] = this.#engine.camera.getWorldFromCamera(
-      cameraX,
-      cameraY,
-    );
-    return {
-      x: worldX,
-      y: worldY,
-      cameraX,
-      cameraY,
-      screenX,
-      screenY,
-    };
   }
 
   #handleDrag(pointer: TrackedPointer) {
@@ -1071,10 +1043,14 @@ class InputControl {
       delta: {
         x: position.x - start.x,
         y: position.y - start.y,
-        cameraX: position.cameraX - start.cameraX,
-        cameraY: position.cameraY - start.cameraY,
-        screenX: position.screenX - start.screenX,
-        screenY: position.screenY - start.screenY,
+        camera: {
+          x: position.camera.x - start.camera.x,
+          y: position.camera.y - start.camera.y,
+        },
+        screen: {
+          x: position.screen.x - start.screen.x,
+          y: position.screen.y - start.screen.y,
+        },
       },
       button: pointer.button,
       handoffTo: (objectOrId) => this.#handoffDrag(pointer.id, objectOrId),
@@ -1358,11 +1334,13 @@ class InputControl {
     if (rect == null) {
       return true;
     }
-    return (
-      screenX >= rect.left &&
-      screenX <= rect.right &&
-      screenY >= rect.top &&
-      screenY <= rect.bottom
+    return pointIntersectsBounds(
+      screenX,
+      screenY,
+      rect.left,
+      rect.top,
+      rect.right,
+      rect.bottom,
     );
   }
 

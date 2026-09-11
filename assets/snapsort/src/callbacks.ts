@@ -2,7 +2,7 @@ import {
   distanceToRect,
   pointIntersectsRect,
   rectsIntersect,
-} from "@snap-engine/core/collision";
+} from "@snap-engine/core/geometry";
 import { DROP_REJECT_PRIORITY, type DropPriorityEvent } from "./events";
 
 /** Prefer the destination whose frozen border box contains the pointer. */

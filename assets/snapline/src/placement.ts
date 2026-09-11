@@ -1,47 +1,33 @@
+import type { Point, Size } from "@snap-engine/core/geometry";
 import type { GeometryWriter } from "./types";
-
-export interface PlacementPoint {
-  x: number;
-  y: number;
-}
-
-export interface PlacementSize {
-  width: number;
-  height: number;
-}
-
-export interface PlacementAnchor {
-  x: number;
-  y: number;
-}
 
 export interface PlacementSnapshot<T> {
   active: boolean;
   payload: T | null;
-  screen: PlacementPoint | null;
-  world: PlacementPoint | null;
-  position: PlacementPoint | null;
-  size: PlacementSize | null;
-  anchor: PlacementAnchor;
+  screen: Point | null;
+  world: Point | null;
+  position: Point | null;
+  size: Size | null;
+  anchor: Point;
   allowed: boolean;
 }
 
 export interface PlacementGeometrySnapshot {
   readonly active: boolean;
   readonly visible: boolean;
-  readonly screen: PlacementPoint | null;
-  readonly world: PlacementPoint | null;
-  readonly position: PlacementPoint | null;
-  readonly size: PlacementSize | null;
+  readonly screen: Point | null;
+  readonly world: Point | null;
+  readonly position: Point | null;
+  readonly size: Size | null;
   readonly allowed: boolean;
 }
 
 export interface PlacementEvent<T> extends PlacementSnapshot<T> {
   payload: T;
-  screen: PlacementPoint;
-  world: PlacementPoint;
-  position: PlacementPoint;
-  size: PlacementSize;
+  screen: Point;
+  world: Point;
+  position: Point;
+  size: Size;
   originalEvent?: PointerEvent | KeyboardEvent;
 }
 
@@ -61,9 +47,9 @@ export interface PlacementCallbacks<T> {
 }
 
 export interface PlacementConfig<T> {
-  screenToWorld: (screen: PlacementPoint) => PlacementPoint | null;
+  screenToWorld: (screen: Point) => Point | null;
   callbacks?: PlacementCallbacks<T>;
-  anchor?: PlacementAnchor;
+  anchor?: Point;
 }
 
 /**
@@ -121,8 +107,8 @@ export class PlacementController<T> {
 
   begin(
     payload: T,
-    size: PlacementSize,
-    options: { anchor?: PlacementAnchor; screen?: PlacementPoint } = {},
+    size: Size,
+    options: { anchor?: Point; screen?: Point } = {},
   ): void {
     this.#snapshot = {
       active: true,
@@ -138,7 +124,7 @@ export class PlacementController<T> {
     if (options.screen) this.update(options.screen);
   }
 
-  update(screen: PlacementPoint, originalEvent?: PointerEvent): boolean {
+  update(screen: Point, originalEvent?: PointerEvent): boolean {
     const current = this.#snapshot;
     if (!current.active || current.payload == null || current.size == null) {
       return false;

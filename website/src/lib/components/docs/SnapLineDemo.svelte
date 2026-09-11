@@ -1,6 +1,9 @@
 <script lang="ts">
   import { Engine } from "@snap-engine/asset-base/svelte";
-  import type { Engine as CoreEngine } from "@snap-engine/core";
+  import {
+    pointerPositionFromScreen,
+    type Engine as CoreEngine,
+  } from "@snap-engine/core";
   import { PlacementController, RESIZE_HANDLES, applyLineChange } from "@snap-engine/snapline";
   import {
     Connector,
@@ -34,9 +37,7 @@
     placement = new PlacementController<string>({
       screenToWorld(screen) {
         if (!engine?.camera) return null;
-        const camera = engine.camera.getCameraFromScreen(screen.x, screen.y);
-        const world = engine.camera.getWorldFromCamera(camera[0], camera[1]);
-        return { x: world[0], y: world[1] };
+        return pointerPositionFromScreen(engine.camera, screen.x, screen.y);
       },
       callbacks: {
         canPlace(event) {

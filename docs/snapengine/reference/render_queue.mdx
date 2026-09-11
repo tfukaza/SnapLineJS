@@ -82,33 +82,32 @@ object.transformOrigin = parentObject;
 
 ```ts
 object.schedule(() => {
-  object.readDom();
-  const props = object.getDomProperty("READ_1");
+  const box = object.readDom();
 
-  console.log(props.screenX, props.screenY, props.width, props.height);
+  console.log(box.screen.x, box.screen.y, box.width, box.height);
 }, { stage: "READ_1" });
 ```
 
 ```ts
 object.schedule(() => {
   object.readDom();
-  object.copyDomProperty("READ_2", "READ_3");
+  object.copyStageBox("READ_2", "READ_3");
 }, { stage: "READ_2" });
 ```
 
 ```ts
 object.schedule(() => {
   object.readDom();
-  object.saveDomProperety("READ_1");
+  object.saveWorldPosition("READ_1");
 }, { stage: "READ_1" });
 ```
 
 ```ts
 object.schedule(() => {
   object.readDom({ unapplyTransform: true });
-  const props = object.getDomProperty("READ_1");
+  const box = object.getStageBox("READ_1");
 
-  console.log(props.x, props.y);
+  console.log(box.x, box.y);
 }, { stage: "READ_1" });
 ```
 
@@ -134,9 +133,9 @@ object.requestFLIP(
 | `FrameTask.cancel()` | Cancels a queued task callback. |
 | `readDom(config?, stage?)` | Reads DOM geometry in a read stage. |
 | `readDomRecursive(config?)` | Reads this object and child element objects recursively. |
-| `getDomProperty(stage?)` | Returns a cached DOM property object. |
-| `copyDomProperty(fromStage, toStage)` | Copies cached geometry between read stages. |
-| `saveDomProperety(stage?)` | Saves read geometry into world transform position. |
+| `getStageBox(stage?)` | Returns the box captured by the last read in a read stage. |
+| `copyStageBox(fromStage, toStage)` | Makes one read stage report another stage's box. |
+| `saveWorldPosition(stage?)` | Copies a stage box's position into the world transform. |
 | `writeDom()` | Applies pending style, classes, and data attributes. |
 | `writeTransform()` | Applies transform state as CSS transform. |
 | `requestFLIP(writeCallback, transformCallback)` | Queues a two-read/two-write FLIP sequence. |

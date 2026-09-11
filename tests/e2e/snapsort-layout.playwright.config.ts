@@ -1,5 +1,5 @@
 // Layout-engine test suite: unit tests for the pure flow-layout simulation
-// (tests/ut/layout.spec.ts) plus the drag-snapshot layout e2e spec across
+// (tests/ut/core-layout.spec.ts) plus the drag-snapshot layout e2e spec across
 // chromium, firefox, and webkit. Cross-browser coverage matters here more
 // than anywhere else in the repo: the layout engine reconciles simulated
 // sums with browser-measured geometry, and each engine quantizes layout
@@ -21,7 +21,7 @@ export default defineConfig({
   projects: [
     {
       name: "layout-ut",
-      testMatch: ["ut/layout.spec.ts"],
+      testMatch: ["ut/core-layout.spec.ts"],
     },
     ...frameworkBrowserProjects({
       frameworks: ["svelte"],

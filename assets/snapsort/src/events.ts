@@ -2,7 +2,7 @@ import type { Container } from "./container";
 import type { Item } from "./item";
 import type { DragSession } from "./drag/session";
 import type { ItemId, ItemMetadata } from "./snapshot";
-import type { CollisionRect } from "@snap-engine/core/collision";
+import type { Circle, Point, Rect } from "@snap-engine/core/geometry";
 
 /**
  * A container + index location, used both for drag sources/destinations and
@@ -116,13 +116,6 @@ export interface ItemMoveEvent {
   beforeElement: HTMLElement | null;
 }
 
-export interface GhostRect {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-}
-
 /** A zero-thickness insertion boundary in world coordinates. */
 export type InsertionGapSegment =
   | {
@@ -144,7 +137,7 @@ export interface InsertionMarkerNeighbor {
   readonly itemId: ItemId;
   readonly itemMetadata: ItemMetadata;
   /** Frozen world-space border box captured for this resolution. */
-  readonly rect: Readonly<CollisionRect>;
+  readonly rect: Rect;
 }
 
 export interface GhostSlotLocation {
@@ -185,7 +178,7 @@ export interface GhostStateBase {
 }
 
 interface RectGhostStateBase extends GhostStateBase {
-  readonly rect: GhostRect;
+  readonly rect: Rect;
 }
 
 /** Framework-ready render state for insertion placement feedback. */
@@ -226,7 +219,7 @@ type GhostStatePlacementFor<State extends GhostState> = State extends GhostState
         State,
         "type" | "location" | "gap" | "previous" | "next" | "isCurrentPlacement"
       >
-    : State extends { readonly rect: GhostRect }
+    : State extends { readonly rect: Rect }
       ? Pick<State, "type" | "location" | "rect">
       : never
   : never;
@@ -329,13 +322,10 @@ export interface DropTargetChangeEvent {
 /** Effective priority value that rejects every candidate owned by a Container. */
 export const DROP_REJECT_PRIORITY = -1;
 
-/** A frozen world-space rectangle captured for the current drag resolution. */
-export type DropPriorityRect = CollisionRect;
-
 /** Complete world-space geometry for one pointer-hover hitbox. */
 export type ItemHitbox =
-  | { shape: "rect"; rect: CollisionRect }
-  | { shape: "circle"; center: { x: number; y: number }; radius: number };
+  | { readonly shape: "rect"; readonly rect: Rect }
+  | { readonly shape: "circle"; readonly circle: Circle };
 
 /** Geometry supplied to a hovered item's direct owner for hitbox resolution. */
 export interface ItemHitboxEvent {
@@ -348,9 +338,9 @@ export interface ItemHitboxEvent {
   overItemMetadata: ItemMetadata;
   container: Container;
   containerMetadata: Record<string, unknown>;
-  pointer: { x: number; y: number };
+  pointer: Point;
   /** Frozen world-space border box used when no callback is configured. */
-  defaultRect: CollisionRect;
+  defaultRect: Rect;
 }
 
 /**
@@ -378,16 +368,16 @@ export interface DropPriorityEvent {
   index: number;
   /** The container's configured `dropPriority` before this callback overrides it. */
   staticPriority: number;
-  pointer: { x: number; y: number };
+  pointer: Point;
   /**
    * The primary dragged item's virtual current world-space rectangle. Its
    * leading edge preserves the pointer-to-item offset captured at drag start.
    */
-  dragRect: DropPriorityRect;
+  dragRect: Rect;
   /** The destination's frozen border-box rectangle. */
-  containerRect: DropPriorityRect;
+  containerRect: Rect;
   /** The destination's frozen content-box rectangle. */
-  containerContentRect: DropPriorityRect;
+  containerContentRect: Rect;
   depth: number;
 }
 
@@ -413,7 +403,7 @@ export interface DragItemHoverEvent {
   overItemMetadata: ItemMetadata;
   container: Container;
   containerMetadata: Record<string, unknown>;
-  pointer: { x: number; y: number };
+  pointer: Point;
 }
 
 /**

@@ -1,4 +1,10 @@
-import type { GhostRect } from "../events";
+import {
+  boundingRect,
+  freezeRect,
+  projectRects,
+  translateRect,
+  type Rect,
+} from "@snap-engine/core/geometry";
 import { buildGhostOverlayLocation, updateGhostState } from "../event-builders";
 import { toContainerLocalRect } from "../insertion-geometry";
 import {
@@ -10,50 +16,30 @@ import {
 import type { DragSessionController as DragSession } from "./session";
 import { readVisualRect } from "../internal/visual-rect";
 
-interface GroupGeometry {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-}
-
-function frozenGroupGeometry(session: DragSession): GroupGeometry {
-  let left = Infinity;
-  let top = Infinity;
-  let right = -Infinity;
-  let bottom = -Infinity;
-
-  for (const item of session.items) {
-    const box = session.dragBoxFor(item);
-    const start = session.dragVisualStart.get(item);
-    if (!start) {
-      throw new Error(
-        `SnapSort: participant "${item.itemId}" has no captured visual start.`,
-      );
+/** The dragged members' frozen start rectangles, as one bounding rect. */
+function frozenGroupGeometry(session: DragSession): Rect {
+  return (
+    boundingRect(session.startMemberRects()) ?? {
+      x: 0,
+      y: 0,
+      width: 0,
+      height: 0,
     }
-    left = Math.min(left, start.x);
-    top = Math.min(top, start.y);
-    right = Math.max(right, start.x + box.width);
-    bottom = Math.max(bottom, start.y + box.height);
-  }
-
-  return {
-    x: left,
-    y: top,
-    width: Math.max(0, right - left),
-    height: Math.max(0, bottom - top),
-  };
+  );
 }
 
 /** @internal Current world-space rectangle of the single group preview. */
-export function pointerPreviewRect(session: DragSession): GhostRect {
-  const group = frozenGroupGeometry(session);
-  return {
-    x: group.x + session.pointer.x - session.start.x,
-    y: group.y + session.pointer.y - session.start.y,
-    width: group.width,
-    height: group.height,
-  };
+export function pointerPreviewRect(session: DragSession): Rect {
+  if (session.input.inputType === "direct") {
+    const directRect = session.input.visualGroupRect;
+    if (directRect) return freezeRect(directRect);
+  }
+
+  return translateRect(
+    frozenGroupGeometry(session),
+    session.visualPointer.x - session.visualStart.x,
+    session.visualPointer.y - session.visualStart.y,
+  );
 }
 
 /** @internal Validate the root-owned pointer-preview adapter contract. */
@@ -137,27 +123,20 @@ export async function removePointerPreview(
  */
 export function pointerPreviewMemberRects(
   session: DragSession,
-): Array<DOMRect | null> {
+): Array<Rect | null> {
   const previewItem = session.ghostsByChannel.get("pointer");
   const preview = previewItem ? readVisualRect(previewItem) : null;
   if (!preview) return session.items.map(() => null);
 
-  const group = frozenGroupGeometry(session);
-  const scaleX = group.width > 0 ? preview.width / group.width : 1;
-  const scaleY = group.height > 0 ? preview.height / group.height : 1;
-  return session.items.map((item) => {
-    const box = session.dragBoxFor(item);
-    const start = session.dragVisualStart.get(item);
-    if (!start) {
-      throw new Error(
-        `SnapSort: participant "${item.itemId}" has no captured visual start.`,
-      );
-    }
-    return new DOMRect(
-      preview.left + (start.x - group.x) * scaleX,
-      preview.top + (start.y - group.y) * scaleY,
-      box.width * scaleX,
-      box.height * scaleY,
-    );
-  });
+  const directGroup =
+    session.input.inputType === "direct" ? session.input.visualGroupRect : null;
+  const group = directGroup ?? frozenGroupGeometry(session);
+  const startRects = session.startMemberRects();
+  const memberRects = session.items.map(
+    (item, index) =>
+      (session.input.inputType === "direct"
+        ? session.input.visualRectFor(item.itemId)
+        : null) ?? startRects[index],
+  );
+  return projectRects(memberRects, group, preview);
 }

@@ -22,6 +22,10 @@ and `edgePan`.
 for persistence. `resolveNewLine` seeds serializable payload onto a newly
 dragged line; a connector-level callback may override it.
 
+Geometry payloads use the shared types from `@snap-engine/core/geometry`:
+`resolveDragPosition` returns a `Point`, `NodeGeometry` and `NodeResizeEvent`
+extend `Rect`, and `node.geometrySnapshot()` returns a `Rect`.
+
 ## Resize regions
 
 Create a `ResizeRegionMirror(engine, node, handle)` for each application DOM

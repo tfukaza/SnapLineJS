@@ -28,8 +28,8 @@ export interface DragLifecycleStrategy {
    * (ghost creation, detaching the item, styling). */
   dragStart(session: DragSession): void | Promise<void>;
 
-  /** WRITE_1 work specific to a pointer move. */
-  dragMove(session: DragSession): void | Promise<void>;
+  /** Synchronous visual work for one pointer or direct-input movement frame. */
+  dragMove(session: DragSession): void;
 
   /** Current container/index the ghost logically occupies,
    * or null when there is none yet. */

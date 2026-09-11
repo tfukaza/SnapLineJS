@@ -7,7 +7,6 @@ export type {
   NodeLinesEvent,
   NodePointerEvent,
   NodeGeometry,
-  ResolvedNodeDragPosition,
   NodeResizeEvent,
   NodeSelectionEvent,
   NodeSelectionModeEvent,
@@ -32,9 +31,7 @@ export type {
   ConnectorDragEvent,
   ConnectorGeometrySnapshot,
   ConnectorHit,
-  ConnectorNormal,
   ConnectorPairEvent,
-  ConnectorPoint,
   ConnectorPointerEvent,
   ConnectorResolvedHit,
   ConnectorRole,
@@ -79,14 +76,11 @@ export { query } from "./query";
 export type { GraphQuery } from "./query";
 export { PlacementController } from "./placement";
 export type {
-  PlacementAnchor,
   PlacementCallbacks,
   PlacementCancelEvent,
   PlacementConfig,
   PlacementEvent,
   PlacementGeometrySnapshot,
-  PlacementPoint,
-  PlacementSize,
   PlacementSnapshot,
 } from "./placement";
 export { applyLineChange, attachControlledGraph } from "./controlled-graph";

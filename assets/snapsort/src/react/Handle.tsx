@@ -1,8 +1,7 @@
 import {
   forwardRef,
+  useCallback,
   useContext,
-  useEffect,
-  useImperativeHandle,
   useRef,
   type HTMLAttributes,
   type ReactNode,
@@ -21,23 +20,24 @@ export const Handle = forwardRef<HTMLDivElement, HandleProps>(function Handle(
 ) {
   const item = useContext(ItemObjectContext);
   const handleRef = useRef<HTMLDivElement>(null);
+  const setHandleElement = useCallback(
+    (handleElement: HTMLDivElement | null) => {
+      const previousElement = handleRef.current;
+      if (item && previousElement) item.removeInputAlias(previousElement);
 
-  useImperativeHandle(ref, () => handleRef.current as HTMLDivElement, []);
+      handleRef.current = handleElement;
+      if (item && handleElement) item.addInputAlias(handleElement);
 
-  useEffect(() => {
-    const handleElement = handleRef.current;
-    if (!item || !handleElement) return;
-
-    item.addInputAlias(handleElement);
-    return () => {
-      item.removeInputAlias(handleElement);
-    };
-  }, [item]);
+      if (typeof ref === "function") ref(handleElement);
+      else if (ref) ref.current = handleElement;
+    },
+    [item, ref],
+  );
 
   return (
     <div
       {...divProps}
-      ref={handleRef}
+      ref={setHandleElement}
       className={`snapsort-handle ${className}`.trim()}
       style={style}
     >

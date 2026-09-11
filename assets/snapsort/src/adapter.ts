@@ -9,6 +9,7 @@ import type {
   ItemRemoveEvent,
   ItemSwapEvent,
 } from "./events";
+import { edgesToCss } from "@snap-engine/core/geometry";
 import type { Container } from "./container";
 import {
   insertionMarkerRect,
@@ -116,8 +117,8 @@ function applyGhostState(
 
   if (ghost.type === "source-spacer" || ghost.type === "target-spacer") {
     const box =
-      ghost.original.dragSnapshot?.box ?? ghost.original.currentDomProperty;
-    element.style.margin = `${box.margin.top}px ${box.margin.right}px ${box.margin.bottom}px ${box.margin.left}px`;
+      ghost.original.dragSnapshot?.box ?? ghost.original.box;
+    element.style.margin = edgesToCss(box.margin);
     return;
   }
 

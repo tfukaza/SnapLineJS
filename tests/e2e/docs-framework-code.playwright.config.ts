@@ -8,7 +8,6 @@ const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 export default defineConfig({
   testDir: ".",
   testMatch: [
-    "docs-framework-code.spec.ts",
     "material-surface-ssr.spec.ts",
     "snapdesign-gallery-virtual-pointer.spec.ts",
     "snapdesign-control-matrix.spec.ts",

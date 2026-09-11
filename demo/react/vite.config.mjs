@@ -14,6 +14,8 @@ export default defineConfig(({ command, mode }) => {
         "@snap-engine/core/animation": path.resolve(root, "src/animation.ts"),
         "@snap-engine/core/collision": path.resolve(root, "src/collision.ts"),
         "@snap-engine/core/debug": path.resolve(root, "src/debug.ts"),
+        "@snap-engine/core/geometry": path.resolve(root, "src/geometry.ts"),
+        "@snap-engine/core/layout": path.resolve(root, "src/layout.ts"),
         "@snap-engine/core": path.resolve(root, "src/index.ts"),
         "@snap-engine/asset-base/react": path.resolve(
           root,

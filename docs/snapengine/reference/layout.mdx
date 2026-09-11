@@ -1,0 +1,100 @@
+---
+title: Layout
+order: 11
+project: snapengine
+projectTitle: SnapEngine
+section: reference
+sectionTitle: Reference
+sectionOrder: 2
+---
+
+## Imports
+
+```ts
+import {
+  createLayoutResolutionPlan,
+  type LayoutNode,
+  type VirtualInsertion,
+} from "@snap-engine/core/layout";
+```
+
+`@snap-engine/core/layout` simulates CSS layout over a frozen tree of
+measured boxes. It never reads the DOM: measure once (for example with
+`ElementObject.readDom()` in a READ stage), then ask any number of "what if"
+questions — remove these nodes, insert an entry here — without layout
+thrash. SnapSort uses it to predict drop positions during a drag.
+
+## Layout Trees
+
+A tree is any object graph that satisfies `LayoutNode`:
+
+```ts
+interface LayoutNode<Child extends LayoutNode<Child>> {
+  readonly box: BoxModel; // measured border box and edges
+  readonly children: readonly Child[];
+  readonly direction: "column" | "row";
+  readonly mainAxisAlign: "start" | "center";
+  readonly layoutModel: "flow" | "slots";
+  readonly wrap: "auto" | "nowrap";
+  readonly stretchItems: boolean;
+}
+```
+
+`box` is a [`BoxModel`](/docs/snapengine/reference/geometry), so an
+`ElementBox` from `readDom()` can be used directly.
+
+| Backend | Behavior |
+|---------|----------|
+| `flow` | Accumulates entries along the main axis and wraps them against the measured capacity (flexbox-style flow). |
+| `slots` | Places entries into measured track positions by index — the basis for simulating CSS grid. |
+
+## Resolution Plans
+
+```ts
+const plan = createLayoutResolutionPlan(root, {
+  exclude: (node) => node === dragged,
+});
+
+const origin = contentRect(root.box);
+const insertion: VirtualInsertion<typeof root> = {
+  container: root,
+  index: 2,
+  entry: { width: 120, height: 40, margin: ZERO_EDGES },
+};
+const { itemPositions, virtualRects } = plan.layoutPositions(
+  root,
+  origin.x,
+  origin.y,
+  [insertion],
+);
+virtualRects.get(insertion); // where the entry would land
+```
+
+A plan infers each container's metrics once — content-box start offsets,
+main/cross gaps, line sizes, and the wrap capacity the browser actually used
+— and caches them. `layoutPositions` then materializes positions for any set
+of local insertions.
+
+| Option | Description |
+|--------|-------------|
+| `exclude(node)` | Leaves children out of the layout (for example, dragged nodes). |
+| `insertions` | Virtual entries folded into each container's cached dimensions, so a nested container's growth propagates to its ancestors. |
+
+| Plan method | Description |
+|-------------|-------------|
+| `containerPlan(container)` | The cached axes, content size, metrics, and eligible children. |
+| `layoutPositions(container, startX, startY, localInsertions?)` | Simulated child positions and virtual entry rectangles. |
+| `virtualDimensions(container)` | The container's simulated border-box size. |
+
+## Helpers
+
+| API | Description |
+|-----|-------------|
+| `flowAxesForDirection(direction)` | Main/cross axis and dimension names. |
+| `inferFlowLayoutMetrics(container, axes)` | Gaps, start offsets, and line sizes from measured children. |
+| `inferVisualLines(container, axes)` | Measured visual lines, in content-box coordinates. |
+| `childRelativeOffset(containerBox, child)` | A child's offset from the container's content-box origin. |
+| `layoutChildren(container, exclude?)` | Children minus excluded nodes. |
+| `virtualEntrySizeFor(container, entry)` | An entry's size in a destination container, honoring `stretchItems`. |
+| `LAYOUT_WRAP_TOLERANCE` | Wrap comparison tolerance absorbing browser measurement noise. |
+| `LAYOUT_LINE_BREAK_TOLERANCE` | Backward main-axis movement that starts a new visual line. |

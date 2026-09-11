@@ -1,3 +1,4 @@
+import type { Rect } from "@snap-engine/core/geometry";
 import type { AnimationConfig, Container } from "../container";
 import type { Item } from "../item";
 import type { ResolvedDropTarget } from "../algorithm";
@@ -42,16 +43,16 @@ function drop(session: DragSession): void {
   const root = session.root;
   const draggedItemId = item.itemId;
   const draggedAnimation: {
-    first: DOMRect | null;
-    last: DOMRect | null;
+    first: Rect | null;
+    last: Rect | null;
     element: HTMLElement | null;
     config: AnimationConfig | null;
   } = { first: null, last: null, element: null, config: null };
   const displacedAnimation: {
     item: Item | null;
     itemId: string | null;
-    first: DOMRect | null;
-    last: DOMRect | null;
+    first: Rect | null;
+    last: Rect | null;
     element: HTMLElement | null;
     config: AnimationConfig | null;
   } = {
@@ -69,14 +70,45 @@ function drop(session: DragSession): void {
   } | null = null;
 
   const resolveDropTarget = () => {
-    if (session.cancelled) return null;
+    if (session.cancelled) {
+      return null;
+    }
+
+    if (session.input.inputType === "direct") {
+      const candidate = session.input.currentCandidate;
+
+      if (!candidate || candidate.kind !== "swap") {
+        return null;
+      }
+
+      const targetItem = root.findItemById(candidate.targetItemId);
+
+      if (!targetItem || targetItem.isDeleteRequested) {
+        return null;
+      }
+
+      const location = targetItem.getIndexAndContainer();
+
+      if (!location.container || location.container.rootContainer !== root) {
+        return null;
+      }
+
+      return {
+        container: location.container,
+        index: location.index,
+        item: targetItem,
+      };
+    }
+
     const pending = session.pendingPlacement;
     const container = pending?.container ?? null;
     const index = pending?.index ?? -1;
+
     const targetItem =
       container && index >= 0 && index < container.itemOrderedList.length
         ? container.itemOrderedList[index]
         : null;
+
     return container && targetItem
       ? { container, index, item: targetItem }
       : null;
@@ -87,7 +119,9 @@ function drop(session: DragSession): void {
       draggedAnimation.first = captureDropOriginRects(session)[0] ?? null;
 
       dropTarget = resolveDropTarget();
-      if (!dropTarget || dropTarget.item === item) return;
+      if (!dropTarget || dropTarget.item.itemId === draggedItemId) {
+        return;
+      }
       displacedAnimation.item = dropTarget.item;
       displacedAnimation.itemId = dropTarget.item.itemId;
       displacedAnimation.first = readVisualRect(dropTarget.item);
@@ -113,13 +147,19 @@ function drop(session: DragSession): void {
       const bContainer = targetLocation?.container ?? null;
       const bIndex = targetLocation?.index ?? -1;
 
-      let destination: DragLocation | null = null;
+      const source = session.sources[0] ?? null;
+
+      let destination: DragLocation | null =
+        session.cancelled || !source
+          ? null
+          : buildDragLocation(source.container, source.index);
+
       draggedAnimation.config = animationConfigFor(
         bContainer ?? aLocation.container,
         "drop",
       );
 
-      if (bContainer && targetItem && targetItem !== item) {
+      if (bContainer && targetItem && targetItem.itemId !== draggedItemId) {
         destination = buildDragLocation(bContainer, bIndex);
       }
 
@@ -127,7 +167,7 @@ function drop(session: DragSession): void {
         aLocation.container &&
         bContainer &&
         targetItem &&
-        targetItem !== item &&
+        targetItem.itemId !== draggedItemId &&
         session.dropEffect === "move"
       ) {
         const aContainer = aLocation.container;
@@ -213,8 +253,7 @@ function drop(session: DragSession): void {
 
       if (!displacedAnimation.item || !displacedAnimation.itemId) return;
       const currentDisplacedItem =
-        root.findItemById(displacedAnimation.itemId) ??
-        displacedAnimation.item;
+        root.findItemById(displacedAnimation.itemId) ?? displacedAnimation.item;
       displacedAnimation.element = currentDisplacedItem.element?.isConnected
         ? currentDisplacedItem.element
         : null;
@@ -260,8 +299,12 @@ export class SwapLifecycle implements DragLifecycleStrategy {
 
   async dragStart(session: DragSession): Promise<void> {
     await startDragVisual(session);
-    if (session.dragVisual === "preview") updateDragVisual(session);
-    await session.updateDropTarget();
+
+    if (session.dragVisual === "preview") {
+      updateDragVisual(session);
+    }
+
+    await session.initializeTarget();
   }
 
   dragMove(session: DragSession): void {

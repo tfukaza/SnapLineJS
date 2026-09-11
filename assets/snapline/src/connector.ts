@@ -1,13 +1,25 @@
-import { ElementObject, BaseObject, type DomElement } from "@snap-engine/core";
+import {
+  ElementObject,
+  BaseObject,
+  pointerPositionFromWorld,
+  worldRectFromScreenRect,
+  type DomElement,
+  type WorldToScreenMapper,
+} from "@snap-engine/core";
 import type {
   dragEndProp,
   dragProp,
   dragStartProp,
-  eventPosition,
+  PointerPosition,
   pointerDownProp,
   pointerUpProp,
 } from "@snap-engine/core";
 import { CircleCollider } from "@snap-engine/core/collision";
+import {
+  rectCenter,
+  type Bounds,
+  type Point,
+} from "@snap-engine/core/geometry";
 import type { NodeMirror } from "./node";
 import { LineMirror, cloneAnchor, type LineMirrorPhase } from "./line";
 import { getGraphRegistry } from "./internal/shared-data";
@@ -38,35 +50,16 @@ export type DragEndOutcome =
   /** The gesture was cancelled (pointer cancel, teardown). */
   | "cancelled";
 
-export interface ConnectorPoint {
-  x: number;
-  y: number;
-}
-
-export interface ConnectorNormal {
-  x: number;
-  y: number;
-}
-
-export interface ConnectorAnchor extends ConnectorPoint {
-  normal?: ConnectorNormal;
+/** A world-space connection point, with an optional outward normal. */
+export interface ConnectorAnchor extends Point {
+  normal?: Point;
 }
 
 /** Cached world-space bounds derived from the parent node's collision box. */
-export interface ConnectorGeometrySnapshot {
+export interface ConnectorGeometrySnapshot extends Bounds {
   connector: ConnectorMirror;
   node: NodeMirror;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  left: number;
-  right: number;
-  top: number;
-  bottom: number;
   center: ConnectorAnchor;
-  scaleX: number;
-  scaleY: number;
 }
 
 export interface ConnectorHit {
@@ -83,7 +76,7 @@ export interface ConnectorCandidate {
 
 export interface ConnectorSurfaceHitTestEvent {
   connector: ConnectorMirror;
-  position: eventPosition;
+  position: PointerPosition;
   geometry: ConnectorGeometrySnapshot;
   phase: LineMirrorPhase;
 }
@@ -94,7 +87,7 @@ export interface ConnectorAnchorEvent {
   line: LineMirror;
   role: ConnectorRole;
   phase: LineMirrorPhase;
-  position: ConnectorPoint;
+  position: Point;
   geometry: ConnectorGeometrySnapshot;
   peerGeometry: ConnectorGeometrySnapshot | null;
   hit: ConnectorHit | null;
@@ -177,7 +170,7 @@ export interface ConnectorDisconnectionEvent
 
 export interface ConnectorDragEvent {
   connector: ConnectorMirror;
-  position: eventPosition;
+  position: PointerPosition;
   pointerId: number;
 }
 
@@ -278,7 +271,7 @@ class ConnectorMirror extends ElementObject<DomElement> {
   #candidate: ConnectorResolvedHit | null = null;
   #dragLine: LineMirror | null = null;
   #edgePanPointerId: number | null = null;
-  #localCenter: ConnectorPoint;
+  #localCenter: Point;
   #hasMeasuredCenter = false;
   #armed: ArmedConnection | null = null;
   #gestureOrigin: "new" | "reconnect" | null = null;
@@ -414,17 +407,15 @@ class ConnectorMirror extends ElementObject<DomElement> {
     return {
       connector: this,
       node: this.parent,
-      x: bounds.left,
-      y: bounds.top,
+      x: bounds.x,
+      y: bounds.y,
       width: bounds.width,
       height: bounds.height,
       left: bounds.left,
       right: bounds.right,
       top: bounds.top,
       bottom: bounds.bottom,
-      center: { x: bounds.centerX, y: bounds.centerY },
-      scaleX: bounds.scaleX,
-      scaleY: bounds.scaleY,
+      center: { x: bounds.center.x, y: bounds.center.y },
     };
   }
 
@@ -444,21 +435,9 @@ class ConnectorMirror extends ElementObject<DomElement> {
     if (!this.element) return this.geometry.center;
 
     const rect = this.element.getBoundingClientRect();
-    const screenX = rect.left + rect.width / 2;
-    const screenY = rect.top + rect.height / 2;
-    if (this.engine?.camera) {
-      const [cameraX, cameraY] = this.engine.camera.getCameraFromScreen(
-        screenX,
-        screenY,
-      );
-      const [worldX, worldY] = this.engine.camera.getWorldFromCamera(
-        cameraX,
-        cameraY,
-      );
-      return { x: worldX, y: worldY };
-    }
-
-    return { x: screenX, y: screenY };
+    return rectCenter(
+      worldRectFromScreenRect(this.engine?.camera ?? null, rect),
+    );
   }
 
   measureLocalCenter(
@@ -472,9 +451,9 @@ class ConnectorMirror extends ElementObject<DomElement> {
     const scaleY = parentTransform.scaleY === 0 ? 1 : parentTransform.scaleY;
     const localLeft = (prop.x - parentTransform.x) / scaleX;
     const localTop = (prop.y - parentTransform.y) / scaleY;
-    const localCenterX = (prop.x + prop.width / 2 - parentTransform.x) / scaleX;
-    const localCenterY =
-      (prop.y + prop.height / 2 - parentTransform.y) / scaleY;
+    const center = rectCenter(prop);
+    const localCenterX = (center.x - parentTransform.x) / scaleX;
+    const localCenterY = (center.y - parentTransform.y) / scaleY;
 
     this.localTransform = { x: localLeft, y: localTop };
     this.#localCenter = { x: localCenterX, y: localCenterY };
@@ -665,12 +644,14 @@ class ConnectorMirror extends ElementObject<DomElement> {
   }
 
   findCandidateAtPoint(
-    position: ConnectorPoint,
+    position: Point,
     phase: "preview-target" | "drop" = "preview-target",
   ): ConnectorCandidate | null {
     return (
-      this.#resolveTargetAtPoint(asEventPosition(position), phase)?.candidate ??
-      null
+      this.#resolveTargetAtPoint(
+        asPointerPosition(this.engine?.camera ?? null, position),
+        phase,
+      )?.candidate ?? null
     );
   }
 
@@ -766,7 +747,7 @@ class ConnectorMirror extends ElementObject<DomElement> {
     this.#moveDraggedLine(prop.position);
   }
 
-  #moveDraggedLine(position: eventPosition): void {
+  #moveDraggedLine(position: PointerPosition): void {
     if (this.#state !== ConnectorState.DRAGGING || !this.#dragLine) return;
 
     const candidate = this.#resolveTargetAtPoint(position, "preview-target");
@@ -1013,7 +994,7 @@ class ConnectorMirror extends ElementObject<DomElement> {
     role: ConnectorRole;
     phase: LineMirrorPhase;
     peer: ConnectorMirror | null;
-    position: ConnectorPoint;
+    position: Point;
     hit: ConnectorHit | null;
     strategy: ConnectorSurfaceStrategy | null;
   }): ConnectorAnchor {
@@ -1057,7 +1038,7 @@ class ConnectorMirror extends ElementObject<DomElement> {
   }
 
   #resolveTargetAtPoint(
-    position: eventPosition,
+    position: PointerPosition,
     phase: "preview-target" | "drop",
   ): ConnectorResolvedHit | null {
     const hits: ConnectorResolvedHit[] = [];
@@ -1328,20 +1309,18 @@ function normalizeHit(
   };
 }
 
-function isFinitePoint(point: ConnectorPoint): boolean {
+function isFinitePoint(point: Point): boolean {
   return Number.isFinite(point.x) && Number.isFinite(point.y);
 }
 
-function asEventPosition(position: ConnectorPoint): eventPosition {
-  const value = position as Partial<eventPosition>;
-  return {
-    x: position.x,
-    y: position.y,
-    cameraX: value.cameraX ?? position.x,
-    cameraY: value.cameraY ?? position.y,
-    screenX: value.screenX ?? position.x,
-    screenY: value.screenY ?? position.y,
-  };
+/** A full pointer position for a world point, resolving camera and screen. */
+function asPointerPosition(
+  camera: WorldToScreenMapper | null,
+  position: Point,
+): PointerPosition {
+  const value = position as Partial<PointerPosition>;
+  if (value.camera && value.screen) return value as PointerPosition;
+  return pointerPositionFromWorld(camera, position.x, position.y);
 }
 
 function compareResolvedHits(

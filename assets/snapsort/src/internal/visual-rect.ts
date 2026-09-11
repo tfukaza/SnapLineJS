@@ -1,8 +1,13 @@
 import type { ElementObject } from "@snap-engine/core";
+import type { Rect } from "@snap-engine/core/geometry";
 
-/** @internal Immutable transformed rectangle in browser viewport coordinates. */
-export type VisualRectSnapshot = Readonly<DOMRect> & {
-  readonly coordinateSpace: "screen";
+/**
+ * @internal Immutable transformed rectangle in world coordinates. Inside a
+ * Camera layer, world units are the CSS pixels a `translate` is written in,
+ * so deltas between these rects animate correctly at any zoom.
+ */
+export type VisualRectSnapshot = Rect & {
+  readonly coordinateSpace: "world";
 };
 
 /** @internal Per-read-stage cache for repeated Item and parent measurements. */
@@ -14,10 +19,8 @@ const stagedBeforeMutationRects = new WeakMap<
 >();
 
 /**
- * Read and immediately clone an ElementObject's transformed visual rectangle.
- * Position and dimensions are both expressed in screen pixels. `readDom`
- * retains the browser rectangle's screen origin and visual dimensions even
- * when a Camera maps its world position.
+ * Read an ElementObject's transformed visual rectangle in world space: the
+ * element's current `readDom` box with its own transforms left applied.
  * @internal
  */
 export function readVisualRect(
@@ -30,20 +33,14 @@ export function readVisualRect(
     return null;
   }
 
-  const property = object.readDom({ unapplyTransform: false });
-  const rectangle = new DOMRect(
-    property.screenX,
-    property.screenY,
-    property.width,
-    property.height,
-  ) as VisualRectSnapshot;
-  Object.defineProperty(rectangle, "coordinateSpace", {
-    configurable: false,
-    enumerable: true,
-    value: "screen",
-    writable: false,
+  const box = object.readDom({ unapplyTransform: false });
+  const rectangle: VisualRectSnapshot = Object.freeze({
+    x: box.x,
+    y: box.y,
+    width: box.width,
+    height: box.height,
+    coordinateSpace: "world",
   });
-  Object.freeze(rectangle);
   cache?.set(object, rectangle);
   return rectangle;
 }

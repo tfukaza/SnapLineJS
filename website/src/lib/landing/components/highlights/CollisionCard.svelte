@@ -507,7 +507,7 @@
       object.classList = baseClassList;
       object.schedule(() => {
         object?.readDom({ unapplyTransform: false });
-        object?.saveDomProperety("READ_1");
+        object?.saveWorldPosition("READ_1");
       }, { stage: "READ_1", queueId: "collision-dot-read" });
       const radius = node.getBoundingClientRect().width / 2;
       collider = new CircleCollider(currentEngine, object, radius, radius, radius);
@@ -598,8 +598,8 @@
 
         const otherKnob = other.knobCollider.getWorldBoundsSnapshot();
         const minDistance = handle.knobCollider.radius + otherKnob.radius;
-        let awayX = centerX - otherKnob.centerX;
-        let awayY = centerY - otherKnob.centerY;
+        let awayX = centerX - otherKnob.center.x;
+        let awayY = centerY - otherKnob.center.y;
         let distance = Math.hypot(awayX, awayY);
 
         if (distance >= minDistance) {
@@ -617,8 +617,8 @@
           distance = 1;
         }
 
-        centerX = otherKnob.centerX + (awayX / distance) * minDistance;
-        centerY = otherKnob.centerY + (awayY / distance) * minDistance;
+        centerX = otherKnob.center.x + (awayX / distance) * minDistance;
+        centerY = otherKnob.center.y + (awayY / distance) * minDistance;
       }
 
       return {
@@ -651,7 +651,7 @@
       object.element = node;
       object.schedule(() => {
         object?.readDom({ unapplyTransform: false });
-        object?.saveDomProperety("READ_1");
+        object?.saveWorldPosition("READ_1");
       }, { stage: "READ_1", queueId: "collision-target-read" });
 
       collider =

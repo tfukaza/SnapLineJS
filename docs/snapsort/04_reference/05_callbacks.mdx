@@ -43,10 +43,10 @@ interface DropPriorityEvent {
   containerMetadata: Record<string, unknown>;
   index: number;
   staticPriority: number;
-  pointer: { x: number; y: number };
-  dragRect: DropPriorityRect;
-  containerRect: DropPriorityRect;
-  containerContentRect: DropPriorityRect;
+  pointer: Point;
+  dragRect: Rect;
+  containerRect: Rect;
+  containerContentRect: Rect;
   depth: number;
 }
 ```
@@ -205,7 +205,7 @@ const pointerY = event.pointer.y;
 
 ### `dragRect`
 
-**Type:** `DropPriorityRect`
+**Type:** `Rect`
 
 The primary dragged Item's virtual world-space rectangle. Its leading edge
 preserves the pointer-to-Item offset captured at drag start.
@@ -216,7 +216,7 @@ const leadingX = event.dragRect.x;
 
 ### `containerRect`
 
-**Type:** `DropPriorityRect`
+**Type:** `Rect`
 
 The destination Container's frozen world-space border box. All five standard
 callbacks use this rectangle when they need destination geometry.
@@ -227,7 +227,7 @@ const right = event.containerRect.x + event.containerRect.width;
 
 ### `containerContentRect`
 
-**Type:** `DropPriorityRect`
+**Type:** `Rect`
 
 The destination Container's frozen world-space content box. Standard helpers
 do not use it, but custom policies can use it when borders and padding should
@@ -251,11 +251,12 @@ scores.
 const nestedPriority = event.depth + 1;
 ```
 
-### `DropPriorityRect`
+### Geometry types
 
-**Type:** `{ x: number; y: number; width: number; height: number }`
-
-A frozen world-space rectangle captured for the current target resolution.
+`Point` and `Rect` come from `@snap-engine/core/geometry`. Every rectangle is
+frozen, in world space, and captured for the current target resolution; the
+same module's helpers (`pointIntersectsRect`, `contentRect`, `rectCenter`, ...)
+work on them directly.
 
 ## Priority Return Values
 

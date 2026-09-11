@@ -1,5 +1,5 @@
 import { Engine } from "./engine";
-import type { ContainerBounds } from "./engine";
+import type { Bounds, PointerPosition, Rect } from "./geometry";
 
 export interface CameraConfig {
   enableZoom?: boolean;
@@ -296,7 +296,7 @@ export class Camera {
    *
    * @param bounds - Optional pre-computed container bounds. If not provided, reads from DOM.
    */
-  updateCameraProperty(bounds?: ContainerBounds) {
+  updateCameraProperty(bounds?: Bounds) {
     if (!this.#containerDom) {
       return;
     }
@@ -773,4 +773,80 @@ export class StationaryCamera extends Camera {
   }
 
 
+}
+
+/** The Camera conversions needed to resolve screen values into world space. */
+export type ScreenToWorldMapper = Pick<
+  Camera,
+  "getCameraFromScreen" | "getWorldFromCamera" | "getWorldDeltaFromCameraDelta"
+>;
+
+/** The Camera conversions needed to resolve world values into screen space. */
+export type WorldToScreenMapper = Pick<
+  Camera,
+  "getCameraFromWorld" | "getScreenFromCamera"
+>;
+
+/**
+ * Resolve a viewport (client) point in world, camera, and screen space.
+ * Without a camera, all three spaces coincide.
+ */
+export function pointerPositionFromScreen(
+  camera: ScreenToWorldMapper | null,
+  screenX: number,
+  screenY: number,
+): PointerPosition {
+  const screen = { x: screenX, y: screenY };
+  if (!camera) return { x: screenX, y: screenY, camera: screen, screen };
+  const [cameraX, cameraY] = camera.getCameraFromScreen(screenX, screenY);
+  const [worldX, worldY] = camera.getWorldFromCamera(cameraX, cameraY);
+  return {
+    x: worldX,
+    y: worldY,
+    camera: { x: cameraX, y: cameraY },
+    screen,
+  };
+}
+
+/**
+ * Resolve a world point in world, camera, and screen space.
+ * Without a camera, all three spaces coincide.
+ */
+export function pointerPositionFromWorld(
+  camera: WorldToScreenMapper | null,
+  worldX: number,
+  worldY: number,
+): PointerPosition {
+  if (!camera) {
+    const point = { x: worldX, y: worldY };
+    return { x: worldX, y: worldY, camera: point, screen: point };
+  }
+  const [cameraX, cameraY] = camera.getCameraFromWorld(worldX, worldY);
+  const [screenX, screenY] = camera.getScreenFromCamera(cameraX, cameraY);
+  return {
+    x: worldX,
+    y: worldY,
+    camera: { x: cameraX, y: cameraY },
+    screen: { x: screenX, y: screenY },
+  };
+}
+
+/**
+ * Map a viewport (client) rectangle into world space: the origin through
+ * the camera transform and the size by the camera zoom.
+ */
+export function worldRectFromScreenRect(
+  camera: ScreenToWorldMapper | null,
+  rect: Rect,
+): Rect {
+  if (!camera) {
+    return { x: rect.x, y: rect.y, width: rect.width, height: rect.height };
+  }
+  const [cameraX, cameraY] = camera.getCameraFromScreen(rect.x, rect.y);
+  const [x, y] = camera.getWorldFromCamera(cameraX, cameraY);
+  const [width, height] = camera.getWorldDeltaFromCameraDelta(
+    rect.width,
+    rect.height,
+  );
+  return { x, y, width, height };
 }

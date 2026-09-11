@@ -21,11 +21,11 @@ object.event.input.pointerDown = (props) => {
 };
 
 object.event.input.pointerMove = (props) => {
-  console.log(props.position.cameraX, props.position.cameraY);
+  console.log(props.position.camera.x, props.position.camera.y);
 };
 
 object.event.input.pointerUp = (props) => {
-  console.log(props.position.screenX, props.position.screenY);
+  console.log(props.position.screen.x, props.position.screen.y);
   console.log(props.cancelled);
 };
 
@@ -63,6 +63,10 @@ object.event.global.mouseWheel = (props) => {
   console.log(props.delta);
 };
 ```
+
+Every `position` is a `PointerPosition`: `x`/`y` are world coordinates,
+`camera` is the point relative to the camera container, and `screen` is the
+viewport (client) point. A drag `delta` has the same shape.
 
 ## Drag Gestures
 

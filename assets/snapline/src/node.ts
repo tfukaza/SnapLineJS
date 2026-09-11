@@ -1,4 +1,5 @@
 import { BaseObject, ElementObject, mergeDefined } from "@snap-engine/core";
+import type { Point, Rect } from "@snap-engine/core/geometry";
 import { ConnectorMirror } from "./connector";
 import { LineMirror } from "./line";
 import type {
@@ -7,7 +8,7 @@ import type {
   dragStartProp,
   dragProp,
   dragEndProp,
-  eventPosition,
+  PointerPosition,
 } from "@snap-engine/core";
 import { RectCollider } from "@snap-engine/core/collision";
 import { getGraphRegistry } from "./internal/shared-data";
@@ -54,12 +55,9 @@ const DEFAULT_NODE_CONFIG: ResolvedNodeConfig = {
  * Node geometry maintained by SnapLine during drag or resize.
  * After that, this is committed to the frontend framework.
  */
-export interface NodeGeometry {
-  node: NodeMirror;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
+/** A node's world-space rectangle. */
+export interface NodeGeometry extends Rect {
+  readonly node: NodeMirror;
 }
 
 /** Batched geometry observation for group/multi-select drag. */
@@ -70,7 +68,7 @@ export interface GeometryChangeEvent {
 export interface NodePointerEvent {
   node: NodeMirror;
   pointerId: number;
-  position: eventPosition;
+  position: PointerPosition;
   originalEvent?: PointerEvent;
 }
 
@@ -80,21 +78,13 @@ export interface NodeDragPositionEvent {
   y: number;
   startX: number;
   startY: number;
-  position: eventPosition;
+  position: PointerPosition;
 }
 
-export interface ResolvedNodeDragPosition {
-  x: number;
-  y: number;
-}
-
-export interface NodeResizeEvent {
-  node: NodeMirror;
-  handle: ResizeHandle | null;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
+/** A node's world-space rectangle during a resize gesture. */
+export interface NodeResizeEvent extends Rect {
+  readonly node: NodeMirror;
+  readonly handle: ResizeHandle | null;
 }
 
 export interface NodeSelectionEvent {
@@ -128,7 +118,7 @@ export interface NodeCallbacks {
   /** Allow node position to be overridden during drag, e.g. to implement snap-to-grid. */
   resolveDragPosition?: (
     event: NodeDragPositionEvent,
-  ) => ResolvedNodeDragPosition;
+  ) => Point;
   /** Override if and how nodes get selected or deselected. */
   resolveSelectionMode?: (event: NodeSelectionModeEvent) => SelectionMode;
   /** Called when selected status of a node changes. */
@@ -180,7 +170,7 @@ class NodeMirror extends ElementObject {
   #dragPointerId: number | null = null;
   #dragRoots: NodeMirror[] = [];
   #dragCommitNodes: NodeMirror[] = [];
-  #lastDragPosition: eventPosition | null = null;
+  #lastDragPosition: PointerPosition | null = null;
   #pointerSelectionMode: SelectionMode = "replace";
   #wasSelectedAtPointerDown = false;
 
@@ -371,7 +361,7 @@ class NodeMirror extends ElementObject {
     }
   }
 
-  geometrySnapshot(): { x: number; y: number; width: number; height: number } {
+  geometrySnapshot(): Rect {
     return {
       x: this.worldTransform.x,
       y: this.worldTransform.y,
@@ -633,7 +623,7 @@ class NodeMirror extends ElementObject {
     });
   }
 
-  #moveSelectionToPointer(position: eventPosition): void {
+  #moveSelectionToPointer(position: PointerPosition): void {
     this.#lastDragPosition = position;
     for (const node of this.#dragRoots) {
       node.setDragPosition({ position } as dragProp);
@@ -641,7 +631,7 @@ class NodeMirror extends ElementObject {
   }
 
   /** Hook used to build one deduplicated multi-selection drag session. */
-  protected beginSelectionDrag(position: eventPosition): void {
+  protected beginSelectionDrag(position: PointerPosition): void {
     this.setStartPositions();
     this.#pointerReferenceX = position.x;
     this.#pointerReferenceY = position.y;

@@ -52,6 +52,19 @@ const zoom = camera.zoom;
 canvasElement.style.transform = camera.canvasStyle;
 ```
 
+## Coordinate Spaces
+
+| Space | Origin | Units |
+|-------|--------|-------|
+| Screen | Browser viewport | Viewport (client) pixels |
+| Camera | Camera container's top-left corner | Viewport pixels |
+| World | Scene origin | CSS pixels inside the camera layer |
+
+Inside the camera layer, CSS lengths are world units: a `120px` wide element
+is 120 world units wide at any zoom, while its `getBoundingClientRect()` width
+is `120 * zoom`. `ElementObject.readDom()` reports world-space boxes and keeps
+the viewport rectangle as `box.screen`.
+
 ## Coordinate Methods
 
 ```ts
@@ -64,6 +77,28 @@ const [containerX, containerY] = camera.getCameraFromScreen(screenX, screenY);
 ```ts
 const [cameraWidth, cameraHeight] = camera.getCameraDeltaFromWorldDelta(10, 10);
 const [worldDeltaX, worldDeltaY] = camera.getWorldDeltaFromCameraDelta(50, 30);
+```
+
+The root package also exports helpers that resolve a point or rectangle in
+every space at once. Each accepts `null` for "no camera", in which case all
+spaces coincide.
+
+```ts
+import {
+  pointerPositionFromScreen,
+  pointerPositionFromWorld,
+  worldRectFromScreenRect,
+} from "@snap-engine/core";
+
+const pointer = pointerPositionFromScreen(engine.camera, event.clientX, event.clientY);
+pointer.x; // world
+pointer.camera.x; // camera
+pointer.screen.x; // viewport
+
+const worldRect = worldRectFromScreenRect(
+  engine.camera,
+  element.getBoundingClientRect(),
+);
 ```
 
 ## CameraControl Setup
@@ -111,6 +146,11 @@ cameraControl.zoomBy(-0.1);
 cameraControl.zoomBy(0.1, 200, 150);
 ```
 
+Camera changes and their painted transform are one commit: CameraControl
+writes the transform immediately when a DOM write is allowed, and a
+programmatic change requested during a read stage waits for the next write
+stage. A DOM read therefore never sees a zoom that is not on screen yet.
+
 ### Edge panning for drag owners
 
 Enable programmatic edge panning when composing the camera with a drag system
@@ -153,3 +193,6 @@ pan, keeping dragged content anchored while the pointer is stationary.
 | `camera.handlePanEnd()` | Ends tracked pan movement. |
 | `new CameraControl(engine, config?)` | Creates interactive pan/zoom controls. |
 | `cameraControl.zoomBy(deltaZoom, originX?, originY?)` | Programmatically changes zoom. |
+| `pointerPositionFromScreen(camera, x, y)` | Resolves a viewport point as a `PointerPosition`. |
+| `pointerPositionFromWorld(camera, x, y)` | Resolves a world point as a `PointerPosition`. |
+| `worldRectFromScreenRect(camera, rect)` | Maps a viewport rectangle into world space. |

@@ -1,29 +1,31 @@
-import type { DomProperty } from "@snap-engine/core";
+import type { ElementBox } from "@snap-engine/core";
 import {
-  type CollisionCircle,
+  contentOffset,
+  contentRect,
   distanceToRect,
+  freezeRect,
+  rectArea,
+  type Rect,
   pointIntersectsCircle,
   pointIntersectsRect,
   rectsIntersect,
-} from "@snap-engine/core/collision";
-import type { Item as ItemBase } from "./item";
-import type { Container } from "./container";
+} from "@snap-engine/core/geometry";
 import {
+  LAYOUT_WRAP_TOLERANCE,
   childRelativeOffset,
-  contentBoxOrigin,
-  contentBoxSize,
   createLayoutResolutionPlan,
   flowAxesForDirection,
   flowLayoutCanWrap,
-  inferSnapshotVisualLines,
+  inferVisualLines,
   virtualEntrySizeFor,
   pointFromAxes,
-  virtualDimensions as layoutVirtualDimensions,
   type LayoutPlanDiagnostics,
   type LayoutResolutionPlan,
-  type SnapshotVisualLine,
+  type VisualLine,
   type VirtualInsertion,
-} from "./layout";
+} from "@snap-engine/core/layout";
+import type { Item as ItemBase } from "./item";
+import type { Container } from "./container";
 import type { ItemSnapshot } from "./snapshot";
 import type { DragSessionController as DragSession } from "./drag/session";
 import {
@@ -32,6 +34,7 @@ import {
   type InsertionGapSegment,
   type InsertionMarkerNeighbor,
   type InsertionMarkerPresentation,
+  type ItemHitbox,
   type ItemHitboxEvent,
 } from "./events";
 import { buildItemLocation, buildItemRunEvent } from "./event-builders";
@@ -42,21 +45,26 @@ const TAG_CANDIDATES = "drop-candidates";
 const TAG_LAYOUT = "drop-layout";
 const TOP_CANDIDATE_DEBUG_LIMIT = 3;
 
-type Rect = { x: number; y: number; width: number; height: number };
-type ResolvedItemHitbox =
-  | { shape: "rect"; rect: Rect }
-  | { shape: "circle"; circle: CollisionCircle };
+/**
+ * Candidate-selection tolerances, in world units. Differences below these are
+ * measurement noise, so selection falls through to the next tie-breaker.
+ */
+const EDGE_DISTANCE_TIE_TOLERANCE = 0.5;
+const PLACEMENT_DISTANCE_TIE_TOLERANCE = 0.5;
+const CROSS_CONTAINER_DISTANCE_TIE_TOLERANCE = 1;
+/** Keeps a point exactly on a line boundary on the later line. */
+const LINE_INDEX_ROUNDING_BIAS = 0.001;
 
-export interface VirtualGhost {
-  container: Container;
-  index: number;
-  width: number;
-  height: number;
-}
+type Snapshot = ItemSnapshot<ItemBase>;
 
-export interface VirtualDimensions {
-  width: number;
-  height: number;
+/**
+ * The layout wrap tolerance for boxes measured under `item`'s camera: the
+ * CSS-pixel default scaled so it stays constant on screen at any zoom.
+ * @internal
+ */
+export function layoutWrapToleranceFor(item: ItemBase): number {
+  const zoom = item.engine?.camera?.zoom ?? 1;
+  return zoom > 0 ? LAYOUT_WRAP_TOLERANCE / zoom : LAYOUT_WRAP_TOLERANCE;
 }
 
 export interface ResolvedDropTarget {
@@ -97,10 +105,6 @@ interface SwapCandidate {
   area: number;
 }
 
-function euclidean(x1: number, y1: number, x2: number, y2: number): number {
-  return Math.sqrt((x1 - x2) ** 2 + (y1 - y2) ** 2);
-}
-
 /**
  * Sum of euclidean distances between each dragged member's own tracked drag
  * position (its original box translated by the shared pointer delta — see
@@ -125,7 +129,7 @@ function groupCandidateDistance(
     const h = box.height;
     const dcx = only.dragPositionX + w / 2;
     const dcy = only.dragPositionY + h / 2;
-    return euclidean(cx, cy, dcx, dcy);
+    return Math.hypot(cx - dcx, cy - dcy);
   }
 
   let cumulative = 0;
@@ -142,11 +146,9 @@ function groupCandidateDistance(
       : rect.y + rect.height / 2;
     const memberDragCenterX = member.dragPositionX + w / 2;
     const memberDragCenterY = member.dragPositionY + h / 2;
-    sum += euclidean(
-      slotCenterX,
-      slotCenterY,
-      memberDragCenterX,
-      memberDragCenterY,
+    sum += Math.hypot(
+      slotCenterX - memberDragCenterX,
+      slotCenterY - memberDragCenterY,
     );
     cumulative += isColumn ? h : w;
   }
@@ -180,7 +182,7 @@ function requireDragSnapshot(item: ItemBase): ItemSnapshot<ItemBase> {
   return snapshot;
 }
 
-function requireDragSnapshotBox(item: ItemBase): DomProperty {
+function requireDragSnapshotBox(item: ItemBase): ElementBox {
   return requireDragSnapshot(item).box;
 }
 
@@ -195,15 +197,6 @@ function isContainerObject(item: ItemBase): item is Container {
     "name" in item &&
     "numberOfItems" in item
   );
-}
-
-function frozenRect(rect: Rect): Rect {
-  return Object.freeze({
-    x: rect.x,
-    y: rect.y,
-    width: rect.width,
-    height: rect.height,
-  });
 }
 
 interface ContainerResolutionBase {
@@ -233,11 +226,13 @@ function createResolutionContext(
   item: ItemBase,
   session: DragSession | null,
   pointer: { x: number; y: number },
+  dragRect?: Rect,
 ): ResolutionContext {
   const items = session?.items ?? [item];
   const run = buildItemRunEvent(items);
   const sources = session?.sources ?? items.map(buildItemLocation);
   const box = requireDragSnapshotBox(item);
+
   return Object.freeze({
     session,
     item,
@@ -248,13 +243,18 @@ function createResolutionContext(
     itemsMetadata: Object.freeze([...run.itemsMetadata]),
     source: sources[0] ?? null,
     sources: Object.freeze([...sources]),
-    pointer: Object.freeze({ x: pointer.x, y: pointer.y }),
-    dragRect: frozenRect({
-      x: item.dragPositionX,
-      y: item.dragPositionY,
-      width: box.width,
-      height: box.height,
+    pointer: Object.freeze({
+      x: pointer.x,
+      y: pointer.y,
     }),
+    dragRect: freezeRect(
+      dragRect ?? {
+        x: item.dragPositionX,
+        y: item.dragPositionY,
+        width: box.width,
+        height: box.height,
+      },
+    ),
     containers: new Map(),
   });
 }
@@ -268,8 +268,8 @@ function containerResolutionBase(
   const base = Object.freeze({
     container,
     containerMetadata: container.metadata,
-    containerRect: frozenRect(requireDragSnapshotBox(container)),
-    containerContentRect: frozenRect(containerContentRect(container)),
+    containerRect: freezeRect(requireDragSnapshotBox(container)),
+    containerContentRect: freezeRect(containerContentRect(container)),
     depth: container.depth,
   });
   context.containers.set(container, base);
@@ -320,17 +320,17 @@ function resolveItemHitbox(
   item: ItemBase,
   container: Container,
   session: DragSession,
-): ResolvedItemHitbox {
+): ItemHitbox {
   const box = item.dragSnapshot?.box;
   if (!box) {
     throw new Error(`SnapSort Item ${item.id}: missing drag snapshot box.`);
   }
-  const defaultRect = frozenRect(box);
+  const defaultRect = freezeRect(box);
   const callback = container.callbacks?.getItemHitbox;
   if (!callback) return { shape: "rect", rect: defaultRect };
 
   const hitbox = callback({
-    session: session.handle,
+    session,
     item: draggedItem,
     itemId: draggedItem.itemId,
     itemMetadata: draggedItem.metadata,
@@ -345,21 +345,22 @@ function resolveItemHitbox(
 
   if (hitbox?.shape === "rect") {
     assertRect(hitbox.rect, "getItemHitbox", container);
-    return { shape: "rect", rect: frozenRect(hitbox.rect) };
+    return { shape: "rect", rect: freezeRect(hitbox.rect) };
   }
+  const circle = hitbox?.shape === "circle" ? hitbox.circle : null;
   if (
-    hitbox?.shape === "circle" &&
-    Number.isFinite(hitbox.center?.x) &&
-    Number.isFinite(hitbox.center?.y) &&
-    Number.isFinite(hitbox.radius) &&
-    hitbox.radius >= 0
+    circle &&
+    Number.isFinite(circle.x) &&
+    Number.isFinite(circle.y) &&
+    Number.isFinite(circle.radius) &&
+    circle.radius >= 0
   ) {
     return {
       shape: "circle",
       circle: Object.freeze({
-        x: hitbox.center.x,
-        y: hitbox.center.y,
-        radius: hitbox.radius,
+        x: circle.x,
+        y: circle.y,
+        radius: circle.radius,
       }),
     };
   }
@@ -384,7 +385,7 @@ function hoveredItemCandidate(
   const area =
     hitbox.shape === "circle"
       ? Math.PI * hitbox.circle.radius ** 2
-      : hitbox.rect.width * hitbox.rect.height;
+      : rectArea(hitbox.rect);
   const intersects =
     hitbox.shape === "circle"
       ? pointIntersectsCircle(session.pointer, hitbox.circle)
@@ -475,30 +476,10 @@ function createLayoutSnapshot(root: ItemBase): {
   return { root: rootSnapshot, byItem };
 }
 
-function layoutInsertionFromGhost(
-  byItem: Map<ItemBase, ItemSnapshot<ItemBase>>,
-  ghost?: VirtualGhost,
-): VirtualInsertion<ItemBase> | undefined {
-  if (!ghost) return undefined;
-  const container = byItem.get(ghost.container);
-  if (!container) return undefined;
-  const margin = requireDragSnapshotBox(ghost.container).margin;
-  const size = virtualEntrySizeFor(container, {
-    width: ghost.width,
-    height: ghost.height,
-    margin,
-  });
-  return {
-    container,
-    index: ghost.index,
-    entry: { ...size, margin },
-  };
-}
-
 function activeFlowInsertionsFromPendingPlacement(
   byItem: Map<ItemBase, ItemSnapshot<ItemBase>>,
   session: DragSession | null,
-): VirtualInsertion<ItemBase>[] {
+): VirtualInsertion<Snapshot>[] {
   // Insertion and swap lifecycles use absolute marker/pointer ghosts. They do
   // not occupy a flow slot and must never influence virtual list layout.
   if (!session || !session.strategy.lifecycle.placementOccupiesFlowSlots) {
@@ -529,10 +510,7 @@ function activeFlowInsertionsFromPendingPlacement(
 }
 
 function containerContentRect(container: Container): Rect {
-  const prop = requireDragSnapshotBox(container);
-  const origin = contentBoxOrigin(prop);
-  const size = contentBoxSize(prop);
-  return { ...origin, ...size };
+  return contentRect(requireDragSnapshotBox(container));
 }
 
 function expandedChildHitRect(
@@ -575,23 +553,10 @@ function chooseByContentBox<T extends CandidateGeometry>(
 
   const aEdge = distanceToNearestContentEdge(aRect, dragCenterX, dragCenterY);
   const bEdge = distanceToNearestContentEdge(bRect, dragCenterX, dragCenterY);
-  if (Math.abs(aEdge - bEdge) > 0.5) return aEdge < bEdge ? a : b;
+  if (Math.abs(aEdge - bEdge) > EDGE_DISTANCE_TIE_TOLERANCE) {
+    return aEdge < bEdge ? a : b;
+  }
   return a.distance <= b.distance ? a : b;
-}
-
-export function virtualDimensions(
-  container: Container,
-  draggedItem: ItemBase,
-  ghost?: VirtualGhost,
-): VirtualDimensions {
-  const snapshot = createLayoutSnapshot(container);
-  const insertions = [layoutInsertionFromGhost(snapshot.byItem, ghost)].filter(
-    (insertion): insertion is VirtualInsertion<ItemBase> => !!insertion,
-  );
-  return layoutVirtualDimensions(snapshot.root, {
-    filter: { excludeValues: new Set([draggedItem]) },
-    insertions,
-  });
 }
 
 export function virtualLayoutRecursive(
@@ -605,7 +570,7 @@ export function virtualLayoutRecursive(
   dragCenterY: number,
   session: DragSession | null = null,
   debugEnabled = false,
-  layoutDiagnostics?: LayoutPlanDiagnostics<ItemBase>,
+  layoutDiagnostics?: LayoutPlanDiagnostics<Snapshot>,
 ): { candidates: FlowCandidate[]; endX: number; endY: number } {
   const snapshot = createLayoutSnapshot(container);
   const draggedBox = requireDragSnapshotBox(draggedItem);
@@ -621,8 +586,9 @@ export function virtualLayoutRecursive(
   };
   const excludeValues = session ? session.itemSet : new Set([draggedItem]);
   const layoutPlan = createLayoutResolutionPlan(snapshot.root, {
-    filter: { excludeValues },
+    exclude: (node) => excludeValues.has(node.value),
     insertions: activeInsertions,
+    wrapTolerance: layoutWrapToleranceFor(container),
     diagnostics: layoutDiagnostics,
   });
   return virtualLayoutRecursiveFromSnapshot(
@@ -647,8 +613,8 @@ function virtualLayoutRecursiveFromSnapshot(
   containerSnapshot: ItemSnapshot<ItemBase>,
   startX: number,
   startY: number,
-  layoutPlan: LayoutResolutionPlan<ItemBase>,
-  draggedBox: DomProperty,
+  layoutPlan: LayoutResolutionPlan<Snapshot>,
+  draggedBox: ElementBox,
   dragGhostW: number,
   dragGhostH: number,
   dragCenterX: number,
@@ -680,7 +646,12 @@ function virtualLayoutRecursiveFromSnapshot(
   );
   const dragCross = axes.cross === "x" ? dragCenterX : dragCenterY;
   const lineIndexForCross = (cross: number) =>
-    Math.max(0, Math.floor((cross - lineCrossStart) / lineCrossStep + 0.001));
+    Math.max(
+      0,
+      Math.floor(
+        (cross - lineCrossStart) / lineCrossStep + LINE_INDEX_ROUNDING_BIAS,
+      ),
+    );
   const dragLineIndex = lineIndexForCross(dragCross);
 
   if (debugEnabled) {
@@ -730,7 +701,7 @@ function virtualLayoutRecursiveFromSnapshot(
     index: number,
     fallbackPosition: { x: number; y: number },
   ): FlowCandidate => {
-    const insertion: VirtualInsertion<ItemBase> = {
+    const insertion: VirtualInsertion<Snapshot> = {
       container: containerSnapshot,
       index,
       entry: {
@@ -758,19 +729,15 @@ function virtualLayoutRecursiveFromSnapshot(
       target: { container, index },
       candidateCenterX,
       candidateCenterY,
-      distance: euclidean(
-        candidateCenterX,
-        candidateCenterY,
-        dragCenterX,
-        dragCenterY,
+      distance: Math.hypot(
+        candidateCenterX - dragCenterX,
+        candidateCenterY - dragCenterY,
       ),
       groupDistance: session
         ? groupCandidateDistance(session, rect, isColumn)
-        : euclidean(
-            candidateCenterX,
-            candidateCenterY,
-            dragCenterX,
-            dragCenterY,
+        : Math.hypot(
+            candidateCenterX - dragCenterX,
+            candidateCenterY - dragCenterY,
           ),
       lineDistance: Math.abs(lineIndex - dragLineIndex),
       placementRect,
@@ -814,14 +781,13 @@ function virtualLayoutRecursiveFromSnapshot(
     }
 
     if (isContainer) {
-      const childOrigin = {
-        x: simulatedPosition.x + prop.border.left + prop.padding.left,
-        y: simulatedPosition.y + prop.border.top + prop.padding.top,
-      };
-      const childContentSize = contentBoxSize(prop);
+      const childOffset = contentOffset(prop);
+      const childContent = contentRect(prop);
       const childContentRect = {
-        ...childOrigin,
-        ...childContentSize,
+        x: simulatedPosition.x + childOffset.x,
+        y: simulatedPosition.y + childOffset.y,
+        width: childContent.width,
+        height: childContent.height,
       };
       const childHitRect = expandedChildHitRect(
         childContentRect,
@@ -840,8 +806,8 @@ function virtualLayoutRecursiveFromSnapshot(
         const childResult = virtualLayoutRecursiveFromSnapshot(
           item,
           itemSnapshot,
-          childOrigin.x,
-          childOrigin.y,
+          childContentRect.x,
+          childContentRect.y,
           layoutPlan,
           draggedBox,
           dragGhostW,
@@ -886,7 +852,7 @@ function collectDropCandidates(
   const dragGhostH = dragProp.height;
   const dragCenterX = item.dragPositionX + dragProp.width / 2;
   const dragCenterY = item.dragPositionY + dragProp.height / 2;
-  const layoutOrigin = contentBoxOrigin(rootProp);
+  const layoutOrigin = contentRect(rootProp);
 
   const { candidates: virtualCandidates } = virtualLayoutRecursive(
     root,
@@ -951,13 +917,14 @@ function chooseProgressiveCandidate(
 
     const placementDistanceDelta: number =
       candidate.placementDistance - best.placementDistance;
-    if (Math.abs(placementDistanceDelta) > 0.5) {
+    if (Math.abs(placementDistanceDelta) > PLACEMENT_DISTANCE_TIE_TOLERANCE) {
       best = placementDistanceDelta < 0 ? candidate : best;
       continue;
     }
 
     if (
-      Math.abs(candidate.distance - best.distance) <= 1 &&
+      Math.abs(candidate.distance - best.distance) <=
+        CROSS_CONTAINER_DISTANCE_TIE_TOLERANCE &&
       candidate.target.container.id !== best.target.container.id
     ) {
       best = chooseByContentBox(best, candidate, dragCenterX, dragCenterY);
@@ -1143,7 +1110,7 @@ function insertionMarkerNeighbor(
     item: snapshot.value,
     itemId: snapshot.itemId,
     itemMetadata: snapshot.metadata,
-    rect: frozenRect(snapshot.box),
+    rect: freezeRect(snapshot.box),
   });
 }
 
@@ -1151,9 +1118,9 @@ function insertionVisualLine(
   snapshot: ItemSnapshot<ItemBase> | null,
   lineBySnapshot: ReadonlyMap<
     ItemSnapshot<ItemBase>,
-    SnapshotVisualLine<ItemBase>
+    VisualLine<Snapshot>
   >,
-): SnapshotVisualLine<ItemBase> | null {
+): VisualLine<Snapshot> | null {
   if (!snapshot) return null;
   const line = lineBySnapshot.get(snapshot);
   if (!line) {
@@ -1168,15 +1135,14 @@ function insertionGapSegment(
   next: ItemSnapshot<ItemBase> | null,
   lineBySnapshot: ReadonlyMap<
     ItemSnapshot<ItemBase>,
-    SnapshotVisualLine<ItemBase>
+    VisualLine<Snapshot>
   >,
   useVisualLineBand: boolean,
 ): InsertionGapSegment {
   const axes = flowAxesForDirection(containerSnapshot.direction);
-  const contentOrigin = contentBoxOrigin(containerSnapshot.box);
-  const contentSize = contentBoxSize(containerSnapshot.box);
-  const contentMainStart = contentOrigin[axes.main];
-  const contentMainSize = contentSize[axes.mainSize];
+  const content = contentRect(containerSnapshot.box);
+  const contentMainStart = content[axes.main];
+  const contentMainSize = content[axes.mainSize];
   const previousMainEnd = previous
     ? previous.box[axes.main] + previous.box[axes.mainSize]
     : null;
@@ -1203,12 +1169,12 @@ function insertionGapSegment(
 
   const crossStart =
     useVisualLineBand && visualLine
-      ? contentOrigin[axes.cross] + visualLine.crossStart
-      : contentOrigin[axes.cross];
+      ? content[axes.cross] + visualLine.crossStart
+      : content[axes.cross];
   const crossSize =
     useVisualLineBand && visualLine
       ? visualLine.crossSize
-      : contentSize[axes.crossSize];
+      : content[axes.crossSize];
 
   if (axes.direction === "column") {
     return Object.freeze({
@@ -1292,16 +1258,16 @@ function collectInsertionCandidates(
     const rawChildren = containerSnapshot.children.filter(
       (child) => !child.value.isGhost,
     );
-    const visualLines = inferSnapshotVisualLines(
+    const visualLines = inferVisualLines(
       containerSnapshot,
       flowAxesForDirection(containerSnapshot.direction),
     );
     const lineBySnapshot = new Map<
       ItemSnapshot<ItemBase>,
-      SnapshotVisualLine<ItemBase>
+      VisualLine<Snapshot>
     >();
     for (const line of visualLines) {
-      for (const snapshot of line.snapshots) {
+      for (const snapshot of line.nodes) {
         lineBySnapshot.set(snapshot, line);
       }
     }
@@ -1390,6 +1356,102 @@ function collectInsertionCandidates(
   return candidates;
 }
 
+/** @internal Build the canonical insertion marker for one direct slot. */
+export function createDirectInsertionTarget(
+  session: DragSession,
+  container: Container,
+  logicalIndex: number,
+): ResolvedDropTarget & {
+  readonly insertion: InsertionMarkerPresentation;
+} {
+  const containerSnapshot = requireDragSnapshot(container);
+  const rawChildren = containerSnapshot.children.filter(
+    (child) => !child.value.isGhost,
+  );
+
+  const retainedIndices = rawChildren.flatMap(
+    (child, rawIndex) =>
+      session.itemSet.has(child.value)
+        ? []
+        : [rawIndex],
+  );
+
+  if (
+    !Number.isInteger(logicalIndex) ||
+    logicalIndex < 0 ||
+    logicalIndex > retainedIndices.length
+  ) {
+    throw new RangeError(
+      "SnapSort: direct insertion index is outside the retained item slots.",
+    );
+  }
+
+  const boundary =
+    retainedIndices[logicalIndex] ??
+    rawChildren.length;
+
+  const previousSnapshot =
+    rawChildren[boundary - 1] ?? null;
+  const nextSnapshot =
+    rawChildren[boundary] ?? null;
+
+  const visualLines = inferVisualLines(
+    containerSnapshot,
+    flowAxesForDirection(containerSnapshot.direction),
+  );
+
+  const lineBySnapshot = new Map<
+    ItemSnapshot<ItemBase>,
+    VisualLine<Snapshot>
+  >();
+
+  for (const line of visualLines) {
+    for (const snapshot of line.nodes) {
+      lineBySnapshot.set(snapshot, line);
+    }
+  }
+
+  const useVisualLineBand =
+    containerSnapshot.layoutModel === "slots"
+      ? visualLines.length > 1
+      : flowLayoutCanWrap(
+          containerSnapshot,
+          flowAxesForDirection(
+            containerSnapshot.direction,
+          ),
+          visualLines.length,
+        );
+
+  const gap = insertionGapSegment(
+    containerSnapshot,
+    previousSnapshot,
+    nextSnapshot,
+    lineBySnapshot,
+    useVisualLineBand,
+  );
+
+  const projection = projectItemRunMove(
+    container,
+    boundary,
+    session.activeSources,
+  );
+
+  const insertion = Object.freeze({
+    gap,
+    previous: insertionMarkerNeighbor(
+      previousSnapshot,
+    ),
+    next: insertionMarkerNeighbor(nextSnapshot),
+    isCurrentPlacement: projection.isCurrentPlacement,
+  }) satisfies InsertionMarkerPresentation;
+
+  return Object.freeze({
+    container,
+    index: logicalIndex,
+    insertion,
+  });
+}
+
 function chooseInsertionCandidate(
   candidates: InsertionCandidate[],
 ): InsertionCandidate | null {
@@ -1446,7 +1508,7 @@ function dropPolicyEvent(
   const base = containerResolutionBase(context, candidate.target.container);
 
   return {
-    session: context.session?.handle ?? null,
+    session: context.session,
     item: context.item,
     itemId: context.itemId,
     itemMetadata: context.itemMetadata,
@@ -1465,6 +1527,59 @@ function dropPolicyEvent(
     containerContentRect: base.containerContentRect,
     depth: base.depth,
   };
+}
+
+function effectiveDropPriority(
+  candidate: { target: ResolvedDropTarget },
+  getContext: () => ResolutionContext,
+): number {
+  const container = candidate.target.container;
+  const staticPriority =
+    configuredDropPriority(container);
+  const callback = container.callbacks?.getDropPriority;
+
+  if (!callback) {
+    return staticPriority;
+  }
+
+  const override = callback(
+    dropPolicyEvent(
+      candidate,
+      getContext(),
+      staticPriority,
+    ),
+  );
+
+  if (override !== undefined) {
+    validateDropPriority(
+      container,
+      override,
+      "getDropPriority",
+    );
+  }
+
+  return override ?? staticPriority;
+}
+
+export function evaluateDropTargetPriority(
+  item: ItemBase,
+  session: DragSession,
+  target: ResolvedDropTarget,
+  geometry: Readonly<{
+    pointer: Readonly<{ x: number; y: number }>;
+    dragRect: Readonly<Rect>;
+  }>,
+): number {
+  return effectiveDropPriority(
+    { target },
+    () =>
+      createResolutionContext(
+        item,
+        session,
+        geometry.pointer,
+        geometry.dragRect,
+      ),
+  );
 }
 
 /**
@@ -1488,17 +1603,11 @@ function applyDropPolicy<T extends { target: ResolvedDropTarget }>(
   }
 
   const eligible: Array<{ candidate: T; priority: number }> = [];
-  for (const [container, directCandidates] of byContainer) {
-    const callbacks = container.callbacks;
-    const staticPriority = configuredDropPriority(container);
-    const override = callbacks?.getDropPriority
-      ? callbacks.getDropPriority(
-          dropPolicyEvent(directCandidates[0], getContext(), staticPriority),
-        )
-      : undefined;
-    if (override !== undefined)
-      validateDropPriority(container, override, "getDropPriority");
-    const priority = override ?? staticPriority;
+  for (const [_, directCandidates] of byContainer) {
+    const priority = effectiveDropPriority(
+      directCandidates[0],
+      getContext,
+    );
     if (priority === DROP_REJECT_PRIORITY) continue;
     for (const candidate of directCandidates) {
       eligible.push({ candidate, priority });
@@ -1641,7 +1750,7 @@ export function determineSwapDropTarget(
       const box = requireDragSnapshotBox(hovered);
       candidates.push({
         target: { container, index },
-        area: box.width * box.height,
+        area: rectArea(box),
       });
     }
 
@@ -1671,7 +1780,7 @@ export function debugDropTargetTree(node: Container, draggedItem: ItemBase) {
   );
 
   for (const item of items) {
-    const prop = item.dragSnapshot?.box ?? item.currentDomProperty;
+    const prop = item.dragSnapshot?.box ?? item.box;
     if (!prop) continue;
 
     item.addDebugRect(

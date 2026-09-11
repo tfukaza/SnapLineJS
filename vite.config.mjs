@@ -54,6 +54,8 @@ export default defineConfig(({ command, mode }) => {
           debug: resolve(__dirname, "src/debug.ts"),
           animation: resolve(__dirname, "src/animation.ts"),
           collision: resolve(__dirname, "src/collision.ts"),
+          geometry: resolve(__dirname, "src/geometry.ts"),
+          layout: resolve(__dirname, "src/layout.ts"),
         },
         name: "SnapEngine",
         formats: ["es"],

@@ -6,7 +6,18 @@ import {
   BaseObject,
   ObjectTransform,
 } from "./object";
-import type { DomElement, DomProperty } from "./object";
+import type { DomElement, TransformProperty } from "./object";
+import type {
+  Point,
+  Size,
+  Rect,
+  Circle,
+  Edges,
+  Bounds,
+  BoxModel,
+  ElementBox,
+  PointerPosition,
+} from "./geometry";
 import { GlobalManager } from "./global";
 import type {
   FrameCallback,
@@ -30,16 +41,19 @@ import type {
   PinchSnapshot,
   GestureHandoffControl,
   InputControlConfig,
-  eventPosition,
 } from "./input";
+import { measureElementBox, EventProxyFactory, mergeDefined } from "./util";
 import {
-  getDomProperty,
-  cloneDomProperty,
-  EventProxyFactory,
-  mergeDefined,
-} from "./util";
-import { Camera } from "./camera";
-import type { CameraConfig } from "./camera";
+  Camera,
+  pointerPositionFromScreen,
+  pointerPositionFromWorld,
+  worldRectFromScreenRect,
+} from "./camera";
+import type {
+  CameraConfig,
+  ScreenToWorldMapper,
+  WorldToScreenMapper,
+} from "./camera";
 
 export {
   Engine,
@@ -50,8 +64,10 @@ export {
   GlobalManager,
   Camera,
   InputControl,
-  getDomProperty,
-  cloneDomProperty,
+  measureElementBox,
+  pointerPositionFromScreen,
+  pointerPositionFromWorld,
+  worldRectFromScreenRect,
   EventProxyFactory,
   mergeDefined,
   type pointerDownProp,
@@ -72,10 +88,20 @@ export {
   type FrameController,
   type FrameInfo,
   type FrameSubscribeOptions,
-  type eventPosition,
   type EdgePanController,
   type DomElement,
-  type DomProperty,
+  type TransformProperty,
+  type Point,
+  type Size,
+  type Rect,
+  type Circle,
+  type Edges,
+  type Bounds,
+  type BoxModel,
+  type ElementBox,
+  type PointerPosition,
   type CameraConfig,
+  type ScreenToWorldMapper,
+  type WorldToScreenMapper,
   mouseButtonBitmap,
 };

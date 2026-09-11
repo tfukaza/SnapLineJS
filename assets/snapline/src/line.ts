@@ -1,10 +1,10 @@
 import { ElementObject, BaseObject } from "@snap-engine/core";
+import type { Point } from "@snap-engine/core/geometry";
 import type {
   ConnectorAnchor,
   ConnectorCandidate,
   ConnectorMirror,
   ConnectorHit,
-  ConnectorPoint,
   ConnectorSurfaceStrategy,
 } from "./connector";
 import type { GeometryInvalidationObserver, GeometryWriter } from "./types";
@@ -27,7 +27,7 @@ export type LineMirrorPhase =
 export interface LineGeometrySnapshot {
   readonly start: ConnectorAnchor;
   readonly end: ConnectorAnchor;
-  readonly delta: Readonly<{ x: number; y: number }>;
+  readonly delta: Point;
 }
 
 export interface LineStateSnapshot {
@@ -57,7 +57,7 @@ class LineMirror extends ElementObject {
   #sourceHit: ConnectorHit | null = null;
   #targetStrategy: ConnectorSurfaceStrategy | null = null;
   #targetHit: ConnectorHit | null = null;
-  #previewPosition: ConnectorPoint | null = null;
+  #previewPosition: Point | null = null;
 
   constructor(engine: any, parent: BaseObject, config: { id?: string } = {}) {
     super(engine, parent);
@@ -236,7 +236,7 @@ class LineMirror extends ElementObject {
     this.#emitStateChange();
   }
 
-  setPreviewPosition(position: ConnectorPoint): void {
+  setPreviewPosition(position: Point): void {
     this.#previewPosition = position;
     this.updateAnchors();
   }

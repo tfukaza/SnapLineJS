@@ -1,7 +1,9 @@
 import { expect, test } from "@playwright/test";
 import { JSDOM } from "jsdom";
 import { Engine, GlobalManager } from "../../src/index";
+import type { ElementBox } from "../../src/geometry";
 import { createVanillaAdapter } from "../../assets/snapsort/src/adapter";
+import { makeBox } from "../helpers/layout-grid";
 import { Container } from "../../assets/snapsort/src/container";
 import {
   buildDragLocation,
@@ -103,6 +105,7 @@ function createRenderTreeHarness(itemIds = ["dragged"]): RenderTreeHarness {
   const originals = [...items.values()];
   const sources = originals.map((_, index) => buildDragLocation(source, index));
   const session: DragSession = {
+    inputType: "pointer",
     root,
     pointerId: 1,
     items: originals,
@@ -114,7 +117,6 @@ function createRenderTreeHarness(itemIds = ["dragged"]): RenderTreeHarness {
     status: "active",
     dragVisual: "item",
     dropEffect: "move",
-    handoff() {},
   };
   let nextGhostId = 0;
   const ghostSession = {
@@ -146,6 +148,11 @@ function createRenderTreeHarness(itemIds = ["dragged"]): RenderTreeHarness {
       dom.window.close();
     },
   };
+}
+
+/** Stand in for a DOM read: make `object.box` report `box`. */
+function stubMeasuredBox(object: object, box: ElementBox): void {
+  Object.defineProperty(object, "box", { configurable: true, value: box });
 }
 
 function requireItem(harness: RenderTreeHarness, itemId: string): Item {
@@ -538,15 +545,17 @@ test("same-location insertion marker moves update presentation and replay idempo
 test("insertionMarkerRect projects through border and scroll with explicit validated options", () => {
   const harness = createRenderTreeHarness();
   try {
-    const box = harness.destination.currentDomProperty;
-    box.x = 100;
-    box.y = 200;
-    box.width = 240;
-    box.height = 180;
-    box.border.left = 4;
-    box.border.top = 6;
-    box.padding.left = 30;
-    box.padding.top = 24;
+    stubMeasuredBox(
+      harness.destination,
+      makeBox({
+        x: 100,
+        y: 200,
+        width: 240,
+        height: 180,
+        border: { left: 4, top: 6 },
+        padding: { left: 30, top: 24 },
+      }),
+    );
     const element = document.createElement("div");
     Object.defineProperty(element, "scrollLeft", { value: 11 });
     Object.defineProperty(element, "scrollTop", { value: 13 });
@@ -630,13 +639,16 @@ test("insertionMarkerRect projects through border and scroll with explicit valid
 test("Vanilla insertion markers honor explicit custom rectangle options", () => {
   const harness = createRenderTreeHarness();
   try {
-    const box = harness.destination.currentDomProperty;
-    box.x = 50;
-    box.y = 80;
-    box.width = 180;
-    box.height = 140;
-    box.border.left = 2;
-    box.border.top = 4;
+    stubMeasuredBox(
+      harness.destination,
+      makeBox({
+        x: 50,
+        y: 80,
+        width: 180,
+        height: 140,
+        border: { left: 2, top: 4 },
+      }),
+    );
     const destinationElement = document.createElement("div");
     Object.defineProperty(destinationElement, "scrollLeft", { value: 7 });
     Object.defineProperty(destinationElement, "scrollTop", { value: 9 });

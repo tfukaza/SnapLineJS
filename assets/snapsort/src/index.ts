@@ -11,7 +11,6 @@ export type {
   DragLocation,
   DropEffect,
   DragVisual,
-  GhostRect,
   GhostLocation,
   GhostSlotLocation,
   GhostOverlayLocation,
@@ -36,17 +35,13 @@ export type {
   DropTargetChangeEvent,
   DragItemHoverEvent,
   DropPriorityEvent,
-  DropPriorityRect,
   ItemHitbox,
   ItemHitboxEvent,
   VisualGeometryInvalidationEvent,
   VisualGeometryInvalidationReason,
 } from "./events";
 export { DROP_REJECT_PRIORITY } from "./events";
-export type {
-  ContainerLocalRect,
-  InsertionMarkerRectOptions,
-} from "./insertion-geometry";
+export type { InsertionMarkerRectOptions } from "./insertion-geometry";
 export {
   insertionMarkerRect,
   stockInsertionMarkerRectOptions,
@@ -65,9 +60,17 @@ export {
   createRenderTree,
   reduceRenderTree,
 } from "./render-state";
-export type { LayoutMainAxisAlign } from "./layout";
 export { Item } from "./item";
 export type { ItemOptions } from "./item";
 export type { ItemId, ItemMetadata, ItemSnapshot } from "./snapshot";
-export type { DragSession, DragSessionStatus } from "./drag/session";
+export type {
+  DragInputController,
+  DragSession,
+  DragSessionStatus,
+} from "./drag/session";
 export type { SortMode } from "./drag/drop-strategy";
+export { KeyboardDragController } from "./keyboard-controller";
+export type {
+  KeyboardDragBindings,
+  KeyboardDragControllerOptions,
+} from "./keyboard-controller";

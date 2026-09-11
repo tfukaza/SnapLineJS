@@ -145,7 +145,9 @@ snapline/
 **Key Methods:**
 - `addConnectorObject(connector)` - Register connector
 - `getConnector(name)` - Look up a connector by name
-- `remeasureDomGeometry()` - Re-measure the box and re-glue lines
+- `remeasureDomGeometry()` - Re-measure the box and re-glue lines. Measured
+  sizes are world-space (CSS pixels), so the hitbox matches the authored
+  size at any camera zoom
 - `setSize(width, height)` / `setSizeState(width, height)` - Drive size
 
 ### ConnectorMirror

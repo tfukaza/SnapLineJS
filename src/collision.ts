@@ -4,186 +4,42 @@
 import { BaseObject, CoreObject } from "./object";
 import { EventProxyFactory } from "./util";
 import type { Engine } from "./engine";
+import {
+  circlesIntersectValues,
+  pointIntersectsBounds,
+  pointIntersectsCircleValues,
+  rectBoundsIntersect,
+  rectBoundsIntersectCircle,
+  type Bounds,
+  type Point,
+} from "./geometry";
 
 type ColliderType = "rect" | "circle" | "point";
 
-/** A world-space point used by allocation-free collision helpers. */
-interface CollisionPoint {
-  x: number;
-  y: number;
+/**
+ * A collider's cached world-space bounds.
+ *
+ * `x`/`y` are always the top-left corner and `width`/`height` span the
+ * bounds, for every shape. `center` is the rectangle center, or the circle
+ * or point position; `radius` is zero for non-circles.
+ */
+interface ColliderBounds extends Bounds {
+  readonly center: Point;
+  readonly radius: number;
 }
 
-/** A normalized world-space rectangle with non-negative dimensions. */
-interface CollisionRect extends CollisionPoint {
-  width: number;
-  height: number;
-}
-
-/** A normalized world-space circle with a non-negative radius. */
-interface CollisionCircle extends CollisionPoint {
-  radius: number;
-}
-
-function pointIntersectsBounds(
-  x: number,
-  y: number,
-  left: number,
-  top: number,
-  right: number,
-  bottom: number,
-): boolean {
-  return x >= left && x <= right && y >= top && y <= bottom;
-}
-
-function rectBoundsIntersect(
-  aLeft: number,
-  aTop: number,
-  aRight: number,
-  aBottom: number,
-  bLeft: number,
-  bTop: number,
-  bRight: number,
-  bBottom: number,
-): boolean {
-  return (
-    aLeft < bRight &&
-    aRight > bLeft &&
-    aTop < bBottom &&
-    aBottom > bTop
-  );
-}
-
-function pointIntersectsCircleValues(
-  pointX: number,
-  pointY: number,
-  circleX: number,
-  circleY: number,
-  radius: number,
-): boolean {
-  if (radius < 0) return false;
-  const deltaX = pointX - circleX;
-  const deltaY = pointY - circleY;
-  return deltaX * deltaX + deltaY * deltaY <= radius * radius;
-}
-
-function circlesIntersectValues(
-  aX: number,
-  aY: number,
-  aRadius: number,
-  bX: number,
-  bY: number,
-  bRadius: number,
-): boolean {
-  return pointIntersectsCircleValues(aX, aY, bX, bY, aRadius + bRadius);
-}
-
-function rectBoundsIntersectCircle(
-  left: number,
-  top: number,
-  right: number,
-  bottom: number,
-  circleX: number,
-  circleY: number,
-  radius: number,
-): boolean {
-  const nearestX = Math.max(left, Math.min(circleX, right));
-  const nearestY = Math.max(top, Math.min(circleY, bottom));
-  return pointIntersectsCircleValues(
-    nearestX,
-    nearestY,
-    circleX,
-    circleY,
-    radius,
-  );
-}
-
-/** Point/rectangle collision with edge-inclusive containment. */
-function pointIntersectsRect(
-  point: CollisionPoint,
-  rect: CollisionRect,
-): boolean {
-  return pointIntersectsBounds(
-    point.x,
-    point.y,
-    rect.x,
-    rect.y,
-    rect.x + rect.width,
-    rect.y + rect.height,
-  );
-}
-
-/** Point/circle collision with edge-inclusive containment. */
-function pointIntersectsCircle(
-  point: CollisionPoint,
-  circle: CollisionCircle,
-): boolean {
-  return pointIntersectsCircleValues(
-    point.x,
-    point.y,
-    circle.x,
-    circle.y,
-    circle.radius,
-  );
-}
-
-/** Circle collision with edge-inclusive tangency. */
-function circlesIntersect(a: CollisionCircle, b: CollisionCircle): boolean {
-  return circlesIntersectValues(a.x, a.y, a.radius, b.x, b.y, b.radius);
-}
-
-/** Rectangle/circle collision with edge-inclusive tangency. */
-function rectIntersectsCircle(
-  rect: CollisionRect,
-  circle: CollisionCircle,
-): boolean {
-  return rectBoundsIntersectCircle(
-    rect.x,
-    rect.y,
-    rect.x + rect.width,
-    rect.y + rect.height,
-    circle.x,
-    circle.y,
-    circle.radius,
-  );
-}
-
-/** Rectangle collision requiring positive overlap; touching edges do not collide. */
-function rectsIntersect(a: CollisionRect, b: CollisionRect): boolean {
-  return rectBoundsIntersect(
-    a.x,
-    a.y,
-    a.x + a.width,
-    a.y + a.height,
-    b.x,
-    b.y,
-    b.x + b.width,
-    b.y + b.height,
-  );
-}
-
-/** Euclidean distance from a point to a rectangle; zero inside its bounds. */
-function distanceToRect(point: CollisionPoint, rect: CollisionRect): number {
-  if (pointIntersectsRect(point, rect)) return 0;
-  const x = Math.max(rect.x, Math.min(point.x, rect.x + rect.width));
-  const y = Math.max(rect.y, Math.min(point.y, rect.y + rect.height));
-  return Math.hypot(point.x - x, point.y - y);
-}
-
-interface ColliderWorldBounds {
-  x: number;
-  y: number;
-  scaleX: number;
-  scaleY: number;
-  width: number;
-  height: number;
-  radius: number;
-  left: number;
-  right: number;
-  top: number;
-  bottom: number;
-  centerX: number;
-  centerY: number;
-}
+const EMPTY_COLLIDER_BOUNDS: ColliderBounds = Object.freeze({
+  x: 0,
+  y: 0,
+  width: 0,
+  height: 0,
+  left: 0,
+  top: 0,
+  right: 0,
+  bottom: 0,
+  center: Object.freeze({ x: 0, y: 0 }),
+  radius: 0,
+});
 
 interface CollisionEvent {
   onCollide: null | ((thisObject: Collider, otherObject: Collider) => void);
@@ -276,21 +132,7 @@ class Collider extends CoreObject {
   #shapeVersion: number = 0;
   #cachedBoundsShapeVersion: number = -1;
   #cachedBoundsTransformEpoch: number = -1;
-  #cachedBounds: ColliderWorldBounds = {
-    x: 0,
-    y: 0,
-    scaleX: 1,
-    scaleY: 1,
-    width: 0,
-    height: 0,
-    radius: 0,
-    left: 0,
-    right: 0,
-    top: 0,
-    bottom: 0,
-    centerX: 0,
-    centerY: 0,
-  };
+  #cachedBounds: ColliderBounds = EMPTY_COLLIDER_BOUNDS;
 
   type: ColliderType;
 
@@ -347,7 +189,7 @@ class Collider extends CoreObject {
     this.#markShapeChange();
   }
 
-  getWorldBoundsSnapshot(): ColliderWorldBounds {
+  getWorldBoundsSnapshot(): ColliderBounds {
     if (
       this.#cachedBoundsShapeVersion === this.#shapeVersion &&
       this.#cachedBoundsTransformEpoch === this.getTransformEpoch()
@@ -356,8 +198,6 @@ class Collider extends CoreObject {
     }
 
     const transform = this.getWorldTransform();
-    const width = this.#width * Math.abs(transform.scaleX);
-    const height = this.#height * Math.abs(transform.scaleY);
     const radius =
       this.localRadius *
       Math.max(Math.abs(transform.scaleX), Math.abs(transform.scaleY));
@@ -380,20 +220,23 @@ class Collider extends CoreObject {
         ? transform.y + radius
         : Math.max(transform.y, bottomEdge);
 
+    const width = right - left;
+    const height = bottom - top;
+
     this.#cachedBounds = {
-      x: transform.x,
-      y: transform.y,
-      scaleX: transform.scaleX,
-      scaleY: transform.scaleY,
+      x: left,
+      y: top,
       width,
       height,
-      radius,
       left,
-      right,
       top,
+      right,
       bottom,
-      centerX: this.type === "rect" ? left + width / 2 : transform.x,
-      centerY: this.type === "rect" ? top + height / 2 : transform.y,
+      center:
+        this.type === "rect"
+          ? { x: left + width / 2, y: top + height / 2 }
+          : { x: transform.x, y: transform.y },
+      radius,
     };
     this.#cachedBoundsShapeVersion = this.#shapeVersion;
     this.#cachedBoundsTransformEpoch = this.getTransformEpoch();
@@ -464,8 +307,8 @@ class Collider extends CoreObject {
       return pointIntersectsCircleValues(
         x,
         y,
-        bounds.x,
-        bounds.y,
+        bounds.center.x,
+        bounds.center.y,
         bounds.radius,
       );
     }
@@ -640,7 +483,7 @@ class CollisionEngine {
    * preserve collider registration order and are intentionally unfiltered;
    * callers own any label, admission, or input-target policy.
    */
-  queryPoint(point: { x: number; y: number }): Collider[] {
+  queryPoint(point: Point): Collider[] {
     return this.#objectList.filter((collider) =>
       collider.containsWorldPoint(point.x, point.y),
     );
@@ -660,11 +503,11 @@ class CollisionEngine {
   }
 
   #colliderCenterX(c: Collider): number {
-    return c.getWorldBoundsSnapshot().centerX;
+    return c.getWorldBoundsSnapshot().center.x;
   }
 
   #colliderCenterY(c: Collider): number {
-    return c.getWorldBoundsSnapshot().centerY;
+    return c.getWorldBoundsSnapshot().center.y;
   }
 
   detectCollisions() {
@@ -790,8 +633,8 @@ class CollisionEngine {
       rectBounds.top,
       rectBounds.right,
       rectBounds.bottom,
-      circleBounds.x,
-      circleBounds.y,
+      circleBounds.center.x,
+      circleBounds.center.y,
       circleBounds.radius,
     );
   }
@@ -800,8 +643,8 @@ class CollisionEngine {
     const rectBounds = rect.getWorldBoundsSnapshot();
     const pointBounds = point.getWorldBoundsSnapshot();
     return pointIntersectsBounds(
-      pointBounds.x,
-      pointBounds.y,
+      pointBounds.center.x,
+      pointBounds.center.y,
       rectBounds.left,
       rectBounds.top,
       rectBounds.right,
@@ -812,7 +655,13 @@ class CollisionEngine {
   #isCirclePointIntersecting(circle: CircleCollider, point: PointCollider) {
     const circleBounds = circle.getWorldBoundsSnapshot();
     const pointBounds = point.getWorldBoundsSnapshot();
-    return pointIntersectsCircle(pointBounds, circleBounds);
+    return pointIntersectsCircleValues(
+      pointBounds.center.x,
+      pointBounds.center.y,
+      circleBounds.center.x,
+      circleBounds.center.y,
+      circleBounds.radius,
+    );
   }
 
   #isCircleIntersecting(circleA: CircleCollider, circleB: CircleCollider) {
@@ -821,7 +670,14 @@ class CollisionEngine {
     }
     const boundsA = circleA.getWorldBoundsSnapshot();
     const boundsB = circleB.getWorldBoundsSnapshot();
-    return circlesIntersect(boundsA, boundsB);
+    return circlesIntersectValues(
+      boundsA.center.x,
+      boundsA.center.y,
+      boundsA.radius,
+      boundsB.center.x,
+      boundsB.center.y,
+      boundsB.radius,
+    );
   }
 
   #isPointPointIntersecting(pointA: PointCollider, pointB: PointCollider) {
@@ -830,20 +686,15 @@ class CollisionEngine {
     }
     const boundsA = pointA.getWorldBoundsSnapshot();
     const boundsB = pointB.getWorldBoundsSnapshot();
-    return boundsA.x === boundsB.x && boundsA.y === boundsB.y;
+    return (
+      boundsA.center.x === boundsB.center.x &&
+      boundsA.center.y === boundsB.center.y
+    );
   }
 }
 
 export {
-  type CollisionPoint,
-  type CollisionRect,
-  type CollisionCircle,
-  pointIntersectsRect,
-  pointIntersectsCircle,
-  circlesIntersect,
-  rectIntersectsCircle,
-  rectsIntersect,
-  distanceToRect,
+  type ColliderBounds,
   CollisionEngine,
   Collider,
   RectCollider,

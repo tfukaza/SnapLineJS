@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { edgesToCss } from "@snap-engine/core/geometry";
   import {
     insertionMarkerRect,
     stockInsertionMarkerRectOptions,
@@ -29,7 +30,7 @@
 
   const ghostStyle = $derived.by(() => {
     const origProp =
-      ghost.original.dragSnapshot?.box ?? ghost.original.currentDomProperty;
+      ghost.original.dragSnapshot?.box ?? ghost.original.box;
     if (ghost.type === "insertion-marker" || ghost.type === "pointer-preview") {
       const marker = ghost.type === "insertion-marker";
       const rect = marker
@@ -49,7 +50,7 @@
     }
     return (
       `width:${ghost.rect.width}px;height:${ghost.rect.height}px;` +
-      `margin:${origProp.margin.top}px ${origProp.margin.right}px ${origProp.margin.bottom}px ${origProp.margin.left}px;` +
+      `margin:${edgesToCss(origProp.margin)};` +
       "box-sizing:border-box;"
     );
   });

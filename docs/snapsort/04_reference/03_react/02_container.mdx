@@ -501,12 +501,15 @@ getItemHitbox?: (event: ItemHitboxEvent) => ItemHitbox;
 ```
 
 Local, synchronous geometry policy for direct-child hover and swap targeting.
-Return a world-space rectangle or circle.
+Return a world-space `Rect` or `Circle` (from `@snap-engine/core/geometry`):
+`{ shape: "rect", rect }` or `{ shape: "circle", circle }`.
 
 ```ts
+import { rectCenter } from "@snap-engine/core/geometry";
+
 const getItemHitbox = (event: ItemHitboxEvent): ItemHitbox => ({
-  shape: "rect",
-  rect: event.defaultRect,
+  shape: "circle",
+  circle: { ...rectCenter(event.defaultRect), radius: 24 },
 });
 ```
 
@@ -1314,8 +1317,7 @@ the stock adapter and choose marker presentation with
 `getItemHitbox` remains a direct-container geometry callback because its return
 value intentionally changes hover/swap targeting. It receives the dragged
 item, candidate `overItem`, direct owner, pointer, and frozen `defaultRect`.
-Return either `{ shape: "rect", rect }` or
-`{ shape: "circle", center, radius }`.
+Return either `{ shape: "rect", rect }` or `{ shape: "circle", circle }`.
 
 - Configure persistent and ghost structural callbacks once on the root.
   Their event locations route updates to the source and destination records.

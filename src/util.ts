@@ -1,4 +1,6 @@
-import type { DomElement, DomProperty, TransformProperty } from "./object";
+import { worldRectFromScreenRect, type ScreenToWorldMapper } from "./camera";
+import { ZERO_EDGES, type Edges, type ElementBox, type Rect } from "./geometry";
+import type { DomElement, TransformProperty } from "./object";
 
 /**
  * Merges defined override values onto a complete defaults object.
@@ -15,102 +17,130 @@ function mergeDefined<T extends object>(defaults: T, overrides: Partial<T>): T {
   return merged;
 }
 
-/**
- * Retrieves the position and dimensions of a DOM element in multiple coordinate spaces.
- *
- * Returns coordinates in world space (accounting for camera transform), camera space,
- * and screen space, along with transformed dimensions.
- *
- * @param engine - The engine instance containing camera information.
- * @param dom - The HTML element to measure.
- * @returns An object containing position and size in various coordinate systems.
- */
-function getDomProperty(engine: any, dom: DomElement) {
-  const rect = dom.getBoundingClientRect();
-  const css = window.getComputedStyle(dom);
-  const margin_top = parseFloat(css.marginTop) || 0;
-  const margin_right = parseFloat(css.marginRight) || 0;
-  const margin_bottom = parseFloat(css.marginBottom) || 0;
-  const margin_left = parseFloat(css.marginLeft) || 0;
-  const padding_top = parseFloat(css.paddingTop) || 0;
-  const padding_right = parseFloat(css.paddingRight) || 0;
-  const padding_bottom = parseFloat(css.paddingBottom) || 0;
-  const padding_left = parseFloat(css.paddingLeft) || 0;
-  const border_top = parseFloat(css.borderTopWidth) || 0;
-  const border_right = parseFloat(css.borderRightWidth) || 0;
-  const border_bottom = parseFloat(css.borderBottomWidth) || 0;
-  const border_left = parseFloat(css.borderLeftWidth) || 0;
+/** The CSS edge thicknesses read from an element's computed style. */
+interface MeasuredEdges {
+  readonly margin: Edges;
+  readonly padding: Edges;
+  readonly border: Edges;
+}
 
-  if (engine == null || engine.camera == null) {
-    return {
-      height: rect.height,
-      width: rect.width,
-      x: rect.left,
-      y: rect.top,
-      cameraX: rect.left,
-      cameraY: rect.top,
-      screenX: rect.left,
-      screenY: rect.top,
-      margin: {
-        top: margin_top,
-        right: margin_right,
-        bottom: margin_bottom,
-        left: margin_left,
-      },
-      padding: {
-        top: padding_top,
-        right: padding_right,
-        bottom: padding_bottom,
-        left: padding_left,
-      },
-      border: {
-        top: border_top,
-        right: border_right,
-        bottom: border_bottom,
-        left: border_left,
-      },
-    };
-  }
-  const [cameraX, cameraY] = engine.camera.getCameraFromScreen(
-    rect.left,
-    rect.top,
-  );
-  const [worldX, worldY] = engine.camera.getWorldFromCamera(cameraX, cameraY);
-  const [cameraWidth, cameraHeight] =
-    engine.camera.getCameraDeltaFromWorldDelta(rect.width, rect.height);
-  const [worldWidth, worldHeight] = engine.camera.getWorldDeltaFromCameraDelta(
-    cameraWidth,
-    cameraHeight,
-  );
+/** A frozen, all-zero element box used before the first DOM read. */
+const EMPTY_ELEMENT_BOX: ElementBox = Object.freeze({
+  x: 0,
+  y: 0,
+  width: 0,
+  height: 0,
+  screen: Object.freeze({ x: 0, y: 0, width: 0, height: 0 }),
+  margin: ZERO_EDGES,
+  padding: ZERO_EDGES,
+  border: ZERO_EDGES,
+});
 
+function sameEdges(a: Edges, b: Edges): boolean {
+  return (
+    a.top === b.top &&
+    a.right === b.right &&
+    a.bottom === b.bottom &&
+    a.left === b.left
+  );
+}
+
+/** A frozen edge set, reusing `previous` or `ZERO_EDGES` when values match. */
+function internEdges(
+  top: number,
+  right: number,
+  bottom: number,
+  left: number,
+  previous: Edges | undefined,
+): Edges {
+  const edges = { top, right, bottom, left };
+  if (previous && sameEdges(previous, edges)) return previous;
+  if (sameEdges(ZERO_EDGES, edges)) return ZERO_EDGES;
+  return Object.freeze(edges);
+}
+
+function readEdges(
+  css: CSSStyleDeclaration,
+  previous: ElementBox | undefined,
+): MeasuredEdges {
+  const px = (value: string) => parseFloat(value) || 0;
   return {
-    height: worldHeight,
-    width: worldWidth,
-    x: worldX,
-    y: worldY,
-    cameraX: cameraX,
-    cameraY: cameraY,
-    screenX: rect.left,
-    screenY: rect.top,
-    margin: {
-      top: margin_top,
-      right: margin_right,
-      bottom: margin_bottom,
-      left: margin_left,
-    },
-    padding: {
-      top: padding_top,
-      right: padding_right,
-      bottom: padding_bottom,
-      left: padding_left,
-    },
-    border: {
-      top: border_top,
-      right: border_right,
-      bottom: border_bottom,
-      left: border_left,
-    },
+    margin: internEdges(
+      px(css.marginTop),
+      px(css.marginRight),
+      px(css.marginBottom),
+      px(css.marginLeft),
+      previous?.margin,
+    ),
+    padding: internEdges(
+      px(css.paddingTop),
+      px(css.paddingRight),
+      px(css.paddingBottom),
+      px(css.paddingLeft),
+      previous?.padding,
+    ),
+    border: internEdges(
+      px(css.borderTopWidth),
+      px(css.borderRightWidth),
+      px(css.borderBottomWidth),
+      px(css.borderLeftWidth),
+      previous?.border,
+    ),
   };
+}
+
+/**
+ * Build an element box from a measured client rect and computed CSS edges.
+ *
+ * Pure: performs no DOM reads, so it can be exercised with a stub camera.
+ * The border box maps from screen to world space through `camera`: its
+ * origin through the camera transform and its size by the zoom. Computed
+ * CSS edges are already world-space for elements inside the camera layer
+ * (one world unit is one CSS pixel there), so they pass through unchanged.
+ * `screen` keeps the client rect exactly as measured.
+ */
+function elementBoxFromMeasurement(
+  camera: ScreenToWorldMapper | null,
+  clientRect: Rect,
+  edges: MeasuredEdges,
+): ElementBox {
+  const world = worldRectFromScreenRect(camera, clientRect);
+  return Object.freeze({
+    x: world.x,
+    y: world.y,
+    width: world.width,
+    height: world.height,
+    screen: Object.freeze({
+      x: clientRect.x,
+      y: clientRect.y,
+      width: clientRect.width,
+      height: clientRect.height,
+    }),
+    margin: edges.margin,
+    padding: edges.padding,
+    border: edges.border,
+  });
+}
+
+/**
+ * Measure an element's box: its transformed client rect and computed CSS
+ * margin, padding, and border widths.
+ *
+ * Forces layout, so call it only in a READ stage. Pass the element's
+ * previous box to reuse unchanged edge objects.
+ */
+function measureElementBox(
+  camera: ScreenToWorldMapper | null,
+  element: DomElement,
+  previous?: ElementBox,
+): ElementBox {
+  const rect = element.getBoundingClientRect();
+  const css = window.getComputedStyle(element);
+  return elementBoxFromMeasurement(
+    camera,
+    { x: rect.left, y: rect.top, width: rect.width, height: rect.height },
+    readEdges(css, previous),
+  );
 }
 
 /**
@@ -126,20 +156,76 @@ function generateTransformString(transform: TransformProperty) {
   return string;
 }
 
+const TRANSFORM_FUNCTION = /([a-zA-Z0-9]+)\(([^)]*)\)/g;
+
+/** A pixel length (`12px`, `-3.5px`, or a bare `0`), else `null`. */
+function parsePixelLength(value: string | undefined): number | null {
+  if (value === undefined) return null;
+  const trimmed = value.trim();
+  if (/^-?[\d.]+(e-?\d+)?px$/i.test(trimmed)) return parseFloat(trimmed);
+  return parseFloat(trimmed) === 0 ? 0 : null;
+}
+
 /**
- * Parses a CSS transform string to extract position values.
+ * Parses the translation and scale of a CSS transform string, such as the
+ * `translate3d(...) scale(...)` strings `generateTransformString` writes.
+ *
+ * Functions compose left to right, so a translate after a scale is scaled.
+ * Supported: `translate`, `translate3d`, `translateX`, `translateY` (pixel
+ * lengths only) and `scale`, `scaleX`, `scaleY`. Other functions, and
+ * translations in units other than `px`, are ignored.
  *
  * @param transform - A CSS transform string to parse.
- * @returns An object with x and y coordinates.
+ * @returns The composed translation (`x`, `y`, in pixels) and scale.
  */
-function parseTransformString(transform: string) {
-  const transformValues = transform.split("(")[1].split(")")[0].split(",");
-  return {
-    x: parseFloat(transformValues[0]),
-    y: parseFloat(transformValues[1]),
-    scaleX: parseFloat(transformValues[3]) || 1,
-    scaleY: parseFloat(transformValues[4]) || 1,
+function parseTransformString(transform: string): TransformProperty {
+  let x = 0;
+  let y = 0;
+  let scaleX = 1;
+  let scaleY = 1;
+  const translate = (dx: number | null, dy: number | null) => {
+    x += scaleX * (dx ?? 0);
+    y += scaleY * (dy ?? 0);
   };
+  for (const [, name, rawArgs] of transform.matchAll(TRANSFORM_FUNCTION)) {
+    const args = rawArgs.split(",");
+    switch (name) {
+      case "translate":
+      case "translate3d":
+        translate(parsePixelLength(args[0]), parsePixelLength(args[1] ?? "0"));
+        break;
+      case "translateX":
+        translate(parsePixelLength(args[0]), 0);
+        break;
+      case "translateY":
+        translate(0, parsePixelLength(args[0]));
+        break;
+      case "scale": {
+        const sx = parseFloat(args[0]);
+        const sy = args[1] === undefined ? sx : parseFloat(args[1]);
+        if (Number.isFinite(sx)) scaleX *= sx;
+        if (Number.isFinite(sy)) scaleY *= sy;
+        break;
+      }
+      case "scaleX": {
+        const sx = parseFloat(args[0]);
+        if (Number.isFinite(sx)) scaleX *= sx;
+        break;
+      }
+      case "scaleY": {
+        const sy = parseFloat(args[0]);
+        if (Number.isFinite(sy)) scaleY *= sy;
+        break;
+      }
+    }
+  }
+  return { x, y, scaleX, scaleY };
+}
+
+/** The pixel `transform-origin` offsets of a computed style value. */
+function parseTransformOrigin(origin: string): [number, number] {
+  const [x, y] = origin.trim().split(/\s+/);
+  return [parsePixelLength(x) ?? 0, parsePixelLength(y) ?? 0];
 }
 
 /**
@@ -198,28 +284,15 @@ function EventProxyFactory<BindObject, Callback extends object>(
   });
 }
 
-function cloneDomProperty(prop: DomProperty): DomProperty {
-  return {
-    x: prop.x,
-    y: prop.y,
-    height: prop.height,
-    width: prop.width,
-    scaleX: prop.scaleX,
-    scaleY: prop.scaleY,
-    screenX: prop.screenX,
-    screenY: prop.screenY,
-    margin: { ...prop.margin },
-    padding: { ...prop.padding },
-    border: { ...prop.border },
-  };
-}
-
+export type { MeasuredEdges };
 export {
   setDomStyle,
   EventProxyFactory,
-  getDomProperty,
-  cloneDomProperty,
+  EMPTY_ELEMENT_BOX,
+  measureElementBox,
+  elementBoxFromMeasurement,
   generateTransformString,
   parseTransformString,
+  parseTransformOrigin,
   mergeDefined,
 };

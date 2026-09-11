@@ -184,7 +184,8 @@ export function createControlledHarness() {
 }
 
 export function eventPositionAt(x: number, y: number) {
-  return { x, y, cameraX: x, cameraY: y, screenX: x, screenY: y };
+  const point = { x, y };
+  return { x, y, camera: point, screen: point };
 }
 
 /** targetHitTest accepting drops left of x=500 (far drops miss). */

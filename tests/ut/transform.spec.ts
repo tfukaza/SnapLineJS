@@ -2,16 +2,18 @@ import { expect, test } from "@playwright/test";
 import { BaseObject, CoreObject, ElementObject } from "../../src/object";
 import {
   CircleCollider,
-  circlesIntersect,
   CollisionEngine,
+  PointCollider,
+  RectCollider,
+} from "../../src/collision";
+import {
+  circlesIntersect,
   distanceToRect,
   pointIntersectsCircle,
   pointIntersectsRect,
-  PointCollider,
   rectIntersectsCircle,
-  RectCollider,
   rectsIntersect,
-} from "../../src/collision";
+} from "../../src/geometry";
 
 test.describe("allocation-free collision geometry", () => {
   const rect = { x: 10, y: 20, width: 30, height: 40 };
@@ -426,6 +428,32 @@ test.describe("Collider transforms", () => {
     expect(collider.worldRadius).toBe(40);
     expect(collider.worldTop).toBe(240);
     expect(collider.worldBottom).toBe(320);
+  });
+
+  test("world bounds anchor x/y at the top-left corner for every shape", () => {
+    const engine = createEngine();
+    const parent = new BaseObject(engine);
+    const circle = new CircleCollider(engine, parent, 10, 20, 15);
+    const mirrored = new RectCollider(engine, parent, 0, 0, 30, 40);
+    parent.worldTransform = { x: 100, y: 200, scaleX: -1, scaleY: 1 };
+
+    expect(circle.getWorldBoundsSnapshot()).toEqual({
+      x: 75,
+      y: 205,
+      width: 30,
+      height: 30,
+      left: 75,
+      top: 205,
+      right: 105,
+      bottom: 235,
+      center: { x: 90, y: 220 },
+      radius: 15,
+    });
+    const rect = mirrored.getWorldBoundsSnapshot();
+    expect([rect.x, rect.y, rect.width, rect.height]).toEqual([
+      70, 200, 30, 40,
+    ]);
+    expect(rect.center).toEqual({ x: 85, y: 220 });
   });
 });
 

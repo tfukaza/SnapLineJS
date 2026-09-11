@@ -419,3 +419,50 @@ test("tl anchor: the origin freezes once the min size is reached", async ({
   expect(Math.abs(brAfter.x - brBefore.x)).toBeLessThanOrEqual(4);
   expect(Math.abs(brAfter.y - brBefore.y)).toBeLessThanOrEqual(4);
 });
+
+// Under a zoomed camera every resize re-measures the node. The measured size
+// must be world-space (CSS pixels), or the next resize starts from the
+// on-screen size and the node jumps by the zoom factor.
+for (const [direction, wheelDeltaY] of [
+  ["out", 300],
+  ["in", -300],
+] as const) {
+  test(`consecutive resizes stay continuous after zooming ${direction}`, async ({
+    page,
+  }) => {
+    await page.goto("/snapline-resize?camera=1");
+    await expect(page.locator("[data-snapline-type='node']")).toHaveCount(3);
+    const nodeA = page.locator("[data-snapline-type='node']", {
+      hasText: "Resizable A",
+    });
+    const eastHandle = nodeA.locator(".resize-region[data-handle='e']");
+    const cssWidth = () => nodeA.evaluate((node) => node.offsetWidth);
+    const zoom = async () =>
+      (await nodeA.boundingBox())!.width / (await cssWidth());
+
+    // Zoom about the container's top-left corner so the nodes stay in view.
+    const canvas = (await page.locator("#node-ui-resize-canvas").boundingBox())!;
+    await page.mouse.move(canvas.x + 10, canvas.y + 10);
+    await page.keyboard.down("Control");
+    await page.mouse.wheel(0, wheelDeltaY);
+    await page.keyboard.up("Control");
+    await expect.poll(zoom).not.toBeCloseTo(1, 2);
+    const scale = await zoom();
+
+    const resizeEastBy = async (screenDx: number) => {
+      const from = await centerOf(eastHandle);
+      await dragFromTo(page, from, { x: from.x + screenDx, y: from.y });
+      await waitForAnimationFrame(page);
+      await waitForAnimationFrame(page);
+    };
+
+    const initial = await cssWidth();
+    await resizeEastBy(60);
+    const first = await cssWidth();
+    expect(first - initial).toBeCloseTo(60 / scale, -0.5);
+
+    await resizeEastBy(40);
+    const second = await cssWidth();
+    expect(second - first).toBeCloseTo(40 / scale, -0.5);
+  });
+}

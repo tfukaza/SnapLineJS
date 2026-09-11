@@ -1,7 +1,9 @@
+import type { Circle, Rect } from "@snap-engine/core/geometry";
 import {
   Container,
   DROP_REJECT_PRIORITY,
   Item,
+  KeyboardDragController,
   createRenderEntries,
   createRenderEntry,
   createRenderTree,
@@ -14,16 +16,15 @@ import {
   type ContainerAnimations,
   type ContainerCallbacks,
   type ContainerConfig,
-  type ContainerLocalRect,
   type ContainerOptions,
   type CreateVanillaAdapterOptions,
   type DragSession,
+  type DragLocation,
   type DropPriorityEvent,
   type GhostInsertEvent,
   type GhostLifecycleEvent,
   type GhostMoveEvent,
   type GhostRemoveEvent,
-  type GhostRect,
   type GhostState,
   type InsertionGapSegment,
   type InsertionMarkerNeighbor,
@@ -31,6 +32,8 @@ import {
   type InsertionMarkerState,
   type ItemInsertEvent,
   type ItemOptions,
+  type KeyboardDragBindings,
+  type KeyboardDragControllerOptions,
   type ItemMoveEvent,
   type ItemRemoveEvent,
   type ItemSwapEvent,
@@ -95,6 +98,18 @@ const constructedItem = new Item(engine, null, itemOptions);
 const constructedContainer = new Container(engine, null, {
   itemId: "tasks-root",
 });
+const keyboardBindings: KeyboardDragBindings = {
+  liftDrop: ["Enter", " "],
+  previous: { row: ["ArrowLeft"] },
+};
+const keyboardOptions: KeyboardDragControllerOptions = {
+  bindings: keyboardBindings,
+};
+const keyboardController = new KeyboardDragController(
+  constructedContainer,
+  keyboardOptions,
+);
+keyboardController.destroy();
 const reactItemProps: reactBinding.ItemProps = {
   children: null,
   itemId: "task-2",
@@ -142,7 +157,7 @@ const markerOptions: InsertionMarkerRectOptions = {
   startInset: 12,
   endInset: 8,
 };
-const markerRect: ContainerLocalRect = insertionMarkerRect(
+const markerRect: Rect = insertionMarkerRect(
   insertionMarker,
   markerOptions,
 );
@@ -152,8 +167,8 @@ const vanillaOptions: CreateVanillaAdapterOptions = {
   insertionMarker: markerOptions,
 };
 const vanillaAdapter: SnapSortAdapter = createVanillaAdapter(vanillaOptions);
-const worldRect: GhostRect = { x: 10, y: 20, width: 30, height: 40 };
-const localRect: ContainerLocalRect = toContainerLocalRect(
+const worldRect: Rect = { x: 10, y: 20, width: 30, height: 40 };
+const localRect: Rect = toContainerLocalRect(
   worldRect,
   container,
 );
@@ -178,6 +193,9 @@ void [
   reactBinding.Container,
   constructedItem,
   constructedContainer,
+  keyboardController,
+  keyboardBindings,
+  keyboardOptions,
   reactItemProps,
   reactContainerProps,
   containerOptions,
@@ -214,12 +232,60 @@ item.itemId = "replacement";
 // @ts-expect-error resolvedItemId was replaced by the non-null itemId property.
 item.resolvedItemId;
 
+const directSession: DragSession | null =
+  item.beginDirectDrag();
+
+void directSession;
+
 const observedRoot: Container = session.root;
-const observedItems: readonly Item[] = session.items;
+const _observedItems: readonly Item[] = session.items;
 const observedStatus = session.status;
 session.dragVisual = "preview";
 session.dropEffect = "none";
-session.handoff(observedItems);
+
+if (session.input.inputType === "pointer") {
+  const pointerId: number =
+    session.input.pointerId;
+  const startX: number =
+    session.input.start.x;
+  const pointerY: number =
+    session.input.pointer.y;
+
+  // @ts-expect-error Direct navigation is unavailable for pointer input.
+  session.input.moveNext();
+
+  void [pointerId, startX, pointerY];
+} else {
+  const candidates: readonly DragLocation[] =
+    session.input.candidates;
+  const currentTarget: DragLocation | null =
+    session.input.currentTarget;
+
+  const movedNext: boolean =
+    session.input.moveNext();
+  const movedPrevious: boolean =
+    session.input.movePrevious();
+  const movedTo: boolean =
+    session.input.moveTo(container, 0);
+  const dropped: boolean =
+    session.input.drop();
+  const cancelled: boolean =
+    session.input.cancel();
+
+  // @ts-expect-error Direct input has no physical pointer id.
+  session.input.pointerId;
+
+  void [
+    candidates,
+    currentTarget,
+    movedNext,
+    movedPrevious,
+    movedTo,
+    dropped,
+    cancelled,
+  ];
+}
+
 void [observedRoot, observedStatus];
 
 // @ts-expect-error the active session handle is installed by SnapSort.
@@ -231,9 +297,9 @@ session.sources.pop();
 // @ts-expect-error source locations are read-only.
 session.sources[0].index = 2;
 // @ts-expect-error session coordinates are read-only.
-session.pointer.x = 10;
+session.input.pointer.x = 10;
 // @ts-expect-error session coordinates are read-only.
-session.start.y = 10;
+session.input.start.y = 10;
 // @ts-expect-error status is lifecycle-owned.
 session.status = "active";
 // @ts-expect-error participants are lifecycle-owned.
@@ -339,7 +405,29 @@ import { removeGhostState as _removeGhostState } from "@snap-engine/snapsort";
 import { useSnapSortAwaitMutation as _useSnapSortAwaitMutation } from "@snap-engine/snapsort/react";
 // @ts-expect-error the deprecated React helper has no package subpath.
 import { useSnapSortAwaitMutation as _deepHelper } from "@snap-engine/snapsort/react/useSnapSortAwaitMutation";
+// @ts-expect-error GhostRect was replaced by core's geometry Rect.
+import type { GhostRect as _GhostRect } from "@snap-engine/snapsort";
+// @ts-expect-error ContainerLocalRect was replaced by core's geometry Rect.
+import type { ContainerLocalRect as _ContainerLocalRect } from "@snap-engine/snapsort";
+// @ts-expect-error DropPriorityRect was replaced by core's geometry Rect.
+import type { DropPriorityRect as _DropPriorityRect } from "@snap-engine/snapsort";
+// @ts-expect-error LayoutMainAxisAlign moved to @snap-engine/core/layout.
+import type { LayoutMainAxisAlign as _LayoutMainAxisAlign } from "@snap-engine/snapsort";
+import type { ItemHitbox } from "@snap-engine/snapsort";
 import { DragSession as DragSessionValue } from "@snap-engine/snapsort";
 
-// @ts-expect-error DragSession is a type-only public handle, not a constructor.
+const circleHitbox: ItemHitbox = {
+  shape: "circle",
+  circle: { x: 0, y: 0, radius: 4 } satisfies Circle,
+};
+const legacyCircleHitbox: ItemHitbox = {
+  shape: "circle",
+  // @ts-expect-error circle hitboxes carry a geometry Circle, not center/radius.
+  center: { x: 0, y: 0 },
+  radius: 4,
+};
+void circleHitbox;
+void legacyCircleHitbox;
+
+// @ts-expect-error DragSession is a type-only public view, not a constructor.
 new DragSessionValue();

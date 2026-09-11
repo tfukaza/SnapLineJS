@@ -1,3 +1,4 @@
+import type { Rect } from "@snap-engine/core/geometry";
 import type { AnimationConfig } from "../container";
 import type { Container } from "../container";
 import type { Item } from "../item";
@@ -7,8 +8,8 @@ import {
   buildGhostSlotLocation,
   updateGhostState,
 } from "../event-builders";
-import type { DragLocation, GhostRect, GhostState } from "../events";
-import { virtualEntrySizeFor } from "../layout";
+import type { DragLocation, GhostState } from "../events";
+import { virtualEntrySizeFor } from "@snap-engine/core/layout";
 import {
   assertCanFireGhostInsert,
   assertCanFireGhostMove,
@@ -184,7 +185,7 @@ function anchorRectFor(
   session: DragSession,
   container: Container,
   member: Item,
-): GhostRect {
+): Rect {
   const box = session.dragBoxFor(member);
   const containerSnapshot = container.dragSnapshot;
   if (!containerSnapshot) {
@@ -207,7 +208,7 @@ function ensureFlowGhostRun(
   session: DragSession,
   container: Container,
   index: number,
-  rects: readonly GhostRect[],
+  rects: readonly Rect[],
 ): Item[] {
   const run = session.flowGhostRun;
   if (run.length !== 0 && run.length !== session.items.length) {
@@ -287,7 +288,7 @@ function commitFlowGhostRun(
   container: Container,
   index: number,
   run: readonly Item[],
-  rects: readonly GhostRect[],
+  rects: readonly Rect[],
 ): void {
   const current = currentFlowPlacement(session);
   const rawIndex = rawFlowInsertionIndex(
@@ -430,8 +431,8 @@ function drop(session: DragSession): void {
   const root = session.root;
   const dropItemIds = items.map((member) => member.itemId);
   const dropRects = items.map(() => ({
-    first: null as DOMRect | null,
-    last: null as DOMRect | null,
+    first: null as Rect | null,
+    last: null as Rect | null,
     element: null as HTMLElement | null,
   }));
   let dropAnimationConfig: AnimationConfig | null = null;

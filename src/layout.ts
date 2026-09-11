@@ -1,9 +1,59 @@
-import type { DomProperty } from "@snap-engine/core";
-import type { ItemSnapshot, LayoutDirection, LayoutWrap } from "./snapshot";
+/**
+ * Layout simulation over measured box trees.
+ *
+ * Given a frozen tree of measured boxes (typically captured from the DOM at
+ * the start of a gesture), this module infers the metrics the browser used —
+ * content-box start offsets, main/cross gaps, line sizes, wrap capacity — and
+ * re-runs that layout with nodes removed and virtual entries inserted. It
+ * never reads the DOM, so a plan built from one snapshot answers any number
+ * of "what if" questions without layout thrash.
+ *
+ * Two backends share one plan:
+ * - `flow` re-accumulates entries along the main axis and wraps them against
+ *   the measured capacity (flexbox-style flow).
+ * - `slots` places entries into measured track positions by index, the basis
+ *   for simulating CSS grid.
+ */
+import {
+  addEdges,
+  contentOffset,
+  contentRect,
+  outsetRect,
+  type Axis,
+  type BoxModel,
+  type Dimension,
+  type Edges,
+  type Point,
+  type Rect,
+  type Size,
+} from "./geometry";
 
-export type { LayoutDirection, LayoutMainAxisAlign } from "./snapshot";
-type AxisName = "x" | "y";
-type SizeName = "width" | "height";
+/** Main-axis direction of a layout container. */
+export type LayoutDirection = "column" | "row";
+
+/** Main-axis alignment of a layout container's lines. */
+export type LayoutMainAxisAlign = "start" | "center";
+
+/** Layout backend: accumulated flow, or measured grid slots. */
+export type LayoutModel = "flow" | "slots";
+
+/** Whether a flow container may wrap onto additional lines. */
+export type LayoutWrap = "auto" | "nowrap";
+
+/**
+ * One node in a measured layout tree. Leaves only need `box`; containers
+ * also describe how they lay out their `children`.
+ */
+export interface LayoutNode<Child extends LayoutNode<Child>> {
+  readonly box: BoxModel;
+  readonly children: readonly Child[];
+  readonly direction: LayoutDirection;
+  readonly mainAxisAlign: LayoutMainAxisAlign;
+  readonly layoutModel: LayoutModel;
+  readonly wrap: LayoutWrap;
+  readonly stretchItems: boolean;
+}
+
 /**
  * Tolerance for main-axis wrap comparisons. Measured geometry is noisy well
  * beyond double-precision: browsers lay out on a snapped grid (Blink 1/64px,
@@ -19,23 +69,37 @@ type SizeName = "width" | "height";
  * genuinely overflow would under-wrap; 0.05px sits ~5x above the worst
  * observed noise and ~100x below typical feature scale.
  */
-const LAYOUT_EPSILON = 0.05;
-const LINE_RESET_EPSILON = 1;
+export const LAYOUT_WRAP_TOLERANCE = 0.05;
 
-/** @internal Whether measured main-axis coordinates begin a wrapped line. */
+/**
+ * How far a measured main-axis start must move backwards before it counts
+ * as the start of a new visual line, absorbing sub-pixel jitter between
+ * items on the same line.
+ */
+export const LAYOUT_LINE_BREAK_TOLERANCE = 1;
+
+/**
+ * Maximum spread between inter-row residuals for a slot grid to count as
+ * content-sized rows (rows that grow with their tallest entry) rather than
+ * fixed template tracks.
+ */
+const SLOT_ROW_RESIDUAL_TOLERANCE = 0.75;
+
+/** Whether measured main-axis coordinates begin a wrapped line. */
 export function startsNewVisualLine(
   wrap: LayoutWrap,
   previousMainStart: number,
   nextMainStart: number,
 ): boolean {
   return (
-    wrap !== "nowrap" && nextMainStart < previousMainStart - LINE_RESET_EPSILON
+    wrap !== "nowrap" &&
+    nextMainStart < previousMainStart - LAYOUT_LINE_BREAK_TOLERANCE
   );
 }
 
-/** @internal Whether a measured flow layout can create another visual line. */
-export function flowLayoutCanWrap<T>(
-  container: ItemSnapshot<T>,
+/** Whether a measured flow layout can create another visual line. */
+export function flowLayoutCanWrap<N extends LayoutNode<N>>(
+  container: N,
   axes: FlowAxes,
   measuredLineCount: number,
 ): boolean {
@@ -45,14 +109,16 @@ export function flowLayoutCanWrap<T>(
   );
 }
 
+/** Axis and dimension names for a flow direction. */
 export interface FlowAxes {
   readonly direction: LayoutDirection;
-  readonly main: AxisName;
-  readonly cross: AxisName;
-  readonly mainSize: SizeName;
-  readonly crossSize: SizeName;
+  readonly main: Axis;
+  readonly cross: Axis;
+  readonly mainSize: Dimension;
+  readonly crossSize: Dimension;
 }
 
+/** Layout metrics inferred from a container's measured children. */
 export interface FlowMetrics {
   readonly mainStart: number;
   readonly crossStart: number;
@@ -72,83 +138,92 @@ export interface FlowMetrics {
   readonly measuredMainExtent: number;
 }
 
-/** @internal One measured visual line in content-box-relative coordinates. */
-export interface SnapshotVisualLine<T> {
-  readonly snapshots: readonly ItemSnapshot<T>[];
+/** One measured visual line in content-box-relative coordinates. */
+export interface VisualLine<N> {
+  readonly nodes: readonly N[];
   readonly crossStart: number;
   readonly crossSize: number;
 }
 
-export interface LayoutFilter<T> {
-  excludeSnapshots?: Set<ItemSnapshot<T>>;
-  excludeValues?: Set<T>;
+/** The size and margins of an entry that is not (yet) in the tree. */
+export interface VirtualEntry extends Size {
+  readonly margin: Edges;
 }
 
-export interface VirtualLayoutEntry {
-  width: number;
-  height: number;
-  margin: DomProperty["margin"];
+/** A virtual entry inserted into `container` before child `index`. */
+export interface VirtualInsertion<N> {
+  readonly container: N;
+  readonly index: number;
+  readonly entry: VirtualEntry;
 }
 
-export interface VirtualInsertion<T> {
-  container: ItemSnapshot<T>;
-  index: number;
-  entry: VirtualLayoutEntry;
+/** Simulated positions for one container's children and virtual entries. */
+export interface LayoutPositions<N> {
+  readonly itemPositions: Map<N, Point>;
+  readonly virtualRects: Map<VirtualInsertion<N>, Rect>;
 }
 
-export interface VirtualDimensions {
-  width: number;
-  height: number;
+/** Deterministic work-count hooks for tests. */
+export interface LayoutPlanDiagnostics<N> {
+  onNodeVisit?: (node: N) => void;
 }
 
-export interface FlowPositionResult<T> {
-  itemPositions: Map<ItemSnapshot<T>, { x: number; y: number }>;
-  virtualRects: Map<
-    VirtualInsertion<T>,
-    { x: number; y: number; width: number; height: number }
-  >;
+/** Options for {@link createLayoutResolutionPlan}. */
+export interface LayoutPlanOptions<N> {
+  /** Children to leave out of the layout (for example, dragged nodes). */
+  readonly exclude?: (node: N) => boolean;
+  /** Virtual entries folded into each container's cached dimensions. */
+  readonly insertions?: readonly VirtualInsertion<N>[];
+  /**
+   * Wrap comparison tolerance, in the tree's units. Defaults to
+   * `LAYOUT_WRAP_TOLERANCE`, which is calibrated for CSS pixels; for boxes
+   * measured under a zoomed camera, divide it by the zoom so the tolerance
+   * stays constant on screen, where browser measurement noise lives.
+   */
+  readonly wrapTolerance?: number;
+  readonly diagnostics?: LayoutPlanDiagnostics<N>;
 }
 
-type FlowEntry<T> =
-  | { kind: "item"; item: ItemSnapshot<T>; width: number; height: number }
+/** The cached layout inputs for one container in a resolution plan. */
+export interface LayoutContainerPlan<N> {
+  readonly container: N;
+  readonly axes: FlowAxes;
+  readonly contentSize: Size;
+  readonly metrics: FlowMetrics;
+  readonly eligibleChildren: readonly N[];
+}
+
+/** An immutable layout plan for one frozen tree. */
+export interface LayoutResolutionPlan<N> {
+  containerPlan(container: N): LayoutContainerPlan<N>;
+  layoutPositions(
+    container: N,
+    startX: number,
+    startY: number,
+    localInsertions?: readonly VirtualInsertion<N>[],
+  ): LayoutPositions<N>;
+  virtualDimensions(container: N): Size;
+}
+
+type FlowEntry<N> =
+  | { kind: "item"; item: N; width: number; height: number }
   | {
       kind: "virtual";
-      insertion: VirtualInsertion<T>;
+      insertion: VirtualInsertion<N>;
       width: number;
       height: number;
     };
 
-interface FlowLine<T> {
-  entries: FlowEntry<T>[];
+interface FlowLine<N> {
+  entries: FlowEntry<N>[];
   mainSize: number;
   crossSize: number;
 }
 
-export interface LayoutPlanDiagnostics<T> {
-  // Internal deterministic work-count hook; not exported by the package root.
-  onSnapshotVisit?: (snapshot: ItemSnapshot<T>) => void;
-}
-
-export interface LayoutContainerPlan<T> {
-  readonly snapshot: ItemSnapshot<T>;
-  readonly axes: FlowAxes;
-  readonly contentSize: Readonly<{ width: number; height: number }>;
-  readonly metrics: FlowMetrics;
-  readonly eligibleChildren: readonly ItemSnapshot<T>[];
-}
-
-export interface LayoutResolutionPlan<T> {
-  containerPlan(container: ItemSnapshot<T>): LayoutContainerPlan<T>;
-  layoutPositions(
-    container: ItemSnapshot<T>,
-    startX: number,
-    startY: number,
-    localInsertions?: readonly VirtualInsertion<T>[],
-  ): FlowPositionResult<T>;
-  virtualDimensions(container: ItemSnapshot<T>): VirtualDimensions;
-}
-
-function trailingMainMargin<T>(entry: FlowEntry<T>, axes: FlowAxes): number {
+function trailingMainMargin<N extends LayoutNode<N>>(
+  entry: FlowEntry<N>,
+  axes: FlowAxes,
+): number {
   const margin =
     entry.kind === "item"
       ? entry.item.box.margin
@@ -156,6 +231,7 @@ function trailingMainMargin<T>(entry: FlowEntry<T>, axes: FlowAxes): number {
   return axes.main === "x" ? margin.right : margin.bottom;
 }
 
+/** Axis and dimension names for `direction`. */
 export function flowAxesForDirection(direction: LayoutDirection): FlowAxes {
   if (direction === "row") {
     return {
@@ -176,97 +252,64 @@ export function flowAxesForDirection(direction: LayoutDirection): FlowAxes {
   };
 }
 
+/** A point from main- and cross-axis coordinates. */
 export function pointFromAxes(
   axes: FlowAxes,
   main: number,
   cross: number,
-): { x: number; y: number } {
+): Point {
   return axes.main === "x" ? { x: main, y: cross } : { x: cross, y: main };
 }
 
-export function contentBoxOrigin(prop: DomProperty): { x: number; y: number } {
+/** `child`'s offset from `container`'s content-box origin. */
+export function childRelativeOffset(container: BoxModel, child: Point): Point {
+  const offset = contentOffset(container);
   return {
-    x: prop.x + prop.border.left + prop.padding.left,
-    y: prop.y + prop.border.top + prop.padding.top,
+    x: child.x - container.x - offset.x,
+    y: child.y - container.y - offset.y,
   };
 }
 
-export function contentBoxSize(prop: DomProperty): {
-  width: number;
-  height: number;
-} {
-  return {
-    width: Math.max(
-      0,
-      prop.width -
-        prop.border.left -
-        prop.border.right -
-        prop.padding.left -
-        prop.padding.right,
-    ),
-    height: Math.max(
-      0,
-      prop.height -
-        prop.border.top -
-        prop.border.bottom -
-        prop.padding.top -
-        prop.padding.bottom,
-    ),
-  };
-}
-
-export function childRelativeOffset(
-  containerProp: DomProperty,
-  childProp: DomProperty,
-): { x: number; y: number } {
-  const origin = contentBoxOrigin(containerProp);
-  return {
-    x: childProp.x - origin.x,
-    y: childProp.y - origin.y,
-  };
-}
-
-export function layoutItems<T>(
-  container: ItemSnapshot<T>,
-  filter: LayoutFilter<T> = {},
-): ItemSnapshot<T>[] {
-  return container.children.filter(
-    (item) =>
-      !filter.excludeSnapshots?.has(item) &&
-      !filter.excludeValues?.has(item.value),
-  );
+/** `container`'s children, minus any `exclude` rejects. */
+export function layoutChildren<N extends LayoutNode<N>>(
+  container: N,
+  exclude?: (node: N) => boolean,
+): N[] {
+  return exclude
+    ? container.children.filter((child) => !exclude(child))
+    : container.children.slice();
 }
 
 /**
- * Infer measured visual lines once from the frozen snapshot. Layout metrics
- * and insertion geometry share this boundary detection so their understanding
- * of wrapping cannot drift apart.
+ * Infer measured visual lines once from the frozen tree. Layout metrics and
+ * insertion geometry share this boundary detection so their understanding of
+ * wrapping cannot drift apart.
  */
-export function inferSnapshotVisualLines<T>(
-  container: ItemSnapshot<T>,
+export function inferVisualLines<N extends LayoutNode<N>>(
+  container: N,
   axes: FlowAxes,
-): readonly SnapshotVisualLine<T>[] {
+): readonly VisualLine<N>[] {
   const lines: Array<{
-    snapshots: ItemSnapshot<T>[];
+    nodes: N[];
     crossStart: number;
     crossEnd: number;
   }> = [];
   let previousMainStart: number | null = null;
 
-  for (const snapshot of container.children) {
-    const offset = childRelativeOffset(container.box, snapshot.box);
+  for (const node of container.children) {
+    const offset = childRelativeOffset(container.box, node.box);
     const mainStart = offset[axes.main];
     const startsNewLine =
       previousMainStart !== null &&
       startsNewVisualLine(container.wrap, previousMainStart, mainStart);
     const crossStart = offset[axes.cross];
-    const crossEnd = crossStart + snapshot.box[axes.crossSize];
+    const crossEnd = crossStart + node.box[axes.crossSize];
 
     if (lines.length === 0 || startsNewLine) {
-      lines.push({ snapshots: [snapshot], crossStart, crossEnd });
+      lines.push({ nodes: [node], crossStart, crossEnd });
     } else {
       const line = lines[lines.length - 1];
-      line.snapshots.push(snapshot);
+      line.nodes.push(node);
       line.crossStart = Math.min(line.crossStart, crossStart);
       line.crossEnd = Math.max(line.crossEnd, crossEnd);
     }
@@ -276,7 +319,7 @@ export function inferSnapshotVisualLines<T>(
   return Object.freeze(
     lines.map((line) =>
       Object.freeze({
-        snapshots: Object.freeze([...line.snapshots]),
+        nodes: Object.freeze([...line.nodes]),
         crossStart: line.crossStart,
         crossSize: Math.max(0, line.crossEnd - line.crossStart),
       }),
@@ -294,27 +337,24 @@ function median(values: number[]): number {
 }
 
 /**
- * Size a virtual insertion entry for its *destination* container. The single
- * source of entry sizing for candidate simulation and the real flow spacer.
+ * Size a virtual entry for its *destination* container.
  *
  * For a `stretchItems` container the entry fills the container's cross axis
  * (width in column lists, height in row lists): content-box cross size minus
  * the entry's own cross margins, clamped to >= 0. The main-axis size always
- * stays the dragged item's own — a todo item's height is content-driven.
- * Without `stretchItems` the base size passes through unchanged (today's
- * behavior). Keeping ghost rects destination-sized is what makes candidate
- * center points correct when dragging between containers of different
- * widths (e.g. from a parent list into a narrower nested list).
+ * stays the entry's own. Without `stretchItems` the base size passes through
+ * unchanged. Keeping virtual rects destination-sized keeps their centers
+ * correct when an entry moves between containers of different widths.
  */
-export function virtualEntrySizeFor<T>(
-  container: ItemSnapshot<T>,
-  base: { width: number; height: number; margin: DomProperty["margin"] },
-): { width: number; height: number } {
+export function virtualEntrySizeFor<N extends LayoutNode<N>>(
+  container: N,
+  base: VirtualEntry,
+): Size {
   if (!container.stretchItems) {
     return { width: base.width, height: base.height };
   }
   const axes = flowAxesForDirection(container.direction);
-  const content = contentBoxSize(container.box);
+  const content = contentRect(container.box);
   const crossMargins =
     axes.cross === "x"
       ? base.margin.left + base.margin.right
@@ -325,8 +365,9 @@ export function virtualEntrySizeFor<T>(
     : { width: base.width, height: cross };
 }
 
-export function inferFlowLayoutMetrics<T>(
-  container: ItemSnapshot<T>,
+/** Infer start offsets, gaps, and line sizes from measured children. */
+export function inferFlowLayoutMetrics<N extends LayoutNode<N>>(
+  container: N,
   axes: FlowAxes,
 ): FlowMetrics {
   const ordered = container.children;
@@ -344,11 +385,11 @@ export function inferFlowLayoutMetrics<T>(
 
   const firstOffset = childRelativeOffset(container.box, ordered[0].box);
   const mainGaps: number[] = [];
-  const visualLines = inferSnapshotVisualLines(container, axes);
-  const lineBySnapshot = new Map<ItemSnapshot<T>, SnapshotVisualLine<T>>();
+  const visualLines = inferVisualLines(container, axes);
+  const lineByNode = new Map<N, VisualLine<N>>();
   for (const line of visualLines) {
-    for (const snapshot of line.snapshots) {
-      lineBySnapshot.set(snapshot, line);
+    for (const node of line.nodes) {
+      lineByNode.set(node, line);
     }
   }
   let measuredMainExtent = 0;
@@ -367,8 +408,7 @@ export function inferFlowLayoutMetrics<T>(
     const next = ordered[i + 1];
     if (next) {
       const nextOffset = childRelativeOffset(container.box, next.box);
-      const nextStartsNewLine =
-        lineBySnapshot.get(item) !== lineBySnapshot.get(next);
+      const nextStartsNewLine = lineByNode.get(item) !== lineByNode.get(next);
       if (!nextStartsNewLine) {
         const gap =
           nextOffset[axes.main] - (offset[axes.main] + item.box[axes.mainSize]);
@@ -396,14 +436,7 @@ export function inferFlowLayoutMetrics<T>(
   };
 }
 
-interface SlotRect {
-  readonly x: number;
-  readonly y: number;
-  readonly width: number;
-  readonly height: number;
-}
-
-interface SlotEntryRect extends SlotRect {
+interface SlotEntryRect extends Rect {
   readonly line: number;
   readonly crossOffset: number;
 }
@@ -412,14 +445,15 @@ interface FlowBackendPlan {
   readonly kind: "flow";
   readonly canWrap: boolean;
   readonly mainCapacity: number;
+  readonly wrapTolerance: number;
 }
 
 interface SlotBackendPlan {
   readonly kind: "slots";
-  readonly slots: readonly SlotRect[];
-  readonly fillAxis: AxisName;
-  readonly crossAxis: AxisName;
-  readonly crossSizeName: SizeName;
+  readonly slots: readonly Rect[];
+  readonly fillAxis: Axis;
+  readonly crossAxis: Axis;
+  readonly crossSizeName: Dimension;
   readonly lineOfSlot: readonly number[];
   readonly lineCrossStarts: readonly number[];
   readonly lineMaxItemCross: readonly number[];
@@ -430,29 +464,22 @@ interface SlotBackendPlan {
 
 type LayoutBackendPlan = FlowBackendPlan | SlotBackendPlan;
 
-interface ContainerPlanGeometry<T> extends LayoutContainerPlan<T> {
-  readonly entries: readonly FlowEntry<T>[];
+interface ContainerPlanGeometry<N> extends LayoutContainerPlan<N> {
+  readonly entries: readonly FlowEntry<N>[];
   readonly backend: LayoutBackendPlan;
 }
 
-interface InternalContainerPlan<T> extends ContainerPlanGeometry<T> {
-  readonly baseDimensions: VirtualDimensions;
+interface InternalContainerPlan<N> extends ContainerPlanGeometry<N> {
+  readonly baseDimensions: Size;
 }
 
-function localInsertionsFor<T>(
-  container: ItemSnapshot<T>,
-  insertions: readonly VirtualInsertion<T>[],
-): VirtualInsertion<T>[] {
-  return insertions.filter((insertion) => insertion.container === container);
-}
-
-function materializeEntries<T>(
-  plan: ContainerPlanGeometry<T>,
-  insertions: readonly VirtualInsertion<T>[],
-): FlowEntry<T>[] {
+function materializeEntries<N extends LayoutNode<N>>(
+  plan: ContainerPlanGeometry<N>,
+  insertions: readonly VirtualInsertion<N>[],
+): FlowEntry<N>[] {
   const entries = plan.entries.slice();
   for (const insertion of insertions) {
-    if (insertion.container !== plan.snapshot) continue;
+    if (insertion.container !== plan.container) continue;
     entries.splice(Math.max(0, Math.min(insertion.index, entries.length)), 0, {
       kind: "virtual",
       insertion,
@@ -463,8 +490,10 @@ function materializeEntries<T>(
   return entries;
 }
 
-function createSlotBackendPlan<T>(container: ItemSnapshot<T>): SlotBackendPlan {
-  // Slots remain unfiltered: the dragged item's measured box is still valid
+function createSlotBackendPlan<N extends LayoutNode<N>>(
+  container: N,
+): SlotBackendPlan {
+  // Slots remain unfiltered: an excluded child's measured box is still valid
   // geometry for whichever entry shifts into that slot.
   const slots = container.children.map((child) => {
     const rel = childRelativeOffset(container.box, child.box);
@@ -475,13 +504,13 @@ function createSlotBackendPlan<T>(container: ItemSnapshot<T>): SlotBackendPlan {
       height: child.box.height,
     });
   });
-  const fillAxis: AxisName =
+  const fillAxis: Axis =
     slots.length >= 2 &&
     Math.abs(slots[1].y - slots[0].y) > Math.abs(slots[1].x - slots[0].x)
       ? "y"
       : "x";
-  const crossAxis: AxisName = fillAxis === "x" ? "y" : "x";
-  const crossSizeName: SizeName = fillAxis === "x" ? "height" : "width";
+  const crossAxis: Axis = fillAxis === "x" ? "y" : "x";
+  const crossSizeName: Dimension = fillAxis === "x" ? "height" : "width";
 
   // Accumulate line membership, starts, and maxima together. Candidate
   // materialization can then reuse this measured geometry without rescanning
@@ -492,7 +521,9 @@ function createSlotBackendPlan<T>(container: ItemSnapshot<T>): SlotBackendPlan {
   const lineLengths: number[] = [];
   for (let index = 0; index < slots.length; index++) {
     const startsNewLine =
-      index === 0 || slots[index][fillAxis] < slots[index - 1][fillAxis] - 1;
+      index === 0 ||
+      slots[index][fillAxis] <
+        slots[index - 1][fillAxis] - LAYOUT_LINE_BREAK_TOLERANCE;
     if (startsNewLine) {
       lineCrossStarts.push(slots[index][crossAxis]);
       lineMaxItemCross.push(slots[index][crossSizeName]);
@@ -521,7 +552,10 @@ function createSlotBackendPlan<T>(container: ItemSnapshot<T>): SlotBackendPlan {
   }
   const contentSizedRows =
     residuals.length === 0 ||
-    residuals.every((residual) => Math.abs(residual - residuals[0]) <= 0.75);
+    residuals.every(
+      (residual) =>
+        Math.abs(residual - residuals[0]) <= SLOT_ROW_RESIDUAL_TOLERANCE,
+    );
 
   return Object.freeze({
     kind: "slots",
@@ -562,12 +596,12 @@ function slotForEntry(backend: SlotBackendPlan, index: number): SlotEntryRect {
  * separate: slot position is a function of index and measured track geometry,
  * while flow position is accumulated from entry dimensions.
  */
-function materializeSlotLayout<T>(
+function materializeSlotLayout<N extends LayoutNode<N>>(
   backend: SlotBackendPlan,
   startX: number,
   startY: number,
-  entries: FlowEntry<T>[],
-): FlowPositionResult<T> {
+  entries: FlowEntry<N>[],
+): LayoutPositions<N> {
   const entrySlots = entries.map((_, index) => slotForEntry(backend, index));
   const lineCount = entrySlots.length
     ? Math.max(...entrySlots.map((slot) => slot.line)) + 1
@@ -603,11 +637,8 @@ function materializeSlotLayout<T>(
     }
   }
 
-  const itemPositions = new Map<ItemSnapshot<T>, { x: number; y: number }>();
-  const virtualRects = new Map<
-    VirtualInsertion<T>,
-    { x: number; y: number; width: number; height: number }
-  >();
+  const itemPositions = new Map<N, Point>();
+  const virtualRects = new Map<VirtualInsertion<N>, Rect>();
   for (let index = 0; index < entries.length; index++) {
     const entry = entries[index];
     const slot = entrySlots[index];
@@ -641,16 +672,16 @@ function materializeSlotLayout<T>(
   return { itemPositions, virtualRects };
 }
 
-function materializeFlowLayout<T>(
-  plan: ContainerPlanGeometry<T>,
+function materializeFlowLayout<N extends LayoutNode<N>>(
+  plan: ContainerPlanGeometry<N>,
   backend: FlowBackendPlan,
   startX: number,
   startY: number,
-  entries: FlowEntry<T>[],
-): FlowPositionResult<T> {
-  const { axes, contentSize, metrics, snapshot: container } = plan;
-  const lines: FlowLine<T>[] = [];
-  let currentLine: FlowLine<T> = { entries: [], mainSize: 0, crossSize: 0 };
+  entries: FlowEntry<N>[],
+): LayoutPositions<N> {
+  const { axes, contentSize, metrics, container } = plan;
+  const lines: FlowLine<N>[] = [];
+  let currentLine: FlowLine<N> = { entries: [], mainSize: 0, crossSize: 0 };
   const pushCurrentLine = () => {
     if (currentLine.entries.length === 0) return;
     lines.push(currentLine);
@@ -669,7 +700,7 @@ function materializeFlowLayout<T>(
         metrics.mainGap +
         entryMainSize +
         entryTrailingMainMargin >
-        backend.mainCapacity + LAYOUT_EPSILON
+        backend.mainCapacity + backend.wrapTolerance
     ) {
       pushCurrentLine();
     }
@@ -682,11 +713,8 @@ function materializeFlowLayout<T>(
   }
   pushCurrentLine();
 
-  const itemPositions = new Map<ItemSnapshot<T>, { x: number; y: number }>();
-  const virtualRects = new Map<
-    VirtualInsertion<T>,
-    { x: number; y: number; width: number; height: number }
-  >();
+  const itemPositions = new Map<N, Point>();
+  const virtualRects = new Map<VirtualInsertion<N>, Rect>();
   const origin = { x: startX, y: startY };
   let cursorCross = origin[axes.cross] + metrics.crossStart;
   for (const line of lines) {
@@ -714,28 +742,28 @@ function materializeFlowLayout<T>(
   return { itemPositions, virtualRects };
 }
 
-function materializeLayout<T>(
-  plan: ContainerPlanGeometry<T>,
+function materializeLayout<N extends LayoutNode<N>>(
+  plan: ContainerPlanGeometry<N>,
   startX: number,
   startY: number,
-  localInsertions: readonly VirtualInsertion<T>[],
-): FlowPositionResult<T> {
+  localInsertions: readonly VirtualInsertion<N>[],
+): LayoutPositions<N> {
   const entries = materializeEntries(plan, localInsertions);
   return plan.backend.kind === "slots"
     ? materializeSlotLayout(plan.backend, startX, startY, entries)
     : materializeFlowLayout(plan, plan.backend, startX, startY, entries);
 }
 
-function dimensionsFromLayout<T>(
-  plan: ContainerPlanGeometry<T>,
-  localInsertions: readonly VirtualInsertion<T>[],
-): VirtualDimensions {
+function dimensionsFromLayout<N extends LayoutNode<N>>(
+  plan: ContainerPlanGeometry<N>,
+  localInsertions: readonly VirtualInsertion<N>[],
+): Size {
   const positions = materializeLayout(plan, 0, 0, localInsertions);
   let maxX = 0;
   let maxY = 0;
   for (const entry of plan.entries) {
     if (entry.kind !== "item") continue;
-    const rel = childRelativeOffset(plan.snapshot.box, entry.item.box);
+    const rel = childRelativeOffset(plan.container.box, entry.item.box);
     const position = positions.itemPositions.get(entry.item) ?? rel;
     maxX = Math.max(maxX, position.x + entry.width);
     maxY = Math.max(maxY, position.y + entry.height);
@@ -745,69 +773,54 @@ function dimensionsFromLayout<T>(
     maxY = Math.max(maxY, rect.y + rect.height);
   }
 
-  const container = plan.snapshot;
-  const snapshotSize = {
-    width: container.box.width,
-    height: container.box.height,
-  };
+  const box = plan.container.box;
   if (plan.entries.length === 0 && localInsertions.length === 0) {
-    return snapshotSize;
+    return { width: box.width, height: box.height };
   }
-  const virtualSize = {
-    width:
-      container.box.border.left +
-      container.box.padding.left +
-      maxX +
-      container.box.padding.right +
-      container.box.border.right,
-    height:
-      container.box.border.top +
-      container.box.padding.top +
-      maxY +
-      container.box.padding.bottom +
-      container.box.border.bottom,
-  };
+  const virtualSize = outsetRect(
+    { x: 0, y: 0, width: maxX, height: maxY },
+    addEdges(box.border, box.padding),
+  );
   return plan.axes.direction === "row"
-    ? {
-        width: snapshotSize.width,
-        height: Math.max(snapshotSize.height, virtualSize.height),
-      }
-    : { width: snapshotSize.width, height: virtualSize.height };
+    ? { width: box.width, height: Math.max(box.height, virtualSize.height) }
+    : { width: box.width, height: virtualSize.height };
 }
 
 /**
- * Build one immutable layout plan for a frozen drop-target resolution.
- * Descendant active insertions are folded into cached child dimensions, while
- * `layoutPositions` accepts the local insertion that replaces the container's
- * current pending ghost for an individual candidate.
+ * Build one immutable layout plan for a frozen tree.
+ *
+ * Every container's inputs are computed once and cached. `insertions` are
+ * folded into each container's cached dimensions, while `layoutPositions`
+ * accepts the local insertions for an individual candidate layout.
  */
-export function createLayoutResolutionPlan<T>(
-  root: ItemSnapshot<T>,
-  options: {
-    filter?: LayoutFilter<T>;
-    insertions?: readonly VirtualInsertion<T>[];
-    diagnostics?: LayoutPlanDiagnostics<T>;
-  } = {},
-): LayoutResolutionPlan<T> {
-  const filter = options.filter ?? {};
+export function createLayoutResolutionPlan<N extends LayoutNode<N>>(
+  root: N,
+  options: LayoutPlanOptions<N> = {},
+): LayoutResolutionPlan<N> {
+  const exclude = options.exclude;
+  const wrapTolerance = options.wrapTolerance ?? LAYOUT_WRAP_TOLERANCE;
   const insertions = Object.freeze([...(options.insertions ?? [])]);
-  const plans = new Map<ItemSnapshot<T>, InternalContainerPlan<T>>();
+  const plans = new Map<N, InternalContainerPlan<N>>();
 
-  const build = (container: ItemSnapshot<T>): InternalContainerPlan<T> => {
+  const build = (container: N): InternalContainerPlan<N> => {
     const cached = plans.get(container);
     if (cached) return cached;
-    options.diagnostics?.onSnapshotVisit?.(container);
-    const eligibleChildren = Object.freeze(layoutItems(container, filter));
-    const childPlans = new Map<ItemSnapshot<T>, InternalContainerPlan<T>>();
+    options.diagnostics?.onNodeVisit?.(container);
+    const eligibleChildren = Object.freeze(layoutChildren(container, exclude));
+    const childPlans = new Map<N, InternalContainerPlan<N>>();
     for (const child of eligibleChildren) {
       childPlans.set(child, build(child));
     }
 
     const axes = Object.freeze(flowAxesForDirection(container.direction));
-    const contentSize = Object.freeze(contentBoxSize(container.box));
+    const content = contentRect(container.box);
+    const contentSize = Object.freeze({
+      width: content.width,
+      height: content.height,
+    });
     const metrics = Object.freeze(inferFlowLayoutMetrics(container, axes));
     const entries = Object.freeze(
-      eligibleChildren.map((child): FlowEntry<T> => {
+      eligibleChildren.map((child): FlowEntry<N> => {
         const dimensions =
           child.children.length > 0
             ? childPlans.get(child)!.baseDimensions
@@ -832,18 +845,21 @@ export function createLayoutResolutionPlan<T>(
               contentSize[axes.mainSize],
               metrics.measuredMainExtent,
             ),
+            wrapTolerance,
           });
 
     const geometry = {
-      snapshot: container,
+      container,
       axes,
       contentSize,
       metrics,
       eligibleChildren,
       entries,
       backend,
-    } satisfies ContainerPlanGeometry<T>;
-    const localInsertions = localInsertionsFor(container, insertions);
+    } satisfies ContainerPlanGeometry<N>;
+    const localInsertions = insertions.filter(
+      (insertion) => insertion.container === container,
+    );
     const baseDimensions = Object.freeze(
       dimensionsFromLayout(geometry, localInsertions),
     );
@@ -852,61 +868,32 @@ export function createLayoutResolutionPlan<T>(
     return plan;
   };
 
+  const planFor = (container: N): InternalContainerPlan<N> => {
+    const plan = plans.get(container);
+    if (!plan) throw new Error("Node is outside this layout resolution");
+    return plan;
+  };
+
   build(root);
   return Object.freeze({
-    containerPlan(container: ItemSnapshot<T>): LayoutContainerPlan<T> {
-      const plan = plans.get(container);
-      if (!plan) throw new Error("Snapshot is outside this layout resolution");
-      return plan;
+    containerPlan(container: N): LayoutContainerPlan<N> {
+      return planFor(container);
     },
     layoutPositions(
-      container: ItemSnapshot<T>,
+      container: N,
       startX: number,
       startY: number,
-      localInsertions: readonly VirtualInsertion<T>[] = [],
-    ): FlowPositionResult<T> {
-      const plan = plans.get(container);
-      if (!plan) throw new Error("Snapshot is outside this layout resolution");
-      return materializeLayout(plan, startX, startY, localInsertions);
+      localInsertions: readonly VirtualInsertion<N>[] = [],
+    ): LayoutPositions<N> {
+      return materializeLayout(
+        planFor(container),
+        startX,
+        startY,
+        localInsertions,
+      );
     },
-    virtualDimensions(container: ItemSnapshot<T>): VirtualDimensions {
-      const plan = plans.get(container);
-      if (!plan) throw new Error("Snapshot is outside this layout resolution");
-      return plan.baseDimensions;
+    virtualDimensions(container: N): Size {
+      return planFor(container).baseDimensions;
     },
   });
-}
-
-export function flowLayoutPositions<T>(
-  container: ItemSnapshot<T>,
-  startX: number,
-  startY: number,
-  options: {
-    filter?: LayoutFilter<T>;
-    insertions?: VirtualInsertion<T>[];
-  } = {},
-): FlowPositionResult<T> {
-  const insertions = options.insertions ?? [];
-  const plan = createLayoutResolutionPlan(container, {
-    filter: options.filter,
-    insertions,
-  });
-  return plan.layoutPositions(
-    container,
-    startX,
-    startY,
-    localInsertionsFor(container, insertions),
-  );
-}
-
-export function virtualDimensions<T>(
-  container: ItemSnapshot<T>,
-  options: {
-    filter?: LayoutFilter<T>;
-    insertions?: VirtualInsertion<T>[];
-  } = {},
-): VirtualDimensions {
-  return createLayoutResolutionPlan(container, options).virtualDimensions(
-    container,
-  );
 }

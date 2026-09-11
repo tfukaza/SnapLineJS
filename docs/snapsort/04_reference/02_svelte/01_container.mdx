@@ -497,12 +497,15 @@ getItemHitbox?: (event: ItemHitboxEvent) => ItemHitbox;
 ```
 
 Local, synchronous geometry policy for direct-child hover and swap targeting.
-Return a world-space rectangle or circle.
+Return a world-space `Rect` or `Circle` (from `@snap-engine/core/geometry`):
+`{ shape: "rect", rect }` or `{ shape: "circle", circle }`.
 
 ```ts
+import { rectCenter } from "@snap-engine/core/geometry";
+
 const getItemHitbox = (event: ItemHitboxEvent): ItemHitbox => ({
-  shape: "rect",
-  rect: event.defaultRect,
+  shape: "circle",
+  circle: { ...rectCenter(event.defaultRect), radius: 24 },
 });
 ```
 

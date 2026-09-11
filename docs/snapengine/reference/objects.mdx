@@ -96,10 +96,29 @@ object.schedule(() => {
 
 ```ts
 object.schedule(() => {
-  object.readDom();
-  object.saveDomProperety("READ_1");
+  const box = object.readDom();
+  console.log(box.x, box.y, box.width, box.height, box.padding.left);
+  object.saveWorldPosition("READ_1");
 }, { stage: "READ_1" });
 ```
+
+### Element Boxes
+
+`readDom()` measures the element and returns an `ElementBox`
+(see [Geometry](/docs/snapengine/reference/geometry)):
+
+| Field | Description |
+|-------|-------------|
+| `x`, `y`, `width`, `height` | The border box in world units (CSS pixels inside the camera layer, at any zoom). |
+| `margin`, `padding`, `border` | Computed CSS edge thicknesses, also world units. |
+| `screen` | The transformed viewport rectangle, exactly as `getBoundingClientRect()` reports it. |
+
+Every read produces a new frozen snapshot, so a box you keep never changes
+afterwards. `elementObject.box` always returns the latest one.
+
+`readDom({ unapplyTransform: true })` removes the element's own inline
+`translate` and `scale` (honoring its computed `transform-origin`) to report
+its untransformed layout box; `screen` still reports what is rendered.
 
 ## Public API
 
@@ -117,9 +136,10 @@ object.schedule(() => {
 | `object.schedule(callback, config)` | Queues frame work. |
 | `object.destroy()` | Removes engine registrations and related resources. |
 | `elementObject.element` | DOM element assigned to an element object. |
-| `elementObject.readDom(config?, stage?)` | Reads and caches DOM geometry. |
-| `elementObject.getDomProperty(stage?)` | Returns cached DOM geometry. |
-| `elementObject.copyDomProperty(fromStage, toStage)` | Copies cached DOM geometry between read stages. |
-| `elementObject.saveDomProperety(stage?)` | Saves cached DOM position into the object transform. |
+| `elementObject.readDom(config?, stage?)` | Measures the element and returns a new frozen `ElementBox`. |
+| `elementObject.box` | The most recent measured `ElementBox`. |
+| `elementObject.getStageBox(stage?)` | The box captured by the last read in a read stage. |
+| `elementObject.copyStageBox(fromStage, toStage)` | Makes one read stage report another stage's box. |
+| `elementObject.saveWorldPosition(stage?)` | Copies a stage box's position into the object's world transform. |
 | `elementObject.writeDom()` | Applies style, class, and data attribute state. |
 | `elementObject.writeTransform()` | Applies transform state to the DOM element. |

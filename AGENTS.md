@@ -30,7 +30,7 @@ SnapEngineJS/
 
 **Package:** `@snap-engine/core`
 **Purpose:** Core interactivity engine
-**Build:** Yes → `dist/`
+**Build:** Raw-source package (`exports` → `src/*.ts`); `npm run build` emits `dist/` as a build check
 
 See `src/AGENTS.md` for module details.
 
@@ -38,6 +38,8 @@ See `src/AGENTS.md` for module details.
 - `@snap-engine/core` - Main export
 - `@snap-engine/core/animation` - Animation system
 - `@snap-engine/core/collision` - Collision detection
+- `@snap-engine/core/geometry` - Shared geometry types and pure helpers
+- `@snap-engine/core/layout` - Layout simulation over measured box trees
 - `@snap-engine/core/debug` - Debug utilities
 
 ## Asset Packages (`assets/`)
@@ -149,7 +151,9 @@ Each asset package needs path mappings. A unified package at
       "@snap-engine/core": ["../../src/index.ts"],
       "@snap-engine/core/animation": ["../../src/animation.ts"],
       "@snap-engine/core/collision": ["../../src/collision.ts"],
-      "@snap-engine/core/debug": ["../../src/debug.ts"]
+      "@snap-engine/core/debug": ["../../src/debug.ts"],
+      "@snap-engine/core/geometry": ["../../src/geometry.ts"],
+      "@snap-engine/core/layout": ["../../src/layout.ts"]
     }
   }
 }

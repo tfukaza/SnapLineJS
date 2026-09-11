@@ -18,15 +18,27 @@ const testMatch = [
   "snapsort-callback-ledger.spec.ts",
 ];
 
+const keyboardDemoProjects = frameworkBrowserProjects({
+  frameworks: ["svelte"],
+  browsers: ["chromium"],
+  testMatch: ["snapsort-keyboard-demo.spec.ts", "snapsort-camera.spec.ts"],
+}).map((project) => ({
+  ...project,
+  name: `${project.name}-keyboard`,
+}));
+
 export default defineConfig({
   testDir: ".",
   fullyParallel: false,
   workers: 1,
   reporter: [["list"]],
-  projects: frameworkBrowserProjects({
-    frameworks,
-    browsers: ["chromium"],
-    testMatch,
-  }),
+  projects: [
+    ...frameworkBrowserProjects({
+      frameworks,
+      browsers: ["chromium"],
+      testMatch,
+    }),
+    ...keyboardDemoProjects,
+  ],
   webServer: frameworkWebServers(frameworks),
 });

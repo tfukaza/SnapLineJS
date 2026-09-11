@@ -1,4 +1,4 @@
-// Shared helpers for layout-engine tests (tests/ut/layout.spec.ts and the
+// Shared helpers for layout-engine tests (tests/ut/core-layout.spec.ts and the
 // wrap-matrix e2e test in tests/e2e/snapsort-drag-snapshot.spec.ts): DOM-free
 // snapshot builders plus the row-shape assertions both suites make. Keeping
 // the grid construction and row counting here guarantees the unit tests and
@@ -7,13 +7,14 @@
 // Note: code inside `page.evaluate` blocks cannot import from here (evaluate
 // serializes the closure into the browser), so in-page measurement helpers
 // like `boxOf` remain local to their spec.
-import type { DomProperty } from "../../src/object";
+import type { Edges, ElementBox } from "../../src/geometry";
+import { contentRect } from "../../src/geometry";
 import {
-  contentBoxOrigin,
-  flowLayoutPositions,
-  type LayoutFilter,
+  createLayoutResolutionPlan,
+  type LayoutNode,
+  type LayoutPositions,
   type VirtualInsertion,
-} from "../../assets/snapsort/src/layout";
+} from "../../src/layout";
 import type { ItemSnapshot } from "../../assets/snapsort/src/snapshot";
 
 export type BoxInit = {
@@ -21,40 +22,55 @@ export type BoxInit = {
   y: number;
   width: number;
   height: number;
-  margin?: Partial<DomProperty["margin"]>;
-  padding?: Partial<DomProperty["padding"]>;
-  border?: Partial<DomProperty["border"]>;
+  margin?: Partial<Edges>;
+  padding?: Partial<Edges>;
+  border?: Partial<Edges>;
 };
 
-export function makeBox(init: BoxInit): DomProperty {
-  const edges = (
-    src: Partial<DomProperty["margin"]> | undefined,
-  ): DomProperty["margin"] => ({
-    top: src?.top ?? 0,
-    right: src?.right ?? 0,
-    bottom: src?.bottom ?? 0,
-    left: src?.left ?? 0,
-  });
-  return {
+/** A frozen element box, mirroring what `ElementObject.readDom` returns. */
+export function makeBox(init: BoxInit): ElementBox {
+  const edges = (src: Partial<Edges> | undefined): Edges =>
+    Object.freeze({
+      top: src?.top ?? 0,
+      right: src?.right ?? 0,
+      bottom: src?.bottom ?? 0,
+      left: src?.left ?? 0,
+    });
+  return Object.freeze({
     x: init.x,
     y: init.y,
     width: init.width,
     height: init.height,
-    scaleX: 1,
-    scaleY: 1,
-    screenX: init.x,
-    screenY: init.y,
+    screen: Object.freeze({
+      x: init.x,
+      y: init.y,
+      width: init.width,
+      height: init.height,
+    }),
     margin: edges(init.margin),
     padding: edges(init.padding),
     border: edges(init.border),
-  } as DomProperty;
+  });
+}
+
+/** A copy of `box` with `patch` applied; edge patches merge per side. */
+export function patchBox(box: ElementBox, patch: Partial<BoxInit>): ElementBox {
+  return makeBox({
+    x: patch.x ?? box.x,
+    y: patch.y ?? box.y,
+    width: patch.width ?? box.width,
+    height: patch.height ?? box.height,
+    margin: { ...box.margin, ...patch.margin },
+    padding: { ...box.padding, ...patch.padding },
+    border: { ...box.border, ...patch.border },
+  });
 }
 
 let nextItemId = 0;
 
 export function makeItemSnapshot(
   value: string,
-  box: DomProperty,
+  box: ElementBox,
   children: ItemSnapshot<string>[] = [],
 ): ItemSnapshot<string> {
   return {
@@ -73,7 +89,7 @@ export function makeItemSnapshot(
 }
 
 export function makeContainerSnapshot(
-  box: DomProperty,
+  box: ElementBox,
   children: ItemSnapshot<string>[],
   direction: "row" | "column" = "row",
   mainAxisAlign: "start" | "center" = "start",
@@ -193,6 +209,44 @@ export function rowCounts(ys: number[], rowStep: number): number[] {
     .map(([, count]) => count);
 }
 
+/** Options for the one-shot layout wrappers below. */
+export interface LayoutRunOptions<N> {
+  exclude?: (node: N) => boolean;
+  insertions?: readonly VirtualInsertion<N>[];
+  wrapTolerance?: number;
+}
+
+/** Lay out one container with a throwaway plan and its local insertions. */
+export function flowLayoutPositions<N extends LayoutNode<N>>(
+  container: N,
+  startX: number,
+  startY: number,
+  options: LayoutRunOptions<N> = {},
+): LayoutPositions<N> {
+  const insertions = options.insertions ?? [];
+  const plan = createLayoutResolutionPlan(container, {
+    exclude: options.exclude,
+    insertions,
+    wrapTolerance: options.wrapTolerance,
+  });
+  return plan.layoutPositions(
+    container,
+    startX,
+    startY,
+    insertions.filter((insertion) => insertion.container === container),
+  );
+}
+
+/** A container's simulated border-box size with a throwaway plan. */
+export function virtualDimensions<N extends LayoutNode<N>>(
+  container: N,
+  options: LayoutRunOptions<N> = {},
+) {
+  return createLayoutResolutionPlan(container, options).virtualDimensions(
+    container,
+  );
+}
+
 /**
  * Run the flow-layout simulation on a container snapshot and return the
  * per-line entry counts (items plus the ghost, when an insertion is given).
@@ -202,14 +256,16 @@ export function simulatedRowCounts<T>(
   container: ItemSnapshot<T>,
   options: {
     rowStep: number;
-    insertion?: VirtualInsertion<T>;
-    filter?: LayoutFilter<T>;
+    insertion?: VirtualInsertion<ItemSnapshot<T>>;
+    exclude?: (node: ItemSnapshot<T>) => boolean;
+    wrapTolerance?: number;
   },
 ): number[] {
-  const origin = contentBoxOrigin(container.box);
+  const origin = contentRect(container.box);
   const result = flowLayoutPositions(container, origin.x, origin.y, {
-    filter: options.filter,
+    exclude: options.exclude,
     insertions: options.insertion ? [options.insertion] : undefined,
+    wrapTolerance: options.wrapTolerance,
   });
   const ys: number[] = [];
   for (const [, position] of result.itemPositions) ys.push(position.y);

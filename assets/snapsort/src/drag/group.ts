@@ -1,10 +1,9 @@
 import type { BaseObject, dragStartProp } from "@snap-engine/core";
-import type { Container } from "../container";
 import { buildDragLocation } from "../event-builders";
 import type { DragLocation } from "../events";
 import type { Item } from "../item";
 import { resolveSortStrategy } from "./drop-strategy";
-import { DragSessionController } from "./session";
+import { DragSessionController, type DragInputStart } from "./session";
 import { installDragSession } from "./session-store";
 
 /** @internal Gather the consumer-selected drag run in logical document order. */
@@ -42,27 +41,46 @@ function sourceFor(item: Item): DragLocation {
   if (!container) throw new Error("Item has no parent container");
   return buildDragLocation(container, index);
 }
-
-/** @internal Build, install, and begin a DragSession for an Item gesture. */
-export function beginItemDrag(
+function beginDragSession(
   item: Item,
-  prop: dragStartProp,
+  start: DragInputStart,
 ): DragSessionController {
   item.takeRootSnapshot();
+
   const root = item.rootContainer;
   const group = collectSelectedDragGroup(root as unknown as Item, item);
   const pressedItem = findGroupAnchor(group, item);
   const strategy = resolveSortStrategy(root.config.mode);
   const sources = group.map(sourceFor);
+
   const session = new DragSessionController(
-    root as Container,
+    root,
     group,
     sources,
     strategy,
-    prop,
+    start,
     pressedItem,
   );
+
   installDragSession(root, session);
-  session.begin(prop);
+  session.begin();
+
   return session;
+}
+/** @internal Build, install, and begin a DragSession for an Item gesture. */
+export function beginItemDrag(
+  item: Item,
+  prop: dragStartProp,
+): DragSessionController {
+  return beginDragSession(item, {
+    inputType: "pointer",
+    prop,
+  });
+}
+
+export function beginDirectItemDrag(item: Item): DragSessionController {
+  return beginDragSession(item, {
+    inputType: "direct",
+    initiatingItemId: item.itemId,
+  });
 }

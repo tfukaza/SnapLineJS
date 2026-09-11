@@ -9,6 +9,7 @@
     "assets/snapline",
     "assets/snapzap/*"
   ],
+  "sideEffects": false,
   "main": "./src/index.ts",
   "types": "./src/index.ts",
   "exports": {
@@ -27,6 +28,14 @@
     "./collision": {
       "types": "./src/collision.ts",
       "import": "./src/collision.ts"
+    },
+    "./geometry": {
+      "types": "./src/geometry.ts",
+      "import": "./src/geometry.ts"
+    },
+    "./layout": {
+      "types": "./src/layout.ts",
+      "import": "./src/layout.ts"
     }
   },
   "files": [
@@ -46,6 +55,8 @@
     "test:camera-control": "playwright test -c tests/e2e/camera-control.playwright.config.ts",
     "test:camera-control-react": "playwright test -c tests/e2e/camera-control-react.playwright.config.ts",
     "test:asset-base-react": "playwright test -c tests/e2e/asset-base-react.playwright.config.ts",
+    "test:core-ut": "playwright test tests/ut/core-*.spec.ts tests/ut/transform.spec.ts tests/ut/frame-controller.spec.ts --project=chromium",
+    "test:core-zoom": "playwright test -c tests/e2e/core-zoom.playwright.config.ts",
     "test:snapline-ut": "playwright test tests/ut/snapline-*.spec.ts --project=chromium",
     "test:snapsort-ut": "playwright test tests/ut/snapsort-*.spec.ts --project=chromium",
     "test:snapline": "playwright test -c tests/e2e/snapline.playwright.config.ts",
@@ -72,7 +83,7 @@
     "check:website": "npm run check --prefix website",
     "check:adapters": "FRAMEWORK=test svelte-check --tsconfig assets/asset-base/tsconfig.json && FRAMEWORK=test svelte-check --tsconfig assets/snapsort/tsconfig.json && FRAMEWORK=test svelte-check --tsconfig assets/snapline/tsconfig.json",
     "typecheck": "tsc --noEmit",
-    "ci": "npm run validate:packages && npm run check:snapsort-api && npm run test:snapsort-ut && npm run typecheck && npm run lint && npm run check:adapters && npm run check:website && npm run build",
+    "ci": "npm run validate:packages && npm run check:snapsort-api && npm run test:core-ut && npm run test:snapsort-ut && npm run test:snapline-ut && npm run typecheck && npm run lint && npm run check:adapters && npm run check:website && npm run build",
     "prepublishOnly": "npm run lint",
     "wdio": "wdio run ./wdio.conf.ts"
   },

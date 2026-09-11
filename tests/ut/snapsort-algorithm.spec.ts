@@ -48,7 +48,7 @@ function mockItem(
     parent: null,
     callbacks: undefined,
     dropPriority: 0,
-    currentDomProperty: box,
+    box,
     itemOrderedList: children,
     children,
     direction: options.direction ?? "column",
@@ -155,7 +155,7 @@ function requireInsertionTarget(
 function flowTargets(
   root: MockItem,
   dragged: MockItem,
-  onSnapshotVisit?: (snapshot: ItemSnapshot<MockItem>) => void,
+  onNodeVisit?: (snapshot: ItemSnapshot<MockItem>) => void,
 ) {
   return virtualLayoutRecursive(
     root as never,
@@ -168,7 +168,7 @@ function flowTargets(
     dragged.dragPositionY + dragged.dragSnapshot.box.height / 2,
     null,
     false,
-    onSnapshotVisit ? { onSnapshotVisit } : undefined,
+    onNodeVisit ? { onNodeVisit } : undefined,
   ).candidates.map((candidate) => candidate.target);
 }
 
@@ -1143,8 +1143,7 @@ test("hover rectangle and circle boundaries remain edge-inclusive", () => {
   container.callbacks = {
     getItemHitbox: () => ({
       shape: "circle",
-      center: { x: 5, y: 5 },
-      radius: 5,
+      circle: { x: 5, y: 5, radius: 5 },
     }),
   };
   session.pointer = { x: 10, y: 5 };

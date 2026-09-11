@@ -2,8 +2,13 @@ import {
   mergeDefined,
   type BaseObject,
   type Engine,
-  type eventPosition,
+  type PointerPosition,
 } from "@snap-engine/core";
+import {
+  pointIntersectsRect,
+  rectArea,
+  rectContainsRect,
+} from "@snap-engine/core/geometry";
 import { NodeMirror, type NodeConfig } from "./node";
 import { getGraphRegistry } from "./internal/shared-data";
 
@@ -52,31 +57,13 @@ const DEFAULT_GROUP_CONFIG = {
   minHeight: 120,
 } satisfies GroupConfig;
 
-type Bounds = ReturnType<NodeMirror["hitBox"]["getWorldBoundsSnapshot"]>;
-
-function boundsArea(bounds: Bounds): number {
-  return (
-    Math.max(0, bounds.right - bounds.left) *
-    Math.max(0, bounds.bottom - bounds.top)
-  );
-}
-
-function containsBounds(container: Bounds, child: Bounds): boolean {
-  return (
-    child.left >= container.left &&
-    child.right <= container.right &&
-    child.top >= container.top &&
-    child.bottom <= container.bottom
-  );
-}
-
 function stableGroupOrder(
   left: GroupNodeMirror,
   right: GroupNodeMirror,
 ): number {
   const areaDelta =
-    boundsArea(left.hitBox.getWorldBoundsSnapshot()) -
-    boundsArea(right.hitBox.getWorldBoundsSnapshot());
+    rectArea(left.hitBox.getWorldBoundsSnapshot()) -
+    rectArea(right.hitBox.getWorldBoundsSnapshot());
   return areaDelta || String(left.id).localeCompare(String(right.id));
 }
 
@@ -296,12 +283,8 @@ class GroupNodeMirror extends NodeMirror {
   allowsMembership(node: NodeMirror): boolean {
     const box = this.hitBox.getWorldBoundsSnapshot();
     const nodeBounds = node.hitBox.getWorldBoundsSnapshot();
-    const centerContained =
-      nodeBounds.centerX >= box.left &&
-      nodeBounds.centerX <= box.right &&
-      nodeBounds.centerY >= box.top &&
-      nodeBounds.centerY <= box.bottom;
-    const boundsContained = containsBounds(box, nodeBounds);
+    const centerContained = pointIntersectsRect(nodeBounds.center, box);
+    const boundsContained = rectContainsRect(box, nodeBounds);
 
     // Ordinary nodes use center containment. A nested group must fit completely
     // so partially overlapping peers cannot become a parent/child pair.
@@ -328,7 +311,7 @@ class GroupNodeMirror extends NodeMirror {
     this.refreshMembership(true);
   }
 
-  protected override beginSelectionDrag(position: eventPosition): void {
+  protected override beginSelectionDrag(position: PointerPosition): void {
     super.beginSelectionDrag(position);
     this.#carryGroupOrigin = {
       x: this.worldTransform.x,

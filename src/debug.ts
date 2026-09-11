@@ -1,4 +1,6 @@
+import type { Camera } from "./camera";
 import type { Engine } from "./engine";
+import type { Rect } from "./geometry";
 import { ElementObject } from "./object";
 import type { BaseObject, FrameStats } from "./object";
 
@@ -11,6 +13,22 @@ export interface DebugRendererInterface {
     objectTable: Record<string, BaseObject>,
   ): void;
   updateSize(width: number, height: number): void;
+}
+
+/** A world-space size in debug-canvas (camera) pixels. */
+function cameraDelta(
+  camera: Camera | null,
+  width: number,
+  height: number,
+): [number, number] {
+  return camera?.getCameraDeltaFromWorldDelta(width, height) ?? [width, height];
+}
+
+/** A world-space rectangle in debug-canvas (camera) pixels. */
+function cameraRectFromWorldRect(camera: Camera | null, rect: Rect): Rect {
+  const [x, y] = camera?.getCameraFromWorld(rect.x, rect.y) ?? [0, 0];
+  const [width, height] = cameraDelta(camera, rect.width, rect.height);
+  return { x, y, width, height };
 }
 
 export class DebugRenderer implements DebugRendererInterface {
@@ -79,7 +97,7 @@ export class DebugRenderer implements DebugRendererInterface {
 
   renderFrame(
     _stats: FrameStats,
-    engine: any,
+    engine: Engine,
     objectTable: Record<string, BaseObject>,
   ): void {
     if (this.debugWindow == null) {
@@ -103,27 +121,7 @@ export class DebugRenderer implements DebugRendererInterface {
     if (this.debugCtx == null) {
       return;
     }
-    for (const marker of Object.values(engine.debugMarkerList) as Array<{
-      objectId: string;
-      id: string;
-      type: "point" | "rect" | "circle" | "text" | "line";
-      persistent: boolean;
-      color: string;
-      tag?: string;
-      x: number;
-      y: number;
-      x2?: number;
-      y2?: number;
-      width?: number;
-      height?: number;
-      radius?: number;
-      text?: string;
-      filled?: boolean;
-      lineWidth?: number;
-      arrowEnd?: boolean;
-      arrowStart?: boolean;
-      arrowSize?: number;
-    }>) {
+    for (const marker of Object.values(engine.debugMarkerList)) {
       if (!this.isTagEnabled(marker.tag)) {
         continue;
       }
@@ -131,7 +129,11 @@ export class DebugRenderer implements DebugRendererInterface {
         marker.x,
         marker.y,
       ) ?? [0, 0];
-      // console.debug("Debug Marker", marker.x, marker.y, cameraX, cameraY);
+      const [cameraWidth, cameraHeight] = cameraDelta(
+        engine.camera,
+        marker.width ?? 0,
+        marker.height ?? 0,
+      );
       if (marker.type == "point") {
         this.debugCtx.beginPath();
         this.debugCtx.fillStyle = marker.color;
@@ -141,22 +143,18 @@ export class DebugRenderer implements DebugRendererInterface {
         this.debugCtx.beginPath();
         if (marker.filled !== false) {
           this.debugCtx.fillStyle = marker.color;
-          this.debugCtx.rect(cameraX, cameraY, marker.width!, marker.height!);
+          this.debugCtx.rect(cameraX, cameraY, cameraWidth, cameraHeight);
           this.debugCtx.fill();
         } else {
           this.debugCtx.strokeStyle = marker.color;
           this.debugCtx.lineWidth = marker.lineWidth ?? 1;
-          this.debugCtx.strokeRect(
-            cameraX,
-            cameraY,
-            marker.width!,
-            marker.height!,
-          );
+          this.debugCtx.strokeRect(cameraX, cameraY, cameraWidth, cameraHeight);
         }
       } else if (marker.type == "circle") {
         this.debugCtx.beginPath();
         this.debugCtx.fillStyle = marker.color;
-        this.debugCtx.arc(cameraX, cameraY, marker.radius!, 0, 2 * Math.PI);
+        const [radius] = cameraDelta(engine.camera, marker.radius ?? 0, 0);
+        this.debugCtx.arc(cameraX, cameraY, radius, 0, 2 * Math.PI);
         this.debugCtx.fill();
       } else if (marker.type == "text") {
         this.debugCtx.fillStyle = marker.color;
@@ -233,25 +231,17 @@ export class DebugRenderer implements DebugRendererInterface {
       const elementObject = object;
 
       const colors = ["#FF0000A0", "#00FF00A0", "#0000FFA0"];
-      const stages = ["READ_1", "READ_2", "READ_3"];
+      const stages = ["READ_1", "READ_2", "READ_3"] as const;
       const tagNames = ["dom-read-1", "dom-read-2", "dom-read-3"];
       for (let i = 0; i < 3; i++) {
         if (!this.isTagEnabled(tagNames[i])) continue;
-        const property = elementObject.getDomProperty(stages[i] as any);
+        const property = elementObject.getStageBox(stages[i]);
         this.debugCtx.stroke();
         this.debugCtx.beginPath();
         this.debugCtx.strokeStyle = colors[i];
         this.debugCtx.lineWidth = 1;
-        const [domCameraX, domCameraY] = engine.camera?.getCameraFromWorld(
-          property.x,
-          property.y,
-        ) ?? [0, 0];
-        this.debugCtx.rect(
-          domCameraX,
-          domCameraY,
-          property.width,
-          property.height,
-        );
+        const rect = cameraRectFromWorldRect(engine.camera, property);
+        this.debugCtx.rect(rect.x, rect.y, rect.width, rect.height);
         this.debugCtx.stroke();
       }
 
@@ -264,12 +254,12 @@ export class DebugRenderer implements DebugRendererInterface {
         this.debugCtx.beginPath();
         this.debugCtx.strokeStyle = "black";
         this.debugCtx.lineWidth = 1;
-        this.debugCtx.rect(
-          cameraX,
-          cameraY,
-          elementObject.currentDomProperty.width,
-          elementObject.currentDomProperty.height,
+        const [width, height] = cameraDelta(
+          engine.camera,
+          elementObject.box.width,
+          elementObject.box.height,
         );
+        this.debugCtx.rect(cameraX, cameraY, width, height);
         this.debugCtx.stroke();
       }
     }
@@ -293,21 +283,26 @@ export class DebugRenderer implements DebugRendererInterface {
             : collisionWorld.y,
         ) ?? [0, 0];
       if (collisionObject.type == "circle") {
+        const [radius] = cameraDelta(
+          engine.camera,
+          collisionObject.worldRadius,
+          0,
+        );
         this.debugCtx.arc(
           colliderCameraX,
           colliderCameraY,
-          collisionObject.worldRadius,
+          radius,
           0,
           2 * Math.PI,
         );
         this.debugCtx.stroke();
       } else if (collisionObject.type == "rect") {
-        this.debugCtx.rect(
-          colliderCameraX,
-          colliderCameraY,
+        const [width, height] = cameraDelta(
+          engine.camera,
           collisionObject.worldWidth,
           collisionObject.worldHeight,
         );
+        this.debugCtx.rect(colliderCameraX, colliderCameraY, width, height);
         this.debugCtx.stroke();
       } else if (collisionObject.type == "point") {
         this.debugCtx.arc(colliderCameraX, colliderCameraY, 2, 0, 2 * Math.PI);
