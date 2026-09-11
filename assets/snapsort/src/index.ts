@@ -11,7 +11,6 @@ export type {
   DragLocation,
   DropEffect,
   DragVisual,
-  GhostRect,
   GhostLocation,
   GhostSlotLocation,
   GhostOverlayLocation,
@@ -36,17 +35,13 @@ export type {
   DropTargetChangeEvent,
   DragItemHoverEvent,
   DropPriorityEvent,
-  DropPriorityRect,
   ItemHitbox,
   ItemHitboxEvent,
   VisualGeometryInvalidationEvent,
   VisualGeometryInvalidationReason,
 } from "./events";
 export { DROP_REJECT_PRIORITY } from "./events";
-export type {
-  ContainerLocalRect,
-  InsertionMarkerRectOptions,
-} from "./insertion-geometry";
+export type { InsertionMarkerRectOptions } from "./insertion-geometry";
 export {
   insertionMarkerRect,
   stockInsertionMarkerRectOptions,

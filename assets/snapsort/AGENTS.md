@@ -21,7 +21,8 @@ A single `Container`/`Item` class pair (per framework) whose drag/drop behavior 
 - Drag presentation types: `DragVisual` (`"item" | "preview" | "none"`) and `DropEffect` (`"move" | "none"`).
 - Ghost/insertion render types: `GhostState`, `InsertionMarkerState`, `InsertionGapSegment`, and `InsertionMarkerNeighbor`.
 - Render-state types and helpers: `RenderEntry`, `RenderTree`, `RenderTreeEvent`, `createRenderEntry`, `createRenderEntries`, `createRenderTree`, and `reduceRenderTree`.
-- Insertion presentation types and helpers: `InsertionMarkerRectOptions`, `ContainerLocalRect`, `insertionMarkerRect`, `toContainerLocalRect`, and `stockInsertionMarkerRectOptions`.
+- Insertion presentation types and helpers: `InsertionMarkerRectOptions`, `insertionMarkerRect`, `toContainerLocalRect`, and `stockInsertionMarkerRectOptions`.
+- Geometry values use core's `@snap-engine/core/geometry` types (`Rect`, `Circle`, `Point`) and helpers; SnapSort declares no rectangle types of its own.
 - `createVanillaAdapter` and `CreateVanillaAdapterOptions`.
 - `ContainerCallbacks`, `ContainerConfig`, and `SortMode`.
 

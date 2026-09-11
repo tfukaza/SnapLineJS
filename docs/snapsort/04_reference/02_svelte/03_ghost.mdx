@@ -193,7 +193,7 @@ if (ghost.location.type === "slot") {
 
 ### `rect`
 
-**Type:** `GhostRect` · **Read-only** · **Spacer and pointer-preview only**
+**Type:** `Rect` (from `@snap-engine/core/geometry`) · **Read-only** · **Spacer and pointer-preview only**
 
 A world-space rectangle with `x`, `y`, `width`, and `height`. The component
 uses width and height for flow spacers and converts pointer-preview coordinates
@@ -287,7 +287,7 @@ const stockInsertionMarkerRectOptions = {
 function insertionMarkerRect(
   marker: InsertionMarkerState,
   options: InsertionMarkerRectOptions,
-): ContainerLocalRect;
+): Rect;
 ```
 
 Expands a marker's world-space `gap` into a rectangle positioned in the
@@ -305,10 +305,7 @@ const rect = insertionMarkerRect(marker, {
 ### `toContainerLocalRect()`
 
 ```ts
-function toContainerLocalRect(
-  worldRect: Readonly<GhostRect>,
-  container: Container,
-): ContainerLocalRect;
+function toContainerLocalRect(worldRect: Rect, container: Container): Rect;
 ```
 
 Converts a world-space rectangle to coordinates measured from a mounted
@@ -319,12 +316,8 @@ included. It throws if the Container has no mounted element.
 const localRect = toContainerLocalRect(ghost.rect, ghost.location.container);
 ```
 
-### `ContainerLocalRect`
-
-**Type:** `{ readonly x: number; readonly y: number; readonly width: number; readonly height: number }`
-
-The return value of both presentation helpers, suitable for absolute
-positioning inside the owning Container.
+Both presentation helpers return a frozen `Rect` in the owning Container's
+local space, suitable for absolute positioning inside it.
 
 ## DOM Contract
 

@@ -1355,8 +1355,7 @@ test("swap collects every hovered container before applying priority", () => {
       preferredHitboxOwner = event.container;
       return {
         shape: "circle",
-        center: { x: 10, y: 10 },
-        radius: 8,
+        circle: { x: 10, y: 10, radius: 8 },
       };
     },
   };

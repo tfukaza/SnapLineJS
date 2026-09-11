@@ -1,3 +1,4 @@
+import type { Circle, Rect } from "@snap-engine/core/geometry";
 import {
   Container,
   DROP_REJECT_PRIORITY,
@@ -15,7 +16,6 @@ import {
   type ContainerAnimations,
   type ContainerCallbacks,
   type ContainerConfig,
-  type ContainerLocalRect,
   type ContainerOptions,
   type CreateVanillaAdapterOptions,
   type DragSession,
@@ -25,7 +25,6 @@ import {
   type GhostLifecycleEvent,
   type GhostMoveEvent,
   type GhostRemoveEvent,
-  type GhostRect,
   type GhostState,
   type InsertionGapSegment,
   type InsertionMarkerNeighbor,
@@ -158,7 +157,7 @@ const markerOptions: InsertionMarkerRectOptions = {
   startInset: 12,
   endInset: 8,
 };
-const markerRect: ContainerLocalRect = insertionMarkerRect(
+const markerRect: Rect = insertionMarkerRect(
   insertionMarker,
   markerOptions,
 );
@@ -168,8 +167,8 @@ const vanillaOptions: CreateVanillaAdapterOptions = {
   insertionMarker: markerOptions,
 };
 const vanillaAdapter: SnapSortAdapter = createVanillaAdapter(vanillaOptions);
-const worldRect: GhostRect = { x: 10, y: 20, width: 30, height: 40 };
-const localRect: ContainerLocalRect = toContainerLocalRect(
+const worldRect: Rect = { x: 10, y: 20, width: 30, height: 40 };
+const localRect: Rect = toContainerLocalRect(
   worldRect,
   container,
 );
@@ -406,7 +405,29 @@ import { removeGhostState as _removeGhostState } from "@snap-engine/snapsort";
 import { useSnapSortAwaitMutation as _useSnapSortAwaitMutation } from "@snap-engine/snapsort/react";
 // @ts-expect-error the deprecated React helper has no package subpath.
 import { useSnapSortAwaitMutation as _deepHelper } from "@snap-engine/snapsort/react/useSnapSortAwaitMutation";
+// @ts-expect-error GhostRect was replaced by core's geometry Rect.
+import type { GhostRect as _GhostRect } from "@snap-engine/snapsort";
+// @ts-expect-error ContainerLocalRect was replaced by core's geometry Rect.
+import type { ContainerLocalRect as _ContainerLocalRect } from "@snap-engine/snapsort";
+// @ts-expect-error DropPriorityRect was replaced by core's geometry Rect.
+import type { DropPriorityRect as _DropPriorityRect } from "@snap-engine/snapsort";
+// @ts-expect-error LayoutMainAxisAlign moved to @snap-engine/core/layout.
+import type { LayoutMainAxisAlign as _LayoutMainAxisAlign } from "@snap-engine/snapsort";
+import type { ItemHitbox } from "@snap-engine/snapsort";
 import { DragSession as DragSessionValue } from "@snap-engine/snapsort";
+
+const circleHitbox: ItemHitbox = {
+  shape: "circle",
+  circle: { x: 0, y: 0, radius: 4 } satisfies Circle,
+};
+const legacyCircleHitbox: ItemHitbox = {
+  shape: "circle",
+  // @ts-expect-error circle hitboxes carry a geometry Circle, not center/radius.
+  center: { x: 0, y: 0 },
+  radius: 4,
+};
+void circleHitbox;
+void legacyCircleHitbox;
 
 // @ts-expect-error DragSession is a type-only public view, not a constructor.
 new DragSessionValue();

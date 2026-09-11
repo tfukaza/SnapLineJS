@@ -1,3 +1,4 @@
+import { freezeRect } from "@snap-engine/core/geometry";
 import type { Container } from "./container";
 import type { DragSessionController as DragSession } from "./drag/session";
 import type {
@@ -85,12 +86,7 @@ function freezeInsertionNeighbor(
   if (neighbor === null) return null;
   return Object.freeze({
     ...neighbor,
-    rect: Object.freeze({
-      x: neighbor.rect.x,
-      y: neighbor.rect.y,
-      width: neighbor.rect.width,
-      height: neighbor.rect.height,
-    }),
+    rect: freezeRect(neighbor.rect),
   });
 }
 

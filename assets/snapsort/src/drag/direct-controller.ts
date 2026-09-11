@@ -1,5 +1,10 @@
 import { AnimationObject } from "@snap-engine/core/animation";
-import type { Rect } from "@snap-engine/core/geometry";
+import {
+  boundingRect,
+  freezeRect,
+  lerpRect,
+  type Rect,
+} from "@snap-engine/core/geometry";
 import { evaluateDropTargetPriority } from "../algorithm";
 import { animationConfigFor } from "../internal/flip-animation";
 import { DROP_REJECT_PRIORITY, type DragLocation } from "../events";
@@ -32,60 +37,18 @@ export function cancelDirectMoveAnimation(
 const DIRECT_MOVE_DEFAULT_DURATION = 160;
 const DIRECT_MOVE_DEFAULT_EASING = "ease-out";
 
-function freezeRect(rect: Readonly<Rect>): Readonly<Rect> {
-  return Object.freeze({
-    x: rect.x,
-    y: rect.y,
-    width: rect.width,
-    height: rect.height,
-  });
+function requireBoundingRect(rects: readonly Readonly<Rect>[]): Rect {
+  const bounds = boundingRect(rects);
+  if (!bounds) {
+    throw new Error("DirectDragController: visual geometry cannot be empty.");
+  }
+  return bounds;
 }
 
 function freezeRects(
   rects: readonly Readonly<Rect>[],
 ): readonly Readonly<Rect>[] {
   return Object.freeze(rects.map(freezeRect));
-}
-
-function interpolateRect(
-  from: Readonly<Rect>,
-  to: Readonly<Rect>,
-  progress: number,
-): Rect {
-  return {
-    x: from.x + (to.x - from.x) * progress,
-    y: from.y + (to.y - from.y) * progress,
-    width: from.width + (to.width - from.width) * progress,
-    height: from.height + (to.height - from.height) * progress,
-  };
-}
-
-function boundingRect(
-  rects: readonly Readonly<Rect>[],
-): Readonly<Rect> {
-  const first = rects[0];
-  if (!first) {
-    throw new Error("DirectDragController: visual geometry cannot be empty.");
-  }
-
-  let left = first.x;
-  let top = first.y;
-  let right = first.x + first.width;
-  let bottom = first.y + first.height;
-
-  for (const rect of rects.slice(1)) {
-    left = Math.min(left, rect.x);
-    top = Math.min(top, rect.y);
-    right = Math.max(right, rect.x + rect.width);
-    bottom = Math.max(bottom, rect.y + rect.height);
-  }
-
-  return freezeRect({
-    x: left,
-    y: top,
-    width: right - left,
-    height: bottom - top,
-  });
 }
 
 export class DirectDragController {
@@ -133,23 +96,7 @@ export class DirectDragController {
 
     this.#homeCandidateIndex = homeCandidateIndex;
     this.#currentCandidateIndex = homeCandidateIndex;
-    this.#visualRects = freezeRects(
-      this.#session.items.map((item) => {
-        const start = this.#session.dragVisualStart.get(item);
-        if (!start) {
-          throw new Error(
-            "DirectDragController: participant visual geometry is missing.",
-          );
-        }
-        const box = this.#session.dragBoxFor(item);
-        return {
-          x: start.x,
-          y: start.y,
-          width: box.width,
-          height: box.height,
-        };
-      }),
-    );
+    this.#visualRects = this.#session.startMemberRects();
     this.#activated = true;
   }
 
@@ -221,7 +168,7 @@ export class DirectDragController {
   /** @internal Current animated bounding box for the complete drag visual. */
   get visualGroupRect(): Readonly<Rect> | null {
     return this.#visualRects.length > 0
-      ? boundingRect(this.#visualRects)
+      ? freezeRect(requireBoundingRect(this.#visualRects))
       : null;
   }
 
@@ -308,7 +255,7 @@ export class DirectDragController {
                     "DirectDragController: target visual geometry is missing.",
                   );
                 }
-                return interpolateRect(source, target, $progress);
+                return lerpRect(source, target, $progress);
               }),
               {
                 x:

@@ -5,6 +5,7 @@ import {
   useRef,
   type HTMLAttributes,
 } from "react";
+import { edgesToCss } from "@snap-engine/core/geometry";
 import {
   insertionMarkerRect,
   stockInsertionMarkerRectOptions,
@@ -93,7 +94,7 @@ export const Ghost = forwardRef<HTMLDivElement, GhostProps>(function Ghost(
         left: overlay ? rect.x : undefined,
         margin: overlay
           ? 0
-          : `${original.margin.top}px ${original.margin.right}px ${original.margin.bottom}px ${original.margin.left}px`,
+          : edgesToCss(original.margin),
         pointerEvents: overlay ? "none" : undefined,
         position: overlay ? "absolute" : undefined,
         top: overlay ? rect.y : undefined,

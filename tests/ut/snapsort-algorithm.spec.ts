@@ -1143,8 +1143,7 @@ test("hover rectangle and circle boundaries remain edge-inclusive", () => {
   container.callbacks = {
     getItemHitbox: () => ({
       shape: "circle",
-      center: { x: 5, y: 5 },
-      radius: 5,
+      circle: { x: 5, y: 5, radius: 5 },
     }),
   };
   session.pointer = { x: 10, y: 5 };

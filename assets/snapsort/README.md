@@ -29,7 +29,8 @@ their bindings from `@snap-engine/snapsort/svelte` or
 - `DROP_REJECT_PRIORITY` - the `-1` effective priority that rejects a destination
 - Ghost and insertion render state: `GhostState`, `InsertionMarkerState`, `InsertionGapSegment`, and `InsertionMarkerNeighbor`
 - Framework render state: `RenderEntry`, `RenderTree`, `RenderTreeEvent`, `createRenderEntry`, `createRenderEntries`, `createRenderTree`, and `reduceRenderTree`
-- Insertion presentation: `InsertionMarkerRectOptions`, `ContainerLocalRect`, `insertionMarkerRect`, `toContainerLocalRect`, and `stockInsertionMarkerRectOptions`
+- Insertion presentation: `InsertionMarkerRectOptions`, `insertionMarkerRect`, `toContainerLocalRect`, and `stockInsertionMarkerRectOptions`
+- Geometry values (`Rect`, `Circle`, `Point`) use the shared types from `@snap-engine/core/geometry`
 - `createVanillaAdapter` and `CreateVanillaAdapterOptions`
 - `ContainerCallbacks`, `ContainerConfig`, `SortMode`
 

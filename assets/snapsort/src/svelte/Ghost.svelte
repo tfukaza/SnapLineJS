@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { edgesToCss } from "@snap-engine/core/geometry";
   import {
     insertionMarkerRect,
     stockInsertionMarkerRectOptions,
@@ -49,7 +50,7 @@
     }
     return (
       `width:${ghost.rect.width}px;height:${ghost.rect.height}px;` +
-      `margin:${origProp.margin.top}px ${origProp.margin.right}px ${origProp.margin.bottom}px ${origProp.margin.left}px;` +
+      `margin:${edgesToCss(origProp.margin)};` +
       "box-sizing:border-box;"
     );
   });

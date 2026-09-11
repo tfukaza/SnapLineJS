@@ -1,5 +1,10 @@
 import type { AnimationObject } from "@snap-engine/core/animation";
 import type { ElementBox, dragStartProp } from "@snap-engine/core";
+import {
+  freezeRect,
+  type BoxModel,
+  type Rect,
+} from "@snap-engine/core/geometry";
 import type { Container } from "../container";
 import type { Item } from "../item";
 import { reconcileRootTreeState, rootHasItemId } from "../internal/tree-state";
@@ -399,6 +404,30 @@ export class DragSessionController implements DragSession {
   }
 
   /**
+   * @internal Each participant's frozen world rectangle at drag start: its
+   * captured visual start position with its drag-box size, in `items` order.
+   */
+  startMemberRects(): readonly Rect[] {
+    return Object.freeze(
+      this.items.map((item) => {
+        const start = this.dragVisualStart.get(item);
+        if (!start) {
+          throw new Error(
+            `DragSession: participant "${item.itemId}" has no captured visual start.`,
+          );
+        }
+        const box = this.dragBoxFor(item);
+        return freezeRect({
+          x: start.x,
+          y: start.y,
+          width: box.width,
+          height: box.height,
+        });
+      }),
+    );
+  }
+
+  /**
    * Compute this session's group dimensions from each member's drag
    * snapshot box. Called once drag snapshots are captured (READ_1 of
    * `begin`). Degenerates to the pressed item's own box for a single item.
@@ -410,11 +439,7 @@ export class DragSessionController implements DragSession {
     let maxH = 0;
     let sumW = 0;
     let sumH = 0;
-    let prevBox: {
-      width: number;
-      height: number;
-      margin: { top: number; bottom: number; left: number; right: number };
-    } | null = null;
+    let prevBox: BoxModel | null = null;
     for (const member of this.items) {
       const box = this.dragBoxFor(member);
       maxW = Math.max(maxW, box.width);

@@ -1,6 +1,9 @@
 import {
+  boundingRect,
   contentOffset,
   contentRect,
+  freezeRect,
+  projectRects,
   type Rect,
 } from "@snap-engine/core/geometry";
 import {
@@ -297,89 +300,19 @@ function snapshotPathTo(
   return [];
 }
 
-function freezeRect(rect: Rect): Readonly<Rect> {
-  return Object.freeze({
-    x: rect.x,
-    y: rect.y,
-    width: rect.width,
-    height: rect.height,
-  });
-}
-
-function sourceMemberRects(
-  session: DragSessionController,
-): readonly Readonly<Rect>[] {
-  return Object.freeze(
-    session.items.map((item) => {
-      const start = session.dragVisualStart.get(item);
-
-      if (!start) {
-        throw new Error(
-          "SnapSort: direct candidate geometry requires captured visual positions.",
-        );
-      }
-
-      const box = session.dragBoxFor(item);
-      return freezeRect({
-        x: start.x,
-        y: start.y,
-        width: box.width,
-        height: box.height,
-      });
-    }),
-  );
-}
-
-// TODO: Eventually, these functions
-// should be provided as part of a layout engine
-function boundingRect(
-  rects: readonly Readonly<Rect>[],
-): Rect {
-  if (rects.length === 0) {
-    throw new Error(
-      "SnapSort: cannot calculate a direct candidate without projected items.",
-    );
-  }
-
-  let left = rects[0].x;
-  let top = rects[0].y;
-  let right = rects[0].x + rects[0].width;
-  let bottom = rects[0].y + rects[0].height;
-
-  for (const rect of rects.slice(1)) {
-    left = Math.min(left, rect.x);
-    top = Math.min(top, rect.y);
-    right = Math.max(right, rect.x + rect.width);
-    bottom = Math.max(bottom, rect.y + rect.height);
-  }
-
-  return {
-    x: left,
-    y: top,
-    width: right - left,
-    height: bottom - top,
-  };
-}
-
 function projectRectsIntoTarget(
   session: DragSessionController,
   target: Readonly<Rect>,
 ): readonly Readonly<Rect>[] {
-  const sourceRects = sourceMemberRects(session);
+  const sourceRects = session.startMemberRects();
   const sourceGroup = boundingRect(sourceRects);
-  const scaleX = sourceGroup.width > 0 ? target.width / sourceGroup.width : 1;
-  const scaleY =
-    sourceGroup.height > 0 ? target.height / sourceGroup.height : 1;
-
+  if (!sourceGroup) {
+    throw new Error(
+      "SnapSort: cannot calculate a direct candidate without projected items.",
+    );
+  }
   return Object.freeze(
-    sourceRects.map((rect) =>
-      freezeRect({
-        x: target.x + (rect.x - sourceGroup.x) * scaleX,
-        y: target.y + (rect.y - sourceGroup.y) * scaleY,
-        width: rect.width * scaleX,
-        height: rect.height * scaleY,
-      }),
-    ),
+    projectRects(sourceRects, sourceGroup, target).map(freezeRect),
   );
 }
 
@@ -387,7 +320,7 @@ export function directCandidateGeometry(
   session: DragSessionController,
   candidate: DirectCandidate,
 ): DirectCandidateGeometry {
-  const sourceRects = sourceMemberRects(session);
+  const sourceRects = session.startMemberRects();
   const pressedIndex = session.items.indexOf(session.pressedItem);
   const primaryIndex = session.items.indexOf(session.primaryItem);
   const pressedStart = sourceRects[pressedIndex];

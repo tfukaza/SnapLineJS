@@ -1,9 +1,11 @@
 import type { ElementBox } from "@snap-engine/core";
 import {
-  type Circle,
   contentOffset,
   contentRect,
   distanceToRect,
+  freezeRect,
+  rectArea,
+  type Rect,
   pointIntersectsCircle,
   pointIntersectsRect,
   rectsIntersect,
@@ -32,6 +34,7 @@ import {
   type InsertionGapSegment,
   type InsertionMarkerNeighbor,
   type InsertionMarkerPresentation,
+  type ItemHitbox,
   type ItemHitboxEvent,
 } from "./events";
 import { buildItemLocation, buildItemRunEvent } from "./event-builders";
@@ -42,10 +45,15 @@ const TAG_CANDIDATES = "drop-candidates";
 const TAG_LAYOUT = "drop-layout";
 const TOP_CANDIDATE_DEBUG_LIMIT = 3;
 
-type Rect = { x: number; y: number; width: number; height: number };
-type ResolvedItemHitbox =
-  | { shape: "rect"; rect: Rect }
-  | { shape: "circle"; circle: Circle };
+/**
+ * Candidate-selection tolerances, in world units. Differences below these are
+ * measurement noise, so selection falls through to the next tie-breaker.
+ */
+const EDGE_DISTANCE_TIE_TOLERANCE = 0.5;
+const PLACEMENT_DISTANCE_TIE_TOLERANCE = 0.5;
+const CROSS_CONTAINER_DISTANCE_TIE_TOLERANCE = 1;
+/** Keeps a point exactly on a line boundary on the later line. */
+const LINE_INDEX_ROUNDING_BIAS = 0.001;
 
 type Snapshot = ItemSnapshot<ItemBase>;
 
@@ -97,10 +105,6 @@ interface SwapCandidate {
   area: number;
 }
 
-function euclidean(x1: number, y1: number, x2: number, y2: number): number {
-  return Math.sqrt((x1 - x2) ** 2 + (y1 - y2) ** 2);
-}
-
 /**
  * Sum of euclidean distances between each dragged member's own tracked drag
  * position (its original box translated by the shared pointer delta — see
@@ -125,7 +129,7 @@ function groupCandidateDistance(
     const h = box.height;
     const dcx = only.dragPositionX + w / 2;
     const dcy = only.dragPositionY + h / 2;
-    return euclidean(cx, cy, dcx, dcy);
+    return Math.hypot(cx - dcx, cy - dcy);
   }
 
   let cumulative = 0;
@@ -142,11 +146,9 @@ function groupCandidateDistance(
       : rect.y + rect.height / 2;
     const memberDragCenterX = member.dragPositionX + w / 2;
     const memberDragCenterY = member.dragPositionY + h / 2;
-    sum += euclidean(
-      slotCenterX,
-      slotCenterY,
-      memberDragCenterX,
-      memberDragCenterY,
+    sum += Math.hypot(
+      slotCenterX - memberDragCenterX,
+      slotCenterY - memberDragCenterY,
     );
     cumulative += isColumn ? h : w;
   }
@@ -197,15 +199,6 @@ function isContainerObject(item: ItemBase): item is Container {
   );
 }
 
-function frozenRect(rect: Rect): Rect {
-  return Object.freeze({
-    x: rect.x,
-    y: rect.y,
-    width: rect.width,
-    height: rect.height,
-  });
-}
-
 interface ContainerResolutionBase {
   readonly container: Container;
   readonly containerMetadata: Record<string, unknown>;
@@ -254,7 +247,7 @@ function createResolutionContext(
       x: pointer.x,
       y: pointer.y,
     }),
-    dragRect: frozenRect(
+    dragRect: freezeRect(
       dragRect ?? {
         x: item.dragPositionX,
         y: item.dragPositionY,
@@ -275,8 +268,8 @@ function containerResolutionBase(
   const base = Object.freeze({
     container,
     containerMetadata: container.metadata,
-    containerRect: frozenRect(requireDragSnapshotBox(container)),
-    containerContentRect: frozenRect(containerContentRect(container)),
+    containerRect: freezeRect(requireDragSnapshotBox(container)),
+    containerContentRect: freezeRect(containerContentRect(container)),
     depth: container.depth,
   });
   context.containers.set(container, base);
@@ -327,12 +320,12 @@ function resolveItemHitbox(
   item: ItemBase,
   container: Container,
   session: DragSession,
-): ResolvedItemHitbox {
+): ItemHitbox {
   const box = item.dragSnapshot?.box;
   if (!box) {
     throw new Error(`SnapSort Item ${item.id}: missing drag snapshot box.`);
   }
-  const defaultRect = frozenRect(box);
+  const defaultRect = freezeRect(box);
   const callback = container.callbacks?.getItemHitbox;
   if (!callback) return { shape: "rect", rect: defaultRect };
 
@@ -352,21 +345,22 @@ function resolveItemHitbox(
 
   if (hitbox?.shape === "rect") {
     assertRect(hitbox.rect, "getItemHitbox", container);
-    return { shape: "rect", rect: frozenRect(hitbox.rect) };
+    return { shape: "rect", rect: freezeRect(hitbox.rect) };
   }
+  const circle = hitbox?.shape === "circle" ? hitbox.circle : null;
   if (
-    hitbox?.shape === "circle" &&
-    Number.isFinite(hitbox.center?.x) &&
-    Number.isFinite(hitbox.center?.y) &&
-    Number.isFinite(hitbox.radius) &&
-    hitbox.radius >= 0
+    circle &&
+    Number.isFinite(circle.x) &&
+    Number.isFinite(circle.y) &&
+    Number.isFinite(circle.radius) &&
+    circle.radius >= 0
   ) {
     return {
       shape: "circle",
       circle: Object.freeze({
-        x: hitbox.center.x,
-        y: hitbox.center.y,
-        radius: hitbox.radius,
+        x: circle.x,
+        y: circle.y,
+        radius: circle.radius,
       }),
     };
   }
@@ -391,7 +385,7 @@ function hoveredItemCandidate(
   const area =
     hitbox.shape === "circle"
       ? Math.PI * hitbox.circle.radius ** 2
-      : hitbox.rect.width * hitbox.rect.height;
+      : rectArea(hitbox.rect);
   const intersects =
     hitbox.shape === "circle"
       ? pointIntersectsCircle(session.pointer, hitbox.circle)
@@ -559,7 +553,9 @@ function chooseByContentBox<T extends CandidateGeometry>(
 
   const aEdge = distanceToNearestContentEdge(aRect, dragCenterX, dragCenterY);
   const bEdge = distanceToNearestContentEdge(bRect, dragCenterX, dragCenterY);
-  if (Math.abs(aEdge - bEdge) > 0.5) return aEdge < bEdge ? a : b;
+  if (Math.abs(aEdge - bEdge) > EDGE_DISTANCE_TIE_TOLERANCE) {
+    return aEdge < bEdge ? a : b;
+  }
   return a.distance <= b.distance ? a : b;
 }
 
@@ -650,7 +646,12 @@ function virtualLayoutRecursiveFromSnapshot(
   );
   const dragCross = axes.cross === "x" ? dragCenterX : dragCenterY;
   const lineIndexForCross = (cross: number) =>
-    Math.max(0, Math.floor((cross - lineCrossStart) / lineCrossStep + 0.001));
+    Math.max(
+      0,
+      Math.floor(
+        (cross - lineCrossStart) / lineCrossStep + LINE_INDEX_ROUNDING_BIAS,
+      ),
+    );
   const dragLineIndex = lineIndexForCross(dragCross);
 
   if (debugEnabled) {
@@ -728,19 +729,15 @@ function virtualLayoutRecursiveFromSnapshot(
       target: { container, index },
       candidateCenterX,
       candidateCenterY,
-      distance: euclidean(
-        candidateCenterX,
-        candidateCenterY,
-        dragCenterX,
-        dragCenterY,
+      distance: Math.hypot(
+        candidateCenterX - dragCenterX,
+        candidateCenterY - dragCenterY,
       ),
       groupDistance: session
         ? groupCandidateDistance(session, rect, isColumn)
-        : euclidean(
-            candidateCenterX,
-            candidateCenterY,
-            dragCenterX,
-            dragCenterY,
+        : Math.hypot(
+            candidateCenterX - dragCenterX,
+            candidateCenterY - dragCenterY,
           ),
       lineDistance: Math.abs(lineIndex - dragLineIndex),
       placementRect,
@@ -920,13 +917,14 @@ function chooseProgressiveCandidate(
 
     const placementDistanceDelta: number =
       candidate.placementDistance - best.placementDistance;
-    if (Math.abs(placementDistanceDelta) > 0.5) {
+    if (Math.abs(placementDistanceDelta) > PLACEMENT_DISTANCE_TIE_TOLERANCE) {
       best = placementDistanceDelta < 0 ? candidate : best;
       continue;
     }
 
     if (
-      Math.abs(candidate.distance - best.distance) <= 1 &&
+      Math.abs(candidate.distance - best.distance) <=
+        CROSS_CONTAINER_DISTANCE_TIE_TOLERANCE &&
       candidate.target.container.id !== best.target.container.id
     ) {
       best = chooseByContentBox(best, candidate, dragCenterX, dragCenterY);
@@ -1112,7 +1110,7 @@ function insertionMarkerNeighbor(
     item: snapshot.value,
     itemId: snapshot.itemId,
     itemMetadata: snapshot.metadata,
-    rect: frozenRect(snapshot.box),
+    rect: freezeRect(snapshot.box),
   });
 }
 
@@ -1752,7 +1750,7 @@ export function determineSwapDropTarget(
       const box = requireDragSnapshotBox(hovered);
       candidates.push({
         target: { container, index },
-        area: box.width * box.height,
+        area: rectArea(box),
       });
     }
 
