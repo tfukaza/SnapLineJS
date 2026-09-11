@@ -184,7 +184,7 @@ export function fireItemInsert(
 ): void {
   const onInsert = requireMutationCallback(container, "onItemInsert");
   const event: ItemInsertEvent = {
-    session: session?.handle ?? null,
+    session,
     ...buildItemRunEvent(items),
     container,
     containerMetadata: container.metadata,
@@ -201,7 +201,7 @@ export function fireItemRemove(
 ): void {
   const onRemove = requireMutationCallback(container, "onItemRemove");
   const event: ItemRemoveEvent = {
-    session: session?.handle ?? null,
+    session,
     ...buildItemRunEvent(items),
     container,
     containerMetadata: container.metadata,
@@ -230,7 +230,7 @@ export function fireItemMove(
   }
   if (resolved.operation === "move") {
     const event: ItemMoveEvent = {
-      session: session?.handle ?? null,
+      session,
       ...buildItemRunEvent(items),
       from: froms[0],
       to,
@@ -256,7 +256,7 @@ export function fireItemSwap(
 ): void {
   const onSwap = requireMutationCallback(a.container, "onItemSwap");
   const event: ItemSwapEvent = {
-    session: session?.handle ?? null,
+    session,
     a: {
       item: a.item,
       itemId: a.item.itemId,
@@ -284,7 +284,7 @@ function buildDragItemHoverEvent(
   container: Container,
 ): DragItemHoverEvent {
   return {
-    session: session.handle,
+    session,
     item,
     itemId: item.itemId,
     itemMetadata: item.metadata,

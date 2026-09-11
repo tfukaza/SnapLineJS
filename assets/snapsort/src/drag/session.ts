@@ -1,10 +1,5 @@
 import type { AnimationObject } from "@snap-engine/core/animation";
-import type {
-  DomProperty,
-  GestureHandoffControl,
-  dragStartProp,
-  dragProp,
-} from "@snap-engine/core";
+import type { DomProperty, dragStartProp } from "@snap-engine/core";
 import type { Container } from "../container";
 import type { Item } from "../item";
 import { reconcileRootTreeState, rootHasItemId } from "../internal/tree-state";
@@ -41,29 +36,38 @@ import {
 import type { SortStrategy } from "./drop-strategy";
 import { resetItemVisual, restoreActiveItems } from "./item-visual";
 import { clearDragSession } from "./session-store";
+import { PointerDragController } from "./pointer-controller";
+import {
+  cancelDirectMoveAnimation,
+  DirectDragController,
+} from "./direct-controller";
 
 export type DragSessionStatus = "pending" | "active" | "dropping" | "ended";
 export type GhostChannel = "target" | "source" | "pointer";
 
+export type DragInputController = PointerDragController | DirectDragController;
+
+/** @internal Input-specific information needed to start one shared session. */
+export type DragInputStart =
+  | {
+      readonly inputType: "pointer";
+      readonly prop: dragStartProp;
+    }
+  | {
+      readonly inputType: "direct";
+      readonly initiatingItemId: ItemId;
+    };
+
 export interface DragSession {
   readonly root: Container;
-  readonly pointerId: number;
+  readonly input: DragInputController;
   readonly items: readonly Item[];
   readonly sources: readonly DragLocation[];
   readonly pressedItem: Item;
   readonly primaryItem: Item;
-  readonly start: Readonly<{ x: number; y: number }>;
-  readonly pointer: Readonly<{ x: number; y: number }>;
   readonly status: DragSessionStatus;
   dragVisual: DragVisual;
   dropEffect: DropEffect;
-  /**
-   * @deprecated This escape hatch predates the recommended move-and-backfill
-   * copying recipe. SnapSort retains it temporarily for compatibility, but it
-   * has no supported first-party use case and may be removed in a future
-   * release.
-   */
-  handoff(replacements: readonly Item[]): void;
 }
 
 /** @internal Placement the active lifecycle is currently targeting. */
@@ -93,8 +97,14 @@ interface DropTargetUpdate {
   readonly shouldClear: boolean;
 }
 
-function freezePoint(point: { x: number; y: number }) {
-  return Object.freeze({ x: point.x, y: point.y });
+function freezePoint(point: {
+  x: number;
+  y: number;
+}): Readonly<{ x: number; y: number }> {
+  return Object.freeze({
+    x: point.x,
+    y: point.y,
+  });
 }
 
 function freezeLocation(location: DragLocation): DragLocation {
@@ -109,68 +119,14 @@ function freezePlacement(
   return Object.freeze({ container, index, insertion });
 }
 
-class PublicDragSession implements DragSession {
-  readonly #controller: DragSessionController;
-
-  constructor(controller: DragSessionController) {
-    this.#controller = controller;
-    Object.freeze(this);
-  }
-
-  get root() {
-    return this.#controller.root;
-  }
-  get pointerId() {
-    return this.#controller.pointerId;
-  }
-  get items() {
-    return this.#controller.items;
-  }
-  get sources() {
-    return this.#controller.sources;
-  }
-  get pressedItem() {
-    return this.#controller.pressedItem;
-  }
-  get primaryItem() {
-    return this.#controller.primaryItem;
-  }
-  get start() {
-    return this.#controller.start;
-  }
-  get pointer() {
-    return this.#controller.pointer;
-  }
-  get status() {
-    return this.#controller.publicStatus;
-  }
-  get dragVisual() {
-    return this.#controller.dragVisual;
-  }
-  set dragVisual(value: DragVisual) {
-    this.#controller.dragVisual = value;
-  }
-  get dropEffect() {
-    return this.#controller.dropEffect;
-  }
-  set dropEffect(value: DropEffect) {
-    this.#controller.dropEffect = value;
-  }
-  handoff(replacements: readonly Item[]): void {
-    this.#controller.handoff(replacements);
-  }
-}
-
 /**
- * @internal Runtime controller for one drag gesture. Its `handle` is the only
- * session object exposed through public callbacks and `root.dragSession`.
+ * @internal Runtime controller maintaining drag events and states,
+ * newly created for every drag gesture.
  */
-export class DragSessionController {
-  readonly handle: DragSession;
+export class DragSessionController implements DragSession {
   readonly root: Container;
-  /** Pointer id driving this drag (from `dragStartProp`). */
-  readonly pointerId: number;
-  readonly #handoffTo: GestureHandoffControl["handoffTo"];
+  /** Input-specific controller created and owned by this session. */
+  readonly input: DragInputController;
   /**
    * The items currently receiving this drag. Stable except across `handoff`.
    * Ordered by the original run's document order (lowest first).
@@ -191,20 +147,57 @@ export class DragSessionController {
   /** Per-item constant visual offset (relative to `pressedItem`) so companions preview the collapsed run while hoisted. */
   readonly groupVisualOffsets: Map<Item, { x: number; y: number }> = new Map();
   readonly strategy: SortStrategy;
-  status: DragSessionStatus = "pending";
+  phase: DragSessionStatus = "pending";
   /** @internal True when a lifecycle is dropping only to unwind a failed drag. */
   cancelled = false;
-  #runningScheduledPointerMove = false;
-  #preparedFlowDropTargetUpdate: DropTargetUpdate | null = null;
   #preparedFlowReorderAnimation: PreparedReorderAnimation | null = null;
 
-  /** Status exposed through the public handle during a logically pre-drop move. */
-  get publicStatus(): DragSessionStatus {
-    return this.#runningScheduledPointerMove &&
-      this.status === "dropping" &&
+  /** Status exposed during a logically pre-drop move. */
+  get status(): DragSessionStatus {
+    return this.pointerInput?.applyingScheduledMove === true &&
+      this.phase === "dropping" &&
       !this.cancelled
       ? "active"
-      : this.status;
+      : this.phase;
+  }
+
+  /** @internal Active pointer input, or null for a direct session. */
+  get pointerInput(): PointerDragController | null {
+    return this.input.inputType === "pointer" ? this.input : null;
+  }
+
+  get pointerId(): number {
+    const input = this.pointerInput;
+
+    if (!input) {
+      throw new Error("DragSession: a direct drag has no pointer id.");
+    }
+
+    return input.pointerId;
+  }
+
+  get start(): Readonly<{ x: number; y: number }> {
+    const input = this.pointerInput;
+
+    if (!input) {
+      throw new Error(
+        "DragSession: a direct drag has no public pointer start.",
+      );
+    }
+
+    return input.start;
+  }
+
+  get pointer(): Readonly<{ x: number; y: number }> {
+    const input = this.pointerInput;
+
+    if (!input) {
+      throw new Error(
+        "DragSession: a direct drag has no public pointer position.",
+      );
+    }
+
+    return input.pointer;
   }
 
   /**
@@ -218,7 +211,7 @@ export class DragSessionController {
   }
 
   set dropEffect(value: DropEffect) {
-    if (this.publicStatus !== "pending" && this.publicStatus !== "active") {
+    if (this.status !== "pending" && this.status !== "active") {
       throw new Error(
         "DragSession.dropEffect can only be changed before dropping begins.",
       );
@@ -242,7 +235,7 @@ export class DragSessionController {
   }
 
   set dragVisual(value: DragVisual) {
-    if (this.status !== "pending") {
+    if (this.phase !== "pending") {
       throw new Error(
         "DragSession.dragVisual can only be changed during onDragStart.",
       );
@@ -255,9 +248,24 @@ export class DragSessionController {
     this.#dragVisual = value;
   }
 
-  start: Readonly<{ x: number; y: number }>;
-  pointer: Readonly<{ x: number; y: number }>;
-  offset: { x: number; y: number } = { x: 0, y: 0 };
+  #visualStart: Readonly<{ x: number; y: number }>;
+  #visualPointer: Readonly<{ x: number; y: number }>;
+  visualOffset: { x: number; y: number } = {
+    x: 0,
+    y: 0,
+  };
+
+  get visualStart(): Readonly<{ x: number; y: number }> {
+    return this.#visualStart;
+  }
+
+  get visualPointer(): Readonly<{ x: number; y: number }> {
+    return this.#visualPointer;
+  }
+
+  set visualPointer(value: Readonly<{ x: number; y: number }>) {
+    this.#visualPointer = freezePoint(value);
+  }
 
   /**
    * Ghosts currently live for this drag, keyed by role. Most lifecycles only
@@ -317,10 +325,9 @@ export class DragSessionController {
     items: Item[],
     sources: DragLocation[],
     strategy: SortStrategy,
-    prop: dragStartProp,
+    start: DragInputStart,
     pressedItem: Item = items[0],
   ) {
-    this.handle = new PublicDragSession(this);
     this.root = root;
     this.sources = Object.freeze(sources.map(freezeLocation));
     this.snapshotItemSet = new Set(items);
@@ -332,10 +339,18 @@ export class DragSessionController {
         : strategy.mode === "swap"
           ? "preview"
           : "item";
-    this.pointerId = prop.pointerId;
-    this.#handoffTo = prop.handoffTo;
-    this.start = freezePoint(prop.start);
-    this.pointer = freezePoint(prop.start);
+
+    if (start.inputType === "pointer") {
+      const input = new PointerDragController(this, start.prop);
+      this.input = input;
+      this.#visualStart = input.start;
+      this.#visualPointer = input.pointer;
+    } else {
+      const initialVisualPoint = freezePoint({ x: 0, y: 0 });
+      this.input = new DirectDragController(this, start.initiatingItemId);
+      this.#visualStart = initialVisualPoint;
+      this.#visualPointer = initialVisualPoint;
+    }
   }
 
   #setParticipants(
@@ -360,101 +375,6 @@ export class DragSessionController {
     this.pressedItem = pressedItem;
     this.itemSet = itemSet;
     for (const item of items) this.#touchedItems.add(item);
-  }
-
-  /**
-   * Transfer this gesture to an already-mounted parallel run. Handoff changes
-   * input/session ownership only: it never creates, destroys, inserts, removes,
-   * or otherwise manages application state for either run. Public `sources`
-   * continue to describe where the gesture began. Call it synchronously from
-   * `onDragStart`, before the selected drag visual is activated.
-   *
-   * Validation and native input transfer complete before session fields are
-   * changed, so a rejected handoff leaves the current participants unchanged.
-   */
-  handoff(replacements: readonly Item[]): void {
-    if (this.status !== "pending") {
-      throw new Error(
-        "DragSession.handoff can only be called during onDragStart.",
-      );
-    }
-    if (replacements.length !== this.items.length) {
-      throw new Error(
-        "DragSession.handoff: replacements must be parallel to the dragged items.",
-      );
-    }
-
-    const origins = this.items;
-    const unique = new Set(replacements);
-    if (unique.size !== replacements.length) {
-      throw new Error("DragSession.handoff: replacements must be unique.");
-    }
-    if (replacements.some((replacement) => this.itemSet.has(replacement))) {
-      throw new Error(
-        "DragSession.handoff: replacements must not include the current dragged items.",
-      );
-    }
-
-    const replacementSources = replacements.map((replacement) => {
-      if (
-        replacement.engine !== this.root.engine ||
-        replacement.isDeleteRequested
-      ) {
-        throw new Error(
-          "DragSession.handoff: every replacement must be live in the session engine.",
-        );
-      }
-      if (replacement.isGhost) {
-        throw new Error(
-          "DragSession.handoff: pointer previews and other Ghosts cannot receive an Item handoff.",
-        );
-      }
-      if (replacement.rootContainer !== this.root) {
-        throw new Error(
-          "DragSession.handoff: every replacement must belong to the session root.",
-        );
-      }
-      const { container, index } = replacement.getIndexAndContainer();
-      if (!container || index < 0) {
-        throw new Error(
-          "DragSession.handoff: every replacement must be attached to a container.",
-        );
-      }
-      const element = replacement.element;
-      if (
-        !element?.isConnected ||
-        !container.element ||
-        element.parentElement !== container.element
-      ) {
-        throw new Error(
-          "DragSession.handoff: every replacement must have a connected element directly inside its container.",
-        );
-      }
-      return buildDragLocation(container, index);
-    });
-
-    const pressedIndex = origins.indexOf(this.pressedItem);
-    const nextPressedItem =
-      replacements[pressedIndex === -1 ? 0 : pressedIndex];
-
-    // Native capture can reject a stale destination. Transfer before changing
-    // SnapSort bookkeeping so that failure is atomic from the session's side.
-    this.#handoffTo(nextPressedItem);
-
-    replacements.forEach((replacement, i) => {
-      replacement.adoptDragSnapshotFrom(origins[i]);
-      const visualStart = this.dragVisualStart.get(origins[i]);
-      if (visualStart) {
-        this.dragVisualStart.set(replacement, { ...visualStart });
-      }
-      const groupOffset = this.groupVisualOffsets.get(origins[i]);
-      if (groupOffset) {
-        this.groupVisualOffsets.set(replacement, { ...groupOffset });
-      }
-      this.#touchedItems.add(replacement);
-    });
-
-    this.#setParticipants(replacements, replacementSources, nextPressedItem);
   }
 
   /** The run head — lowest original index, first element of `items`. Used as the singular `item` in backwards-compatible event fields. */
@@ -513,15 +433,13 @@ export class DragSessionController {
   }
 
   /** Schedules the READ_1/WRITE_1 work for starting a drag; see FlowGhostLifecycle/InsertionMarkerLifecycle for the mode-specific WRITE_1 continuation. */
-  begin(prop: dragStartProp): void {
+  begin(): void {
     const item = this.pressedItem;
     const root = this.root;
 
     item.schedule(
       () => {
         if (this.#isEnded()) return;
-        this.pointer = freezePoint(prop.start);
-        this.start = freezePoint(prop.start);
         for (const member of this.items) {
           const visual = member.readDom({ unapplyTransform: false });
           this.dragVisualStart.set(member, { x: visual.x, y: visual.y });
@@ -530,13 +448,23 @@ export class DragSessionController {
           x: item.worldTransform.x,
           y: item.worldTransform.y,
         };
-        this.offset = {
-          x: prop.start.x - itemVisualStart.x,
-          y: prop.start.y - itemVisualStart.y,
-        };
+        const pointerInput = this.pointerInput;
+        if (pointerInput) {
+          this.visualOffset = {
+            x: pointerInput.start.x - itemVisualStart.x,
+            y: pointerInput.start.y - itemVisualStart.y,
+          };
+        } else {
+          this.#visualStart = freezePoint(itemVisualStart);
+          this.#visualPointer = this.#visualStart;
+          this.visualOffset = { x: 0, y: 0 };
+        }
         root.readDragSnapshotTree();
         root.captureDragSnapshotTree();
         this.groupDims = this.#computeGroupDims();
+        if (this.input.inputType === "direct") {
+          this.input.activate();
+        }
       },
       { stage: "READ_1", queueId: `drag-start-offset-${item.id}` },
     );
@@ -555,7 +483,7 @@ export class DragSessionController {
           }
           this.strategy.lifecycle.validateStart(this);
 
-          this.status = "active";
+          this.phase = "active";
           await this.strategy.lifecycle.dragStart(this);
           if (this.#isEnded()) {
             this.#clearSessionState();
@@ -576,76 +504,51 @@ export class DragSessionController {
     );
   }
 
-  pointerMove(prop: dragProp): void {
-    const item = this.primaryItem;
-    item.schedule(
-      () => {
-        if (!this.#acceptsScheduledPointerMove()) return;
-        let completed = false;
-        try {
-          this.pointer = freezePoint(prop.position);
-          const ghostItem = this.ghostsByChannel.get("target");
-          if (ghostItem) stageVisualRectBeforeMutation(ghostItem);
-          if (this.strategy.lifecycle.placementOccupiesFlowSlots) {
-            this.#prepareFlowDropTargetUpdate();
-          }
-          completed = true;
-        } finally {
-          if (!completed) this.scheduleErrorFinalizer();
-        }
-      },
-      { stage: "READ_1", queueId: `drag-read-${item.id}` },
-    );
-    item.schedule(
-      async () => {
-        if (!this.#acceptsScheduledPointerMove()) return;
-        let completed = false;
-        try {
-          this.pointer = freezePoint(prop.position);
-          this.#runningScheduledPointerMove = true;
-          try {
-            if (this.strategy.lifecycle.placementOccupiesFlowSlots) {
-              await this.#applyPreparedFlowDropTargetUpdate();
-            } else {
-              await this.updateDropTarget();
-            }
-            await this.strategy.lifecycle.dragMove(this);
-          } finally {
-            this.#runningScheduledPointerMove = false;
-          }
-          completed = true;
-        } finally {
-          if (!completed) this.scheduleErrorFinalizer();
-        }
-      },
-      { stage: "WRITE_1", queueId: `drag-${item.id}` },
-    );
-    this.root.queueReadTree("READ_2", `drag-${item.id}`);
-  }
-
-  #acceptsScheduledPointerMove(): boolean {
-    // A normal pointerup queues drop work after the final move in the same
-    // frame; cancellation must still suppress any queued move immediately.
-    return (
-      this.status === "active" ||
-      (this.status === "dropping" && !this.cancelled)
-    );
-  }
-
   #isEnded(): boolean {
-    return this.status === "ended";
+    return this.phase === "ended";
+  }
+
+  #cancelInputAnimation(): void {
+    if (this.input.inputType === "direct") {
+      cancelDirectMoveAnimation(this.input);
+    }
+  }
+
+  /** @internal Begin a successful drop exactly once. */
+  beginDrop(): boolean {
+    if (this.phase !== "active") {
+      return false;
+    }
+
+    this.#cancelInputAnimation();
+    this.phase = "dropping";
+    this.dragTransformSyncAnimation?.cancel();
+    this.dragTransformSyncAnimation = null;
+
+    let completed = false;
+
+    try {
+      this.strategy.lifecycle.drop(this);
+      completed = true;
+      return true;
+    } finally {
+      if (!completed) {
+        this.scheduleErrorFinalizer();
+      }
+    }
   }
 
   /** @internal Unwinds an input-cancelled drag without committing a drop. */
   cancel(): void {
-    if (this.status === "dropping" || this.status === "ended") return;
+    if (this.phase === "dropping" || this.phase === "ended") return;
 
+    this.#cancelInputAnimation();
     this.cancelled = true;
-    if (this.status === "pending") {
+    if (this.phase === "pending") {
       this.#clearSessionState();
       return;
     }
-    this.status = "dropping";
+    this.phase = "dropping";
     this.dragTransformSyncAnimation?.cancel();
     this.dragTransformSyncAnimation = null;
     this.#dropEffect = "none";
@@ -666,32 +569,33 @@ export class DragSessionController {
 
   /** @internal Mark a failed task and defer cleanup to the engine's error boundary. */
   scheduleErrorFinalizer(): void {
-    if (this.status === "ended") return;
-    const shouldFireDragEnd = this.status !== "pending";
+    if (this.phase === "ended") return;
+    const shouldFireDragEnd = this.phase !== "pending";
     this.#markFailedDrop();
     this.#scheduleFailureFinalizer(shouldFireDragEnd);
   }
 
   #markFailedDrop(): void {
     if (this.#isEnded()) return;
+    this.#cancelInputAnimation();
     this.cancelled = true;
-    this.status = "dropping";
+    this.phase = "dropping";
     this.#dropEffect = "none";
     this.dragTransformSyncAnimation?.cancel();
     this.dragTransformSyncAnimation = null;
   }
 
   #clearSessionState(): void {
+    this.#cancelInputAnimation();
     this.dragTransformSyncAnimation?.cancel();
     this.dragTransformSyncAnimation = null;
-    this.status = "ended";
+    this.phase = "ended";
     clearDragSession(this.root, this);
     this.dragCoordinateParent.clear();
     this.dragLayoutPosition.clear();
     this.dragVisualStart.clear();
     this.groupVisualOffsets.clear();
     this.groupDims = null;
-    this.#preparedFlowDropTargetUpdate = null;
     this.#preparedFlowReorderAnimation = null;
     this.pendingPlacement = null;
     this.resolvedDropTarget = null;
@@ -718,11 +622,19 @@ export class DragSessionController {
     } finally {
       this.#clearSessionState();
     }
+    this.#fireDragEnd(destination);
+  }
+
+  #fireDragEnd(destination: DragLocation | null): void {
     fireOptionalMutation(
       this.root,
       this.root.callbacks?.onDragEnd,
       buildDragEndEvent(this, destination),
     );
+
+    if (this.input.inputType === "direct") {
+      this.input.scheduleFocusRestoration();
+    }
   }
 
   #scheduleFailureFinalizer(shouldFireDragEnd: boolean): void {
@@ -756,39 +668,85 @@ export class DragSessionController {
     if (!shouldFireDragEnd) return;
     finalizer.addCallback(() => {
       if (!finalized) return;
-      fireOptionalMutation(
-        this.root,
-        this.root.callbacks?.onDragEnd,
-        buildDragEndEvent(this, null),
-      );
+      this.#fireDragEnd(null);
     });
   }
 
-  /**
-   * Compute the current drop target and move the ghost when the target changes.
-   * Mode-specific translation/comparison is delegated to the lifecycle strategy;
-   * this method owns the shared "did the target change" bookkeeping and the
-   * `onDropTargetChange` callback.
-   */
-  async updateDropTarget(): Promise<void> {
-    const update = this.#resolveDropTargetUpdate();
-    if (!update) return;
-    await this.#applyDropTargetUpdate(update);
-  }
-
-  #resolveDropTargetUpdate(): DropTargetUpdate | null {
-    const item = this.primaryItem;
-    const root = this.root;
-    // Defensive guard for a drag-start/drag race: the deeper fix should live in
-    // the engine scheduler as built-in debounce/coalescing support for input
-    // updates that depend on earlier READ/WRITE phases.
-    if (!root.hasDragSnapshotTree() || !item.dragSnapshot) {
-      return null;
+  /** @internal Initialize placement feedback for the active input method. */
+  async initializeTarget(): Promise<void> {
+    if (this.input.inputType === "pointer") {
+      await this.applyTarget(this.resolvePointerTarget(), true);
+      return;
     }
 
+    // The direct swap home candidate represents no prospective swap.
+    if (this.strategy.mode === "swap") {
+      return;
+    }
+
+    await this.applyTarget(this.input.currentCandidate?.target ?? null, false);
+  }
+
+  /** @internal Resolve the current real pointer through the active strategy. */
+  resolvePointerTarget(): ResolvedDropTarget | null {
+    const item = this.primaryItem;
+    if (!this.root.hasDragSnapshotTree() || !item.dragSnapshot) return null;
+    return this.strategy.dropTarget.resolve(item, this.root, this);
+  }
+
+  /** @internal Stage an existing target visual before structural mutation. */
+  stageTargetVisual(): void {
+    const ghost = this.ghostsByChannel.get("target");
+    if (ghost) stageVisualRectBeforeMutation(ghost);
+  }
+
+  /** @internal Capture pre-mutation animation geometry for an exact target. */
+  prepareTarget(target: ResolvedDropTarget | null): void {
+    this.stageTargetVisual();
+
+    this.#preparedFlowReorderAnimation = null;
+
+    if (!this.strategy.lifecycle.placementOccupiesFlowSlots) {
+      return;
+    }
+
+    const update = this.#dropTargetUpdateFor(target);
+
+    if (!update.logicalChanged) {
+      return;
+    }
+
+    const animationContainer =
+      update.placement?.container ??
+      update.previousPlacement?.container ??
+      null;
+
+    if (!animationContainer) {
+      return;
+    }
+
+    this.#preparedFlowReorderAnimation = prepareReorderAnimation(
+      this.primaryItem,
+      animationContainer,
+      this.items,
+    );
+  }
+
+  /** @internal Apply one already-selected target through the shared lifecycle. */
+  async applyTarget(
+    target: ResolvedDropTarget | null,
+    updatePointerHover: boolean,
+  ): Promise<void> {
+    await this.#applyDropTargetUpdate(
+      this.#dropTargetUpdateFor(target),
+      updatePointerHover,
+    );
+  }
+
+  #dropTargetUpdateFor(target: ResolvedDropTarget | null): DropTargetUpdate {
     const lifecycle = this.strategy.lifecycle;
-    const target = this.strategy.dropTarget.resolve(item, root, this);
     const previousPlacement = lifecycle.currentPlacement(this);
+
     if (!target) {
       return {
         target: null,
@@ -810,7 +768,9 @@ export class DragSessionController {
       !previousPlacement ||
       placement.container !== previousPlacement.container ||
       placement.index !== previousPlacement.index;
+
     const previousInsertion = this.pendingPlacement?.insertion ?? null;
+
     const presentationChanged =
       previousInsertion === null || placement.insertion === null
         ? previousInsertion !== placement.insertion
@@ -828,8 +788,10 @@ export class DragSessionController {
       shouldClear: false,
     };
   }
-
-  async #applyDropTargetUpdate(update: DropTargetUpdate): Promise<void> {
+  async #applyDropTargetUpdate(
+    update: DropTargetUpdate,
+    updatePointerHover = true,
+  ): Promise<void> {
     const lifecycle = this.strategy.lifecycle;
     const { previousPlacement, placement } = update;
     if (!placement) {
@@ -846,12 +808,16 @@ export class DragSessionController {
         );
         this.#fireDropTargetChange(previousPlacement, null);
       }
-      this.#updateHoveredItem(null);
+      if (updatePointerHover) {
+        this.#updateHoveredItem(null);
+      }
       return;
     }
 
     this.resolvedDropTarget = update.target;
-    this.#updateHoveredItem(placement.container);
+    if (updatePointerHover) {
+      this.#updateHoveredItem(placement.container);
+    }
     if (update.logicalChanged || update.presentationChanged) {
       await lifecycle.syncPlacement(this, placement);
       this.#invalidateVisualGeometry(
@@ -868,34 +834,6 @@ export class DragSessionController {
       }
     }
     lifecycle.afterPlacementSync(this);
-  }
-
-  #prepareFlowDropTargetUpdate(): void {
-    this.#preparedFlowDropTargetUpdate = null;
-    this.#preparedFlowReorderAnimation = null;
-
-    const update = this.#resolveDropTargetUpdate();
-    if (!update) return;
-    this.#preparedFlowDropTargetUpdate = update;
-    if (!update.logicalChanged) return;
-
-    const animationContainer =
-      update.placement?.container ??
-      update.previousPlacement?.container ??
-      null;
-    if (!animationContainer) return;
-    this.#preparedFlowReorderAnimation = prepareReorderAnimation(
-      this.primaryItem,
-      animationContainer,
-      this.items,
-    );
-  }
-
-  async #applyPreparedFlowDropTargetUpdate(): Promise<void> {
-    const update = this.#preparedFlowDropTargetUpdate;
-    this.#preparedFlowDropTargetUpdate = null;
-    if (!update) return;
-    await this.#applyDropTargetUpdate(update);
   }
 
   /** @internal Consume the READ_1 FLIP capture for this flow mutation. */

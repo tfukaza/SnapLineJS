@@ -15,7 +15,7 @@ A single `Container`/`Item` class pair (per framework) whose drag/drop behavior 
 - `Container` - The only container class. `new Container(engine, parent, { itemId, mode, ... })`.
 - `defaultAnimations` - Opt-in standard reorder, drop, and programmatic move/removal animation preset.
 - `Item` - The only ordinary item class. `new Item(engine, parent, { itemId })`; identity is required and construction-only. Ghosts/markers are created internally.
-- `DragSession` - Type-only public handle for one gesture. Callback events and `root.dragSession` expose the same stable handle; lifecycle/controller state remains internal.
+- `DragSession` - Type-only public view of the per-gesture controller. Callback events and `root.dragSession` expose the same controller object; pointer/direct state lives on its discriminated `input` controller.
 - Event types: `ItemInsertEvent`, `ItemRemoveEvent`, `ItemMoveEvent`, `ItemSwapEvent`, `GhostCreateEvent`, `GhostInsertEvent`, `GhostMoveEvent`, `GhostRemoveEvent`, `DragStartEvent`, `DragEndEvent`, `DropTargetChangeEvent`, `DropPriorityEvent`, `VisualGeometryInvalidationEvent`, `DragLocation`.
 - `DROP_REJECT_PRIORITY` - the effective `-1` destination rejection value.
 - Drag presentation types: `DragVisual` (`"item" | "preview" | "none"`) and `DropEffect` (`"move" | "none"`).
@@ -111,23 +111,23 @@ public configuration surface is the built-in `SortMode` union.
 ### DragSession
 
 `DragSessionController` is created on `dragStart` and kept in the internal
-root-keyed session store. Lifecycle strategies receive that controller, which
-owns pointer/offset/start state, ghosts, targets, the resolved strategy, and
-animation bookkeeping. Public callbacks and `root.dragSession` receive only
-its stable `DragSession` handle. Nested containers report `null`.
+root-keyed session store. It owns the shared transaction, ghosts, targets,
+resolved strategy, visual coordinates, and animation bookkeeping. Its
+`input` is either a `PointerDragController` or `DirectDragController`, which
+owns input-specific state and commands. Public callbacks and
+`root.dragSession` receive the same controller object through the narrower
+`DragSession` type; nested containers report `null`.
 
-The handle exposes read-only `root`, `pointerId`, `items`, `sources`,
-`pressedItem`, `primaryItem`, `start`, `pointer`, and `status`, plus the
-phase-checked `dragVisual` and `dropEffect` controls. Its arrays, locations, and
-coordinate objects are immutable. `DragSession` is a type-only root export and
-cannot be constructed by consumers. Internal code that needs lifecycle state
-must resolve the controller through `drag/session-store.ts`; never widen the
-public handle to expose controller fields.
+Direct movement retains one destination rectangle per dragged participant and
+animates the active visual from its current rectangle to those projected
+rectangles with the destination Container's `animation.reorder` channel.
+Position, width, and height share one progress value. A queued drop waits for
+that transition; cancel and teardown stop it.
 
-`handoff(replacements)` is deprecated. It predates the move-and-backfill copy
-recipe, has no first-party use case, and remains temporarily only so it can be
-removed in a future release if no concrete use case emerges. Do not add new
-call sites or present it as a supported application recipe.
+The public type exposes read-only root, participant, source, status, and input
+state plus the phase-checked `dragVisual` and `dropEffect` controls. Its arrays,
+locations, and coordinate objects are immutable. `DragSession` remains a
+type-only root export and cannot be constructed by consumers.
 
 ### Mutator (`mutation.ts`)
 

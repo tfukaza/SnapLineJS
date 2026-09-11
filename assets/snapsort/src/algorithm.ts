@@ -233,11 +233,13 @@ function createResolutionContext(
   item: ItemBase,
   session: DragSession | null,
   pointer: { x: number; y: number },
+  dragRect?: Rect,
 ): ResolutionContext {
   const items = session?.items ?? [item];
   const run = buildItemRunEvent(items);
   const sources = session?.sources ?? items.map(buildItemLocation);
   const box = requireDragSnapshotBox(item);
+
   return Object.freeze({
     session,
     item,
@@ -248,13 +250,18 @@ function createResolutionContext(
     itemsMetadata: Object.freeze([...run.itemsMetadata]),
     source: sources[0] ?? null,
     sources: Object.freeze([...sources]),
-    pointer: Object.freeze({ x: pointer.x, y: pointer.y }),
-    dragRect: frozenRect({
-      x: item.dragPositionX,
-      y: item.dragPositionY,
-      width: box.width,
-      height: box.height,
+    pointer: Object.freeze({
+      x: pointer.x,
+      y: pointer.y,
     }),
+    dragRect: frozenRect(
+      dragRect ?? {
+        x: item.dragPositionX,
+        y: item.dragPositionY,
+        width: box.width,
+        height: box.height,
+      },
+    ),
     containers: new Map(),
   });
 }
@@ -330,7 +337,7 @@ function resolveItemHitbox(
   if (!callback) return { shape: "rect", rect: defaultRect };
 
   const hitbox = callback({
-    session: session.handle,
+    session,
     item: draggedItem,
     itemId: draggedItem.itemId,
     itemMetadata: draggedItem.metadata,
@@ -1390,6 +1397,102 @@ function collectInsertionCandidates(
   return candidates;
 }
 
+/** @internal Build the canonical insertion marker for one direct slot. */
+export function createDirectInsertionTarget(
+  session: DragSession,
+  container: Container,
+  logicalIndex: number,
+): ResolvedDropTarget & {
+  readonly insertion: InsertionMarkerPresentation;
+} {
+  const containerSnapshot = requireDragSnapshot(container);
+  const rawChildren = containerSnapshot.children.filter(
+    (child) => !child.value.isGhost,
+  );
+
+  const retainedIndices = rawChildren.flatMap(
+    (child, rawIndex) =>
+      session.itemSet.has(child.value)
+        ? []
+        : [rawIndex],
+  );
+
+  if (
+    !Number.isInteger(logicalIndex) ||
+    logicalIndex < 0 ||
+    logicalIndex > retainedIndices.length
+  ) {
+    throw new RangeError(
+      "SnapSort: direct insertion index is outside the retained item slots.",
+    );
+  }
+
+  const boundary =
+    retainedIndices[logicalIndex] ??
+    rawChildren.length;
+
+  const previousSnapshot =
+    rawChildren[boundary - 1] ?? null;
+  const nextSnapshot =
+    rawChildren[boundary] ?? null;
+
+  const visualLines = inferSnapshotVisualLines(
+    containerSnapshot,
+    flowAxesForDirection(containerSnapshot.direction),
+  );
+
+  const lineBySnapshot = new Map<
+    ItemSnapshot<ItemBase>,
+    SnapshotVisualLine<ItemBase>
+  >();
+
+  for (const line of visualLines) {
+    for (const snapshot of line.snapshots) {
+      lineBySnapshot.set(snapshot, line);
+    }
+  }
+
+  const useVisualLineBand =
+    containerSnapshot.layoutModel === "slots"
+      ? visualLines.length > 1
+      : flowLayoutCanWrap(
+          containerSnapshot,
+          flowAxesForDirection(
+            containerSnapshot.direction,
+          ),
+          visualLines.length,
+        );
+
+  const gap = insertionGapSegment(
+    containerSnapshot,
+    previousSnapshot,
+    nextSnapshot,
+    lineBySnapshot,
+    useVisualLineBand,
+  );
+
+  const projection = projectItemRunMove(
+    container,
+    boundary,
+    session.activeSources,
+  );
+
+  const insertion = Object.freeze({
+    gap,
+    previous: insertionMarkerNeighbor(
+      previousSnapshot,
+    ),
+    next: insertionMarkerNeighbor(nextSnapshot),
+    isCurrentPlacement: projection.isCurrentPlacement,
+  }) satisfies InsertionMarkerPresentation;
+
+  return Object.freeze({
+    container,
+    index: logicalIndex,
+    insertion,
+  });
+}
+
 function chooseInsertionCandidate(
   candidates: InsertionCandidate[],
 ): InsertionCandidate | null {
@@ -1446,7 +1549,7 @@ function dropPolicyEvent(
   const base = containerResolutionBase(context, candidate.target.container);
 
   return {
-    session: context.session?.handle ?? null,
+    session: context.session,
     item: context.item,
     itemId: context.itemId,
     itemMetadata: context.itemMetadata,
@@ -1465,6 +1568,59 @@ function dropPolicyEvent(
     containerContentRect: base.containerContentRect,
     depth: base.depth,
   };
+}
+
+function effectiveDropPriority(
+  candidate: { target: ResolvedDropTarget },
+  getContext: () => ResolutionContext,
+): number {
+  const container = candidate.target.container;
+  const staticPriority =
+    configuredDropPriority(container);
+  const callback = container.callbacks?.getDropPriority;
+
+  if (!callback) {
+    return staticPriority;
+  }
+
+  const override = callback(
+    dropPolicyEvent(
+      candidate,
+      getContext(),
+      staticPriority,
+    ),
+  );
+
+  if (override !== undefined) {
+    validateDropPriority(
+      container,
+      override,
+      "getDropPriority",
+    );
+  }
+
+  return override ?? staticPriority;
+}
+
+export function evaluateDropTargetPriority(
+  item: ItemBase,
+  session: DragSession,
+  target: ResolvedDropTarget,
+  geometry: Readonly<{
+    pointer: Readonly<{ x: number; y: number }>;
+    dragRect: Readonly<Rect>;
+  }>,
+): number {
+  return effectiveDropPriority(
+    { target },
+    () =>
+      createResolutionContext(
+        item,
+        session,
+        geometry.pointer,
+        geometry.dragRect,
+      ),
+  );
 }
 
 /**
@@ -1488,17 +1644,11 @@ function applyDropPolicy<T extends { target: ResolvedDropTarget }>(
   }
 
   const eligible: Array<{ candidate: T; priority: number }> = [];
-  for (const [container, directCandidates] of byContainer) {
-    const callbacks = container.callbacks;
-    const staticPriority = configuredDropPriority(container);
-    const override = callbacks?.getDropPriority
-      ? callbacks.getDropPriority(
-          dropPolicyEvent(directCandidates[0], getContext(), staticPriority),
-        )
-      : undefined;
-    if (override !== undefined)
-      validateDropPriority(container, override, "getDropPriority");
-    const priority = override ?? staticPriority;
+  for (const [_, directCandidates] of byContainer) {
+    const priority = effectiveDropPriority(
+      directCandidates[0],
+      getContext,
+    );
     if (priority === DROP_REJECT_PRIORITY) continue;
     for (const candidate of directCandidates) {
       eligible.push({ candidate, priority });

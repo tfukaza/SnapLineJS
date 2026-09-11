@@ -89,13 +89,16 @@ class EventCallback {
             prop,
             this.#object.id,
           );
+          Object.assign(this.#global, { [prop]: null });
         } else {
+          const callback = (value as any).bind(this.#object);
           this.#object.engine?.input.subscribeGlobalCursorEvent(
             prop,
             this.#object.id,
-            (value as any).bind(this.#object),
+            callback,
             this.#object.engine,
           );
+          Object.assign(this.#global, { [prop]: callback });
         }
         return true;
       },
@@ -123,6 +126,30 @@ class EventCallback {
       onAfterReadDom: null,
     };
     this.dom = EventProxyFactory<BaseObject, DomEvent>(this.#object, this.#dom);
+  }
+
+  /** @internal Whether this object already owns a callback for an input event. */
+  hasInputCallback(event: keyof InputEventCallback): boolean {
+    return this.#input[event] !== null;
+  }
+
+  /** @internal Whether this object owns a root-scoped callback for an input event. */
+  hasGlobalCallback(event: keyof InputEventCallback): boolean {
+    return this.#global[event] !== null;
+  }
+
+  /** @internal The bound callback currently installed for an input event. */
+  inputCallback<Event extends keyof InputEventCallback>(
+    event: Event,
+  ): InputEventCallback[Event] {
+    return this.#input[event];
+  }
+
+  /** @internal The bound root-scoped callback installed for an input event. */
+  globalCallback<Event extends keyof InputEventCallback>(
+    event: Event,
+  ): InputEventCallback[Event] {
+    return this.#global[event];
   }
 }
 
@@ -1031,6 +1058,15 @@ export class ElementObject<
     }
     this.#assignElement(element);
     this.event.dom.onAssignDom?.();
+  }
+
+  /**
+   * Element currently representing this object for input and focus.
+   *
+   * An explicit input alias takes precedence over the object's visual element.
+   */
+  get inputElement(): DomElement | null {
+    return this.#inputAlias ?? this.#element;
   }
 
   addInputAlias(element: DomElement): void {

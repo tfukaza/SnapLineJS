@@ -9,6 +9,7 @@ import {
   type ContainerOptions,
 } from "../../assets/snapsort/src/container";
 import { builtinStrategies } from "../../assets/snapsort/src/drag/drop-strategy";
+import { directCandidateGeometry } from "../../assets/snapsort/src/drag/direct-candidates";
 import { DragSessionController as DragSession } from "../../assets/snapsort/src/drag/session";
 import {
   getDragSessionController,
@@ -22,6 +23,7 @@ import {
 import { buildGhostSlotLocation } from "../../assets/snapsort/src/event-builders";
 import type { DropPriorityEvent } from "../../assets/snapsort/src/events";
 import { Item } from "../../assets/snapsort/src/item";
+import { KeyboardDragController } from "../../assets/snapsort/src/keyboard-controller";
 import { readVisualRect } from "../../assets/snapsort/src/internal/visual-rect";
 import { placeItemAt } from "../../assets/snapsort/src/internal/tree-mutation";
 
@@ -218,10 +220,13 @@ function makeSession(
     ],
     builtinStrategies[mode],
     {
-      handoffTo() {},
-      pointerId,
-      start: { x: 20, y: 20 },
-    } as never,
+      inputType: "pointer",
+      prop: {
+        handoffTo() {},
+        pointerId,
+        start: { x: 20, y: 20 },
+      } as never,
+    },
     item,
   );
 }
@@ -242,6 +247,29 @@ function attemptItemDrag(item: Item): void {
     isWithinEngine: true,
     handoffTo() {},
   });
+}
+
+function dispatchKeyboardCommand(
+  root: Container,
+  focusedItem: Item,
+  key: string,
+  options: KeyboardEventInit = {},
+  target: EventTarget | null = focusedItem.inputElement,
+): KeyboardEvent {
+  const KeyboardEventConstructor =
+    focusedItem.element!.ownerDocument.defaultView!.KeyboardEvent;
+  const event = new KeyboardEventConstructor("keydown", {
+    bubbles: true,
+    cancelable: true,
+    key,
+    ...options,
+  });
+  Object.defineProperty(event, "target", {
+    configurable: true,
+    value: target,
+  });
+  root.event.global.keyDown?.({ event, focusedObject: focusedItem });
+  return event;
 }
 
 async function drainFrames(global: any, maximumFrames = 5): Promise<void> {
@@ -1123,7 +1151,7 @@ test("move, reorder, removal, and cancellation keep state live", async () => {
 
     const session = makeSession(root, last);
     installDragSession(root, session);
-    session.status = "active";
+    session.phase = "active";
     session.strategy.lifecycle.validateStart(session);
     await session.strategy.lifecycle.dragStart(session);
 
@@ -1214,7 +1242,7 @@ test("swap lifecycle reconciles same-container Vanilla adapter order", async () 
     const session = makeSession(root, first, 3, "swap");
 
     installDragSession(root, session);
-    session.status = "dropping";
+    session.phase = "dropping";
     session.strategy.lifecycle.syncPlacement(session, {
       container: root,
       index: 1,
@@ -1289,7 +1317,7 @@ test("swap lifecycle reconciles framework-owned replacement Items", async () => 
     const session = makeSession(root, first, 4, "swap");
 
     installDragSession(root, session);
-    session.status = "dropping";
+    session.phase = "dropping";
     session.strategy.lifecycle.syncPlacement(session, {
       container: destination,
       index: 0,
@@ -1366,8 +1394,15 @@ test("DropPriorityEvent reports the real nested container depth", () => {
     harness.global.currentStage = "IDLE";
 
     const session = makeSession(root, dragged, 2);
-    session.pointer = { x: 145, y: 145 };
-    session.status = "active";
+    if (session.input.inputType !== "pointer") {
+      throw new Error("Expected pointer input");
+    }
+    session.input.updatePointer({
+      pointerId: 2,
+      position: { x: 145, y: 145 },
+    } as never);
+    session.visualPointer = session.input.pointer;
+    session.phase = "active";
     const candidate = determineSwapDropTarget(dragged, root, session);
 
     expect(candidate?.container).toBe(nested);
@@ -1375,6 +1410,292 @@ test("DropPriorityEvent reports the real nested container depth", () => {
     expect(priorityEvent?.container).toBe(nested);
     expect(priorityEvent?.depth).toBe(2);
     expect(priorityEvent?.depth).toBe(nested.depth);
+  } finally {
+    harness.cleanup();
+  }
+});
+
+test("KeyboardDragController owns and releases the root key callback", () => {
+  const harness = createStateHarness();
+  try {
+    const root = mountRoot(harness);
+    root.event.global.keyDown = () => {};
+
+    expect(() => new KeyboardDragController(root)).toThrow(
+      /keyDown callback is already in use/,
+    );
+
+    root.event.global.keyDown = null;
+    const controller = new KeyboardDragController(root);
+    expect(root.event.hasGlobalCallback("keyDown")).toBe(true);
+
+    controller.destroy();
+    controller.destroy();
+    expect(root.event.hasGlobalCallback("keyDown")).toBe(false);
+  } finally {
+    harness.cleanup();
+  }
+});
+
+test("KeyboardDragController navigates a direct session and restores focus", async () => {
+  const harness = createStateHarness();
+  try {
+    const root = mountRoot(harness);
+    const first = mountItem(harness, root, "first", {
+      x: 20,
+      y: 20,
+      width: 120,
+      height: 40,
+    });
+    mountItem(harness, root, "second", {
+      x: 20,
+      y: 80,
+      width: 120,
+      height: 40,
+    });
+    first.element!.setAttribute("tabindex", "0");
+    first.element!.focus();
+    const controller = new KeyboardDragController(root);
+
+    const lift = dispatchKeyboardCommand(root, first, "Enter");
+    expect(lift.defaultPrevented).toBe(true);
+    await drainFrames(harness.global, 10);
+
+    const activeSession = getDragSessionController(root);
+    expect(activeSession?.input.inputType).toBe("direct");
+    expect(activeSession?.status).toBe("active");
+
+    const move = dispatchKeyboardCommand(root, first, "ArrowDown");
+    expect(move.defaultPrevented).toBe(true);
+    await drainFrames(harness.global, 10);
+
+    if (!activeSession || activeSession.input.inputType !== "direct") {
+      throw new Error("Expected an active direct session");
+    }
+    expect(activeSession.input.currentTarget?.index).toBe(1);
+
+    const cancel = dispatchKeyboardCommand(root, first, "Escape");
+    expect(cancel.defaultPrevented).toBe(true);
+    await drainFrames(harness.global, 10);
+
+    expect(root.dragSession).toBeNull();
+    expect(harness.document.activeElement).toBe(first.inputElement);
+    controller.destroy();
+  } finally {
+    harness.cleanup();
+  }
+});
+
+test("direct candidates retain destination-sized member rectangles", async () => {
+  const harness = createStateHarness();
+  try {
+    const root = mountRoot(harness, "root", {
+      direction: "row",
+      wrap: "nowrap",
+    });
+    const source = mountContainer(
+      harness,
+      root,
+      "source",
+      { x: 20, y: 20, width: 220, height: 240 },
+      { direction: "column", wrap: "nowrap", stretchItems: true },
+    );
+    const destination = mountContainer(
+      harness,
+      root,
+      "destination",
+      { x: 300, y: 20, width: 120, height: 240 },
+      { direction: "column", wrap: "nowrap", stretchItems: true },
+    );
+    const dragged = mountItem(harness, source, "dragged", {
+      x: 30,
+      y: 30,
+      width: 200,
+      height: 44,
+    });
+    mountItem(harness, destination, "target", {
+      x: 300,
+      y: 20,
+      width: 120,
+      height: 36,
+    });
+
+    const publicSession = dragged.beginDirectDrag();
+    expect(publicSession).not.toBeNull();
+    await drainFrames(harness.global, 10);
+    const session = getDragSessionController(root);
+    if (!session || session.input.inputType !== "direct") {
+      throw new Error("Expected an active direct session");
+    }
+
+    expect(session.input.moveTo(destination, 0)).toBe(true);
+    const candidate = session.input.currentCandidate;
+    if (!candidate) throw new Error("Expected a current direct candidate");
+    const geometry = directCandidateGeometry(session, candidate);
+
+    expect(candidate.memberRects).toHaveLength(1);
+    expect(Object.isFrozen(candidate.memberRects)).toBe(true);
+    expect(Object.isFrozen(candidate.memberRects[0])).toBe(true);
+    expect(candidate.memberRects[0]).toMatchObject({
+      x: 300,
+      y: 20,
+      width: 120,
+      height: 44,
+    });
+    expect(geometry.dragRect).toEqual(candidate.memberRects[0]);
+    expect(geometry.memberRects).toBe(candidate.memberRects);
+
+    await drainFrames(harness.global, 10);
+    expect(session.input.visualRectFor("dragged")).toEqual(
+      candidate.memberRects[0],
+    );
+    expect(dragged.style.width).toBe("120px");
+    expect(dragged.style.height).toBe("44px");
+    expect(session.input.moveTo(source, 0)).toBe(true);
+
+    session.input.cancel();
+    await drainFrames(harness.global, 10);
+  } finally {
+    harness.cleanup();
+  }
+});
+
+test("direct group candidates retain one projected rectangle per member", async () => {
+  const harness = createStateHarness();
+  try {
+    const root = mountRoot(harness, "root", {
+      direction: "row",
+      wrap: "nowrap",
+    });
+    const first = mountItem(harness, root, "first", {
+      x: 20,
+      y: 20,
+      width: 200,
+      height: 40,
+    });
+    const second = mountItem(harness, root, "second", {
+      x: 20,
+      y: 70,
+      width: 200,
+      height: 50,
+    });
+    const destination = mountContainer(
+      harness,
+      root,
+      "destination",
+      { x: 300, y: 20, width: 120, height: 240 },
+      { direction: "column", wrap: "nowrap", stretchItems: true },
+    );
+    mountItem(harness, destination, "anchor", {
+      x: 300,
+      y: 20,
+      width: 120,
+      height: 36,
+    });
+    first.selected = true;
+    second.selected = true;
+
+    expect(first.beginDirectDrag()).not.toBeNull();
+    await drainFrames(harness.global, 10);
+    const session = getDragSessionController(root);
+    if (!session || session.input.inputType !== "direct") {
+      throw new Error("Expected an active direct session");
+    }
+
+    expect(session.items.map((item) => item.itemId)).toEqual([
+      "first",
+      "second",
+    ]);
+    expect(session.input.moveTo(destination, 0)).toBe(true);
+    const candidate = session.input.currentCandidate;
+    if (!candidate) throw new Error("Expected a current direct candidate");
+
+    expect(candidate.memberRects).toHaveLength(2);
+    expect(candidate.memberRects[0]).toMatchObject({
+      width: 120,
+      height: 40,
+    });
+    expect(candidate.memberRects[1]).toMatchObject({
+      width: 120,
+      height: 50,
+    });
+    expect(candidate.memberRects[0].x).toBe(candidate.memberRects[1].x);
+    expect(candidate.memberRects[1].y).toBeGreaterThanOrEqual(
+      candidate.memberRects[0].y + candidate.memberRects[0].height,
+    );
+
+    session.input.cancel();
+    await drainFrames(harness.global, 10);
+  } finally {
+    harness.cleanup();
+  }
+});
+
+test("KeyboardDragController requires the exact input alias target", async () => {
+  const harness = createStateHarness();
+  try {
+    const root = mountRoot(harness);
+    const item = mountItem(harness, root, "item", {
+      x: 20,
+      y: 20,
+      width: 120,
+      height: 40,
+    });
+    const handle = harness.document.createElement("button");
+    item.element!.append(handle);
+    item.addInputAlias(handle);
+    const controller = new KeyboardDragController(root);
+
+    const wrongTarget = dispatchKeyboardCommand(
+      root,
+      item,
+      "Enter",
+      {},
+      item.element,
+    );
+    expect(wrongTarget.defaultPrevented).toBe(false);
+    expect(root.dragSession).toBeNull();
+
+    const exactTarget = dispatchKeyboardCommand(root, item, "Enter");
+    expect(exactTarget.defaultPrevented).toBe(true);
+    await drainFrames(harness.global, 10);
+    expect(root.dragSession?.input.inputType).toBe("direct");
+
+    controller.destroy();
+    await drainFrames(harness.global, 10);
+    expect(root.dragSession).toBeNull();
+  } finally {
+    harness.cleanup();
+  }
+});
+
+test("KeyboardDragController lets Tab cancellation keep native focus", async () => {
+  const harness = createStateHarness();
+  try {
+    const root = mountRoot(harness);
+    const item = mountItem(harness, root, "item", {
+      x: 20,
+      y: 20,
+      width: 120,
+      height: 40,
+    });
+    item.element!.setAttribute("tabindex", "0");
+    const nextFocus = harness.document.createElement("button");
+    harness.document.body.append(nextFocus);
+    item.element!.focus();
+    const controller = new KeyboardDragController(root);
+
+    dispatchKeyboardCommand(root, item, "Enter");
+    await drainFrames(harness.global, 10);
+
+    const tab = dispatchKeyboardCommand(root, item, "Tab");
+    nextFocus.focus();
+    expect(tab.defaultPrevented).toBe(false);
+    await drainFrames(harness.global, 10);
+
+    expect(root.dragSession).toBeNull();
+    expect(harness.document.activeElement).toBe(nextFocus);
+    controller.destroy();
   } finally {
     harness.cleanup();
   }

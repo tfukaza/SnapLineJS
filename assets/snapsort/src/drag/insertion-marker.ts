@@ -261,6 +261,52 @@ function drop(session: DragSession): void {
   );
 }
 
+function directInsertionSnapshotIndex(
+  session: DragSession,
+  container: Container,
+  logicalIndex: number,
+): number {
+  const snapshot = container.dragSnapshot;
+
+  if (!snapshot) {
+    throw new Error(
+      "SnapSort: direct insertion requires a captured destination snapshot.",
+    );
+  }
+
+  const rawChildren = snapshot.children.filter((child) => !child.value.isGhost);
+
+  const retainedChildren = rawChildren.filter(
+    (child) => !session.itemSet.has(child.value),
+  );
+
+  if (
+    !Number.isInteger(logicalIndex) ||
+    logicalIndex < 0 ||
+    logicalIndex > retainedChildren.length
+  ) {
+    throw new RangeError(
+      "SnapSort: direct insertion index is outside the retained item slots.",
+    );
+  }
+
+  const nextRetained = retainedChildren[logicalIndex] ?? null;
+
+  if (!nextRetained) {
+    return rawChildren.length;
+  }
+
+  const snapshotIndex = rawChildren.indexOf(nextRetained);
+
+  if (snapshotIndex === -1) {
+    throw new Error(
+      "SnapSort: retained insertion neighbor is missing from its snapshot.",
+    );
+  }
+
+  return snapshotIndex;
+}
+
 export class InsertionMarkerLifecycle implements DragLifecycleStrategy {
   readonly placementOccupiesFlowSlots = false;
 
@@ -278,7 +324,7 @@ export class InsertionMarkerLifecycle implements DragLifecycleStrategy {
 
   async dragStart(session: DragSession): Promise<void> {
     await startDragVisual(session);
-    await session.updateDropTarget();
+    await session.initializeTarget();
   }
 
   dragMove(session: DragSession): void {
@@ -293,8 +339,16 @@ export class InsertionMarkerLifecycle implements DragLifecycleStrategy {
     return { container: pending.container, index: pending.index };
   }
 
-  placementIndexFor(_session: DragSession, target: ResolvedDropTarget): number {
-    return target.index;
+  placementIndexFor(session: DragSession, target: ResolvedDropTarget): number {
+    if (session.input.inputType === "pointer") {
+      return target.index;
+    }
+
+    return directInsertionSnapshotIndex(
+      session,
+      target.container,
+      target.index,
+    );
   }
 
   async syncPlacement(

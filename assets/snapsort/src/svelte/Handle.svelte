@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { getContext, onDestroy, onMount, type Snippet } from "svelte";
+  import { getContext, type Snippet } from "svelte";
+  import type { Action } from "svelte/action";
   import type { HTMLAttributes } from "svelte/elements";
   import type {
     Item,
@@ -19,26 +20,20 @@
   }: HandleProps = $props();
 
   const item: Item | null = getContext("item");
-  let handleElement: HTMLElement | null = null;
   const mergedClass = $derived(`snapsort-handle ${classValue} ${className}`.trim());
 
-  onMount(() => {
-    if (item && handleElement) {
-      item.addInputAlias(handleElement);
-    }
-  });
-
-  onDestroy(() => {
-    if (item && handleElement) {
-      item.removeInputAlias(handleElement);
-    }
-  });
+  const inputAlias: Action<HTMLElement> = (node) => {
+    item?.addInputAlias(node);
+    return {
+      destroy: () => item?.removeInputAlias(node),
+    };
+  };
 </script>
 
 <div
   {...divProps}
   class={mergedClass}
-  bind:this={handleElement}
+  use:inputAlias
   {style}
 >
   {@render children()}

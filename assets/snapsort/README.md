@@ -21,7 +21,7 @@ their bindings from `@snap-engine/snapsort/svelte` or
 
 - `Container`
 - `Item`
-- `DragSession` - read-only public handle type for the active gesture
+- `DragSession` - public view of the active gesture controller
 - `DragVisual` - `"item"`, `"preview"`, or `"none"` pointer representation
 - `DropEffect` - `"move"` or `"none"` persistent mutation choice
 - `defaultAnimations` - opt-in 100ms reorder, drop, and programmatic-move animation preset
@@ -238,14 +238,13 @@ const callbacks = {
 };
 ```
 
-`DragSession` is exported as a type, not a constructor. The same stable handle
-is exposed through callback events and `root.dragSession`; nested containers
-return `null`. Its read-only observations are `root`, `pointerId`, `items`,
-`sources`, `pressedItem`, `primaryItem`, `start`, `pointer`, and `status`.
-`items`, `sources`, their locations, and the coordinate objects are immutable.
-The supported mutable controls are `dragVisual` while pending and `dropEffect`
-while pending or active. Lifecycle methods, placement strategies, target
-state, ghosts, and animation bookkeeping remain internal.
+`DragSession` is exported as a type, not a constructor. Callback events and
+`root.dragSession` expose the same controller object; nested containers return
+`null`. Shared read-only observations include `root`, `items`, `sources`,
+`pressedItem`, `primaryItem`, `status`, and the discriminated `input`
+controller. Pointer coordinates live on pointer input, while direct
+navigation state lives on direct input. The supported shared mutable controls
+are `dragVisual` while pending and `dropEffect` while pending or active.
 
 A preview is one root-owned `GhostState` with `type: "pointer-preview"` and an
 overlay location. It can coexist with insertion's destination-owned
@@ -438,6 +437,49 @@ the root exports `SortStrategy`, `DropTargetStrategy`, and
 `DragLifecycleStrategy` are also removed; select a built-in behavior through
 `ContainerConfig.mode` and the exported `SortMode` type.
 
+## Keyboard dragging
+
+`KeyboardDragController` adds optional linear keyboard controls to one root
+Container without changing Item markup or focus order:
+
+```ts
+import { Container, KeyboardDragController } from "@snap-engine/snapsort";
+
+const root = new Container(engine, null, { itemId: "tasks" });
+const keyboard = new KeyboardDragController(root);
+
+// Enter lifts or drops, Escape cancels, and arrow keys follow the current
+// Container's row or column direction.
+
+keyboard.destroy();
+```
+
+Items must already use a native focusable element or provide `tabIndex`.
+When an Item has a Svelte or React `Handle`, keyboard commands are accepted
+only from that exact Handle. Custom bindings replace individual defaults:
+
+```ts
+const keyboard = new KeyboardDragController(root, {
+  bindings: {
+    liftDrop: ["Enter", " "],
+    previous: { row: ["ArrowLeft", "h"] },
+    next: { row: ["ArrowRight", "l"] },
+  },
+});
+```
+
+For board navigation or other spatial behavior, call
+`item.beginDirectDrag()` and use the narrowed direct controller's `moveTo()`,
+`drop()`, and `cancel()` methods from an application-owned key handler.
+
+Accepted direct moves animate with the destination Container's
+`animation.reorder` settings. The dragged visual interpolates its exact
+position and size to the projected candidate geometry, including per-member
+geometry for a selected group. Omit `animation`, set it to `null`, or disable
+the reorder channel for an immediate move. A drop requested during a direct
+transition is queued until that transition settles; cancellation interrupts
+it immediately.
+
 ## DOM ownership contract
 
 SnapSort core is designed to work identically across Vanilla JS, Svelte, React,
@@ -452,8 +494,9 @@ never fight over the same DOM nodes. The contract:
    exists only behind `createVanillaAdapter`; framework bindings never inherit
    it as a parallel mutation path.
 2. **Core writes only non-structural properties on the dragged element** —
-   `transform`, `position`/`z-index` styles. Every framework tolerates that;
-   none diffs inline styles it didn't set.
+   `transform`, temporary `position`/`z-index`, and temporary `width`/`height`
+   styles. Every framework tolerates that; none diffs inline styles it didn't
+   set.
 3. **Framework mutations commit synchronously.** Core runs structural
    commands inside `SnapSortAdapter.commit(mutation)`. React and Svelte adapters
    provide this transaction automatically, committing state and DOM before

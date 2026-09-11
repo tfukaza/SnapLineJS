@@ -105,7 +105,7 @@ export class Container extends Item {
   #visualInvalidationItems = new Set<Item>();
   #visualInvalidationReasons = new Set<VisualGeometryInvalidationReason>();
 
-  /** The read-only public handle for this tree's in-progress drag, or null. Only meaningful on the root container. */
+  /** The public view of this tree's in-progress drag controller, or null. Only meaningful on the root container. */
   get dragSession(): DragSession | null {
     return this.rootContainer === this ? getDragSession(this) : null;
   }

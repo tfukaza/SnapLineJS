@@ -69,5 +69,14 @@ export type { LayoutMainAxisAlign } from "./layout";
 export { Item } from "./item";
 export type { ItemOptions } from "./item";
 export type { ItemId, ItemMetadata, ItemSnapshot } from "./snapshot";
-export type { DragSession, DragSessionStatus } from "./drag/session";
+export type {
+  DragInputController,
+  DragSession,
+  DragSessionStatus,
+} from "./drag/session";
 export type { SortMode } from "./drag/drop-strategy";
+export { KeyboardDragController } from "./keyboard-controller";
+export type {
+  KeyboardDragBindings,
+  KeyboardDragControllerOptions,
+} from "./keyboard-controller";

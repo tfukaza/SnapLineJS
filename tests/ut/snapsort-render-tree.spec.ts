@@ -103,6 +103,7 @@ function createRenderTreeHarness(itemIds = ["dragged"]): RenderTreeHarness {
   const originals = [...items.values()];
   const sources = originals.map((_, index) => buildDragLocation(source, index));
   const session: DragSession = {
+    inputType: "pointer",
     root,
     pointerId: 1,
     items: originals,
@@ -114,7 +115,6 @@ function createRenderTreeHarness(itemIds = ["dragged"]): RenderTreeHarness {
     status: "active",
     dragVisual: "item",
     dropEffect: "move",
-    handoff() {},
   };
   let nextGhostId = 0;
   const ghostSession = {

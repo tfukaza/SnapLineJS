@@ -216,10 +216,13 @@ function makeSession(
     [location(item)],
     builtinStrategies[mode],
     {
-      handoffTo() {},
-      pointerId: 1,
-      start: { x: 20, y: 20 },
-    } as never,
+      inputType: "pointer",
+      prop: {
+        handoffTo() {},
+        pointerId: 1,
+        start: { x: 20, y: 20 },
+      } as never,
+    },
     item,
   );
 }
@@ -320,17 +323,24 @@ test("activation and veto callbacks remain direct and preserve order", async () 
       [item],
       [location(item)],
       strategy,
-      { handoffTo() {}, pointerId: 1, start: { x: 20, y: 20 } } as never,
+      {
+        inputType: "pointer",
+        prop: {
+          handoffTo() {},
+          pointerId: 1,
+          start: { x: 20, y: 20 },
+        } as never,
+      },
       item,
     );
     installDragSession(root, session);
-    session.begin({ start: { x: 20, y: 20 } } as never);
+    session.begin();
     await drainFrames(harness.global);
     expect(activationLedger).toEqual(["start", "validate", "activate"]);
-    expect(observedHandle).toBe(session.handle);
-    expect(root.dragSession).toBe(session.handle);
+    expect(observedHandle).toBe(session);
+    expect(root.dragSession).toBe(session);
 
-    session.status = "ended";
+    session.phase = "ended";
     clearDragSession(root, session);
     activationLedger.length = 0;
     root.callbacks = {
@@ -345,11 +355,18 @@ test("activation and veto callbacks remain direct and preserve order", async () 
       [item],
       [location(item)],
       strategy,
-      { handoffTo() {}, pointerId: 2, start: { x: 20, y: 20 } } as never,
+      {
+        inputType: "pointer",
+        prop: {
+          handoffTo() {},
+          pointerId: 2,
+          start: { x: 20, y: 20 },
+        } as never,
+      },
       item,
     );
     installDragSession(root, vetoed);
-    vetoed.begin({ start: { x: 20, y: 20 } } as never);
+    vetoed.begin();
     await drainFrames(harness.global);
     expect(activationLedger).toEqual(["veto"]);
     expect(vetoed.status).toBe("ended");
@@ -396,14 +413,14 @@ test("a queued final move stays publicly active while internal drop ownership re
       [item],
       [location(item)],
       strategy,
-      dragStartFor(item),
+      { inputType: "pointer", prop: dragStartFor(item) },
       item,
     );
     root.callbacks = {
       ...callbacks,
       onDropTargetChange: (event) => {
         publicStatuses.push(event.session.status);
-        internalStatuses.push(session.status);
+        internalStatuses.push(session.phase);
         session.cancel();
         event.session.dropEffect = "move";
       },
@@ -412,13 +429,13 @@ test("a queued final move stays publicly active while internal drop ownership re
       },
     };
     session.dropEffect = "none";
-    session.status = "active";
+    session.phase = "active";
     installDragSession(root, session);
     root.readDragSnapshotTree();
     root.captureDragSnapshotTree();
 
-    session.pointerMove(dragMoveFor(item, 200, 20));
-    session.status = "dropping";
+    session.pointerInput?.move(dragMoveFor(item, 200, 20));
+    session.phase = "dropping";
     session.strategy.lifecycle.drop(session);
     expect(session.status).toBe("dropping");
 
@@ -485,7 +502,7 @@ test("normal drop and outside cancellation preserve callback ledgers", async () 
     const destination = mountContainer(harness, root, "destination");
     const item = mountItem(harness, source, "item");
     const session = makeSession(root, item);
-    expectedEndHandle = session.handle;
+    expectedEndHandle = session;
     session.dragVisual = "none";
     const ghost = item.createGhostItem(session, {
       type: "target-spacer",
@@ -500,7 +517,7 @@ test("normal drop and outside cancellation preserve callback ledgers", async () 
       index: 0,
       insertion: null,
     };
-    session.status = "dropping";
+    session.phase = "dropping";
     installDragSession(root, session);
     session.strategy.lifecycle.drop(session);
     await drainFrames(harness.global);
@@ -511,7 +528,7 @@ test("normal drop and outside cancellation preserve callback ledgers", async () 
       "end:root:destination:0",
     ]);
     expect(session.status).toBe("ended");
-    expect(endedHandle).toBe(session.handle);
+    expect(endedHandle).toBe(session);
     expect(root.dragSession).toBeNull();
     expect(session.flowGhostRun).toHaveLength(0);
     expect(session.sourceGhostRun).toHaveLength(0);
@@ -527,9 +544,9 @@ test("normal drop and outside cancellation preserve callback ledgers", async () 
     ledger.length = 0;
     const cancelItem = mountItem(harness, source, "cancel-item");
     const cancelled = makeSession(root, cancelItem);
-    expectedEndHandle = cancelled.handle;
+    expectedEndHandle = cancelled;
     cancelled.dragVisual = "none";
-    cancelled.status = "active";
+    cancelled.phase = "active";
     installDragSession(root, cancelled);
     cancelled.cancel();
     await drainFrames(harness.global);
@@ -557,7 +574,7 @@ test("throwing swap callbacks reconcile and finalize before reporting the same e
     const second = mountItem(harness, root, "second", 50);
     const session = makeSession(root, first, "swap");
     session.dragVisual = "none";
-    session.status = "dropping";
+    session.phase = "dropping";
     installDragSession(root, session);
     session.strategy.lifecycle.syncPlacement(session, {
       container: root,
@@ -579,7 +596,7 @@ test("throwing swap callbacks reconcile and finalize before reporting the same e
 
     const nextSession = makeSession(root, first, "swap");
     nextSession.dragVisual = "none";
-    nextSession.status = "active";
+    nextSession.phase = "active";
     installDragSession(root, nextSession);
     nextSession.cancel();
     await drainFrames(harness.global, 6, reportedErrors);
@@ -627,10 +644,17 @@ test("error finalization skips DOM writes for disconnected participants", async 
         lifecycle,
         defaultDragVisual: "item",
       },
-      { handoffTo() {}, pointerId: 1, start: { x: 20, y: 20 } } as never,
+      {
+        inputType: "pointer",
+        prop: {
+          handoffTo() {},
+          pointerId: 1,
+          start: { x: 20, y: 20 },
+        } as never,
+      },
       item,
     );
-    session.status = "active";
+    session.phase = "active";
     installDragSession(root, session);
     item.element!.remove();
 
@@ -642,43 +666,6 @@ test("error finalization skips DOM writes for disconnected participants", async 
     expect(root.dragSession).toBeNull();
     expect(item.style.position).toBe("relative");
     expect(item.transformMode).toBe("none");
-  } finally {
-    harness.cleanup();
-  }
-});
-
-test("failed handoff stays atomic and does not block the next session", async () => {
-  const harness = createHarness();
-  try {
-    const root = mountRoot(harness);
-    const first = mountItem(harness, root, "first");
-    mountItem(harness, root, "second", 50);
-    const session = makeSession(root, first);
-    const originalItems = session.items;
-    const originalSources = session.activeSources;
-    session.status = "pending";
-    installDragSession(root, session);
-
-    expect(() => session.handoff([first])).toThrow(
-      "replacements must not include the current dragged items",
-    );
-    expect(session.items).toBe(originalItems);
-    expect(session.activeSources).toBe(originalSources);
-    expect(session.pressedItem).toBe(first);
-    expect(root.dragSession).toBe(session.handle);
-
-    session.cancel();
-    expect(session.status).toBe("ended");
-    expect(root.dragSession).toBeNull();
-
-    const nextSession = makeSession(root, first);
-    nextSession.dragVisual = "none";
-    nextSession.status = "active";
-    installDragSession(root, nextSession);
-    nextSession.cancel();
-    await drainFrames(harness.global);
-    expect(nextSession.status).toBe("ended");
-    expect(root.dragSession).toBeNull();
   } finally {
     harness.cleanup();
   }
@@ -715,7 +702,7 @@ test("failed ghost teardown reports once and does not block the next session", a
     const item = mountItem(harness, root, "first");
     const session = makeSession(root, item);
     session.dragVisual = "none";
-    session.status = "active";
+    session.phase = "active";
     installDragSession(root, session);
     const ghost = item.createGhostItem(session, {
       type: "target-spacer",
@@ -736,7 +723,7 @@ test("failed ghost teardown reports once and does not block the next session", a
 
     const nextSession = makeSession(root, item);
     nextSession.dragVisual = "none";
-    nextSession.status = "active";
+    nextSession.phase = "active";
     installDragSession(root, nextSession);
     nextSession.cancel();
     await drainFrames(harness.global, 6, reportedErrors);
@@ -769,7 +756,7 @@ test("swap, hover, and absent optional callbacks keep their boundaries", async (
     const second = mountItem(harness, root, "second", 50);
     const session = makeSession(root, first, "swap");
     session.dragVisual = "none";
-    session.status = "dropping";
+    session.phase = "dropping";
     installDragSession(root, session);
     session.hoveredItem = second;
     session.strategy.lifecycle.syncPlacement(session, {
@@ -789,7 +776,7 @@ test("swap, hover, and absent optional callbacks keep their boundaries", async (
     root.callbacks = { ...root.callbacks, onDragEnd: undefined };
     const noEndCallback = makeSession(root, first, "swap");
     noEndCallback.dragVisual = "none";
-    noEndCallback.status = "active";
+    noEndCallback.phase = "active";
     installDragSession(root, noEndCallback);
     noEndCallback.cancel();
     await drainFrames(harness.global);
@@ -871,15 +858,15 @@ test("placement hover routes a nested destination through its actual owner", asy
       [item],
       [location(item)],
       strategy,
-      dragStartFor(item),
+      { inputType: "pointer", prop: dragStartFor(item) },
       item,
     );
-    session.status = "active";
+    session.phase = "active";
     root.readDragSnapshotTree();
     root.captureDragSnapshotTree();
 
-    await session.updateDropTarget();
-    await session.updateDropTarget();
+    await session.applyTarget(session.resolvePointerTarget(), true);
+    await session.applyTarget(session.resolvePointerTarget(), true);
     session.clearHoveredItem();
 
     expect(ledger).toEqual([
@@ -948,14 +935,14 @@ test("swap hover remains scoped to the resolved container's direct children", as
       [item],
       [location(item)],
       strategy,
-      dragStartFor(item),
+      { inputType: "pointer", prop: dragStartFor(item) },
       item,
     );
-    session.status = "active";
+    session.phase = "active";
     root.readDragSnapshotTree();
     root.captureDragSnapshotTree();
 
-    await session.updateDropTarget();
+    await session.applyTarget(session.resolvePointerTarget(), true);
 
     expect(ledger).toEqual([
       "hitbox:destination:swap-child",

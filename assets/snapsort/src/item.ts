@@ -40,9 +40,12 @@ import {
   fireItemMove,
   fireItemRemove,
 } from "./mutation";
-import type { DragSessionController as DragSession } from "./drag/session";
+import type {
+  DragSession as PublicDragSession,
+  DragSessionController as DragSession,
+} from "./drag/session";
 import { getDragSessionController } from "./drag/session-store";
-import { beginItemDrag } from "./drag/group";
+import { beginDirectItemDrag, beginItemDrag } from "./drag/group";
 import {
   assertCanPlaceItems,
   detachItem,
@@ -379,7 +382,10 @@ export class Item extends ElementObject {
   get dragPointerPosition(): { x: number; y: number } | null {
     const session = getDragSessionController(this.rootContainer);
     if (!session || !this.#dragSnapshot) return null;
-    return { x: session.pointer.x, y: session.pointer.y };
+    return {
+      x: session.pointer.x,
+      y: session.pointer.y,
+    };
   }
 
   /**
@@ -389,11 +395,16 @@ export class Item extends ElementObject {
   get dragPositionX(): number {
     const session = getDragSessionController(this.rootContainer);
     if (!session || !this.#dragSnapshot) return this.worldTransform.x;
+    if (session.input.inputType === "direct") {
+      return (
+        session.input.visualRectFor(this.#itemId)?.x ?? this.worldTransform.x
+      );
+    }
     const visualStart = session.dragVisualStart.get(this);
     return (
       (visualStart?.x ?? this.#dragSnapshot.box.x) +
-      session.pointer.x -
-      session.start.x
+      session.visualPointer.x -
+      session.visualStart.x
     );
   }
 
@@ -404,11 +415,16 @@ export class Item extends ElementObject {
   get dragPositionY(): number {
     const session = getDragSessionController(this.rootContainer);
     if (!session || !this.#dragSnapshot) return this.worldTransform.y;
+    if (session.input.inputType === "direct") {
+      return (
+        session.input.visualRectFor(this.#itemId)?.y ?? this.worldTransform.y
+      );
+    }
     const visualStart = session.dragVisualStart.get(this);
     return (
       (visualStart?.y ?? this.#dragSnapshot.box.y) +
-      session.pointer.y -
-      session.start.y
+      session.visualPointer.y -
+      session.visualStart.y
     );
   }
 
@@ -573,32 +589,6 @@ export class Item extends ElementObject {
   }
 
   /**
-   * Give this item a frozen drag snapshot copied from another item's, keyed to
-   * this item. Used by `DragSession.handoff` so a replacement preserves the
-   * active gesture's drop prediction and pointer-follow geometry.
-   *
-   * @param source Item whose drag snapshot geometry to adopt.
-   * @internal
-   */
-  adoptDragSnapshotFrom(source: Item): void {
-    const src = source.#dragSnapshot;
-    if (!src) return;
-    this.#dragSnapshot = {
-      value: this,
-      itemId: this.itemId,
-      metadata: Object.freeze({ ...this.#metadata }),
-      direction: src.direction,
-      mainAxisAlign: src.mainAxisAlign,
-      layoutModel: src.layoutModel,
-      wrap: src.wrap,
-      stretchItems: src.stretchItems,
-      locked: this.#locked,
-      box: cloneDomProperty(src.box),
-      children: [],
-    };
-  }
-
-  /**
    * Clear frozen drag snapshots from this subtree after drag end.
    *
    * @param visited Items already cleared during this traversal.
@@ -745,14 +735,14 @@ export class Item extends ElementObject {
    */
   scheduleWriteDrag() {
     const session = getDragSessionController(this.rootContainer);
-    if (!session || session.status !== "active") return;
+    if (!session || session.phase !== "active") return;
     const parentItem = session.dragCoordinateParent.get(this) ?? null;
 
     this.schedule(
       async () => {
         if (
           getDragSessionController(this.rootContainer) !== session ||
-          session.status !== "active"
+          session.phase !== "active"
         ) {
           return;
         }
@@ -784,7 +774,7 @@ export class Item extends ElementObject {
     const session = getDragSessionController(this.rootContainer);
     if (
       !session ||
-      session.status !== "active" ||
+      session.phase !== "active" ||
       (expectedSession && session !== expectedSession)
     ) {
       return;
@@ -800,21 +790,42 @@ export class Item extends ElementObject {
 
     // Account for offsets if the container is being animated.
     const ancestorOffset = ancestorVisualOffset(parentItem);
+    const directRect =
+      session.input.inputType === "direct"
+        ? session.input.visualRectFor(this.#itemId)
+        : null;
+
+    if (directRect) {
+      this.style = {
+        width: `${directRect.width}px`,
+        height: `${directRect.height}px`,
+      };
+      this.worldTransform.x =
+        directRect.x - layoutPosition.x - ancestorOffset.x;
+      this.worldTransform.y =
+        directRect.y - layoutPosition.y - ancestorOffset.y;
+      this.writeDom();
+      this.writeTransform();
+      this.rootContainer.invalidateVisualGeometry([this], "drag");
+      return;
+    }
+
     const groupOffset = session.groupVisualOffsets.get(this) ?? {
       x: 0,
       y: 0,
     };
     this.worldTransform.x =
-      session.pointer.x -
+      session.visualPointer.x -
       layoutPosition.x -
       ancestorOffset.x -
-      session.offset.x +
+      session.visualOffset.x +
       groupOffset.x;
+
     this.worldTransform.y =
-      session.pointer.y -
+      session.visualPointer.y -
       layoutPosition.y -
       ancestorOffset.y -
-      session.offset.y +
+      session.visualOffset.y +
       groupOffset.y;
 
     this.writeTransform();
@@ -1088,6 +1099,32 @@ export class Item extends ElementObject {
   }
 
   /**
+   * Begin a direct drag without creating a pointer gesture.
+   *
+   * Returns null when this item cannot safely start a drag.
+   */
+  beginDirectDrag(): PublicDragSession | null {
+    const location = this.getIndexAndContainer();
+    const container = location.container;
+
+    if (!container || this.#locked || this.#isGhost || this.isDeleteRequested) {
+      return null;
+    }
+
+    const rootContainer = container.rootContainer;
+    const root = rootContainer as unknown as Item;
+
+    if (
+      getDragSessionController(rootContainer) ||
+      root.#hasPendingProgrammaticMutation()
+    ) {
+      return null;
+    }
+
+    return beginDirectItemDrag(this);
+  }
+
+  /**
    * Called when a drag operation starts.
    * @param prop
    * @returns
@@ -1113,8 +1150,8 @@ export class Item extends ElementObject {
   drag(prop: dragProp) {
     if (prop.objectId !== this.id) return;
     const session = getDragSessionController(this.rootContainer);
-    if (!session || session.status !== "active") return;
-    session.pointerMove(prop);
+    if (!session || session.phase !== "active") return;
+    session.pointerInput?.move(prop);
   }
 
   dragEnd(prop: dragEndProp) {
@@ -1127,15 +1164,7 @@ export class Item extends ElementObject {
       if (this.element) delete this.element.dataset.snapsortDragging;
       return;
     }
-    if (prop.cancelled || session.status === "pending") {
-      session.cancel();
-      return;
-    }
-    if (session.status !== "active") return;
-    session.status = "dropping";
-    session.dragTransformSyncAnimation?.cancel();
-    session.dragTransformSyncAnimation = null;
-    session.strategy.lifecycle.drop(session);
+    session.pointerInput?.end(prop);
   }
 
   destroy(removeElement: boolean = true) {

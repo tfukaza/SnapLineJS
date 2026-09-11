@@ -12,14 +12,18 @@ export function getDragSessionController(
 
 /** @internal */
 export function getDragSession(root: Container): DragSession | null {
-  return getDragSessionController(root)?.handle ?? null;
+  return getDragSessionController(root);
 }
 
-/** @internal */
+/** @internal Install the only active drag session for this root. */
 export function installDragSession(
   root: Container,
   controller: DragSessionController,
 ): void {
+  if (controllers.has(root)) {
+    throw new Error("SnapSort: this root already has an active drag session.");
+  }
+
   controllers.set(root, controller);
 }
 

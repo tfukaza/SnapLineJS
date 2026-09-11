@@ -47,10 +47,22 @@ function frozenGroupGeometry(session: DragSession): GroupGeometry {
 
 /** @internal Current world-space rectangle of the single group preview. */
 export function pointerPreviewRect(session: DragSession): GhostRect {
+  if (session.input.inputType === "direct") {
+    const directRect = session.input.visualGroupRect;
+    if (directRect) {
+      return {
+        x: directRect.x,
+        y: directRect.y,
+        width: directRect.width,
+        height: directRect.height,
+      };
+    }
+  }
+
   const group = frozenGroupGeometry(session);
   return {
-    x: group.x + session.pointer.x - session.start.x,
-    y: group.y + session.pointer.y - session.start.y,
+    x: group.x + session.visualPointer.x - session.visualStart.x,
+    y: group.y + session.visualPointer.y - session.visualStart.y,
     width: group.width,
     height: group.height,
   };
@@ -142,12 +154,18 @@ export function pointerPreviewMemberRects(
   const preview = previewItem ? readVisualRect(previewItem) : null;
   if (!preview) return session.items.map(() => null);
 
-  const group = frozenGroupGeometry(session);
+  const directGroup =
+    session.input.inputType === "direct" ? session.input.visualGroupRect : null;
+  const group = directGroup ?? frozenGroupGeometry(session);
   const scaleX = group.width > 0 ? preview.width / group.width : 1;
   const scaleY = group.height > 0 ? preview.height / group.height : 1;
   return session.items.map((item) => {
-    const box = session.dragBoxFor(item);
-    const start = session.dragVisualStart.get(item);
+    const directRect =
+      session.input.inputType === "direct"
+        ? session.input.visualRectFor(item.itemId)
+        : null;
+    const box = directRect ?? session.dragBoxFor(item);
+    const start = directRect ?? session.dragVisualStart.get(item);
     if (!start) {
       throw new Error(
         `SnapSort: participant "${item.itemId}" has no captured visual start.`,
