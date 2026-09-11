@@ -211,20 +211,20 @@ type DirectCandidate =
   | {
       readonly kind: "flow";
       readonly target: ResolvedDropTarget;
-      readonly memberRects: readonly Readonly<CollisionRect>[];
+      readonly memberRects: readonly Rect[];
     }
   | {
       readonly kind: "insertion";
       readonly target: ResolvedDropTarget & {
         readonly insertion: InsertionMarkerPresentation;
       };
-      readonly memberRects: readonly Readonly<CollisionRect>[];
+      readonly memberRects: readonly Rect[];
     }
   | {
       readonly kind: "swap";
       readonly target: ResolvedDropTarget;
       readonly targetItemId: ItemId;
-      readonly memberRects: readonly Readonly<CollisionRect>[];
+      readonly memberRects: readonly Rect[];
     };
 ```
 

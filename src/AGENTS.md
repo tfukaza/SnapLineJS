@@ -20,6 +20,7 @@ src/
 ├── camera.ts         # Camera system
 ├── input.ts          # Input handling
 ├── collision.ts      # Collision detection (optional)
+├── geometry.ts       # Shared geometry types and pure helpers
 ├── animation.ts      # Animation system (optional)
 ├── debug.ts          # Debug renderer (optional)
 └── util.ts           # Utilities
@@ -37,6 +38,9 @@ Defined in `vite.config.mjs`:
   - AnimationObject, SequenceObject
 - **Collision:** `collision.ts` → `dist/collision.mjs`
   - CollisionEngine, RectCollider, CircleCollider, etc.
+- **Geometry:** `geometry.ts` → `dist/geometry.mjs`
+  - Point, Size, Rect, Edges, Bounds, BoxModel, ElementBox types
+  - Pure rect/box-model helpers (intersection, content box, projection)
 - **Debug:** `debug.ts` → `dist/debug.mjs`
   - DebugRenderer
 
@@ -152,9 +156,18 @@ Unified input handling.
 - dragStart, drag, dragEnd
 - pinchStart, pinch, pinchEnd
 
+### `geometry.ts`
+
+The one geometry vocabulary for core and every asset package. Pure: no DOM
+reads, no Camera, no imports. Every other core module (and every asset)
+describes points, rects, edges, and box models with these types instead of
+declaring its own shapes. The collision engine's allocation-free scalar
+kernels live here too, so collision and geometry share one implementation.
+
 ### `collision.ts`
 
-Collision detection system.
+Collision detection system. Geometric predicates (`rectsIntersect`,
+`pointIntersectsRect`, ...) are imported from `geometry.ts`.
 
 **CollisionEngine:**
 
@@ -167,7 +180,6 @@ Collision detection system.
 
 - RectCollider
 - CircleCollider
-- LineCollider
 - PointCollider
 
 ### `animation.ts`
@@ -240,6 +252,7 @@ is therefore supported; calling a recursive read there is not.
 - debug (optional)
 - animation (optional)
 - collision (optional)
+- geometry (optional)
 
 **TypeScript:** Declarations generated to `dist/` via vite-plugin-dts
 
@@ -267,6 +280,7 @@ dist/
 import { Engine, ElementObject } from "@snap-engine/core";
 import { AnimationObject } from "@snap-engine/core/animation";
 import { RectCollider } from "@snap-engine/core/collision";
+import { contentRect, type Rect } from "@snap-engine/core/geometry";
 import { DebugRenderer } from "@snap-engine/core/debug";
 ```
 

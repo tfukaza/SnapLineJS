@@ -1,11 +1,11 @@
 import type { DomProperty } from "@snap-engine/core";
 import {
-  type CollisionCircle,
+  type Circle,
   distanceToRect,
   pointIntersectsCircle,
   pointIntersectsRect,
   rectsIntersect,
-} from "@snap-engine/core/collision";
+} from "@snap-engine/core/geometry";
 import type { Item as ItemBase } from "./item";
 import type { Container } from "./container";
 import {
@@ -45,7 +45,7 @@ const TOP_CANDIDATE_DEBUG_LIMIT = 3;
 type Rect = { x: number; y: number; width: number; height: number };
 type ResolvedItemHitbox =
   | { shape: "rect"; rect: Rect }
-  | { shape: "circle"; circle: CollisionCircle };
+  | { shape: "circle"; circle: Circle };
 
 export interface VirtualGhost {
   container: Container;

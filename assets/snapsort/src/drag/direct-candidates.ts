@@ -1,4 +1,4 @@
-import type { CollisionRect } from "@snap-engine/core/collision";
+import type { Rect } from "@snap-engine/core/geometry";
 import {
   createDirectInsertionTarget,
   type ResolvedDropTarget,
@@ -26,7 +26,7 @@ interface DirectLayoutSnapshot {
 interface DirectCandidateBase {
   readonly target: Readonly<ResolvedDropTarget>;
   /** Projected world-space border boxes, ordered to parallel session.items. */
-  readonly memberRects: readonly Readonly<CollisionRect>[];
+  readonly memberRects: readonly Readonly<Rect>[];
 }
 
 export interface DirectFlowCandidate extends DirectCandidateBase {
@@ -50,8 +50,8 @@ export interface DirectCandidateGeometry {
     x: number;
     y: number;
   }>;
-  readonly dragRect: Readonly<CollisionRect>;
-  readonly memberRects: readonly Readonly<CollisionRect>[];
+  readonly dragRect: Readonly<Rect>;
+  readonly memberRects: readonly Readonly<Rect>[];
 }
 
 export type DirectCandidate =
@@ -294,7 +294,7 @@ function snapshotPathTo(
   return [];
 }
 
-function freezeRect(rect: CollisionRect): Readonly<CollisionRect> {
+function freezeRect(rect: Rect): Readonly<Rect> {
   return Object.freeze({
     x: rect.x,
     y: rect.y,
@@ -305,7 +305,7 @@ function freezeRect(rect: CollisionRect): Readonly<CollisionRect> {
 
 function sourceMemberRects(
   session: DragSessionController,
-): readonly Readonly<CollisionRect>[] {
+): readonly Readonly<Rect>[] {
   return Object.freeze(
     session.items.map((item) => {
       const start = session.dragVisualStart.get(item);
@@ -330,8 +330,8 @@ function sourceMemberRects(
 // TODO: Eventually, these functions
 // should be provided as part of a layout engine
 function boundingRect(
-  rects: readonly Readonly<CollisionRect>[],
-): CollisionRect {
+  rects: readonly Readonly<Rect>[],
+): Rect {
   if (rects.length === 0) {
     throw new Error(
       "SnapSort: cannot calculate a direct candidate without projected items.",
@@ -360,8 +360,8 @@ function boundingRect(
 
 function projectRectsIntoTarget(
   session: DragSessionController,
-  target: Readonly<CollisionRect>,
-): readonly Readonly<CollisionRect>[] {
+  target: Readonly<Rect>,
+): readonly Readonly<Rect>[] {
   const sourceRects = sourceMemberRects(session);
   const sourceGroup = boundingRect(sourceRects);
   const scaleX = sourceGroup.width > 0 ? target.width / sourceGroup.width : 1;
@@ -458,7 +458,7 @@ function projectDirectRects(
   session: DragSessionController,
   snapshot: DirectLayoutSnapshot,
   target: ResolvedDropTarget,
-): readonly Readonly<CollisionRect>[] {
+): readonly Readonly<Rect>[] {
   const targetSnapshot = snapshot.byItem.get(target.container);
 
   if (!targetSnapshot) {

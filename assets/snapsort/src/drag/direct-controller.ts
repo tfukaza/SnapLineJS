@@ -1,5 +1,5 @@
 import { AnimationObject } from "@snap-engine/core/animation";
-import type { CollisionRect } from "@snap-engine/core/collision";
+import type { Rect } from "@snap-engine/core/geometry";
 import { evaluateDropTargetPriority } from "../algorithm";
 import { animationConfigFor } from "../internal/flip-animation";
 import { DROP_REJECT_PRIORITY, type DragLocation } from "../events";
@@ -32,7 +32,7 @@ export function cancelDirectMoveAnimation(
 const DIRECT_MOVE_DEFAULT_DURATION = 160;
 const DIRECT_MOVE_DEFAULT_EASING = "ease-out";
 
-function freezeRect(rect: Readonly<CollisionRect>): Readonly<CollisionRect> {
+function freezeRect(rect: Readonly<Rect>): Readonly<Rect> {
   return Object.freeze({
     x: rect.x,
     y: rect.y,
@@ -42,16 +42,16 @@ function freezeRect(rect: Readonly<CollisionRect>): Readonly<CollisionRect> {
 }
 
 function freezeRects(
-  rects: readonly Readonly<CollisionRect>[],
-): readonly Readonly<CollisionRect>[] {
+  rects: readonly Readonly<Rect>[],
+): readonly Readonly<Rect>[] {
   return Object.freeze(rects.map(freezeRect));
 }
 
 function interpolateRect(
-  from: Readonly<CollisionRect>,
-  to: Readonly<CollisionRect>,
+  from: Readonly<Rect>,
+  to: Readonly<Rect>,
   progress: number,
-): CollisionRect {
+): Rect {
   return {
     x: from.x + (to.x - from.x) * progress,
     y: from.y + (to.y - from.y) * progress,
@@ -61,8 +61,8 @@ function interpolateRect(
 }
 
 function boundingRect(
-  rects: readonly Readonly<CollisionRect>[],
-): Readonly<CollisionRect> {
+  rects: readonly Readonly<Rect>[],
+): Readonly<Rect> {
   const first = rects[0];
   if (!first) {
     throw new Error("DirectDragController: visual geometry cannot be empty.");
@@ -101,7 +101,7 @@ export class DirectDragController {
   #moveSettling = false;
   #dropRequested = false;
   #restoreFocus = true;
-  #visualRects: readonly Readonly<CollisionRect>[] = Object.freeze([]);
+  #visualRects: readonly Readonly<Rect>[] = Object.freeze([]);
   #moveAnimation: AnimationObject | null = null;
 
   #currentCandidateIndex: number | null = null;
@@ -213,13 +213,13 @@ export class DirectDragController {
   }
 
   /** @internal Current animated world-space border box for one participant. */
-  visualRectFor(itemId: ItemId): Readonly<CollisionRect> | null {
+  visualRectFor(itemId: ItemId): Readonly<Rect> | null {
     const index = this.#participantIndexById.get(itemId);
     return index === undefined ? null : this.#visualRects[index] ?? null;
   }
 
   /** @internal Current animated bounding box for the complete drag visual. */
-  get visualGroupRect(): Readonly<CollisionRect> | null {
+  get visualGroupRect(): Readonly<Rect> | null {
     return this.#visualRects.length > 0
       ? boundingRect(this.#visualRects)
       : null;
@@ -232,7 +232,7 @@ export class DirectDragController {
   }
 
   #writeVisualGeometry(
-    rects: readonly Readonly<CollisionRect>[],
+    rects: readonly Readonly<Rect>[],
     pointer: Readonly<{ x: number; y: number }>,
   ): void {
     if (rects.length !== this.#session.items.length) {

@@ -2,7 +2,7 @@ import type { Container } from "./container";
 import type { Item } from "./item";
 import type { DragSession } from "./drag/session";
 import type { ItemId, ItemMetadata } from "./snapshot";
-import type { CollisionRect } from "@snap-engine/core/collision";
+import type { Rect } from "@snap-engine/core/geometry";
 
 /**
  * A container + index location, used both for drag sources/destinations and
@@ -144,7 +144,7 @@ export interface InsertionMarkerNeighbor {
   readonly itemId: ItemId;
   readonly itemMetadata: ItemMetadata;
   /** Frozen world-space border box captured for this resolution. */
-  readonly rect: Readonly<CollisionRect>;
+  readonly rect: Readonly<Rect>;
 }
 
 export interface GhostSlotLocation {
@@ -330,11 +330,11 @@ export interface DropTargetChangeEvent {
 export const DROP_REJECT_PRIORITY = -1;
 
 /** A frozen world-space rectangle captured for the current drag resolution. */
-export type DropPriorityRect = CollisionRect;
+export type DropPriorityRect = Rect;
 
 /** Complete world-space geometry for one pointer-hover hitbox. */
 export type ItemHitbox =
-  | { shape: "rect"; rect: CollisionRect }
+  | { shape: "rect"; rect: Rect }
   | { shape: "circle"; center: { x: number; y: number }; radius: number };
 
 /** Geometry supplied to a hovered item's direct owner for hitbox resolution. */
@@ -350,7 +350,7 @@ export interface ItemHitboxEvent {
   containerMetadata: Record<string, unknown>;
   pointer: { x: number; y: number };
   /** Frozen world-space border box used when no callback is configured. */
-  defaultRect: CollisionRect;
+  defaultRect: Rect;
 }
 
 /**

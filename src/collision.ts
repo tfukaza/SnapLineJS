@@ -4,170 +4,17 @@
 import { BaseObject, CoreObject } from "./object";
 import { EventProxyFactory } from "./util";
 import type { Engine } from "./engine";
+import {
+  circlesIntersect,
+  pointIntersectsBounds,
+  pointIntersectsCircle,
+  pointIntersectsCircleValues,
+  rectBoundsIntersect,
+  rectBoundsIntersectCircle,
+  type Point,
+} from "./geometry";
 
 type ColliderType = "rect" | "circle" | "point";
-
-/** A world-space point used by allocation-free collision helpers. */
-interface CollisionPoint {
-  x: number;
-  y: number;
-}
-
-/** A normalized world-space rectangle with non-negative dimensions. */
-interface CollisionRect extends CollisionPoint {
-  width: number;
-  height: number;
-}
-
-/** A normalized world-space circle with a non-negative radius. */
-interface CollisionCircle extends CollisionPoint {
-  radius: number;
-}
-
-function pointIntersectsBounds(
-  x: number,
-  y: number,
-  left: number,
-  top: number,
-  right: number,
-  bottom: number,
-): boolean {
-  return x >= left && x <= right && y >= top && y <= bottom;
-}
-
-function rectBoundsIntersect(
-  aLeft: number,
-  aTop: number,
-  aRight: number,
-  aBottom: number,
-  bLeft: number,
-  bTop: number,
-  bRight: number,
-  bBottom: number,
-): boolean {
-  return (
-    aLeft < bRight &&
-    aRight > bLeft &&
-    aTop < bBottom &&
-    aBottom > bTop
-  );
-}
-
-function pointIntersectsCircleValues(
-  pointX: number,
-  pointY: number,
-  circleX: number,
-  circleY: number,
-  radius: number,
-): boolean {
-  if (radius < 0) return false;
-  const deltaX = pointX - circleX;
-  const deltaY = pointY - circleY;
-  return deltaX * deltaX + deltaY * deltaY <= radius * radius;
-}
-
-function circlesIntersectValues(
-  aX: number,
-  aY: number,
-  aRadius: number,
-  bX: number,
-  bY: number,
-  bRadius: number,
-): boolean {
-  return pointIntersectsCircleValues(aX, aY, bX, bY, aRadius + bRadius);
-}
-
-function rectBoundsIntersectCircle(
-  left: number,
-  top: number,
-  right: number,
-  bottom: number,
-  circleX: number,
-  circleY: number,
-  radius: number,
-): boolean {
-  const nearestX = Math.max(left, Math.min(circleX, right));
-  const nearestY = Math.max(top, Math.min(circleY, bottom));
-  return pointIntersectsCircleValues(
-    nearestX,
-    nearestY,
-    circleX,
-    circleY,
-    radius,
-  );
-}
-
-/** Point/rectangle collision with edge-inclusive containment. */
-function pointIntersectsRect(
-  point: CollisionPoint,
-  rect: CollisionRect,
-): boolean {
-  return pointIntersectsBounds(
-    point.x,
-    point.y,
-    rect.x,
-    rect.y,
-    rect.x + rect.width,
-    rect.y + rect.height,
-  );
-}
-
-/** Point/circle collision with edge-inclusive containment. */
-function pointIntersectsCircle(
-  point: CollisionPoint,
-  circle: CollisionCircle,
-): boolean {
-  return pointIntersectsCircleValues(
-    point.x,
-    point.y,
-    circle.x,
-    circle.y,
-    circle.radius,
-  );
-}
-
-/** Circle collision with edge-inclusive tangency. */
-function circlesIntersect(a: CollisionCircle, b: CollisionCircle): boolean {
-  return circlesIntersectValues(a.x, a.y, a.radius, b.x, b.y, b.radius);
-}
-
-/** Rectangle/circle collision with edge-inclusive tangency. */
-function rectIntersectsCircle(
-  rect: CollisionRect,
-  circle: CollisionCircle,
-): boolean {
-  return rectBoundsIntersectCircle(
-    rect.x,
-    rect.y,
-    rect.x + rect.width,
-    rect.y + rect.height,
-    circle.x,
-    circle.y,
-    circle.radius,
-  );
-}
-
-/** Rectangle collision requiring positive overlap; touching edges do not collide. */
-function rectsIntersect(a: CollisionRect, b: CollisionRect): boolean {
-  return rectBoundsIntersect(
-    a.x,
-    a.y,
-    a.x + a.width,
-    a.y + a.height,
-    b.x,
-    b.y,
-    b.x + b.width,
-    b.y + b.height,
-  );
-}
-
-/** Euclidean distance from a point to a rectangle; zero inside its bounds. */
-function distanceToRect(point: CollisionPoint, rect: CollisionRect): number {
-  if (pointIntersectsRect(point, rect)) return 0;
-  const x = Math.max(rect.x, Math.min(point.x, rect.x + rect.width));
-  const y = Math.max(rect.y, Math.min(point.y, rect.y + rect.height));
-  return Math.hypot(point.x - x, point.y - y);
-}
 
 interface ColliderWorldBounds {
   x: number;
@@ -640,7 +487,7 @@ class CollisionEngine {
    * preserve collider registration order and are intentionally unfiltered;
    * callers own any label, admission, or input-target policy.
    */
-  queryPoint(point: { x: number; y: number }): Collider[] {
+  queryPoint(point: Point): Collider[] {
     return this.#objectList.filter((collider) =>
       collider.containsWorldPoint(point.x, point.y),
     );
@@ -835,15 +682,6 @@ class CollisionEngine {
 }
 
 export {
-  type CollisionPoint,
-  type CollisionRect,
-  type CollisionCircle,
-  pointIntersectsRect,
-  pointIntersectsCircle,
-  circlesIntersect,
-  rectIntersectsCircle,
-  rectsIntersect,
-  distanceToRect,
   CollisionEngine,
   Collider,
   RectCollider,

@@ -2,16 +2,18 @@ import { expect, test } from "@playwright/test";
 import { BaseObject, CoreObject, ElementObject } from "../../src/object";
 import {
   CircleCollider,
-  circlesIntersect,
   CollisionEngine,
+  PointCollider,
+  RectCollider,
+} from "../../src/collision";
+import {
+  circlesIntersect,
   distanceToRect,
   pointIntersectsCircle,
   pointIntersectsRect,
-  PointCollider,
   rectIntersectsCircle,
-  RectCollider,
   rectsIntersect,
-} from "../../src/collision";
+} from "../../src/geometry";
 
 test.describe("allocation-free collision geometry", () => {
   const rect = { x: 10, y: 20, width: 30, height: 40 };
