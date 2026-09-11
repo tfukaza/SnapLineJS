@@ -15,7 +15,7 @@ import type {
   pointerUpProp,
 } from "@snap-engine/core";
 import { CircleCollider } from "@snap-engine/core/collision";
-import { rectCenter } from "@snap-engine/core/geometry";
+import { rectCenter, type Bounds } from "@snap-engine/core/geometry";
 import type { NodeMirror } from "./node";
 import { LineMirror, cloneAnchor, type LineMirrorPhase } from "./line";
 import { getGraphRegistry } from "./internal/shared-data";
@@ -61,20 +61,10 @@ export interface ConnectorAnchor extends ConnectorPoint {
 }
 
 /** Cached world-space bounds derived from the parent node's collision box. */
-export interface ConnectorGeometrySnapshot {
+export interface ConnectorGeometrySnapshot extends Bounds {
   connector: ConnectorMirror;
   node: NodeMirror;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  left: number;
-  right: number;
-  top: number;
-  bottom: number;
   center: ConnectorAnchor;
-  scaleX: number;
-  scaleY: number;
 }
 
 export interface ConnectorHit {
@@ -422,17 +412,15 @@ class ConnectorMirror extends ElementObject<DomElement> {
     return {
       connector: this,
       node: this.parent,
-      x: bounds.left,
-      y: bounds.top,
+      x: bounds.x,
+      y: bounds.y,
       width: bounds.width,
       height: bounds.height,
       left: bounds.left,
       right: bounds.right,
       top: bounds.top,
       bottom: bounds.bottom,
-      center: { x: bounds.centerX, y: bounds.centerY },
-      scaleX: bounds.scaleX,
-      scaleY: bounds.scaleY,
+      center: { x: bounds.center.x, y: bounds.center.y },
     };
   }
 

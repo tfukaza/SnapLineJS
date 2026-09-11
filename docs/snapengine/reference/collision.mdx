@@ -91,6 +91,22 @@ collider.event.collider.onEndContact = (self, other) => {
 | `onCollide` | Called every frame while two colliders overlap. |
 | `onEndContact` | Called once when two colliders stop touching. |
 
+## World Bounds
+
+`collider.getWorldBoundsSnapshot()` returns a `ColliderBounds`: a
+[`Bounds`](/docs/snapengine/reference/geometry) plus `center` and `radius`.
+For every shape, `x`/`y` are the top-left corner and `width`/`height` span
+the bounds, so a circle's bounds are its enclosing square. `center` is the
+rectangle center or the circle/point position.
+
+```ts
+import { rectsIntersect } from "@snap-engine/core/geometry";
+
+const a = colliderA.getWorldBoundsSnapshot();
+const b = colliderB.getWorldBoundsSnapshot();
+rectsIntersect(a, b);
+```
+
 ## Public API
 
 | API | Description |
@@ -104,7 +120,7 @@ collider.event.collider.onEndContact = (self, other) => {
 | `new RectCollider(engine, parent, localX, localY, width, height)` | Creates a rectangular collider. |
 | `new CircleCollider(engine, parent, localX, localY, radius)` | Creates a circular collider. |
 | `new PointCollider(engine, parent, localX, localY)` | Creates a point collider. |
-| `collider.getWorldBoundsSnapshot()` | Returns current world bounds. |
+| `collider.getWorldBoundsSnapshot()` | Returns the cached world `ColliderBounds`. |
 | `collider.isCollidingWith(other)` | Checks whether two colliders are currently touching. |
 | `collider.currentCollisions` | Current collision set. |
 | `collider.destroy()` | Removes the collider from its parent and collision engine. |

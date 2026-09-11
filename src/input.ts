@@ -1,7 +1,7 @@
 import type { GlobalManager } from "./global";
 import { BaseObject, ElementObject } from "./object";
 import type { DomElement } from "./object";
-import type { PointerPosition } from "./geometry";
+import { pointIntersectsBounds, type PointerPosition } from "./geometry";
 import { pointerPositionFromScreen } from "./camera";
 import { reportConsumerError } from "./errors";
 
@@ -1334,11 +1334,13 @@ class InputControl {
     if (rect == null) {
       return true;
     }
-    return (
-      screenX >= rect.left &&
-      screenX <= rect.right &&
-      screenY >= rect.top &&
-      screenY <= rect.bottom
+    return pointIntersectsBounds(
+      screenX,
+      screenY,
+      rect.left,
+      rect.top,
+      rect.right,
+      rect.bottom,
     );
   }
 

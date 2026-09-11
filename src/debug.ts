@@ -79,7 +79,7 @@ export class DebugRenderer implements DebugRendererInterface {
 
   renderFrame(
     _stats: FrameStats,
-    engine: any,
+    engine: Engine,
     objectTable: Record<string, BaseObject>,
   ): void {
     if (this.debugWindow == null) {
@@ -103,27 +103,7 @@ export class DebugRenderer implements DebugRendererInterface {
     if (this.debugCtx == null) {
       return;
     }
-    for (const marker of Object.values(engine.debugMarkerList) as Array<{
-      objectId: string;
-      id: string;
-      type: "point" | "rect" | "circle" | "text" | "line";
-      persistent: boolean;
-      color: string;
-      tag?: string;
-      x: number;
-      y: number;
-      x2?: number;
-      y2?: number;
-      width?: number;
-      height?: number;
-      radius?: number;
-      text?: string;
-      filled?: boolean;
-      lineWidth?: number;
-      arrowEnd?: boolean;
-      arrowStart?: boolean;
-      arrowSize?: number;
-    }>) {
+    for (const marker of Object.values(engine.debugMarkerList)) {
       if (!this.isTagEnabled(marker.tag)) {
         continue;
       }

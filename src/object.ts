@@ -836,19 +836,7 @@ export class BaseObject extends CoreObject {
 
   clearAllDebugMarkers() {
     if (!this.engine) return;
-    for (const marker of Object.values(this.engine.debugMarkerList) as Array<{
-      objectId: string;
-      id: string;
-      type: "point" | "rect" | "circle" | "text";
-      persistent: boolean;
-      color: string;
-      x: number;
-      y: number;
-      width?: number;
-      height?: number;
-      radius?: number;
-      text?: string;
-    }>) {
+    for (const marker of Object.values(this.engine.debugMarkerList)) {
       if (marker.objectId == this.id) {
         delete this.engine.debugMarkerList[marker.id];
       }

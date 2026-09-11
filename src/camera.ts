@@ -1,6 +1,5 @@
 import { Engine } from "./engine";
-import type { ContainerBounds } from "./engine";
-import type { PointerPosition, Rect } from "./geometry";
+import type { Bounds, PointerPosition, Rect } from "./geometry";
 
 export interface CameraConfig {
   enableZoom?: boolean;
@@ -297,7 +296,7 @@ export class Camera {
    *
    * @param bounds - Optional pre-computed container bounds. If not provided, reads from DOM.
    */
-  updateCameraProperty(bounds?: ContainerBounds) {
+  updateCameraProperty(bounds?: Bounds) {
     if (!this.#containerDom) {
       return;
     }

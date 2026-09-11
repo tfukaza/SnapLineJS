@@ -79,6 +79,10 @@ engine.subscribeEvent("containerResized", "layout", ({ bounds }) => {
 engine.unsubscribeEvent("containerResized", "layout");
 ```
 
+`bounds` is the container's viewport rectangle as a
+[`Bounds`](/docs/snapengine/reference/geometry); `engine.containerBounds`
+holds the latest one.
+
 | Event               | Description                                                     |
 | ------------------- | --------------------------------------------------------------- |
 | `containerAssigned` | Fired after the container element is assigned.                  |

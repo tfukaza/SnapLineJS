@@ -2,7 +2,7 @@ import { StationaryCamera } from "./camera";
 import type { Camera } from "./camera";
 import { GlobalManager } from "./global";
 import { InputControl } from "./input";
-import type { PointerPosition } from "./geometry";
+import { boundsOf, type Bounds, type PointerPosition } from "./geometry";
 import { BaseObject, FrameTask, detachAnimationFromOwner } from "./object";
 import { reportConsumerError } from "./errors";
 import type { CollisionEngine } from "./collision";
@@ -36,27 +36,16 @@ export type EngineEventType =
   | "containerMoved";
 
 /**
- * Container bounds data passed to engine event callbacks.
- */
-export interface ContainerBounds {
-  left: number;
-  top: number;
-  right: number;
-  bottom: number;
-  width: number;
-  height: number;
-}
-
-/**
  * Props passed to engine event callbacks.
  */
 export interface EngineEventProps {
   element: HTMLElement;
-  bounds: ContainerBounds;
+  bounds: Bounds;
 }
 
 type AnimationProcessor = (timestamp: number) => void;
-type DebugMarker = {
+/** A debug-renderer marker registered through `BaseObject.addDebug*`. */
+export type DebugMarker = {
   type: "point" | "rect" | "circle" | "text" | "line";
   objectId: string;
   id: string;
@@ -98,7 +87,7 @@ class Engine {
   #frameController: EngineFrameController;
 
   #containerElement: HTMLElement | null = null; // The DOM element for the engine's container.
-  #containerBounds: ContainerBounds | null = null; // Cached bounding rect of the container
+  #containerBounds: Bounds | null = null; // Cached bounding rect of the container
   #camera: Camera | null = null; // Optional camera instance
   #edgePanController: EdgePanController | null = null;
   #collisionEngine: CollisionEngine | null = null; // Optional collision engine instance
@@ -175,11 +164,11 @@ class Engine {
     this.#containerElement = element;
   }
 
-  get containerBounds(): ContainerBounds | null {
+  get containerBounds(): Bounds | null {
     return this.#containerBounds;
   }
 
-  set containerBounds(bounds: ContainerBounds | null) {
+  set containerBounds(bounds: Bounds | null) {
     this.#containerBounds = bounds;
   }
 
@@ -268,15 +257,7 @@ class Engine {
    * @internal
    */
   #updateContainerBounds(element: HTMLElement) {
-    const rect = element.getBoundingClientRect();
-    this.#containerBounds = {
-      left: rect.left,
-      top: rect.top,
-      right: rect.right,
-      bottom: rect.bottom,
-      width: rect.width,
-      height: rect.height,
-    };
+    this.#containerBounds = boundsOf(element.getBoundingClientRect());
   }
 
   /**
