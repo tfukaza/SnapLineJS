@@ -35,7 +35,7 @@ type Insertion = VirtualInsertion<ItemSnapshot<string>>;
  *   90.59999084 / 90.60000610).
  *
  * The wrap regression suite below locks in the invariant that measurement
- * noise far below LAYOUT_EPSILON never flips a wrap decision, while genuine
+ * noise far below LAYOUT_WRAP_TOLERANCE never flips a wrap decision, while genuine
  * overflow beyond it always does. The cross-browser e2e twin of these tests
  * (the sub-pixel wrap matrix in snapsort-drag-snapshot.spec.ts) makes the
  * same row-shape assertions through the shared helpers in
@@ -335,7 +335,7 @@ test.describe("wrap robustness against browser measurement noise", () => {
   });
 
   test("still wraps genuine overflow just past the tolerance", () => {
-    // Guards the other direction: LAYOUT_EPSILON must stay far below real
+    // Guards the other direction: LAYOUT_WRAP_TOLERANCE must stay far below real
     // layout features, or lines that truly overflow would under-wrap.
     const grid = makeGrid({ rows: 2, cols: 4, itemW: 90, itemH: 60, gap: 4 });
     const dragged = grid.children[0];

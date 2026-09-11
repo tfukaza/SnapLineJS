@@ -283,17 +283,12 @@ is therefore supported; calling a recursive read there is not.
 
 ## Package Structure
 
-```
-dist/
-├── snapengine.mjs     # Main bundle
-├── snapengine.d.ts    # Type declarations
-├── animation.mjs      # Animation module
-├── animation.d.ts
-├── collision.mjs      # Collision module
-├── collision.d.ts
-├── debug.mjs          # Debug module
-└── debug.d.ts
-```
+The published package ships raw TypeScript: `package.json` `exports` map each
+entry (`.`, `./animation`, `./collision`, `./debug`, `./geometry`,
+`./layout`) to its `src/*.ts` file, and `"sideEffects": false` lets bundlers
+drop unused modules. `npm run build` still produces ES bundles and rolled-up
+declarations in `dist/` (one `.mjs` + `.d.ts` per entry), which verifies the
+entries build cleanly.
 
 ## Import Patterns
 
@@ -321,10 +316,10 @@ import { Engine } from "../../../src/index";
 ## Key Principles
 
 - **Framework-agnostic:** Works with vanilla JS, React, Svelte, etc.
-- **Built package:** Compiled to dist/, not raw source
+- **Raw-source package:** Exports `src/*.ts` directly; `dist/` is a build check
 - **Stage-based rendering:** Prevents layout thrashing
 - **Single render loop:** All engines share one RAF loop
-- **Optional features:** Collision, animation, debug are separate imports
+- **Optional features:** Collision, animation, debug, geometry, and layout are separate imports
 
 ## Notes
 

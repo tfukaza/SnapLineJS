@@ -30,7 +30,7 @@ SnapEngineJS/
 
 **Package:** `@snap-engine/core`
 **Purpose:** Core interactivity engine
-**Build:** Yes → `dist/`
+**Build:** Raw-source package (`exports` → `src/*.ts`); `npm run build` emits `dist/` as a build check
 
 See `src/AGENTS.md` for module details.
 
