@@ -116,9 +116,7 @@ export function rectBoundsIntersect(
   bRight: number,
   bBottom: number,
 ): boolean {
-  return (
-    aLeft < bRight && aRight > bLeft && aTop < bBottom && aBottom > bTop
-  );
+  return aLeft < bRight && aRight > bLeft && aTop < bBottom && aBottom > bTop;
 }
 
 /** @internal Edge-inclusive point/circle containment on scalars. */

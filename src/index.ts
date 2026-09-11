@@ -41,11 +41,19 @@ import type {
   PinchSnapshot,
   GestureHandoffControl,
   InputControlConfig,
-  eventPosition,
 } from "./input";
 import { measureElementBox, EventProxyFactory, mergeDefined } from "./util";
-import { Camera } from "./camera";
-import type { CameraConfig } from "./camera";
+import {
+  Camera,
+  pointerPositionFromScreen,
+  pointerPositionFromWorld,
+  worldRectFromScreenRect,
+} from "./camera";
+import type {
+  CameraConfig,
+  ScreenToWorldMapper,
+  WorldToScreenMapper,
+} from "./camera";
 
 export {
   Engine,
@@ -57,6 +65,9 @@ export {
   Camera,
   InputControl,
   measureElementBox,
+  pointerPositionFromScreen,
+  pointerPositionFromWorld,
+  worldRectFromScreenRect,
   EventProxyFactory,
   mergeDefined,
   type pointerDownProp,
@@ -77,7 +88,6 @@ export {
   type FrameController,
   type FrameInfo,
   type FrameSubscribeOptions,
-  type eventPosition,
   type EdgePanController,
   type DomElement,
   type TransformProperty,
@@ -91,5 +101,7 @@ export {
   type ElementBox,
   type PointerPosition,
   type CameraConfig,
+  type ScreenToWorldMapper,
+  type WorldToScreenMapper,
   mouseButtonBitmap,
 };

@@ -7,7 +7,7 @@ import type {
   dragStartProp,
   dragProp,
   dragEndProp,
-  eventPosition,
+  PointerPosition,
 } from "@snap-engine/core";
 import { RectCollider } from "@snap-engine/core/collision";
 import { getGraphRegistry } from "./internal/shared-data";
@@ -70,7 +70,7 @@ export interface GeometryChangeEvent {
 export interface NodePointerEvent {
   node: NodeMirror;
   pointerId: number;
-  position: eventPosition;
+  position: PointerPosition;
   originalEvent?: PointerEvent;
 }
 
@@ -80,7 +80,7 @@ export interface NodeDragPositionEvent {
   y: number;
   startX: number;
   startY: number;
-  position: eventPosition;
+  position: PointerPosition;
 }
 
 export interface ResolvedNodeDragPosition {
@@ -180,7 +180,7 @@ class NodeMirror extends ElementObject {
   #dragPointerId: number | null = null;
   #dragRoots: NodeMirror[] = [];
   #dragCommitNodes: NodeMirror[] = [];
-  #lastDragPosition: eventPosition | null = null;
+  #lastDragPosition: PointerPosition | null = null;
   #pointerSelectionMode: SelectionMode = "replace";
   #wasSelectedAtPointerDown = false;
 
@@ -633,7 +633,7 @@ class NodeMirror extends ElementObject {
     });
   }
 
-  #moveSelectionToPointer(position: eventPosition): void {
+  #moveSelectionToPointer(position: PointerPosition): void {
     this.#lastDragPosition = position;
     for (const node of this.#dragRoots) {
       node.setDragPosition({ position } as dragProp);
@@ -641,7 +641,7 @@ class NodeMirror extends ElementObject {
   }
 
   /** Hook used to build one deduplicated multi-selection drag session. */
-  protected beginSelectionDrag(position: eventPosition): void {
+  protected beginSelectionDrag(position: PointerPosition): void {
     this.setStartPositions();
     this.#pointerReferenceX = position.x;
     this.#pointerReferenceY = position.y;

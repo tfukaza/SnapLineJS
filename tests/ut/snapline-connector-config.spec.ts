@@ -409,10 +409,8 @@ test("a pre-threshold reconnect release disarms the delegated source", () => {
       position: {
         x: 0,
         y: 0,
-        cameraX: 0,
-        cameraY: 0,
-        screenX: 0,
-        screenY: 0,
+        camera: { x: 0, y: 0 },
+        screen: { x: 0, y: 0 },
       },
     } as any,
     null,

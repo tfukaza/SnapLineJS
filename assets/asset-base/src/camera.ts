@@ -4,11 +4,12 @@ import type {
   pointerUpProp,
   mouseWheelProp,
   pinchProp,
-  eventPosition,
+  PointerPosition,
   EdgePanController,
 } from "@snap-engine/core";
-import { ElementObject } from "@snap-engine/core";
+import { ElementObject, pointerPositionFromScreen } from "@snap-engine/core";
 import { Camera } from "@snap-engine/core";
+import { pointIntersectsRect, type Point } from "@snap-engine/core/geometry";
 import type { CameraConfig } from "@snap-engine/core";
 
 /** What the mouse wheel / trackpad two-finger scroll does. */
@@ -148,8 +149,8 @@ class CameraControl extends ElementObject {
   #pinchAnchor: PinchAnchor | null = null;
   #edgePanRequest: {
     pointerId: number;
-    position: eventPosition;
-    onFrame: (position: eventPosition) => void;
+    position: PointerPosition;
+    onFrame: (position: PointerPosition) => void;
   } | null = null;
   #edgePanFrameId: number | null = null;
   #edgePanTimestamp: number | null = null;
@@ -262,8 +263,8 @@ class CameraControl extends ElementObject {
 
   startEdgePan(
     pointerId: number,
-    position: eventPosition,
-    onFrame: (position: eventPosition) => void,
+    position: PointerPosition,
+    onFrame: (position: PointerPosition) => void,
   ): void {
     if (!this.config.edgePan?.enabled) {
       return;
@@ -273,7 +274,7 @@ class CameraControl extends ElementObject {
     this.#scheduleEdgePanFrame();
   }
 
-  updateEdgePan(pointerId: number, position: eventPosition): void {
+  updateEdgePan(pointerId: number, position: PointerPosition): void {
     if (!this.config.edgePan?.enabled) {
       this.stopEdgePan(pointerId);
       return;
@@ -336,9 +337,9 @@ class CameraControl extends ElementObject {
       return 0;
     };
     const velocityX =
-      axisSpeed(request.position.screenX, left, right) * maxSpeed;
+      axisSpeed(request.position.screen.x, left, right) * maxSpeed;
     const velocityY =
-      axisSpeed(request.position.screenY, top, bottom) * maxSpeed;
+      axisSpeed(request.position.screen.y, top, bottom) * maxSpeed;
     const previousTimestamp = this.#edgePanTimestamp ?? timestamp;
     const elapsedSeconds =
       Math.min(32, Math.max(0, timestamp - previousTimestamp)) / 1000;
@@ -356,8 +357,8 @@ class CameraControl extends ElementObject {
       this.paintCamera();
       request.onFrame(
         this.#positionFromScreen(
-          request.position.screenX,
-          request.position.screenY,
+          request.position.screen.x,
+          request.position.screen.y,
         ),
       );
     }
@@ -365,22 +366,20 @@ class CameraControl extends ElementObject {
     this.#scheduleEdgePanFrame();
   };
 
-  #positionFromScreen(screenX: number, screenY: number): eventPosition {
-    const camera = this.engine.camera;
-    if (!camera) {
-      return {
-        x: screenX,
-        y: screenY,
-        cameraX: screenX,
-        cameraY: screenY,
-        screenX,
-        screenY,
-      };
-    }
-    const [cameraX, cameraY] = camera.getCameraFromScreen(screenX, screenY);
-    const [x, y] = camera.getWorldFromCamera(cameraX, cameraY);
-    return { x, y, cameraX, cameraY, screenX, screenY };
+  #positionFromScreen(screenX: number, screenY: number): PointerPosition {
+    return pointerPositionFromScreen(this.engine.camera, screenX, screenY);
   }
+
+  /** Whether a viewport point lies inside the camera's container. */
+  #isWithinCamera(camera: Camera, screen: Point): boolean {
+    return pointIntersectsRect(screen, {
+      x: camera.containerOffsetX,
+      y: camera.containerOffsetY,
+      width: camera.cameraWidth,
+      height: camera.cameraHeight,
+    });
+  }
+
 
   // Event Handlers
 
@@ -419,8 +418,8 @@ class CameraControl extends ElementObject {
     }
     this.#state = "panning";
     this.#panPointerId = prop.event.pointerId;
-    this.#mouseDownX = prop.position.screenX;
-    this.#mouseDownY = prop.position.screenY;
+    this.#mouseDownX = prop.position.screen.x;
+    this.#mouseDownY = prop.position.screen.y;
     this.#pinchAnchor = null;
     this.engine.camera?.handlePanStart();
     prop.event.preventDefault();
@@ -438,8 +437,8 @@ class CameraControl extends ElementObject {
     if (this.global.data.allowCameraControl === false) {
       return;
     }
-    const dx = prop.position.screenX - this.#mouseDownX;
-    const dy = prop.position.screenY - this.#mouseDownY;
+    const dx = prop.position.screen.x - this.#mouseDownX;
+    const dy = prop.position.screen.y - this.#mouseDownY;
     this.engine.camera?.handlePanDrag(dx, dy);
     this.style.transform = this.engine.camera?.canvasStyle as string;
     this.schedule(() => this.writeTransform(), {
@@ -484,12 +483,7 @@ class CameraControl extends ElementObject {
       return;
     }
     const camera = this.engine.camera!;
-    if (
-      prop.position.screenX < camera.containerOffsetX ||
-      prop.position.screenX > camera.containerOffsetX + camera.cameraWidth ||
-      prop.position.screenY < camera.containerOffsetY ||
-      prop.position.screenY > camera.containerOffsetY + camera.cameraHeight
-    ) {
+    if (!this.#isWithinCamera(camera, prop.position.screen)) {
       return;
     }
     // A trackpad pinch is a ctrl-wheel; Cmd+scroll is a meta-wheel with much larger
@@ -500,8 +494,8 @@ class CameraControl extends ElementObject {
       options.zoomSensitivity * (pinch ? options.pinchZoomGain : 1);
     this.zoomBy(
       (-prop.delta * sensitivity) / 2000,
-      prop.position.cameraX,
-      prop.position.cameraY,
+      prop.position.camera.x,
+      prop.position.camera.y,
     );
     prop.event.preventDefault();
   }
@@ -519,12 +513,7 @@ class CameraControl extends ElementObject {
     if (!camera) {
       return;
     }
-    if (
-      prop.position.screenX < camera.containerOffsetX ||
-      prop.position.screenX > camera.containerOffsetX + camera.cameraWidth ||
-      prop.position.screenY < camera.containerOffsetY ||
-      prop.position.screenY > camera.containerOffsetY + camera.cameraHeight
-    ) {
+    if (!this.#isWithinCamera(camera, prop.position.screen)) {
       return;
     }
     // Wheel deltas are screen pixels in the document-scroll sense (deltaY > 0 =
@@ -566,8 +555,8 @@ class CameraControl extends ElementObject {
     }
     const [pointer0, pointer1] = prop.current.pointerList;
     const center = {
-      x: (pointer0.cameraX + pointer1.cameraX) / 2,
-      y: (pointer0.cameraY + pointer1.cameraY) / 2,
+      x: (pointer0.camera.x + pointer1.camera.x) / 2,
+      y: (pointer0.camera.y + pointer1.camera.y) / 2,
     };
     const camera = this.engine.camera;
     if (!camera) {
@@ -625,14 +614,15 @@ class CameraControl extends ElementObject {
     super.destroy(removeDom);
   }
 
-  #createPinchAnchor(center: { x: number; y: number }, distance: number) {
+  #createPinchAnchor(center: Point, distance: number) {
     const camera = this.engine.camera!;
+    const [worldX, worldY] = camera.getWorldFromCamera(center.x, center.y);
     return {
       centerX: center.x,
       centerY: center.y,
       distance,
-      worldX: camera.cameraPositionX + center.x / camera.zoom,
-      worldY: camera.cameraPositionY + center.y / camera.zoom,
+      worldX,
+      worldY,
       zoom: camera.zoom,
     };
   }

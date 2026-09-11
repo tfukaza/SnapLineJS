@@ -133,9 +133,9 @@ test.describe("rect helpers", () => {
   test("projection maps between frames by size ratio", () => {
     const from = { x: 0, y: 0, width: 100, height: 100 };
     const to = { x: 50, y: 50, width: 50, height: 200 };
-    expect(projectRect({ x: 10, y: 10, width: 20, height: 20 }, from, to)).toEqual(
-      { x: 55, y: 70, width: 10, height: 40 },
-    );
+    expect(
+      projectRect({ x: 10, y: 10, width: 20, height: 20 }, from, to),
+    ).toEqual({ x: 55, y: 70, width: 10, height: 40 });
     expect(projectRects([from], from, to)).toEqual([to]);
   });
 

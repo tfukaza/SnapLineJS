@@ -4,8 +4,8 @@
 
     // let engine:Engine = getContext("engine");
 
-    // let pointerPosition: any = $state({x: 0, y: 0, screenX: 0, screenY: 0, cameraX: 0, cameraY: 0});
-    // let style = $derived(`top: ${pointerPosition.screenY}px; left: ${pointerPosition.screenX}px;`);
+    // let pointerPosition: any = $state({x: 0, y: 0, screen: {x: 0, y: 0}, camera: {x: 0, y: 0}});
+    // let style = $derived(`top: ${pointerPosition.screen.y}px; left: ${pointerPosition.screen.x}px;`);
 
     // function updateMousePosition(prop: pointerMoveProp) {
     //     pointerPosition = prop.position;
@@ -28,10 +28,10 @@
         <p>World Coordinates: {pointerPosition.x}, {pointerPosition.y}</p>
     </li>
     <li>
-        <p>Camera Coordinates: {pointerPosition.cameraX}, {pointerPosition.cameraY}</p>
+        <p>Camera Coordinates: {pointerPosition.camera.x}, {pointerPosition.camera.y}</p>
     </li>
     <li>
-        <p>Screen Coordinates: {pointerPosition.screenX}, {pointerPosition.screenY}</p>
+        <p>Screen Coordinates: {pointerPosition.screen.x}, {pointerPosition.screen.y}</p>
     </li>
    </ol>
 </div> -->

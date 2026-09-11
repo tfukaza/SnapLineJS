@@ -1,10 +1,5 @@
-import type { Camera } from "./camera";
-import {
-  ZERO_EDGES,
-  type Edges,
-  type ElementBox,
-  type Rect,
-} from "./geometry";
+import type { ScreenToWorldMapper } from "./camera";
+import { ZERO_EDGES, type Edges, type ElementBox, type Rect } from "./geometry";
 import type { DomElement, TransformProperty } from "./object";
 
 /**
@@ -21,12 +16,6 @@ function mergeDefined<T extends object>(defaults: T, overrides: Partial<T>): T {
   }
   return merged;
 }
-
-/** The subset of Camera used to map measured screen rects into world space. */
-type ElementMeasureCamera = Pick<
-  Camera,
-  "getCameraFromScreen" | "getWorldFromCamera"
->;
 
 /** The CSS edge thicknesses read from an element's computed style. */
 interface MeasuredEdges {
@@ -108,7 +97,7 @@ function readEdges(
  * keeps the client rect exactly as measured.
  */
 function elementBoxFromMeasurement(
-  camera: ElementMeasureCamera | null,
+  camera: ScreenToWorldMapper | null,
   clientRect: Rect,
   edges: MeasuredEdges,
 ): ElementBox {
@@ -143,7 +132,7 @@ function elementBoxFromMeasurement(
  * previous box to reuse unchanged edge objects.
  */
 function measureElementBox(
-  camera: ElementMeasureCamera | null,
+  camera: ScreenToWorldMapper | null,
   element: DomElement,
   previous?: ElementBox,
 ): ElementBox {
@@ -241,7 +230,7 @@ function EventProxyFactory<BindObject, Callback extends object>(
   });
 }
 
-export type { ElementMeasureCamera, MeasuredEdges };
+export type { MeasuredEdges };
 export {
   setDomStyle,
   EventProxyFactory,

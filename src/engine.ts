@@ -2,7 +2,7 @@ import { StationaryCamera } from "./camera";
 import type { Camera } from "./camera";
 import { GlobalManager } from "./global";
 import { InputControl } from "./input";
-import type { eventPosition } from "./input";
+import type { PointerPosition } from "./geometry";
 import { BaseObject, FrameTask, detachAnimationFromOwner } from "./object";
 import { reportConsumerError } from "./errors";
 import type { CollisionEngine } from "./collision";
@@ -18,10 +18,10 @@ export interface EngineConfig {}
 export interface EdgePanController {
   startEdgePan(
     pointerId: number,
-    position: eventPosition,
-    onFrame: (position: eventPosition) => void,
+    position: PointerPosition,
+    onFrame: (position: PointerPosition) => void,
   ): void;
-  updateEdgePan(pointerId: number, position: eventPosition): void;
+  updateEdgePan(pointerId: number, position: PointerPosition): void;
   stopEdgePan(pointerId: number): void;
 }
 

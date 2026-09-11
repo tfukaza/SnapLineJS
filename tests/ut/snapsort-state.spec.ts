@@ -238,10 +238,8 @@ function attemptItemDrag(item: Item): void {
     start: {
       x: 0,
       y: 0,
-      cameraX: 0,
-      cameraY: 0,
-      screenX: 0,
-      screenY: 0,
+      camera: { x: 0, y: 0 },
+      screen: { x: 0, y: 0 },
     },
     button: 0,
     isWithinEngine: true,

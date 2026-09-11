@@ -2,7 +2,7 @@ import {
   mergeDefined,
   type BaseObject,
   type Engine,
-  type eventPosition,
+  type PointerPosition,
 } from "@snap-engine/core";
 import { NodeMirror, type NodeConfig } from "./node";
 import { getGraphRegistry } from "./internal/shared-data";
@@ -328,7 +328,7 @@ class GroupNodeMirror extends NodeMirror {
     this.refreshMembership(true);
   }
 
-  protected override beginSelectionDrag(position: eventPosition): void {
+  protected override beginSelectionDrag(position: PointerPosition): void {
     super.beginSelectionDrag(position);
     this.#carryGroupOrigin = {
       x: this.worldTransform.x,
