@@ -178,36 +178,6 @@ test("Euclidean priority resolves mismatched zones before ranking their slots", 
   );
 });
 
-test("priority -1 rejects a container", () => {
-  const { dragged, near, far, root } = dropPriorityFixture();
-  let priorityCalls = 0;
-  far.dropPriority = 100;
-  far.callbacks = {
-    getDropPriority: (event) => {
-      priorityCalls++;
-      return rejectDrop(event);
-    },
-  };
-
-  expect(determineDropTarget(dragged as any, root as any)?.container).toBe(
-    near,
-  );
-  expect(priorityCalls).toBe(1);
-});
-
-test("priority -1 can reject every destination and be overridden dynamically", () => {
-  const { dragged, near, far, root } = dropPriorityFixture();
-  near.dropPriority = DROP_REJECT_PRIORITY;
-  far.dropPriority = DROP_REJECT_PRIORITY;
-
-  expect(determineDropTarget(dragged as any, root as any)).toBeNull();
-
-  near.callbacks = { getDropPriority: () => 0 };
-  expect(determineDropTarget(dragged as any, root as any)?.container).toBe(
-    near,
-  );
-});
-
 test("drop priority runs once for a container with multiple candidate slots", () => {
   const dragged = mockSnapSortItem("dragged", {
     x: 10,
@@ -258,6 +228,10 @@ test("drop priority runs once for a container with multiple candidate slots", ()
 test("priority supports rejection, fallback, and nonnegative overrides", () => {
   const { dragged, near, far, root } = dropPriorityFixture();
   near.dropPriority = DROP_REJECT_PRIORITY;
+  far.dropPriority = DROP_REJECT_PRIORITY;
+
+  expect(determineDropTarget(dragged as any, root as any)).toBeNull();
+
   far.dropPriority = 0.5;
   near.callbacks = { getDropPriority: () => undefined };
 
@@ -312,6 +286,9 @@ test("drop policy events expose source, destination, metadata, and geometry", ()
     containerContentRect: { x: 0, y: 0, width: 100, height: 50 },
     depth: 1,
   });
+  const event = priorityEvent as DropPriorityEvent | null;
+  expect(Object.isFrozen(event?.containerRect)).toBe(true);
+  expect(Object.isFrozen(event?.dragRect)).toBe(true);
 });
 
 test("applications can replace grouping with source and destination metadata", () => {

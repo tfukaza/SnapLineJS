@@ -109,31 +109,21 @@ function positionOf(transform: { x: number; y: number }) {
 }
 
 test.describe("BaseObject transforms", () => {
-  test("keeps CoreObject root world and local transforms in sync", () => {
-    const engine = createEngine();
-    const object = new CoreObject(engine);
-
-    object.worldTransform = { x: 12, y: 24, scaleX: 2, scaleY: 3 };
-
-    expect(positionOf(object.localTransform)).toEqual([12, 24]);
-    expect(object.localTransform.scaleX).toBe(2);
-    expect(object.localTransform.scaleY).toBe(3);
-    expect(object.transform.getWorld()).toBe(object.worldTransform);
-  });
-
   test("keeps root world and local transforms in sync", () => {
     const engine = createEngine();
-    const object = new BaseObject(engine);
+    for (const Kind of [CoreObject, BaseObject]) {
+      const object = new Kind(engine);
 
-    object.worldTransform = { x: 10, y: 20, scaleX: 2, scaleY: 3 };
+      object.worldTransform = { x: 10, y: 20, scaleX: 2, scaleY: 3 };
 
-    expect(object.localTransform.x).toBe(10);
-    expect(object.localTransform.y).toBe(20);
-    expect(object.localTransform.scaleX).toBe(2);
-    expect(object.localTransform.scaleY).toBe(3);
+      expect(positionOf(object.localTransform), Kind.name).toEqual([10, 20]);
+      expect(object.localTransform.scaleX).toBe(2);
+      expect(object.localTransform.scaleY).toBe(3);
+      expect(object.transform.getWorld()).toBe(object.worldTransform);
 
-    object.localTransform = { x: 30, y: 40 };
-    expect(positionOf(object.worldTransform)).toEqual([30, 40]);
+      object.localTransform = { x: 30, y: 40 };
+      expect(positionOf(object.worldTransform), Kind.name).toEqual([30, 40]);
+    }
   });
 
   test("composes child transforms through parent position and scale", () => {
@@ -471,9 +461,13 @@ test.describe("ElementObject writeTransformRecursive", () => {
     const engine = createEngine();
     const parent = new WriteSpyObject(engine);
     const directChild = new WriteSpyObject(engine);
+    const directGrandchild = new WriteSpyObject(engine);
     const noneChild = new WriteSpyObject(engine);
+    const noneGrandchild = new WriteSpyObject(engine);
     parent.appendChild(directChild);
+    directChild.appendChild(directGrandchild);
     parent.appendChild(noneChild);
+    noneChild.appendChild(noneGrandchild);
     noneChild.transformMode = "none";
     const collider = new RectCollider(engine, parent, 0, 0, 10, 10);
     parent.addCollider(collider);
@@ -487,23 +481,10 @@ test.describe("ElementObject writeTransformRecursive", () => {
 
     expect(parent.writeCount).toBe(1);
     expect(directChild.writeCount).toBe(1);
-    expect(noneChild.writeCount).toBe(0); // none-mode pruned (with its subtree)
-  });
-
-  test("recurses through nested direct-mode children", () => {
-    const engine = createEngine();
-    const parent = new WriteSpyObject(engine);
-    const child = new WriteSpyObject(engine);
-    const grandchild = new WriteSpyObject(engine);
-    parent.appendChild(child);
-    child.appendChild(grandchild);
-
-    engine.global.currentStage = "WRITE_2";
-    parent.writeTransformRecursive();
-
-    expect(parent.writeCount).toBe(1);
-    expect(child.writeCount).toBe(1);
-    expect(grandchild.writeCount).toBe(1);
+    expect(directGrandchild.writeCount).toBe(1);
+    // A none-mode child is pruned together with its subtree.
+    expect(noneChild.writeCount).toBe(0);
+    expect(noneGrandchild.writeCount).toBe(0);
   });
 
   test("throws when invoked during a read stage", () => {

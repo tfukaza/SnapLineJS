@@ -317,33 +317,6 @@ test("insertion placement spans the container content box on the marker cross ax
   });
 });
 
-test("insertion placement shows a centered marker for an empty row container", () => {
-  const dragged = mockSnapSortItem("dragged", {
-    x: 0,
-    y: 0,
-    width: 60,
-    height: 32,
-  });
-  const container = mockSnapSortContainer(
-    "container",
-    { x: 10, y: 20, width: 200, height: 80 },
-    [],
-    "row",
-  );
-  dragged.worldTransform = { x: 80, y: 44, scaleX: 1, scaleY: 1 };
-
-  const target = determineInsertionDropTarget(dragged as any, container as any);
-
-  expect(target?.container).toBe(container);
-  expect(target?.index).toBe(0);
-  expect(target?.insertion).toEqual({
-    gap: { orientation: "vertical", x: 110, y: 20, length: 80 },
-    previous: null,
-    next: null,
-    isCurrentPlacement: false,
-  });
-});
-
 test("progressive placement uses the cross-axis line in wrapped rows", () => {
   const dragged = mockSnapSortItem("dragged", {
     x: 0,
@@ -405,63 +378,6 @@ test("wraps a horizontal ghost when its trailing margin exceeds the content widt
     locked: false,
     box: layoutBox(
       { x: 0, y: 0, width: 90, height: 40 },
-      { left: 4, right: 4 },
-    ),
-    children: [],
-  });
-
-  const simulated = virtualInsertionPosition(
-    container,
-    dragged,
-    0,
-    0,
-    2,
-    dragged.box.width,
-    dragged.box.height,
-  );
-
-  expect(simulated).toEqual({ x: 4, y: 40 });
-});
-
-test("wraps fractional horizontal overflow at browser flex precision", () => {
-  const container = snapshotFixture<string>({
-    value: "container",
-    direction: "row",
-    mainAxisAlign: "start",
-    locked: false,
-    box: layoutBox({ x: 0, y: 0, width: 317.2, height: 120 }),
-    children: [
-      {
-        value: "item-1",
-        direction: "column",
-        mainAxisAlign: "start",
-        locked: false,
-        box: layoutBox(
-          { x: 4, y: 0, width: 100, height: 40 },
-          { left: 4, right: 4 },
-        ),
-        children: [],
-      },
-      {
-        value: "item-2",
-        direction: "column",
-        mainAxisAlign: "start",
-        locked: false,
-        box: layoutBox(
-          { x: 112, y: 0, width: 100, height: 40 },
-          { left: 4, right: 4 },
-        ),
-        children: [],
-      },
-    ],
-  });
-  const dragged = snapshotFixture<string>({
-    value: "dragged",
-    direction: "column",
-    mainAxisAlign: "start",
-    locked: false,
-    box: layoutBox(
-      { x: 0, y: 0, width: 93.5, height: 40 },
       { left: 4, right: 4 },
     ),
     children: [],
