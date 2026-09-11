@@ -29,7 +29,7 @@
 
   const ghostStyle = $derived.by(() => {
     const origProp =
-      ghost.original.dragSnapshot?.box ?? ghost.original.currentDomProperty;
+      ghost.original.dragSnapshot?.box ?? ghost.original.box;
     if (ghost.type === "insertion-marker" || ghost.type === "pointer-preview") {
       const marker = ghost.type === "insertion-marker";
       const rect = marker

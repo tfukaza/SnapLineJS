@@ -14,6 +14,7 @@ import {
   determineSwapDropTarget,
 } from "../../assets/snapsort/src/algorithm";
 import { BaseObject } from "../../src/object";
+import type { ElementBox, Rect } from "../../src/geometry";
 import {
   prioritizeIntersectingContainer,
   prioritizeNearestContainerEdge,
@@ -51,7 +52,6 @@ import {
   simulatedRowCounts,
 } from "../helpers/layout-grid";
 
-type Rect = { x: number; y: number; width: number; height: number };
 
 test("built-in modes choose composable drag visual defaults that can be overridden before activation", () => {
   let nextId = 0;
@@ -357,15 +357,7 @@ test("visual geometry invalidations coalesce at the root container", async () =>
   expect(events[1]!.items).toEqual([second]);
   expect(events[1]!.reasons).toEqual(["settle"]);
 });
-type Box = Rect & {
-  scaleX: number;
-  scaleY: number;
-  screenX: number;
-  screenY: number;
-  margin: { top: number; right: number; bottom: number; left: number };
-  padding: { top: number; right: number; bottom: number; left: number };
-  border: { top: number; right: number; bottom: number; left: number };
-};
+type Box = ElementBox;
 
 type LayoutCase = {
   name: string;
@@ -466,7 +458,7 @@ type MockSnapSortItem = {
   };
   dropPriority?: number;
   dragSnapshot: ItemSnapshot<MockSnapSortItem>;
-  currentDomProperty: Box;
+  box: Box;
   itemOrderedList: MockSnapSortItem[];
   children: MockSnapSortItem[];
   worldTransform: { x: number; y: number; scaleX: number; scaleY: number };
@@ -618,10 +610,12 @@ function layoutBox(
 ): Box {
   return {
     ...rect,
-    scaleX: 1,
-    scaleY: 1,
-    screenX: rect.x,
-    screenY: rect.y,
+    screen: {
+      x: rect.x,
+      y: rect.y,
+      width: rect.width,
+      height: rect.height,
+    },
     margin: {
       top: margin.top ?? 0,
       right: margin.right ?? 0,
@@ -715,7 +709,7 @@ function mockSnapSortItem(
     callbacks: undefined,
     dropPriority: 0,
     dragSnapshot: null as unknown as ItemSnapshot<MockSnapSortItem>,
-    currentDomProperty: box,
+    box,
     itemOrderedList: children,
     children,
     worldTransform: { x: rect.x, y: rect.y, scaleX: 1, scaleY: 1 },
@@ -1296,7 +1290,7 @@ test("swap collects every hovered container before applying priority", () => {
     item.isGhost = false;
     item.itemOrderedList = children;
     item.children = children;
-    item.currentDomProperty = box;
+    item.box = box;
     item.depth = 0;
     item.callbacks = undefined;
     item.dropPriority = 0;
@@ -1830,7 +1824,7 @@ test("insertion placement spans the container content box on the marker cross ax
     ...container.dragSnapshot,
     box: containerBox,
   };
-  container.currentDomProperty = containerBox;
+  container.box = containerBox;
   dragged.worldTransform = { x: 34, y: 112, scaleX: 1, scaleY: 1 };
 
   const target = determineInsertionDropTarget(dragged as any, container as any);
@@ -2232,10 +2226,12 @@ async function measureBrowserLayoutCases(
         y: rect.y,
         width: rect.width,
         height: rect.height,
-        scaleX: 1,
-        scaleY: 1,
-        screenX: rect.x,
-        screenY: rect.y,
+        screen: {
+          x: rect.x,
+          y: rect.y,
+          width: rect.width,
+          height: rect.height,
+        },
         margin: {
           top: number(style.marginTop),
           right: number(style.marginRight),
@@ -3238,10 +3234,12 @@ test.describe("Snapsort drag-start snapshot layout", () => {
           y: rect.y,
           width: rect.width,
           height: rect.height,
-          scaleX: 1,
-          scaleY: 1,
-          screenX: rect.x,
-          screenY: rect.y,
+          screen: {
+            x: rect.x,
+            y: rect.y,
+            width: rect.width,
+            height: rect.height,
+          },
           margin: {
             top: number(style.marginTop),
             right: number(style.marginRight),
@@ -3410,10 +3408,12 @@ test.describe("Snapsort drag-start snapshot layout", () => {
             y: rect.y,
             width: rect.width,
             height: rect.height,
-            scaleX: 1,
-            scaleY: 1,
-            screenX: rect.x,
-            screenY: rect.y,
+            screen: {
+              x: rect.x,
+              y: rect.y,
+              width: rect.width,
+              height: rect.height,
+            },
             margin: {
               top: number(style.marginTop),
               right: number(style.marginRight),
@@ -3633,10 +3633,12 @@ test.describe("Snapsort drag-start snapshot layout", () => {
           y: rect.y,
           width: rect.width,
           height: rect.height,
-          scaleX: 1,
-          scaleY: 1,
-          screenX: rect.x,
-          screenY: rect.y,
+          screen: {
+            x: rect.x,
+            y: rect.y,
+            width: rect.width,
+            height: rect.height,
+          },
           margin: {
             top: number(style.marginTop),
             right: number(style.marginRight),
@@ -4115,10 +4117,12 @@ test.describe("Snapsort drag-start snapshot layout", () => {
           y: rect.y,
           width: rect.width,
           height: rect.height,
-          scaleX: 1,
-          scaleY: 1,
-          screenX: rect.x,
-          screenY: rect.y,
+          screen: {
+            x: rect.x,
+            y: rect.y,
+            width: rect.width,
+            height: rect.height,
+          },
           margin: {
             top: number(style.marginTop),
             right: number(style.marginRight),
@@ -4244,10 +4248,12 @@ test.describe("Snapsort drag-start snapshot layout", () => {
           y: rect.y,
           width: rect.width,
           height: rect.height,
-          scaleX: 1,
-          scaleY: 1,
-          screenX: rect.x,
-          screenY: rect.y,
+          screen: {
+            x: rect.x,
+            y: rect.y,
+            width: rect.width,
+            height: rect.height,
+          },
           margin: {
             top: number(style.marginTop),
             right: number(style.marginRight),
@@ -5163,10 +5169,12 @@ test.describe("Snapsort drag-start snapshot layout", () => {
           y: rect.y,
           width: rect.width,
           height: rect.height,
-          scaleX: 1,
-          scaleY: 1,
-          screenX: rect.x,
-          screenY: rect.y,
+          screen: {
+            x: rect.x,
+            y: rect.y,
+            width: rect.width,
+            height: rect.height,
+          },
           margin: {
             top: number(style.marginTop),
             right: number(style.marginRight),

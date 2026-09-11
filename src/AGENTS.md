@@ -55,7 +55,7 @@ Public API entry point. All external-facing exports.
 - `Engine`, `BaseObject`, `ElementObject`, `Camera`, and the `FrameController`
   interface
 - Input types (dragProp, pointerDownProp, etc.)
-- Utilities (getDomProperty, EventProxyFactory)
+- Utilities (measureElementBox, EventProxyFactory)
 
 ### `engine.ts`
 

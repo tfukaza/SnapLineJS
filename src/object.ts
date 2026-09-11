@@ -2,11 +2,13 @@ import type { AnimationInterface } from "./animation";
 import type { Collider } from "./collision";
 import type { Engine } from "./engine";
 import type { InputEventCallback } from "./input";
+import type { ElementBox } from "./geometry";
 import { GlobalManager } from "./global";
 import {
+  EMPTY_ELEMENT_BOX,
   EventProxyFactory,
   generateTransformString,
-  getDomProperty,
+  measureElementBox,
   parseTransformString,
   setDomStyle,
 } from "./util";
@@ -36,23 +38,6 @@ export interface TransformProperty {
 }
 
 type ReadonlyTransformProperty = Readonly<TransformProperty>;
-
-export interface DomProperty extends TransformProperty {
-  height: number;
-  width: number;
-  screenX: number;
-  screenY: number;
-  margin: BoxSpacing;
-  padding: BoxSpacing;
-  border: BoxSpacing;
-}
-
-interface BoxSpacing {
-  top: number;
-  right: number;
-  bottom: number;
-  left: number;
-}
 
 let transformEpoch = 0;
 const animationOwnerMap = new WeakMap<AnimationInterface, BaseObject>();
@@ -943,44 +928,11 @@ export function detachAnimationFromOwner(animation: AnimationInterface) {
   owner.removeAnimationReference(animation);
 }
 
-function createDomProperty(): DomProperty {
-  return {
-    x: 0,
-    y: 0,
-    height: 0,
-    width: 0,
-    scaleX: 1,
-    scaleY: 1,
-    screenX: 0,
-    screenY: 0,
-    margin: {
-      top: 0,
-      right: 0,
-      bottom: 0,
-      left: 0,
-    },
-    padding: {
-      top: 0,
-      right: 0,
-      bottom: 0,
-      left: 0,
-    },
-    border: {
-      top: 0,
-      right: 0,
-      bottom: 0,
-      left: 0,
-    },
-  };
-}
-
-function copyDomPropertyValue(target: DomProperty, source: DomProperty) {
-  Object.assign(target, {
-    ...source,
-    margin: { ...source.margin },
-    padding: { ...source.padding },
-    border: { ...source.border },
-  });
+function stageBoxIndex(stage: FrameReadStages | null): number {
+  if (stage == "READ_1") return 0;
+  if (stage == "READ_2") return 1;
+  if (stage == "READ_3" || stage == null) return 2;
+  throw new Error(`Invalid stage: ${stage}`);
 }
 
 export class ElementObject<
@@ -990,8 +942,12 @@ export class ElementObject<
   #style: Record<string, any> = {};
   #classList: string[] = [];
   #dataAttribute: Record<string, any> = {};
-  #property: DomProperty;
-  #domProperty: Array<DomProperty>;
+  #box: ElementBox = EMPTY_ELEMENT_BOX;
+  #stageBoxes: [ElementBox, ElementBox, ElementBox] = [
+    EMPTY_ELEMENT_BOX,
+    EMPTY_ELEMENT_BOX,
+    EMPTY_ELEMENT_BOX,
+  ];
   #resizeObserver: ResizeObserver | null = null;
   #mutationObserver: MutationObserver | null = null;
   #state: any = {};
@@ -1005,11 +961,6 @@ export class ElementObject<
 
   constructor(engine: Engine, parent: BaseObject | null = null) {
     super(engine, parent);
-    this.#property = createDomProperty();
-    this.#domProperty = [];
-    for (let i = 0; i < 3; i++) {
-      this.#domProperty.push(createDomProperty());
-    }
     this.transformMode = "direct";
     this.transformOrigin = null;
     this.state = new Proxy(this.#state, {
@@ -1020,8 +971,14 @@ export class ElementObject<
     });
   }
 
-  get currentDomProperty(): DomProperty {
-    return this.#property;
+  /**
+   * The element's most recent measured box.
+   *
+   * Each `readDom` produces a new frozen snapshot, so a captured box never
+   * changes after the fact.
+   */
+  get box(): ElementBox {
+    return this.#box;
   }
 
   get style(): Record<string, any> {
@@ -1096,43 +1053,38 @@ export class ElementObject<
     super.destroy();
   }
 
-  getDomProperty(stage: FrameReadStages | null = null): DomProperty {
-    let index = 0;
-    if (stage == "READ_1") {
-      index = 0;
-    } else if (stage == "READ_2") {
-      index = 1;
-    } else if (stage == "READ_3" || stage == null) {
-      index = 2;
-    } else {
-      throw new Error(`Invalid stage: ${stage}`);
-    }
-    return this.#domProperty[index];
+  /** The box captured by the last `readDom` in `stage` (default READ_3). */
+  getStageBox(stage: FrameReadStages | null = null): ElementBox {
+    return this.#stageBoxes[stageBoxIndex(stage)];
   }
 
-  copyDomProperty(fromStage: FrameReadStages, toStage: FrameReadStages): void {
-    copyDomPropertyValue(
-      this.getDomProperty(toStage),
-      this.getDomProperty(fromStage),
-    );
+  /** Make `toStage` report the box captured in `fromStage`. */
+  copyStageBox(fromStage: FrameReadStages, toStage: FrameReadStages): void {
+    this.#stageBoxes[stageBoxIndex(toStage)] = this.getStageBox(fromStage);
   }
 
   /**
-   * Save the DOM property to the transform property.
-   * Currently only saves the x and y properties.
-   * This function assumes that the element position has already been read from the DOM.
+   * Copy a stage box's position into this object's world transform.
+   * At IDLE the READ_2 box is used. Assumes the element was already read.
    */
-  saveDomProperety(stage: FrameReadStages | null = null): void {
+  saveWorldPosition(stage: FrameReadStages | null = null): void {
     let currentStage = stage ?? this.global.currentStage;
     currentStage = currentStage == "IDLE" ? "READ_2" : currentStage;
-    const property = this.getDomProperty(currentStage as FrameReadStages);
-    this.worldTransform = { x: property.x, y: property.y };
+    const box = this.getStageBox(currentStage as FrameReadStages);
+    this.worldTransform = { x: box.x, y: box.y };
   }
 
+  /**
+   * Measure the element and return the new box snapshot.
+   *
+   * With `unapplyTransform`, the translation and scale of the element's own
+   * inline transform are removed so the box reports its untransformed
+   * layout position.
+   */
   readDom(
     config: { unapplyTransform?: boolean } = {},
     stage: FrameReadStages | null = null,
-  ): DomProperty {
+  ): ElementBox {
     const currentStage = stage ?? this.global.currentStage;
 
     if (!["READ_1", "READ_2", "READ_3", "IDLE"].includes(currentStage)) {
@@ -1149,43 +1101,30 @@ export class ElementObject<
       throw new Error("Element is not set");
     }
 
-    const property = getDomProperty(this.engine, this.#element);
+    let box = measureElementBox(this.engine.camera, this.#element, this.#box);
     const transform = this.#element.style.transform;
-    let transformApplied = {
-      x: 0,
-      y: 0,
-      scaleX: 1,
-      scaleY: 1,
-    };
-
     if (transform && transform != "none" && config.unapplyTransform) {
-      transformApplied = parseTransformString(transform);
+      const applied = parseTransformString(transform);
+      box = Object.freeze({
+        ...box,
+        x: box.x - applied.x,
+        y: box.y - applied.y,
+        width: box.width / applied.scaleX,
+        height: box.height / applied.scaleY,
+      });
     }
-
-    this.#property.height = property.height / transformApplied.scaleY;
-    this.#property.width = property.width / transformApplied.scaleX;
-    this.#property.x = property.x - transformApplied.x;
-    this.#property.y = property.y - transformApplied.y;
-    this.#property.screenX = property.screenX;
-    this.#property.screenY = property.screenY;
-    this.#property.margin = property.margin;
-    this.#property.padding = property.padding;
-    this.#property.border = property.border;
+    this.#box = box;
 
     if (["READ_1", "READ_2", "READ_3"].includes(currentStage)) {
-      copyDomPropertyValue(
-        this.getDomProperty(currentStage as FrameReadStages),
-        this.#property,
-      );
+      this.#stageBoxes[stageBoxIndex(currentStage as FrameReadStages)] = box;
     }
 
-    return this.#property;
+    return box;
   }
 
   readDomRecursive(
     config: {
       unapplyTransform?: boolean;
-      saveDomProperety?: boolean;
       saveWorldPosition?: boolean;
     } = {},
   ) {
@@ -1195,8 +1134,8 @@ export class ElementObject<
     }
 
     this.readDom(config);
-    if (config.saveDomProperety || config.saveWorldPosition) {
-      this.saveDomProperety(stage);
+    if (config.saveWorldPosition) {
+      this.saveWorldPosition(stage);
     }
 
     for (const child of this.children) {
@@ -1269,8 +1208,8 @@ export class ElementObject<
       };
     } else if (this.transformMode == "relative") {
       const [newX, newY] = [
-        this.worldTransform.x - this.#property.x,
-        this.worldTransform.y - this.#property.y,
+        this.worldTransform.x - this.#box.x,
+        this.worldTransform.y - this.#box.y,
       ];
       transformStyle = {
         transform: generateTransformString({
@@ -1284,8 +1223,8 @@ export class ElementObject<
       const origin = this.transformOrigin ?? this.parent;
       if (!origin) {
         const [newX, newY] = [
-          this.worldTransform.x - this.#property.x,
-          this.worldTransform.y - this.#property.y,
+          this.worldTransform.x - this.#box.x,
+          this.worldTransform.y - this.#box.y,
         ];
         transformStyle = {
           transform: generateTransformString({

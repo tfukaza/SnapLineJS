@@ -108,7 +108,7 @@ export function toContainerLocalRect(
     );
   }
   const containerBox =
-    container.dragSnapshot?.box ?? container.currentDomProperty;
+    container.dragSnapshot?.box ?? container.box;
 
   return Object.freeze({
     x:

@@ -116,7 +116,7 @@ function applyGhostState(
 
   if (ghost.type === "source-spacer" || ghost.type === "target-spacer") {
     const box =
-      ghost.original.dragSnapshot?.box ?? ghost.original.currentDomProperty;
+      ghost.original.dragSnapshot?.box ?? ghost.original.box;
     element.style.margin = `${box.margin.top}px ${box.margin.right}px ${box.margin.bottom}px ${box.margin.left}px`;
     return;
   }

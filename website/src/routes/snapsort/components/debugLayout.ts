@@ -1,4 +1,5 @@
-import type { DomProperty, Engine as SnapEngine } from "@snap-engine/core";
+import type { ElementBox, Engine as SnapEngine } from "@snap-engine/core";
+import { contentRect, projectRect } from "@snap-engine/core/geometry";
 import type {
   Container as ContainerType,
   Item as ItemType,
@@ -30,28 +31,13 @@ function isFiniteRect(rect: Pick<DebugOverlayRect, "x" | "y" | "width" | "height
   );
 }
 
-function boxToViewportRect(box: DomProperty) {
-  return {
-    x: box.screenX,
-    y: box.screenY,
-    width: box.width,
-    height: box.height,
-  };
+function boxToViewportRect(box: ElementBox) {
+  return box.screen;
 }
 
-function contentViewportRect(box: DomProperty) {
-  return {
-    x: box.screenX + box.border.left + box.padding.left,
-    y: box.screenY + box.border.top + box.padding.top,
-    width: Math.max(
-      0,
-      box.width - box.border.left - box.border.right - box.padding.left - box.padding.right,
-    ),
-    height: Math.max(
-      0,
-      box.height - box.border.top - box.border.bottom - box.padding.top - box.padding.bottom,
-    ),
-  };
+/** The content box, mapped from world space into the box's viewport rect. */
+function contentViewportRect(box: ElementBox) {
+  return projectRect(contentRect(box), box, box.screen);
 }
 
 function liveViewportRect(element: HTMLElement | null) {

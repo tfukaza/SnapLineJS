@@ -233,11 +233,11 @@ export class DebugRenderer implements DebugRendererInterface {
       const elementObject = object;
 
       const colors = ["#FF0000A0", "#00FF00A0", "#0000FFA0"];
-      const stages = ["READ_1", "READ_2", "READ_3"];
+      const stages = ["READ_1", "READ_2", "READ_3"] as const;
       const tagNames = ["dom-read-1", "dom-read-2", "dom-read-3"];
       for (let i = 0; i < 3; i++) {
         if (!this.isTagEnabled(tagNames[i])) continue;
-        const property = elementObject.getDomProperty(stages[i] as any);
+        const property = elementObject.getStageBox(stages[i]);
         this.debugCtx.stroke();
         this.debugCtx.beginPath();
         this.debugCtx.strokeStyle = colors[i];
@@ -267,8 +267,8 @@ export class DebugRenderer implements DebugRendererInterface {
         this.debugCtx.rect(
           cameraX,
           cameraY,
-          elementObject.currentDomProperty.width,
-          elementObject.currentDomProperty.height,
+          elementObject.box.width,
+          elementObject.box.height,
         );
         this.debugCtx.stroke();
       }

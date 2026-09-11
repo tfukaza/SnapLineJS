@@ -30,12 +30,12 @@ export function readVisualRect(
     return null;
   }
 
-  const property = object.readDom({ unapplyTransform: false });
+  const { screen } = object.readDom({ unapplyTransform: false });
   const rectangle = new DOMRect(
-    property.screenX,
-    property.screenY,
-    property.width,
-    property.height,
+    screen.x,
+    screen.y,
+    screen.width,
+    screen.height,
   ) as VisualRectSnapshot;
   Object.defineProperty(rectangle, "coordinateSpace", {
     configurable: false,

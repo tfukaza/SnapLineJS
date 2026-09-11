@@ -1,4 +1,4 @@
-import type { DomProperty } from "@snap-engine/core";
+import type { BoxModel, Edges } from "@snap-engine/core";
 import type { ItemSnapshot, LayoutDirection, LayoutWrap } from "./snapshot";
 
 export type { LayoutDirection, LayoutMainAxisAlign } from "./snapshot";
@@ -87,7 +87,7 @@ export interface LayoutFilter<T> {
 export interface VirtualLayoutEntry {
   width: number;
   height: number;
-  margin: DomProperty["margin"];
+  margin: Edges;
 }
 
 export interface VirtualInsertion<T> {
@@ -184,14 +184,14 @@ export function pointFromAxes(
   return axes.main === "x" ? { x: main, y: cross } : { x: cross, y: main };
 }
 
-export function contentBoxOrigin(prop: DomProperty): { x: number; y: number } {
+export function contentBoxOrigin(prop: BoxModel): { x: number; y: number } {
   return {
     x: prop.x + prop.border.left + prop.padding.left,
     y: prop.y + prop.border.top + prop.padding.top,
   };
 }
 
-export function contentBoxSize(prop: DomProperty): {
+export function contentBoxSize(prop: BoxModel): {
   width: number;
   height: number;
 } {
@@ -216,8 +216,8 @@ export function contentBoxSize(prop: DomProperty): {
 }
 
 export function childRelativeOffset(
-  containerProp: DomProperty,
-  childProp: DomProperty,
+  containerProp: BoxModel,
+  childProp: BoxModel,
 ): { x: number; y: number } {
   const origin = contentBoxOrigin(containerProp);
   return {
@@ -308,7 +308,7 @@ function median(values: number[]): number {
  */
 export function virtualEntrySizeFor<T>(
   container: ItemSnapshot<T>,
-  base: { width: number; height: number; margin: DomProperty["margin"] },
+  base: { width: number; height: number; margin: Edges },
 ): { width: number; height: number } {
   if (!container.stretchItems) {
     return { width: base.width, height: base.height };

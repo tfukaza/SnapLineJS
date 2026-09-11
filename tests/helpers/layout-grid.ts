@@ -7,7 +7,7 @@
 // Note: code inside `page.evaluate` blocks cannot import from here (evaluate
 // serializes the closure into the browser), so in-page measurement helpers
 // like `boxOf` remain local to their spec.
-import type { DomProperty } from "../../src/object";
+import type { Edges, ElementBox } from "../../src/geometry";
 import {
   contentBoxOrigin,
   flowLayoutPositions,
@@ -21,40 +21,55 @@ export type BoxInit = {
   y: number;
   width: number;
   height: number;
-  margin?: Partial<DomProperty["margin"]>;
-  padding?: Partial<DomProperty["padding"]>;
-  border?: Partial<DomProperty["border"]>;
+  margin?: Partial<Edges>;
+  padding?: Partial<Edges>;
+  border?: Partial<Edges>;
 };
 
-export function makeBox(init: BoxInit): DomProperty {
-  const edges = (
-    src: Partial<DomProperty["margin"]> | undefined,
-  ): DomProperty["margin"] => ({
-    top: src?.top ?? 0,
-    right: src?.right ?? 0,
-    bottom: src?.bottom ?? 0,
-    left: src?.left ?? 0,
-  });
-  return {
+/** A frozen element box, mirroring what `ElementObject.readDom` returns. */
+export function makeBox(init: BoxInit): ElementBox {
+  const edges = (src: Partial<Edges> | undefined): Edges =>
+    Object.freeze({
+      top: src?.top ?? 0,
+      right: src?.right ?? 0,
+      bottom: src?.bottom ?? 0,
+      left: src?.left ?? 0,
+    });
+  return Object.freeze({
     x: init.x,
     y: init.y,
     width: init.width,
     height: init.height,
-    scaleX: 1,
-    scaleY: 1,
-    screenX: init.x,
-    screenY: init.y,
+    screen: Object.freeze({
+      x: init.x,
+      y: init.y,
+      width: init.width,
+      height: init.height,
+    }),
     margin: edges(init.margin),
     padding: edges(init.padding),
     border: edges(init.border),
-  } as DomProperty;
+  });
+}
+
+/** A copy of `box` with `patch` applied; edge patches merge per side. */
+export function patchBox(box: ElementBox, patch: Partial<BoxInit>): ElementBox {
+  return makeBox({
+    x: patch.x ?? box.x,
+    y: patch.y ?? box.y,
+    width: patch.width ?? box.width,
+    height: patch.height ?? box.height,
+    margin: { ...box.margin, ...patch.margin },
+    padding: { ...box.padding, ...patch.padding },
+    border: { ...box.border, ...patch.border },
+  });
 }
 
 let nextItemId = 0;
 
 export function makeItemSnapshot(
   value: string,
-  box: DomProperty,
+  box: ElementBox,
   children: ItemSnapshot<string>[] = [],
 ): ItemSnapshot<string> {
   return {
@@ -73,7 +88,7 @@ export function makeItemSnapshot(
 }
 
 export function makeContainerSnapshot(
-  box: DomProperty,
+  box: ElementBox,
   children: ItemSnapshot<string>[],
   direction: "row" | "column" = "row",
   mainAxisAlign: "start" | "center" = "start",

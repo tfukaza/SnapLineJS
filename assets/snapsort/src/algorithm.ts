@@ -1,4 +1,4 @@
-import type { DomProperty } from "@snap-engine/core";
+import type { ElementBox } from "@snap-engine/core";
 import {
   type Circle,
   distanceToRect,
@@ -180,7 +180,7 @@ function requireDragSnapshot(item: ItemBase): ItemSnapshot<ItemBase> {
   return snapshot;
 }
 
-function requireDragSnapshotBox(item: ItemBase): DomProperty {
+function requireDragSnapshotBox(item: ItemBase): ElementBox {
   return requireDragSnapshot(item).box;
 }
 
@@ -655,7 +655,7 @@ function virtualLayoutRecursiveFromSnapshot(
   startX: number,
   startY: number,
   layoutPlan: LayoutResolutionPlan<ItemBase>,
-  draggedBox: DomProperty,
+  draggedBox: ElementBox,
   dragGhostW: number,
   dragGhostH: number,
   dragCenterX: number,
@@ -1821,7 +1821,7 @@ export function debugDropTargetTree(node: Container, draggedItem: ItemBase) {
   );
 
   for (const item of items) {
-    const prop = item.dragSnapshot?.box ?? item.currentDomProperty;
+    const prop = item.dragSnapshot?.box ?? item.box;
     if (!prop) continue;
 
     item.addDebugRect(

@@ -1,4 +1,4 @@
-import type { DomProperty } from "@snap-engine/core";
+import type { ElementBox } from "@snap-engine/core";
 
 export type ItemId = string;
 export type LayoutDirection = "column" | "row";
@@ -18,6 +18,6 @@ export interface ItemSnapshot<T> {
   wrap: LayoutWrap;
   stretchItems: boolean;
   locked: boolean;
-  box: DomProperty;
+  box: ElementBox;
   children: ItemSnapshot<T>[];
 }

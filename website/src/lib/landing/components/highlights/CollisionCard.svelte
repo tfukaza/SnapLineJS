@@ -507,7 +507,7 @@
       object.classList = baseClassList;
       object.schedule(() => {
         object?.readDom({ unapplyTransform: false });
-        object?.saveDomProperety("READ_1");
+        object?.saveWorldPosition("READ_1");
       }, { stage: "READ_1", queueId: "collision-dot-read" });
       const radius = node.getBoundingClientRect().width / 2;
       collider = new CircleCollider(currentEngine, object, radius, radius, radius);
@@ -651,7 +651,7 @@
       object.element = node;
       object.schedule(() => {
         object?.readDom({ unapplyTransform: false });
-        object?.saveDomProperety("READ_1");
+        object?.saveWorldPosition("READ_1");
       }, { stage: "READ_1", queueId: "collision-target-read" });
 
       collider =

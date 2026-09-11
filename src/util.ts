@@ -1,4 +1,11 @@
-import type { DomElement, DomProperty, TransformProperty } from "./object";
+import type { Camera } from "./camera";
+import {
+  ZERO_EDGES,
+  type Edges,
+  type ElementBox,
+  type Rect,
+} from "./geometry";
+import type { DomElement, TransformProperty } from "./object";
 
 /**
  * Merges defined override values onto a complete defaults object.
@@ -15,102 +22,138 @@ function mergeDefined<T extends object>(defaults: T, overrides: Partial<T>): T {
   return merged;
 }
 
-/**
- * Retrieves the position and dimensions of a DOM element in multiple coordinate spaces.
- *
- * Returns coordinates in world space (accounting for camera transform), camera space,
- * and screen space, along with transformed dimensions.
- *
- * @param engine - The engine instance containing camera information.
- * @param dom - The HTML element to measure.
- * @returns An object containing position and size in various coordinate systems.
- */
-function getDomProperty(engine: any, dom: DomElement) {
-  const rect = dom.getBoundingClientRect();
-  const css = window.getComputedStyle(dom);
-  const margin_top = parseFloat(css.marginTop) || 0;
-  const margin_right = parseFloat(css.marginRight) || 0;
-  const margin_bottom = parseFloat(css.marginBottom) || 0;
-  const margin_left = parseFloat(css.marginLeft) || 0;
-  const padding_top = parseFloat(css.paddingTop) || 0;
-  const padding_right = parseFloat(css.paddingRight) || 0;
-  const padding_bottom = parseFloat(css.paddingBottom) || 0;
-  const padding_left = parseFloat(css.paddingLeft) || 0;
-  const border_top = parseFloat(css.borderTopWidth) || 0;
-  const border_right = parseFloat(css.borderRightWidth) || 0;
-  const border_bottom = parseFloat(css.borderBottomWidth) || 0;
-  const border_left = parseFloat(css.borderLeftWidth) || 0;
+/** The subset of Camera used to map measured screen rects into world space. */
+type ElementMeasureCamera = Pick<
+  Camera,
+  "getCameraFromScreen" | "getWorldFromCamera"
+>;
 
-  if (engine == null || engine.camera == null) {
-    return {
-      height: rect.height,
-      width: rect.width,
-      x: rect.left,
-      y: rect.top,
-      cameraX: rect.left,
-      cameraY: rect.top,
-      screenX: rect.left,
-      screenY: rect.top,
-      margin: {
-        top: margin_top,
-        right: margin_right,
-        bottom: margin_bottom,
-        left: margin_left,
-      },
-      padding: {
-        top: padding_top,
-        right: padding_right,
-        bottom: padding_bottom,
-        left: padding_left,
-      },
-      border: {
-        top: border_top,
-        right: border_right,
-        bottom: border_bottom,
-        left: border_left,
-      },
-    };
-  }
-  const [cameraX, cameraY] = engine.camera.getCameraFromScreen(
-    rect.left,
-    rect.top,
-  );
-  const [worldX, worldY] = engine.camera.getWorldFromCamera(cameraX, cameraY);
-  const [cameraWidth, cameraHeight] =
-    engine.camera.getCameraDeltaFromWorldDelta(rect.width, rect.height);
-  const [worldWidth, worldHeight] = engine.camera.getWorldDeltaFromCameraDelta(
-    cameraWidth,
-    cameraHeight,
-  );
+/** The CSS edge thicknesses read from an element's computed style. */
+interface MeasuredEdges {
+  readonly margin: Edges;
+  readonly padding: Edges;
+  readonly border: Edges;
+}
 
+/** A frozen, all-zero element box used before the first DOM read. */
+const EMPTY_ELEMENT_BOX: ElementBox = Object.freeze({
+  x: 0,
+  y: 0,
+  width: 0,
+  height: 0,
+  screen: Object.freeze({ x: 0, y: 0, width: 0, height: 0 }),
+  margin: ZERO_EDGES,
+  padding: ZERO_EDGES,
+  border: ZERO_EDGES,
+});
+
+function sameEdges(a: Edges, b: Edges): boolean {
+  return (
+    a.top === b.top &&
+    a.right === b.right &&
+    a.bottom === b.bottom &&
+    a.left === b.left
+  );
+}
+
+/** A frozen edge set, reusing `previous` or `ZERO_EDGES` when values match. */
+function internEdges(
+  top: number,
+  right: number,
+  bottom: number,
+  left: number,
+  previous: Edges | undefined,
+): Edges {
+  const edges = { top, right, bottom, left };
+  if (previous && sameEdges(previous, edges)) return previous;
+  if (sameEdges(ZERO_EDGES, edges)) return ZERO_EDGES;
+  return Object.freeze(edges);
+}
+
+function readEdges(
+  css: CSSStyleDeclaration,
+  previous: ElementBox | undefined,
+): MeasuredEdges {
+  const px = (value: string) => parseFloat(value) || 0;
   return {
-    height: worldHeight,
-    width: worldWidth,
-    x: worldX,
-    y: worldY,
-    cameraX: cameraX,
-    cameraY: cameraY,
-    screenX: rect.left,
-    screenY: rect.top,
-    margin: {
-      top: margin_top,
-      right: margin_right,
-      bottom: margin_bottom,
-      left: margin_left,
-    },
-    padding: {
-      top: padding_top,
-      right: padding_right,
-      bottom: padding_bottom,
-      left: padding_left,
-    },
-    border: {
-      top: border_top,
-      right: border_right,
-      bottom: border_bottom,
-      left: border_left,
-    },
+    margin: internEdges(
+      px(css.marginTop),
+      px(css.marginRight),
+      px(css.marginBottom),
+      px(css.marginLeft),
+      previous?.margin,
+    ),
+    padding: internEdges(
+      px(css.paddingTop),
+      px(css.paddingRight),
+      px(css.paddingBottom),
+      px(css.paddingLeft),
+      previous?.padding,
+    ),
+    border: internEdges(
+      px(css.borderTopWidth),
+      px(css.borderRightWidth),
+      px(css.borderBottomWidth),
+      px(css.borderLeftWidth),
+      previous?.border,
+    ),
   };
+}
+
+/**
+ * Build an element box from a measured client rect and computed CSS edges.
+ *
+ * Pure: performs no DOM reads, so it can be exercised with a stub camera.
+ * The box origin maps from screen to world space through `camera`; `screen`
+ * keeps the client rect exactly as measured.
+ */
+function elementBoxFromMeasurement(
+  camera: ElementMeasureCamera | null,
+  clientRect: Rect,
+  edges: MeasuredEdges,
+): ElementBox {
+  let x = clientRect.x;
+  let y = clientRect.y;
+  if (camera) {
+    const [cameraX, cameraY] = camera.getCameraFromScreen(x, y);
+    [x, y] = camera.getWorldFromCamera(cameraX, cameraY);
+  }
+  return Object.freeze({
+    x,
+    y,
+    width: clientRect.width,
+    height: clientRect.height,
+    screen: Object.freeze({
+      x: clientRect.x,
+      y: clientRect.y,
+      width: clientRect.width,
+      height: clientRect.height,
+    }),
+    margin: edges.margin,
+    padding: edges.padding,
+    border: edges.border,
+  });
+}
+
+/**
+ * Measure an element's box: its transformed client rect and computed CSS
+ * margin, padding, and border widths.
+ *
+ * Forces layout, so call it only in a READ stage. Pass the element's
+ * previous box to reuse unchanged edge objects.
+ */
+function measureElementBox(
+  camera: ElementMeasureCamera | null,
+  element: DomElement,
+  previous?: ElementBox,
+): ElementBox {
+  const rect = element.getBoundingClientRect();
+  const css = window.getComputedStyle(element);
+  return elementBoxFromMeasurement(
+    camera,
+    { x: rect.left, y: rect.top, width: rect.width, height: rect.height },
+    readEdges(css, previous),
+  );
 }
 
 /**
@@ -198,27 +241,13 @@ function EventProxyFactory<BindObject, Callback extends object>(
   });
 }
 
-function cloneDomProperty(prop: DomProperty): DomProperty {
-  return {
-    x: prop.x,
-    y: prop.y,
-    height: prop.height,
-    width: prop.width,
-    scaleX: prop.scaleX,
-    scaleY: prop.scaleY,
-    screenX: prop.screenX,
-    screenY: prop.screenY,
-    margin: { ...prop.margin },
-    padding: { ...prop.padding },
-    border: { ...prop.border },
-  };
-}
-
+export type { ElementMeasureCamera, MeasuredEdges };
 export {
   setDomStyle,
   EventProxyFactory,
-  getDomProperty,
-  cloneDomProperty,
+  EMPTY_ELEMENT_BOX,
+  measureElementBox,
+  elementBoxFromMeasurement,
   generateTransformString,
   parseTransformString,
   mergeDefined,

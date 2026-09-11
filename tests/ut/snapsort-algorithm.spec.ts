@@ -48,7 +48,7 @@ function mockItem(
     parent: null,
     callbacks: undefined,
     dropPriority: 0,
-    currentDomProperty: box,
+    box,
     itemOrderedList: children,
     children,
     direction: options.direction ?? "column",

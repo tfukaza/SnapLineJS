@@ -14,6 +14,7 @@ import {
   makeContainerSnapshot,
   makeGrid,
   makeItemSnapshot,
+  patchBox,
   simulatedRowCounts,
 } from "../helpers/layout-grid";
 
@@ -181,7 +182,9 @@ test.describe("inferFlowLayoutMetrics", () => {
 
   test("includes trailing margins in the measured extent", () => {
     const grid = makeGrid({ rows: 1, cols: 2, itemW: 50, itemH: 20, gap: 10 });
-    grid.children[1].box.margin.right = 7;
+    grid.children[1].box = patchBox(grid.children[1].box, {
+      margin: { right: 7 },
+    });
     const metrics = inferFlowLayoutMetrics(grid, flowAxesForDirection("row"));
     expect(metrics.measuredMainExtent).toBeCloseTo(110 + 7, 6);
   });
@@ -259,7 +262,7 @@ test.describe("flowLayoutPositions wrap decisions", () => {
   test("centers lines when mainAxisAlign is center", () => {
     const grid = makeGrid({ rows: 1, cols: 2, itemW: 40, itemH: 20, gap: 10 });
     grid.mainAxisAlign = "center";
-    grid.box.width = 150; // 60px slack
+    grid.box = patchBox(grid.box, { width: 150 }); // 60px slack
     const origin = contentBoxOrigin(grid.box);
     const result = flowLayoutPositions(grid, origin.x, origin.y);
     const first = result.itemPositions.get(grid.children[0])!;
@@ -288,7 +291,7 @@ test.describe("wrap robustness against browser measurement noise", () => {
     });
     // Parsed container width fractionally *below* the measured extent, as
     // Gecko reports it.
-    grid.box.width = 374.3999938964844;
+    grid.box = patchBox(grid.box, { width: 374.3999938964844 });
     const dragged = grid.children[0];
     for (let index = 0; index <= 15; index++) {
       expect(
@@ -310,10 +313,13 @@ test.describe("wrap robustness against browser measurement noise", () => {
     // the parsed content width smaller than what the browser demonstrably
     // fit on one line. measuredMainExtent must win.
     const grid = makeGrid({ rows: 2, cols: 4, itemW: 90, itemH: 60, gap: 4 });
-    grid.box.width += 0.0125; // snapped outer width
-    grid.box.padding.left = 5.6;
-    grid.box.padding.right = 5.6;
-    for (const child of grid.children) child.box.x += 5.59375;
+    grid.box = patchBox(grid.box, {
+      width: grid.box.width + 0.0125, // snapped outer width
+      padding: { left: 5.6, right: 5.6 },
+    });
+    for (const child of grid.children) {
+      child.box = patchBox(child.box, { x: child.box.x + 5.59375 });
+    }
     const dragged = grid.children[0];
     expect(
       simulatedRowCounts(grid, {
@@ -355,7 +361,7 @@ test.describe("wrap robustness against browser measurement noise", () => {
         gap: 4,
         jitter: () => ({ w: noise(), x: noise() }),
       });
-      grid.box.width += noise();
+      grid.box = patchBox(grid.box, { width: grid.box.width + noise() });
       const dragged = grid.children[5];
       expect(
         simulatedRowCounts(grid, {

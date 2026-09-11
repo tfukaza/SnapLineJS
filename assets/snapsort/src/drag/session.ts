@@ -1,5 +1,5 @@
 import type { AnimationObject } from "@snap-engine/core/animation";
-import type { DomProperty, dragStartProp } from "@snap-engine/core";
+import type { ElementBox, dragStartProp } from "@snap-engine/core";
 import type { Container } from "../container";
 import type { Item } from "../item";
 import { reconcileRootTreeState, rootHasItemId } from "../internal/tree-state";
@@ -383,7 +383,7 @@ export class DragSessionController implements DragSession {
   }
 
   /** @internal Return the captured box for one current participant. */
-  dragBoxFor(item: Item): DomProperty {
+  dragBoxFor(item: Item): ElementBox {
     if (!this.itemSet.has(item)) {
       throw new Error(
         "DragSession: drag geometry is only available for current participants.",

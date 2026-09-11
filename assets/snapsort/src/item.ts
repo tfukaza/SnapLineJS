@@ -1,6 +1,5 @@
 import {
   ElementObject,
-  cloneDomProperty,
   type BaseObject,
   type Engine,
   type dragEndProp,
@@ -456,7 +455,7 @@ export class Item extends ElementObject {
     const color = Item.#colorForContainer(node.id);
     for (const child of node.children) {
       if (!(child instanceof Item)) continue;
-      const prop = child.dragSnapshot?.box ?? child.currentDomProperty;
+      const prop = child.dragSnapshot?.box ?? child.box;
       if (prop) {
         const cx = prop.x + prop.width / 2;
         const cy = prop.y + prop.height / 2;
@@ -513,7 +512,7 @@ export class Item extends ElementObject {
   ) {
     this.readDom({ unapplyTransform: config.unapplyTransform });
     if (config.saveWorldPosition ?? true) {
-      const prop = this.currentDomProperty;
+      const prop = this.box;
       this.worldTransform = { x: prop.x, y: prop.y };
     }
     for (const child of this.children) {
@@ -578,7 +577,7 @@ export class Item extends ElementObject {
       wrap: this.#snapshotWrap(),
       stretchItems: this.#snapshotStretchItems(),
       locked: this.#locked,
-      box: cloneDomProperty(this.currentDomProperty),
+      box: this.box,
       children: [],
     };
     this.#dragSnapshot = snapshot;

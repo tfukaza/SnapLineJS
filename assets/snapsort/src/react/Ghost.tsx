@@ -32,7 +32,7 @@ export const Ghost = forwardRef<HTMLDivElement, GhostProps>(function Ghost(
 ) {
   const elementRef = useRef<HTMLDivElement>(null);
   const original =
-    ghost.original.dragSnapshot?.box ?? ghost.original.currentDomProperty;
+    ghost.original.dragSnapshot?.box ?? ghost.original.box;
   const ghostItem = ghost.ghostItem;
   const rect =
     ghost.type === "insertion-marker"
