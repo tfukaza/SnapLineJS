@@ -36,7 +36,20 @@ test("serves the interactive Gallery and removes the old photo-op route", async 
   await expect(
     page.getByRole("heading", { name: "Gallery", exact: true }),
   ).toBeVisible();
-  await expect(page.locator("[data-gallery]")).toHaveCount(6);
+  await expect(
+    page.locator("[data-gallery]").evaluateAll((exhibits) =>
+      exhibits.map((exhibit) => exhibit.getAttribute("data-gallery")),
+    ),
+  ).resolves.toEqual([
+    "todo-list",
+    "nested-containers",
+    "sideways-insert",
+    "swap-mode",
+    "toucan-lesson",
+    "layers-panel",
+    "kanban-board",
+    "control-matrix",
+  ]);
   const stageDimensions = await page
     .locator(".demo-stage")
     .evaluateAll((stages) =>
@@ -45,7 +58,7 @@ test("serves the interactive Gallery and removes the old photo-op route", async 
         height: stage.clientHeight,
       })),
     );
-  expect(stageDimensions).toHaveLength(6);
+  expect(stageDimensions).toHaveLength(8);
   for (const { width, height } of stageDimensions) {
     expect(Math.abs(width - height)).toBeLessThanOrEqual(1);
   }

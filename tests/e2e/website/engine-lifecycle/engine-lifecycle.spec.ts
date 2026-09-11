@@ -17,7 +17,9 @@ test("owned Svelte engines survive page teardown without errors", async ({
   expect(collisionCanvas?.height).toBeGreaterThan(400);
 
   await page.getByRole("link", { name: "About", exact: true }).first().click();
-  await expect(page).toHaveURL(/\/about$/);
+  // Client-side navigation loads the /about route before updating the URL;
+  // on a cold dev server that route compiles on first visit.
+  await expect(page).toHaveURL(/\/about$/, { timeout: 15_000 });
 
   expect(pageErrors).toEqual([]);
 });
@@ -61,9 +63,11 @@ test("camera card reserves modified wheel input for zoom", async ({ page }) => {
   const modifiedTransformBefore = await camera.evaluate(
     (element) => (element as HTMLElement).style.transform,
   );
+  // The camera starts at its maximum zoom (1), so zoom out: a modified
+  // wheel must zoom the camera instead of scrolling the page.
   await page.keyboard.down("Control");
   try {
-    await page.mouse.wheel(0, -320);
+    await page.mouse.wheel(0, 320);
   } finally {
     await page.keyboard.up("Control");
   }
