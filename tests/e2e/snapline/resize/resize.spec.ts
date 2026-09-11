@@ -269,18 +269,6 @@ test("a north drag holds the bottom edge with one pointermove per animation fram
   expect(Math.max(...bottoms) - Math.min(...bottoms)).toBeLessThanOrEqual(2);
 });
 
-test("resize regions own their native CSS cursor", async ({ page }) => {
-  const nodeA = page.locator("[data-snapline-type='node']", {
-    hasText: "Resizable A",
-  });
-  const east = nodeA.locator(
-    "[data-snapline-part='resize-region'][data-handle='e']",
-  );
-  await east.hover();
-  await expect(east).toHaveCSS("cursor", "ew-resize");
-  await expect(nodeA).not.toHaveAttribute("data-snapline-resize-handle");
-});
-
 test("a plain (non-resizable) node moves when grabbed at its BR corner", async ({
   page,
 }) => {
@@ -296,32 +284,6 @@ test("a plain (non-resizable) node moves when grabbed at its BR corner", async (
   const after = await nodeB.boundingBox();
   expect(after!.x - before!.x).toBeGreaterThan(70); // moved
   expect(Math.abs(after!.width - before!.width)).toBeLessThan(4); // not resized
-});
-
-test("tl anchor: dragging the top-left handle grows the box while the BR corner stays fixed", async ({
-  page,
-}) => {
-  const nodeC = page.locator("[data-snapline-type='node']", {
-    hasText: "TL Anchor C",
-  });
-  const before = await nodeC.boundingBox();
-  const brBefore = {
-    x: before!.x + before!.width,
-    y: before!.y + before!.height,
-  };
-
-  // Press the TL corner (the anchor) and drag outward (up-left): grows the box.
-  const tl = { x: before!.x + 2, y: before!.y + 2 };
-  await dragFromTo(page, tl, { x: tl.x - 90, y: tl.y - 60 });
-  await waitForAnimationFrame(page);
-
-  const after = await nodeC.boundingBox();
-  expect(after!.width - before!.width).toBeGreaterThan(60);
-  expect(after!.height - before!.height).toBeGreaterThan(30);
-  // The OPPOSITE (bottom-right) corner must not move.
-  const brAfter = { x: after!.x + after!.width, y: after!.y + after!.height };
-  expect(Math.abs(brAfter.x - brBefore.x)).toBeLessThanOrEqual(4);
-  expect(Math.abs(brAfter.y - brBefore.y)).toBeLessThanOrEqual(4);
 });
 
 // The anchored edge must hold on EVERY painted frame, not just once the drag

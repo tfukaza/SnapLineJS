@@ -62,14 +62,7 @@ test("dragging the group header carries its in-box members, not outsiders", asyn
   // Non-member B stays put.
   expect(Math.abs(afterB!.x - beforeB!.x)).toBeLessThan(8);
   expect(Math.abs(afterB!.y - beforeB!.y)).toBeLessThan(8);
-});
-
-test("carried members do not fire enter/leave (cue count stays stable)", async ({
-  page,
-}) => {
-  const header = await centerOf(page.locator(HEADER));
-  await dragFromTo(page, header, { x: header.x + 60, y: header.y + 40 });
-  // A and C merely moved with the group — still members, no flicker.
+  // Carried members stay members: moving with the group is not a leave.
   await expect(page.locator(MEMBER)).toHaveCount(2);
 });
 

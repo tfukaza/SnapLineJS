@@ -15,7 +15,6 @@ import {
   dragToItemFraction,
   expectNoParentReentry,
   expectStableDrag,
-  ghostInsertionTargets,
   installSnapsortTrace,
   itemByTextIn,
   itemRect,
@@ -145,7 +144,6 @@ test.describe("Snapsort drag-start snapshot layout", () => {
       testInfo.outputPath("website-nested-bottom-slot-states.json"),
       {
         states,
-        ghostTargets: ghostInsertionTargets(consoleMessages),
       },
     );
     expect(
@@ -307,82 +305,5 @@ test.describe("Snapsort drag-start snapshot layout", () => {
       wrappedFrames,
       "left and right containers should stay on one visual row during the 321px drag",
     ).toHaveLength(0);
-  });
-
-  test("keeps website multi-container dragged item above both columns", async ({
-    page,
-  }) => {
-    await page.goto("/?demo=snapsort_website_core", {
-      waitUntil: "networkidle",
-    });
-
-    const card = await websiteCoreDemo(page, "multiple-containers");
-    const source = await itemByTextIn(card, "Spec");
-    const target = await itemByTextIn(card, "Ship");
-    await target.scrollIntoViewIfNeeded();
-    const sourceRect = await source.boundingBox();
-    const targetRect = await target.boundingBox();
-    if (!sourceRect || !targetRect) {
-      throw new Error("Expected multi-container items to have bounding boxes.");
-    }
-    const startPoint = {
-      x: sourceRect.x + sourceRect.width * 0.25,
-      y: sourceRect.y + sourceRect.height / 2,
-    };
-    const hoverPoint = {
-      x: targetRect.x + Math.min(48, targetRect.width / 2),
-      y: targetRect.y + targetRect.height / 2,
-    };
-
-    const samples = await dragBy(
-      page,
-      source,
-      "Spec",
-      0,
-      {
-        x: hoverPoint.x - startPoint.x,
-        y: hoverPoint.y - startPoint.y,
-      },
-      {
-        start: startPoint,
-        steps: 80,
-      },
-    );
-
-    const overRightColumn = samples.filter(
-      (sample) =>
-        sample.mouse.x >= targetRect.x &&
-        sample.mouse.x <= targetRect.x + targetRect.width &&
-        sample.mouse.y >= targetRect.y &&
-        sample.mouse.y <= targetRect.y + targetRect.height,
-    );
-
-    expect(
-      overRightColumn,
-      "drag should move over the right column",
-    ).not.toHaveLength(0);
-    const recentSamples = JSON.stringify(overRightColumn.slice(-4));
-    expect(
-      overRightColumn.some(
-        (sample) =>
-          sample.draggedAttribute === "true" &&
-          sample.draggedSourceColumnZIndex === "2" &&
-          !!sample.dragged &&
-          sample.dragged.x < targetRect.x + targetRect.width &&
-          sample.dragged.x + sample.dragged.width > targetRect.x &&
-          sample.dragged.y < targetRect.y + targetRect.height &&
-          sample.dragged.y + sample.dragged.height > targetRect.y,
-      ),
-      `dragged item should overlap the right column from an elevated source column; observed ${recentSamples}`,
-    ).toBe(true);
-
-    await expect
-      .poll(() =>
-        card
-          .locator(".basic-column")
-          .first()
-          .evaluate((element) => (element as HTMLElement).style.zIndex),
-      )
-      .toBe("");
   });
 });

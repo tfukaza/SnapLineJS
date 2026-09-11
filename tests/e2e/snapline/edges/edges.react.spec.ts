@@ -33,19 +33,6 @@ test.beforeEach(async ({ page }) => {
   await expect(connectorOf(page, "Node A", "output")).toBeVisible();
 });
 
-test("react: gesture connect emits one intent and the line survives sync", async ({
-  page,
-}) => {
-  await dragFromTo(
-    page,
-    await centerOf(connectorOf(page, "Node A", "output")),
-    await centerOf(connectorOf(page, "Node B", "input")),
-  );
-  await expect(page.getByTestId("connect-intents")).toHaveText("1");
-  await expect(page.getByTestId("edge-count")).toHaveText("1");
-  await expect(page.locator(LINE)).toHaveCount(1);
-});
-
 test("react: programmatic edge add renders a line with zero intents", async ({
   page,
 }) => {
@@ -60,7 +47,10 @@ test("react: full input replaces via ONE atomic request", async ({ page }) => {
     await centerOf(connectorOf(page, "Node A", "output")),
     await centerOf(connectorOf(page, "Node B", "input")),
   );
+  // A gesture connect emits exactly one intent and its line survives sync.
+  await expect(page.getByTestId("connect-intents")).toHaveText("1");
   await expect(page.getByTestId("edge-count")).toHaveText("1");
+  await expect(page.locator(LINE)).toHaveCount(1);
   await dragFromTo(
     page,
     await centerOf(connectorOf(page, "Node C", "output")),

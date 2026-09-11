@@ -56,7 +56,7 @@
     "test:core-ut": "playwright test tests/ut/core-*.spec.ts tests/ut/transform.spec.ts tests/ut/frame-controller.spec.ts --project=chromium",
     "test:snapline-ut": "playwright test tests/ut/snapline-*.spec.ts --project=chromium",
     "test:snapsort-ut": "playwright test tests/ut/snapsort-*.spec.ts --project=chromium",
-    "test:e2e": "npm run test:core -- --project=chromium && npm run test:asset-base && npm run test:snapline && npm run test:snapsort",
+    "test:e2e": "npm run test:core -- --project=chromium && npm run test:asset-base && npm run test:snapline && npm run test:snapsort && npm run test:layout -- --project=svelte-chromium",
     "test:core": "playwright test -c tests/e2e/core/playwright.config.ts",
     "test:core-zoom": "playwright test -c tests/e2e/core/playwright.config.ts measure/",
     "test:asset-base": "playwright test -c tests/e2e/asset-base/playwright.config.ts",

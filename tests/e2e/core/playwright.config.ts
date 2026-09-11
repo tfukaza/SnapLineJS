@@ -1,5 +1,5 @@
-// Core engine suite: measurement under a real Camera across all three
-// engines, since each quantizes layout differently.
+// Core engine suite across all three engines: measurement under a real
+// Camera (each quantizes layout differently) and Web Animations timing.
 //
 // Run with: npm run test:core
 import { defineConfig } from "@playwright/test";

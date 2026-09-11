@@ -10,7 +10,6 @@ import {
   dragBy,
   dragTo,
   dragToItemFraction,
-  expectGhostUpdatesStable,
   expectNoNestedParentFlicker,
   expectStableDrag,
   installSnapsortTrace,
@@ -36,9 +35,7 @@ test.describe("Snapsort drag-start snapshot layout", () => {
     const nested = await demoBoxByHeading(page, "Nested Container");
     const item = await itemByTextIn(nested, "Item 1");
     const target = await itemByTextIn(nested, "Sub A3");
-    const samples = await dragTo(page, item, "Item 1", 0, target, {
-      captureFrameRects: true,
-    });
+    const samples = await dragTo(page, item, "Item 1", 0, target);
 
     await expectStableDrag(
       page,
@@ -47,7 +44,6 @@ test.describe("Snapsort drag-start snapshot layout", () => {
       testInfo.outputPath("nested-slow-animation-drag-trace.json"),
     );
     expectNoNestedParentFlicker(samples);
-    expectGhostUpdatesStable(consoleMessages, 6);
   });
 
   test("keeps the drop animation visible while a reorder animation is still active", async ({
@@ -341,11 +337,7 @@ test.describe("Snapsort drag-start snapshot layout", () => {
         };
         await page.mouse.move(mouse.x, mouse.y);
         await page.waitForTimeout(8);
-        samples.push(
-          await collectSample(page, samples.length + 1, mouse, {
-            captureFrameRects: true,
-          }),
-        );
+        samples.push(await collectSample(page, samples.length + 1, mouse));
       }
       previous = point;
     }

@@ -6,13 +6,8 @@ import {
   makeItemSnapshot,
 } from "../../../helpers/layout-grid";
 import { type Box } from "../../../helpers/snapsort-fixtures";
-import { installSnapsortTrace } from "../_support/drag-harness";
 
 test.describe("Snapsort drag-start snapshot layout", () => {
-  test.beforeEach(async ({ page }) => {
-    await installSnapsortTrace(page);
-  });
-
   // Documented-unsupported layout shapes, encoded as expected failures so
   // the boundary is visible in the test report and any accidental fix or
   // regression flips the result. Each builds a real DOM, inserts a real

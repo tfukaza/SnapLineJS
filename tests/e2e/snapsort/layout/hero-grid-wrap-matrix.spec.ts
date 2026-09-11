@@ -6,13 +6,9 @@ import {
   simulatedRowCounts,
 } from "../../../helpers/layout-grid";
 import { type Box } from "../../../helpers/snapsort-fixtures";
-import { installSnapsortTrace, writeJson } from "../_support/drag-harness";
+import { writeJson } from "../_support/drag-harness";
 
 test.describe("Snapsort drag-start snapshot layout", () => {
-  test.beforeEach(async ({ page }) => {
-    await installSnapsortTrace(page);
-  });
-
   test("keeps a zero-slack hero grid at 4 columns across sub-pixel container widths", async ({
     page,
   }, testInfo) => {

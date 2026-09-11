@@ -6,13 +6,9 @@ import {
   layoutNodeFromBrowserCase,
   measureBrowserLayoutCases,
 } from "../_support/layout-parity";
-import { installSnapsortTrace, writeJson } from "../_support/drag-harness";
+import { writeJson } from "../_support/drag-harness";
 
 test.describe("Snapsort drag-start snapshot layout", () => {
-  test.beforeEach(async ({ page }) => {
-    await installSnapsortTrace(page);
-  });
-
   test("matches browser flex ghost positions for horizontal double-row fuzz cases", async ({
     page,
   }, testInfo) => {

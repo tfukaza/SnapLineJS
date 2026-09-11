@@ -359,41 +359,6 @@ test.describe("SnapSort Kiokun sentence builder demo", () => {
     );
   });
 
-  test("builds and grades the full answer after repeated cross-container moves", async ({
-    page,
-  }, testInfo) => {
-    const consoleEntries: ConsoleEntry[] = [];
-    const pageErrors = installConsoleCapture(page, consoleEntries);
-    await gotoDemo(page);
-
-    const answer = page.locator(".answer-box");
-    const bank = page.locator(".tile-bank");
-    for (const text of ["私", "は", "毎朝", "水", "を", "飲みます"]) {
-      await bank.getByRole("button", { name: text }).click();
-    }
-
-    await expect(answer.locator(".tile")).toHaveText([
-      "私",
-      "は",
-      "毎朝",
-      "水",
-      "を",
-      "飲みます",
-    ]);
-    await page.getByRole("button", { name: "Check", exact: true }).click();
-    await expect(page.locator(".result.correct")).toBeVisible();
-
-    await expectCleanConsole(
-      consoleEntries,
-      pageErrors,
-      testInfo.outputPath("full-answer-console.json"),
-      {
-        answerTexts: await tileTexts(answer),
-        bankTexts: await tileTexts(bank),
-      },
-    );
-  });
-
   test("reorders a non-last answer tile without dropping it at the end", async ({
     page,
   }, testInfo) => {

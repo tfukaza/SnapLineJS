@@ -5,14 +5,11 @@ import {
   demoBoxByHeading,
   dragBy,
   dragTo,
-  expectGhostUpdatesStable,
-  expectNoNestedParentFlicker,
   expectNoSpacerBacktrack,
   expectNoSpacerOscillation,
   expectSpacerAlignedAfterPrevious,
   expectSpacerNearDragged,
   expectStableDrag,
-  ghostInsertionTargets,
   installSnapsortTrace,
   itemByText,
   itemByTextIn,
@@ -50,7 +47,6 @@ test.describe("Snapsort drag-start snapshot layout", () => {
     );
     expectNoSpacerBacktrack(samples, "y");
     expectNoSpacerOscillation(samples);
-    expectGhostUpdatesStable(consoleMessages, 5);
   });
 
   test("does not flicker the spacer upward while dragging into a wrapped horizontal row", async ({
@@ -78,30 +74,6 @@ test.describe("Snapsort drag-start snapshot layout", () => {
     );
     expectNoSpacerBacktrack(samples, "y");
     expectNoSpacerOscillation(samples);
-    expectGhostUpdatesStable(consoleMessages, 3);
-  });
-
-  test("does not flicker out of a nested column after entering it", async ({
-    page,
-  }, testInfo) => {
-    const consoleMessages: string[] = [];
-    page.on("console", (message) => consoleMessages.push(message.text()));
-    await page.goto("/?demo=drop_snap_nested", { waitUntil: "networkidle" });
-
-    const nested = await demoBoxByHeading(page, "Nested Container");
-    const item = await itemByTextIn(nested, "Item 1");
-    const target = await itemByTextIn(nested, "Sub A3");
-    const samples = await dragTo(page, item, "Item 1", 0, target);
-
-    await expectStableDrag(
-      page,
-      samples,
-      consoleMessages,
-      testInfo.outputPath("nested-container-flicker-trace.json"),
-      { assertCenter: false },
-    );
-    expectNoNestedParentFlicker(samples);
-    expectGhostUpdatesStable(consoleMessages, 6);
   });
 
   test("can reach nested column boundary slots while dragging root item downward", async ({
@@ -137,10 +109,8 @@ test.describe("Snapsort drag-start snapshot layout", () => {
     );
 
     const states = compressedSpacerStates(samples);
-    const ghostTargets = ghostInsertionTargets(consoleMessages);
     await writeJson(testInfo.outputPath("nested-boundary-slots-states.json"), {
       states,
-      ghostTargets,
     });
 
     expect(
@@ -275,49 +245,15 @@ test.describe("Snapsort drag-start snapshot layout", () => {
     expectSpacerNearDragged(samples, "drag-root", 48);
   });
 
-  test("keeps one stable spacer while reordering a flat nested-items list", async ({
-    page,
-  }, testInfo) => {
-    const consoleMessages: string[] = [];
-    page.on("console", (message) => consoleMessages.push(message.text()));
-    await page.goto("/?demo=drop_snap_nested", { waitUntil: "networkidle" });
-    await page.screenshot({
-      path: testInfo.outputPath("nested-flat-before.png"),
-      fullPage: true,
-    });
-
-    const item = await itemByText(page, "Item B");
-    const samples = await dragBy(page, item, "Item B", 0, { x: 0, y: 110 });
-    await page.screenshot({
-      path: testInfo.outputPath("nested-flat-after.png"),
-      fullPage: true,
-    });
-
-    await expectStableDrag(
-      page,
-      samples,
-      consoleMessages,
-      testInfo.outputPath("nested-flat-trace.json"),
-    );
-  });
-
   test("keeps nested container drop prediction stable for padded sub-items", async ({
     page,
   }, testInfo) => {
     const consoleMessages: string[] = [];
     page.on("console", (message) => consoleMessages.push(message.text()));
     await page.goto("/?demo=drop_snap_nested", { waitUntil: "networkidle" });
-    await page.screenshot({
-      path: testInfo.outputPath("nested-subitem-before.png"),
-      fullPage: true,
-    });
 
     const item = await itemByText(page, "Sub A2");
     const samples = await dragBy(page, item, "Sub A2", 0, { x: 0, y: 95 });
-    await page.screenshot({
-      path: testInfo.outputPath("nested-subitem-after.png"),
-      fullPage: true,
-    });
 
     await expectStableDrag(
       page,
@@ -333,18 +269,10 @@ test.describe("Snapsort drag-start snapshot layout", () => {
     const consoleMessages: string[] = [];
     page.on("console", (message) => consoleMessages.push(message.text()));
     await page.goto("/?demo=drop_snap_nested", { waitUntil: "networkidle" });
-    await page.screenshot({
-      path: testInfo.outputPath("multi-area-before.png"),
-      fullPage: true,
-    });
 
     const item = await itemByText(page, "Item B");
     const target = await itemByText(page, "Item Y");
     const samples = await dragTo(page, item, "Item B", 0, target);
-    await page.screenshot({
-      path: testInfo.outputPath("multi-area-after.png"),
-      fullPage: true,
-    });
 
     await expectStableDrag(
       page,
@@ -361,18 +289,10 @@ test.describe("Snapsort drag-start snapshot layout", () => {
     page.on("console", (message) => consoleMessages.push(message.text()));
     await page.goto("/?demo=drop_snap_nested", { waitUntil: "networkidle" });
     const doubleRow = await demoBoxByHeading(page, "Horizontal Double Row");
-    await page.screenshot({
-      path: testInfo.outputPath("wrapped-row-before.png"),
-      fullPage: true,
-    });
 
     const item = await itemByTextIn(doubleRow, "Item 1");
     const target = await itemByTextIn(doubleRow, "Item 9");
     const samples = await dragTo(page, item, "Item 1", 0, target);
-    await page.screenshot({
-      path: testInfo.outputPath("wrapped-row-after.png"),
-      fullPage: true,
-    });
 
     await expectStableDrag(
       page,

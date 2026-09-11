@@ -17,15 +17,17 @@ import {
   sharedUse,
 } from "../shared/servers";
 
-/** The layout-sensitive specs: everything that compares simulation to DOM. */
+/**
+ * Specs whose outcome depends on browser layout: simulation-vs-DOM parity and
+ * drags whose drop targets come from measured geometry. Pure lifecycle and
+ * framework-state specs run once, on Chromium, in playwright.config.ts.
+ */
 const layoutSpecs = [
   "layout/**/*.spec.ts",
-  "drag/**/*.spec.ts",
-  "animation/**/*.spec.ts",
+  "drag/drop-prediction.spec.ts",
+  "drag/spacer-stability.spec.ts",
+  "drag/website-core-repros.spec.ts",
   "nested/**/*.spec.ts",
-  "components/framework-state.spec.ts",
-  "insertion/insertion-marker.spec.ts",
-  "ghosts/multi-item-ghosts.spec.ts",
 ];
 
 export default defineConfig({

@@ -5,7 +5,6 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { type Rect } from "../../../../src/geometry";
 import { center } from "../../../helpers/snapsort-fixtures";
-import { coreImportPath } from "../../shared/servers";
 
 export type DragSample = {
   step: number;
@@ -22,8 +21,6 @@ export type DragSample = {
   spacerDomNext: (Rect & { text: string }) | null;
   dragged: (Rect & { centerX: number; centerY: number }) | null;
   draggedCenterDelta: number | null;
-  draggedSourceColumnZIndex?: string | null;
-  draggedAttribute?: string | null;
   frameRects?: Array<{
     role: string;
     text: string;
@@ -55,20 +52,6 @@ export type SnapSortLifecycleState = {
     classes: string[];
     text: string;
   }>;
-};
-
-export type SelfInsertProbeState = {
-  found: boolean;
-  childIndex: number | null;
-  duplicateCount: number | null;
-  insertEvents: Array<{
-    index: number;
-    selfBefore: boolean;
-    beforeText: string | null;
-  }>;
-  beforeOrder: string[];
-  afterOrder: string[];
-  domChildren: string[];
 };
 
 export async function installSnapsortTrace(page: Page) {
@@ -342,7 +325,6 @@ export async function collectSample(
             centerY: draggedRect.y + draggedRect.height / 2,
           }
         : null;
-      const draggedSourceColumn = draggedElement?.closest(".basic-column");
       const frameRects = captureFrameRects
         ? [
             ...document.querySelectorAll(
@@ -393,13 +375,6 @@ export async function collectSample(
         draggedCenterDelta: dragged
           ? Math.hypot(dragged.centerX - mouse.x, dragged.centerY - mouse.y)
           : null,
-        draggedSourceColumnZIndex: draggedSourceColumn
-          ? getComputedStyle(draggedSourceColumn).zIndex
-          : null,
-        draggedAttribute:
-          draggedElement instanceof HTMLElement
-            ? draggedElement.dataset.snapsortDragging ?? null
-            : null,
         frameRects,
       };
     },
@@ -644,81 +619,6 @@ export async function dragLockedNestedContainerBackground(
   await page.waitForTimeout(160);
 }
 
-export async function nestedContainerSelfInsertProbe(
-  page: Page,
-): Promise<SelfInsertProbeState> {
-  return page.evaluate(
-    async ({ coreImportPath }) => {
-      const { GlobalManager } = await import(coreImportPath);
-      const containers =
-        GlobalManager.getInstance().data.dragAndDropContainers ?? [];
-      const nestedCell = [...document.querySelectorAll(".demo-cell")].find(
-        (cell) =>
-          cell.querySelector("h2")?.textContent?.trim() === "Nested Container",
-      );
-      const outerElement = nestedCell?.querySelector(".snapsort-container");
-      const childElement = nestedCell?.querySelectorAll(
-        ".snapsort-container",
-      )[1];
-      const outer = containers.find(
-        (container: any) => container.element === outerElement,
-      );
-      const child = containers.find(
-        (container: any) => container.element === childElement,
-      );
-      const normalizeText = (element: Element | null) =>
-        element?.textContent?.trim().replace(/\s+/g, " ") ?? "";
-      const itemText = (item: any) => normalizeText(item.element);
-
-      if (!outer || !child) {
-        return {
-          found: false,
-          childIndex: null,
-          duplicateCount: null,
-          insertEvents: [],
-          beforeOrder: [],
-          afterOrder: [],
-          domChildren: [],
-        };
-      }
-
-      const beforeOrder = outer.itemOrderedList.map(itemText);
-      const childIndex = outer.itemOrderedList.indexOf(child);
-      const insertEvents: SelfInsertProbeState["insertEvents"] = [];
-      const originalInsert = outer.callbacks.onItemInsert;
-      outer.callbacks = {
-        ...outer.callbacks,
-        onItemInsert: (event: any) => {
-          insertEvents.push({
-            index: event.index,
-            selfBefore: event.beforeElement === event.item.element,
-            beforeText: normalizeText(event.beforeElement),
-          });
-          originalInsert?.(event);
-        },
-      };
-
-      outer.insertItemAt(outer, child, childIndex);
-      outer.callbacks = { ...outer.callbacks, onItemInsert: originalInsert };
-
-      return {
-        found: true,
-        childIndex,
-        duplicateCount: outer.itemOrderedList.filter(
-          (item: any) => item === child,
-        ).length,
-        insertEvents,
-        beforeOrder,
-        afterOrder: outer.itemOrderedList.map(itemText),
-        domChildren: [...outer.element.children].map((element) =>
-          normalizeText(element),
-        ),
-      };
-    },
-    { coreImportPath },
-  );
-}
-
 export async function directLogoSliceOrder(
   locator: Locator,
 ): Promise<number[]> {
@@ -752,11 +652,6 @@ export async function expectStableDrag(
   await writeJson(outputPath, {
     samples,
     trace,
-    layoutLogs: consoleMessages.filter((message) =>
-      /\[updateDropTarget\]|\[updateGhostElement\]|\[insertItemAt\]|determineDropTarget|chosen|candidate/.test(
-        message,
-      ),
-    ),
     errors: consoleMessages.filter((message) =>
       /error|Missing drag snapshot|Unhandled|TypeError/i.test(message),
     ),
@@ -838,33 +733,6 @@ export function expectNoSpacerOscillation(samples: DragSample[]) {
     expect(
       !(keys[i] === keys[i - 2] && keys[i] !== keys[i - 1]),
       `spacer should not alternate between ${keys[i - 1]} and ${keys[i]} around sample ${i}`,
-    ).toBe(true);
-  }
-}
-
-export function ghostInsertionTargets(consoleMessages: string[]) {
-  return consoleMessages.flatMap((message) => {
-    const match = message.match(
-      /\[updateGhostElement\] inserting ghost at container=([^\s]+) index=(\d+)/,
-    );
-    return match ? [`${match[1]}[${match[2]}]`] : [];
-  });
-}
-
-export function expectGhostUpdatesStable(
-  consoleMessages: string[],
-  expectedMaxUpdates: number,
-) {
-  const targets = ghostInsertionTargets(consoleMessages);
-  expect(
-    targets.length,
-    `ghost should update only at stable slot transitions; saw ${targets.join(" -> ")}`,
-  ).toBeLessThanOrEqual(expectedMaxUpdates);
-
-  for (let i = 2; i < targets.length; i++) {
-    expect(
-      !(targets[i] === targets[i - 2] && targets[i] !== targets[i - 1]),
-      `ghost target should not oscillate: ${targets.join(" -> ")}`,
     ).toBe(true);
   }
 }

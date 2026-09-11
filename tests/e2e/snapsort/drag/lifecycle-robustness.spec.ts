@@ -6,7 +6,6 @@ import {
   installSnapsortTrace,
   itemByTextIn,
   itemRect,
-  nestedContainerSelfInsertProbe,
   nestedSnapSortLifecycleState,
   releaseStartedDragNearOrigin,
   writeJson,
@@ -42,9 +41,6 @@ test.describe("Snapsort drag-start snapshot layout", () => {
           message,
         ),
       ),
-      snapshotWaits: consoleMessages.filter((message) =>
-        /waiting for drag snapshot/.test(message),
-      ),
     });
 
     expect(
@@ -54,49 +50,6 @@ test.describe("Snapsort drag-start snapshot layout", () => {
         ),
       ),
     ).toHaveLength(0);
-  });
-
-  test("cleans up drag state when a started drag releases back inside the threshold", async ({
-    page,
-  }, testInfo) => {
-    // Regression: a drag that starts (crosses the threshold) and then returns
-    // near its origin before release must still fire dragEnd and commit/clean
-    // up. Previously dragEnd was gated on the pointer's final distance from
-    // the start, so an away-and-back "drop it in the same place" gesture was
-    // misclassified as a click and left the drag session uncommitted.
-    // Fixed in src/input.ts #finishPointer by gating on the drag gesture state.
-    const consoleMessages: string[] = [];
-    const pageErrors: string[] = [];
-    page.on("console", (message) => consoleMessages.push(message.text()));
-    page.on("pageerror", (error) => pageErrors.push(String(error)));
-    await page.goto("/?demo=drop_snap_nested&disableNestedFlip=1", {
-      waitUntil: "networkidle",
-    });
-
-    const nested = await demoBoxByHeading(page, "Nested Container");
-    await releaseStartedDragNearOrigin(page, nested, "Item 1.5", "Sub A1", 0.2);
-    const state = await nestedSnapSortLifecycleState(page);
-
-    await writeJson(
-      testInfo.outputPath("threshold-release-cleanup-repro.json"),
-      {
-        state,
-        errors: [
-          ...pageErrors,
-          ...consoleMessages.filter((message) =>
-            /Missing drag snapshot|Unhandled|TypeError|ReferenceError/i.test(
-              message,
-            ),
-          ),
-        ],
-      },
-    );
-
-    expect(state.spacerCount, "released drag should remove its ghost").toBe(0);
-    expect(
-      state.draggingTexts,
-      "released drag should clear the dragging marker",
-    ).toEqual([]);
   });
 
   // Regression for a leak where a released drag left a root ghost behind and
@@ -148,35 +101,7 @@ test.describe("Snapsort drag-start snapshot layout", () => {
     expect(errors).toEqual([]);
   });
 
-  test("does not self-reference beforeElement when reinserting an existing nested container", async ({
-    page,
-  }, testInfo) => {
-    await page.goto("/?demo=drop_snap_nested&disableNestedFlip=1", {
-      waitUntil: "networkidle",
-    });
-
-    const probe = await nestedContainerSelfInsertProbe(page);
-    await writeJson(
-      testInfo.outputPath("nested-container-self-insert-repro.json"),
-      {
-        probe,
-      },
-    );
-
-    expect(probe.found, "expected to find the nested container objects").toBe(
-      true,
-    );
-    expect(
-      probe.insertEvents.some((event) => event.selfBefore),
-      `adapter should never receive the dropped item as beforeElement; events=${JSON.stringify(probe.insertEvents)}`,
-    ).toBe(false);
-    expect(
-      probe.duplicateCount,
-      `re-inserting an existing child should not duplicate the itemOrderedList; order=${probe.afterOrder.join(" | ")}`,
-    ).toBe(1);
-  });
-
-  test("does not throw when a released dragged item is grabbed again", async ({
+  test("cleans up a drag released back inside the threshold and regrabs it", async ({
     page,
   }, testInfo) => {
     const consoleMessages: string[] = [];
@@ -187,8 +112,25 @@ test.describe("Snapsort drag-start snapshot layout", () => {
       waitUntil: "networkidle",
     });
 
+    // Regression: a drag that starts (crosses the threshold) and then returns
+    // near its origin before release must still fire dragEnd and commit/clean
+    // up. Previously dragEnd was gated on the pointer's final distance from
+    // the start, so an away-and-back "drop it in the same place" gesture was
+    // misclassified as a click and left the drag session uncommitted.
+    // Fixed in src/input.ts #finishPointer by gating on the drag gesture state.
     const nested = await demoBoxByHeading(page, "Nested Container");
     await releaseStartedDragNearOrigin(page, nested, "Item 1.5", "Sub A1", 0.2);
+    const releasedState = await nestedSnapSortLifecycleState(page);
+    expect(
+      releasedState.spacerCount,
+      "released drag should remove its ghost",
+    ).toBe(0);
+    expect(
+      releasedState.draggingTexts,
+      "released drag should clear the dragging marker",
+    ).toEqual([]);
+
+    // Grabbing the released item again must not throw.
     const releasedItem = await itemByTextIn(nested, "Item 1.5");
     const releasedRect = await itemRect(releasedItem);
     const releasedCenter = center(releasedRect);

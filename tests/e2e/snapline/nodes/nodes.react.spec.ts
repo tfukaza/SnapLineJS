@@ -80,23 +80,6 @@ test("renders the React SnapLine demo nodes and connectors", async ({
   await expect(page.locator("[data-snapline-type='selection']")).toHaveCount(1);
 });
 
-test("connects two React SnapLine nodes", async ({ page }) => {
-  const nodeA = page.locator("[data-snapline-type='node']", {
-    hasText: "Node A",
-  });
-  const nodeB = page.locator("[data-snapline-type='node']", {
-    hasText: "Node B",
-  });
-  const output = nodeA.locator("[data-snapline-name='output']");
-  const input = nodeB.locator("[data-snapline-name='input']");
-
-  await dragFromTo(page, await centerOf(output), await centerOf(input));
-
-  await expect(
-    page.locator("[data-snapline-type='connector-line']"),
-  ).toHaveCount(1);
-});
-
 test("keeps a React line endpoint aligned while the target node is moving", async ({
   page,
 }) => {

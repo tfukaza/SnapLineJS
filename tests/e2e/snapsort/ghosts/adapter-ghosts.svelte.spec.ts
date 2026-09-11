@@ -1,16 +1,8 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { coreImportPath } from "../../shared/servers";
 
-// This spec asserts on Svelte-adapter-specific implementation details
-// (`data-snapsort-ghost-entry`, emitted by the framework-owned Ghost
-// component) — it has no React-adapter equivalent yet, so it only runs under
-// the svelte project.
-test.beforeEach(async ({}, testInfo) => {
-  test.skip(
-    !testInfo.project.name.startsWith("svelte"),
-    "Svelte-adapter-specific ghost ownership marker",
-  );
-});
+// Svelte-only because the React demo has no multi-item pointer-preview
+// fixture; the other ghost-entry tests here also pass on React.
 
 async function rect(locator: Locator) {
   const box = await locator.boundingBox();
@@ -132,6 +124,11 @@ test.describe("SnapSort adapter-rendered ghost entries", () => {
     await page.mouse.up();
     await page.waitForTimeout(250);
     await expect(column.locator("[data-snapsort-ghost-entry]")).toHaveCount(0);
+    // The pair lands as a contiguous run.
+    const order = await column
+      .locator(".snapsort-item")
+      .evaluateAll((els) => els.map((el) => el.textContent?.trim()));
+    expect(order).toEqual(["Item 1", "Item 4", "Item 2", "Item 3"]);
   });
 
   test("a multi-item preview uses one pointer Ghost while flow feedback keeps its target run", async ({

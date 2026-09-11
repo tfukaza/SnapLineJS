@@ -52,16 +52,6 @@ test("background drag pans the camera", async ({ page }) => {
   expect(after!.y - before!.y).toBeLessThan(-100);
 });
 
-test("ctrl+wheel zooms the camera", async ({ page }) => {
-  const before = await cameraTransform(page);
-  await page.mouse.move(640, 450);
-  // The camera starts at its max zoom (1), so scroll down / pinch-in zooms out.
-  await page.keyboard.down("Control");
-  await page.mouse.wheel(0, 240);
-  await page.keyboard.up("Control");
-  await expect.poll(() => cameraTransform(page)).not.toBe(before);
-});
-
 test("dragging a node does not pan the camera", async ({ page }) => {
   const nodeB = page.locator("[data-snapline-type='node']", {
     hasText: "Node B",

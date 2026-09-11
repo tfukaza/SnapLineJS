@@ -6,13 +6,9 @@ import {
   makeItemSnapshot,
 } from "../../../helpers/layout-grid";
 import { type Box } from "../../../helpers/snapsort-fixtures";
-import { installSnapsortTrace, writeJson } from "../_support/drag-harness";
+import { writeJson } from "../_support/drag-harness";
 
 test.describe("Snapsort drag-start snapshot layout", () => {
-  test.beforeEach(async ({ page }) => {
-    await installSnapsortTrace(page);
-  });
-
   test("matches browser grid placements across template variants (slot layout model)", async ({
     page,
   }, testInfo) => {

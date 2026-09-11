@@ -7,13 +7,8 @@ import {
   makeItemSnapshot,
 } from "../../../helpers/layout-grid";
 import { type Box } from "../../../helpers/snapsort-fixtures";
-import { installSnapsortTrace } from "../_support/drag-harness";
 
 test.describe("Snapsort drag-start snapshot layout", () => {
-  test.beforeEach(async ({ page }) => {
-    await installSnapsortTrace(page);
-  });
-
   test("stretch entry sizing matches a real width-100% spacer (ground truth)", async ({
     page,
   }) => {
