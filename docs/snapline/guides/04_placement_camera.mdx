@@ -17,11 +17,9 @@ and reports commit or cancellation. It deliberately does not create nodes.
 
 ```ts
 const placement = new PlacementController<NodeTemplate>({
-  screenToWorld(screen) {
-    const camera = engine.camera!.getCameraFromScreen(screen.x, screen.y);
-    const world = engine.camera!.getWorldFromCamera(camera[0], camera[1]);
-    return { x: world[0], y: world[1] };
-  },
+  // pointerPositionFromScreen comes from @snap-engine/core.
+  screenToWorld: (screen) =>
+    pointerPositionFromScreen(engine.camera, screen.x, screen.y),
   callbacks: {
     canPlace: ({ position }) => isInsideWorkspace(position),
     onCommit: ({ payload, position }) => addNode(payload, position),

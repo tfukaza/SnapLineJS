@@ -1,3 +1,4 @@
+import type { Rect } from "@snap-engine/core/geometry";
 import { BaseObject, ElementObject } from "@snap-engine/core";
 import type {
   pointerDownProp,
@@ -10,12 +11,8 @@ import { getGraphRegistry } from "./internal/shared-data";
 import type { GeometryWriter } from "./types";
 
 /** World-space rectangle delivered to the registered geometry writer. */
-export interface SelectRect {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  visible: boolean;
+export interface SelectRect extends Rect {
+  readonly visible: boolean;
 }
 
 export interface SelectStartEvent {

@@ -8,7 +8,9 @@ frameworkKey: placement
 ---
 
 Create `PlacementController<T>` with `screenToWorld`, optional callbacks, and an
-optional normalized anchor.
+optional normalized anchor. Points and sizes are the shared `Point` and `Size`
+types from `@snap-engine/core/geometry`; under a camera, `screenToWorld` can
+return `pointerPositionFromScreen(engine.camera, screen.x, screen.y)`.
 
 | Method | Result |
 | --- | --- |

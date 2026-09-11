@@ -15,7 +15,11 @@ import type {
   pointerUpProp,
 } from "@snap-engine/core";
 import { CircleCollider } from "@snap-engine/core/collision";
-import { rectCenter, type Bounds } from "@snap-engine/core/geometry";
+import {
+  rectCenter,
+  type Bounds,
+  type Point,
+} from "@snap-engine/core/geometry";
 import type { NodeMirror } from "./node";
 import { LineMirror, cloneAnchor, type LineMirrorPhase } from "./line";
 import { getGraphRegistry } from "./internal/shared-data";
@@ -46,18 +50,9 @@ export type DragEndOutcome =
   /** The gesture was cancelled (pointer cancel, teardown). */
   | "cancelled";
 
-export interface ConnectorPoint {
-  x: number;
-  y: number;
-}
-
-export interface ConnectorNormal {
-  x: number;
-  y: number;
-}
-
-export interface ConnectorAnchor extends ConnectorPoint {
-  normal?: ConnectorNormal;
+/** A world-space connection point, with an optional outward normal. */
+export interface ConnectorAnchor extends Point {
+  normal?: Point;
 }
 
 /** Cached world-space bounds derived from the parent node's collision box. */
@@ -92,7 +87,7 @@ export interface ConnectorAnchorEvent {
   line: LineMirror;
   role: ConnectorRole;
   phase: LineMirrorPhase;
-  position: ConnectorPoint;
+  position: Point;
   geometry: ConnectorGeometrySnapshot;
   peerGeometry: ConnectorGeometrySnapshot | null;
   hit: ConnectorHit | null;
@@ -276,7 +271,7 @@ class ConnectorMirror extends ElementObject<DomElement> {
   #candidate: ConnectorResolvedHit | null = null;
   #dragLine: LineMirror | null = null;
   #edgePanPointerId: number | null = null;
-  #localCenter: ConnectorPoint;
+  #localCenter: Point;
   #hasMeasuredCenter = false;
   #armed: ArmedConnection | null = null;
   #gestureOrigin: "new" | "reconnect" | null = null;
@@ -456,9 +451,9 @@ class ConnectorMirror extends ElementObject<DomElement> {
     const scaleY = parentTransform.scaleY === 0 ? 1 : parentTransform.scaleY;
     const localLeft = (prop.x - parentTransform.x) / scaleX;
     const localTop = (prop.y - parentTransform.y) / scaleY;
-    const localCenterX = (prop.x + prop.width / 2 - parentTransform.x) / scaleX;
-    const localCenterY =
-      (prop.y + prop.height / 2 - parentTransform.y) / scaleY;
+    const center = rectCenter(prop);
+    const localCenterX = (center.x - parentTransform.x) / scaleX;
+    const localCenterY = (center.y - parentTransform.y) / scaleY;
 
     this.localTransform = { x: localLeft, y: localTop };
     this.#localCenter = { x: localCenterX, y: localCenterY };
@@ -649,7 +644,7 @@ class ConnectorMirror extends ElementObject<DomElement> {
   }
 
   findCandidateAtPoint(
-    position: ConnectorPoint,
+    position: Point,
     phase: "preview-target" | "drop" = "preview-target",
   ): ConnectorCandidate | null {
     return (
@@ -999,7 +994,7 @@ class ConnectorMirror extends ElementObject<DomElement> {
     role: ConnectorRole;
     phase: LineMirrorPhase;
     peer: ConnectorMirror | null;
-    position: ConnectorPoint;
+    position: Point;
     hit: ConnectorHit | null;
     strategy: ConnectorSurfaceStrategy | null;
   }): ConnectorAnchor {
@@ -1314,14 +1309,14 @@ function normalizeHit(
   };
 }
 
-function isFinitePoint(point: ConnectorPoint): boolean {
+function isFinitePoint(point: Point): boolean {
   return Number.isFinite(point.x) && Number.isFinite(point.y);
 }
 
 /** A full pointer position for a world point, resolving camera and screen. */
 function asPointerPosition(
   camera: WorldToScreenMapper | null,
-  position: ConnectorPoint,
+  position: Point,
 ): PointerPosition {
   const value = position as Partial<PointerPosition>;
   if (value.camera && value.screen) return value as PointerPosition;

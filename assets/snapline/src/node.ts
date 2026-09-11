@@ -1,4 +1,5 @@
 import { BaseObject, ElementObject, mergeDefined } from "@snap-engine/core";
+import type { Point, Rect } from "@snap-engine/core/geometry";
 import { ConnectorMirror } from "./connector";
 import { LineMirror } from "./line";
 import type {
@@ -54,12 +55,9 @@ const DEFAULT_NODE_CONFIG: ResolvedNodeConfig = {
  * Node geometry maintained by SnapLine during drag or resize.
  * After that, this is committed to the frontend framework.
  */
-export interface NodeGeometry {
-  node: NodeMirror;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
+/** A node's world-space rectangle. */
+export interface NodeGeometry extends Rect {
+  readonly node: NodeMirror;
 }
 
 /** Batched geometry observation for group/multi-select drag. */
@@ -83,18 +81,10 @@ export interface NodeDragPositionEvent {
   position: PointerPosition;
 }
 
-export interface ResolvedNodeDragPosition {
-  x: number;
-  y: number;
-}
-
-export interface NodeResizeEvent {
-  node: NodeMirror;
-  handle: ResizeHandle | null;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
+/** A node's world-space rectangle during a resize gesture. */
+export interface NodeResizeEvent extends Rect {
+  readonly node: NodeMirror;
+  readonly handle: ResizeHandle | null;
 }
 
 export interface NodeSelectionEvent {
@@ -128,7 +118,7 @@ export interface NodeCallbacks {
   /** Allow node position to be overridden during drag, e.g. to implement snap-to-grid. */
   resolveDragPosition?: (
     event: NodeDragPositionEvent,
-  ) => ResolvedNodeDragPosition;
+  ) => Point;
   /** Override if and how nodes get selected or deselected. */
   resolveSelectionMode?: (event: NodeSelectionModeEvent) => SelectionMode;
   /** Called when selected status of a node changes. */
@@ -371,7 +361,7 @@ class NodeMirror extends ElementObject {
     }
   }
 
-  geometrySnapshot(): { x: number; y: number; width: number; height: number } {
+  geometrySnapshot(): Rect {
     return {
       x: this.worldTransform.x,
       y: this.worldTransform.y,
