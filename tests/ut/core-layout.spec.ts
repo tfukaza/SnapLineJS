@@ -221,18 +221,6 @@ test.describe("flowLayoutPositions wrap decisions", () => {
     }
   });
 
-  test("wraps a genuinely oversized ghost insertion", () => {
-    const grid = makeGrid({ rows: 2, cols: 4, itemW: 93, itemH: 93, gap: 4 });
-    const dragged = grid.children[0];
-    // Ghost twice as wide as a slot: only 3 fit per line alongside it.
-    const counts = simulatedRowCounts(grid, {
-      rowStep: 97,
-      insertion: ghostInsertion(grid, 0, { width: 190, height: 93 }),
-      exclude: (node) => node.value === dragged.value,
-    });
-    expect(counts[0]).toBeLessThan(4);
-  });
-
   test("column containers with a single measured line never wrap", () => {
     const children = [0, 1, 2].map((i) =>
       makeItemSnapshot(

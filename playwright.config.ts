@@ -1,58 +1,16 @@
-import { defineConfig, devices } from "@playwright/test";
-
-const framework = process.env.FRAMEWORK || "vanilla";
+import { defineConfig } from "@playwright/test";
 
 /**
- * See https://playwright.dev/docs/test-configuration.
+ * Unit tests: DOM-free (or JSDOM) specs under tests/ut, run in Node.
+ *
+ * `npm test` runs all of them; the `test:*-ut` scripts run one package's.
+ * End-to-end suites live in tests/e2e/<project>/ with their own configs;
+ * see the `test:<project>` scripts.
  */
 export default defineConfig({
-  testDir: "./tests",
-
+  testDir: "./tests/ut",
   fullyParallel: true,
   retries: process.env.CI ? 2 : 0,
   workers: process.env.CI ? 1 : undefined,
-
-  projects: [
-    {
-      name: "chromium",
-      use: { ...devices["Desktop Chrome"] },
-    },
-
-    {
-      name: "firefox",
-      use: { ...devices["Desktop Firefox"] },
-    },
-
-    // {
-    //   name: "webkit",
-    //   use: { ...devices["Desktop Safari"] },
-    // },
-
-    /* Test against mobile viewports. */
-    // {
-    //   name: 'Mobile Chrome',
-    //   use: { ...devices['Pixel 5'] },
-    // },
-    // {
-    //   name: 'Mobile Safari',
-    //   use: { ...devices['iPhone 12'] },
-    // },
-
-    /* Test against branded browsers. */
-    // {
-    //   name: 'Microsoft Edge',
-    //   use: { ...devices['Desktop Edge'], channel: 'msedge' },
-    // },
-    // {
-    //   name: 'Google Chrome',
-    //   use: { ...devices['Desktop Chrome'], channel: 'chrome' },
-    // },
-  ],
-
-  /* Not working at the moment, need to figure out why. */
-  // webServer: {
-  //   command: `npm run server:${framework}`,
-  //   url: `http://localhost:3001`,
-  //   reuseExistingServer: !process.env.CI,
-  // },
+  projects: [{ name: "chromium" }],
 });

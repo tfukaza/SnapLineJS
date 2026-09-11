@@ -94,7 +94,9 @@ test("frame controllers run before every engine READ_1 with the shared rAF times
       order.push(`frame:first:${firstEngine.global?.currentStage}`);
       timestamps.push(frame.timestamp);
       frames.push(frame);
-      firstObject.schedule(() => order.push("read:first"), {
+      firstObject.schedule(() => {
+        order.push("read:first");
+      }, {
         stage: "READ_1",
       });
     });
@@ -102,7 +104,9 @@ test("frame controllers run before every engine READ_1 with the shared rAF times
       order.push(`frame:second:${secondEngine.global?.currentStage}`);
       timestamps.push(frame.timestamp);
       frames.push(frame);
-      secondObject.schedule(() => order.push("read:second"), {
+      secondObject.schedule(() => {
+        order.push("read:second");
+      }, {
         stage: "READ_1",
       });
     });

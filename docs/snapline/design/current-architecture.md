@@ -446,4 +446,4 @@ types). Adapter contracts:
 | React adapters (incl. ControlledGraph)   | `assets/snapline/src/react/*.tsx`                 |
 | Controlled-graph demos                   | `demo/svelte/src/demo/node_ui_edges/`, `demo/react/` |
 | Unit tests                               | `tests/ut/snapline-graph-mirror.spec.ts`, `tests/ut/snapline-line-reconciler.spec.ts`, `tests/ut/snapline-connector-config.spec.ts` |
-| Browser tests                            | `tests/e2e/snapline-edges.spec.ts`, `tests/e2e/snapline-edges-react.spec.ts` |
+| Browser tests                            | `tests/e2e/snapline/edges/edges.spec.ts`, `tests/e2e/snapline/edges/edges.react.spec.ts` |

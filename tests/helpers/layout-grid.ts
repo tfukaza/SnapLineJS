@@ -1,5 +1,5 @@
 // Shared helpers for layout-engine tests (tests/ut/core-layout.spec.ts and the
-// wrap-matrix e2e test in tests/e2e/snapsort-drag-snapshot.spec.ts): DOM-free
+// wrap-matrix e2e test in tests/e2e/snapsort/layout/): DOM-free
 // snapshot builders plus the row-shape assertions both suites make. Keeping
 // the grid construction and row counting here guarantees the unit tests and
 // the cross-browser e2e matrix judge the layout engine by the same rules.

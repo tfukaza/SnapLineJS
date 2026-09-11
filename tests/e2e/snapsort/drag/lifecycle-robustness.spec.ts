@@ -1,0 +1,169 @@
+import { expect, test } from "@playwright/test";
+import { center } from "../../../helpers/snapsort-fixtures";
+import {
+  demoBoxByHeading,
+  dragLockedNestedContainerBackground,
+  installSnapsortTrace,
+  itemByTextIn,
+  itemRect,
+  nestedSnapSortLifecycleState,
+  releaseStartedDragNearOrigin,
+  writeJson,
+} from "../_support/drag-harness";
+
+test.describe("Snapsort drag-start snapshot layout", () => {
+  test.beforeEach(async ({ page }) => {
+    await installSnapsortTrace(page);
+  });
+
+  test("does not crash when drag movement arrives before snapshot capture", async ({
+    page,
+  }, testInfo) => {
+    const consoleMessages: string[] = [];
+    page.on("console", (message) => consoleMessages.push(message.text()));
+    await page.goto("/?demo=drop_snap_nested", { waitUntil: "networkidle" });
+
+    const verticalColumn = await demoBoxByHeading(page, "Vertical Column");
+    const item = await itemByTextIn(verticalColumn, "Item 1");
+    const itemCenter = center(await itemRect(item));
+
+    await page.mouse.move(itemCenter.x, itemCenter.y);
+    await page.mouse.down();
+    for (let step = 1; step <= 24; step++) {
+      await page.mouse.move(itemCenter.x, itemCenter.y + step * 4);
+    }
+    await page.mouse.up();
+    await page.waitForTimeout(100);
+
+    await writeJson(testInfo.outputPath("snapshot-readiness-trace.json"), {
+      errors: consoleMessages.filter((message) =>
+        /Missing drag snapshot|Unhandled|TypeError|ReferenceError/i.test(
+          message,
+        ),
+      ),
+    });
+
+    expect(
+      consoleMessages.filter((message) =>
+        /Missing drag snapshot|Unhandled|TypeError|ReferenceError/i.test(
+          message,
+        ),
+      ),
+    ).toHaveLength(0);
+  });
+
+  // Regression for a leak where a released drag left a root ghost behind and
+  // a later locked-container drag adopted it. The input layer now finishes
+  // the released pointer, so neither gesture may leave drag state behind.
+  test("leaves no drag state behind when a locked container drag follows a released drag", async ({
+    page,
+  }, testInfo) => {
+    const consoleMessages: string[] = [];
+    const pageErrors: string[] = [];
+    page.on("console", (message) => consoleMessages.push(message.text()));
+    page.on("pageerror", (error) => pageErrors.push(String(error)));
+    await page.goto(
+      "/?demo=drop_snap_nested&disableNestedFlip=1&lockNestedChild=1",
+      {
+        waitUntil: "networkidle",
+      },
+    );
+
+    const nested = await demoBoxByHeading(page, "Nested Container");
+    const initialState = await nestedSnapSortLifecycleState(page);
+    await releaseStartedDragNearOrigin(page, nested, "Item 1.5", "Sub A1", 0.2);
+    const beforeLockedDrag = await nestedSnapSortLifecycleState(page);
+    await dragLockedNestedContainerBackground(page, nested);
+    const afterLockedDrag = await nestedSnapSortLifecycleState(page);
+    const errors = [
+      ...pageErrors,
+      ...consoleMessages.filter((message) =>
+        /Missing drag snapshot|Unhandled|TypeError|ReferenceError/i.test(
+          message,
+        ),
+      ),
+    ];
+
+    await writeJson(testInfo.outputPath("locked-container-drag-state.json"), {
+      initialState,
+      beforeLockedDrag,
+      afterLockedDrag,
+      errors,
+    });
+
+    for (const state of [beforeLockedDrag, afterLockedDrag]) {
+      expect(state.spacerCount).toBe(0);
+      expect(state.draggingTexts).toEqual([]);
+    }
+    expect(afterLockedDrag.nestedOuterChildren).toEqual(
+      initialState.nestedOuterChildren,
+    );
+    expect(errors).toEqual([]);
+  });
+
+  test("cleans up a drag released back inside the threshold and regrabs it", async ({
+    page,
+  }, testInfo) => {
+    const consoleMessages: string[] = [];
+    const pageErrors: string[] = [];
+    page.on("console", (message) => consoleMessages.push(message.text()));
+    page.on("pageerror", (error) => pageErrors.push(String(error)));
+    await page.goto("/?demo=drop_snap_nested&disableNestedFlip=1", {
+      waitUntil: "networkidle",
+    });
+
+    // Regression: a drag that starts (crosses the threshold) and then returns
+    // near its origin before release must still fire dragEnd and commit/clean
+    // up. Previously dragEnd was gated on the pointer's final distance from
+    // the start, so an away-and-back "drop it in the same place" gesture was
+    // misclassified as a click and left the drag session uncommitted.
+    // Fixed in src/input.ts #finishPointer by gating on the drag gesture state.
+    const nested = await demoBoxByHeading(page, "Nested Container");
+    await releaseStartedDragNearOrigin(page, nested, "Item 1.5", "Sub A1", 0.2);
+    const releasedState = await nestedSnapSortLifecycleState(page);
+    expect(
+      releasedState.spacerCount,
+      "released drag should remove its ghost",
+    ).toBe(0);
+    expect(
+      releasedState.draggingTexts,
+      "released drag should clear the dragging marker",
+    ).toEqual([]);
+
+    // Grabbing the released item again must not throw.
+    const releasedItem = await itemByTextIn(nested, "Item 1.5");
+    const releasedRect = await itemRect(releasedItem);
+    const releasedCenter = center(releasedRect);
+
+    await page.mouse.move(releasedCenter.x, releasedCenter.y);
+    await page.mouse.down();
+    await page.mouse.move(releasedCenter.x + 20, releasedCenter.y + 20, {
+      steps: 10,
+    });
+    await page.waitForTimeout(100);
+    await page.mouse.up();
+    await page.waitForTimeout(200);
+
+    const state = await nestedSnapSortLifecycleState(page);
+    await writeJson(testInfo.outputPath("released-item-regrab.json"), {
+      state,
+      pageErrors,
+      consoleErrors: consoleMessages.filter((message) =>
+        /Missing drag snapshot|Unhandled|TypeError|ReferenceError/i.test(
+          message,
+        ),
+      ),
+    });
+
+    expect(pageErrors).toHaveLength(0);
+    expect(
+      consoleMessages.filter((message) =>
+        /Missing drag snapshot|Unhandled|TypeError|ReferenceError/i.test(
+          message,
+        ),
+      ),
+    ).toHaveLength(0);
+    expect(state.spacerCount).toBe(0);
+    expect(state.draggingTexts).toEqual([]);
+  });
+});

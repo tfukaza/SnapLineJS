@@ -17,10 +17,13 @@ jobs:
       - run: npm ci
       - run: npm run validate:packages
       - run: npm run check:snapsort-api
+      - run: npm run test:core-ut
       - run: npm run test:snapsort-ut
+      - run: npm run test:snapline-ut
       - run: npm run typecheck
       - run: npm run lint
       - run: npm run check:adapters
       - run: npm ci --prefix website
+      - run: npm run check:tests
       - run: npm run check:website
       - run: npm run build

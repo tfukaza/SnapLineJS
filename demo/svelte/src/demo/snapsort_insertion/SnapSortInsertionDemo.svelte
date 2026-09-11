@@ -12,7 +12,10 @@
     type RenderTree,
     type RenderTreeEvent,
   } from "@snap-engine/snapsort";
-  import { rejectDrop } from "@snap-engine/snapsort/callbacks";
+  import {
+    prioritizePointerContainer,
+    rejectDrop,
+  } from "@snap-engine/snapsort/callbacks";
   import type { DragStartEvent } from "@snap-engine/snapsort";
   import { renderTreeCallbacks } from "../snapsort-render-tree";
 
@@ -281,6 +284,10 @@
             mode: "insertion",
             direction: "column",
             name: `insertion-${entry.itemId}`,
+            // Insertion ranks gaps by main-axis distance alone, so a
+            // side-by-side column needs pointer-container priority to keep
+            // the marker in the column under the pointer.
+            callbacks: { getDropPriority: prioritizePointerContainer },
           }}
           locked={true}
           metadata={{ columnId: entry.itemId }}

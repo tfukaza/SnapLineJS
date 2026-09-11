@@ -326,7 +326,10 @@ class NodeMirror extends ElementObject {
   /* Reconciles state with what the browser actually rendered */
   #syncMeasuredGeometry(stage: "READ_1" | "READ_2"): void {
     if (!this.element) return;
-    const property = this.readDom({ unapplyTransform: false }, stage);
+    // The collision box is a child of this node and inherits its scale, so
+    // it takes the untransformed size: without this, a scaled node's scale
+    // would apply twice.
+    const property = this.readDom({ unapplyTransform: true }, stage);
     // During resize, setSizeState sets the correct dimensions.
     if (!this.#isResizing) {
       this.#hitBox.width = property.width;

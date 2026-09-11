@@ -844,14 +844,14 @@ The representation artifact is versioned and separate from canonical line
 records:
 
 ```ts
+// The serializable part of ConnectorGeometrySnapshot: a core geometry Rect
+// (world space) plus the connector anchor.
 interface SerializedConnectorGeometry {
   x: number;
   y: number;
   width: number;
   height: number;
   center: ConnectorAnchor;
-  scaleX: number;
-  scaleY: number;
 }
 
 interface GraphRenderSnapshot {

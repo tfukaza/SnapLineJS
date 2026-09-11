@@ -7,6 +7,7 @@ import {
   contentRect,
   distance,
   edgesToCss,
+  freezePoint,
   freezeRect,
   insetRect,
   lerpRect,
@@ -75,6 +76,12 @@ test.describe("rect helpers", () => {
   test("bounding rect covers every input and is null when empty", () => {
     expect(boundingRect([a, b])).toEqual({ x: 0, y: 0, width: 40, height: 20 });
     expect(boundingRect([])).toBeNull();
+  });
+
+  test("freezePoint copies only point fields", () => {
+    const point = freezePoint({ x: 1, y: 2, ...{ extra: true } });
+    expect(point).toEqual({ x: 1, y: 2 });
+    expect(Object.isFrozen(point)).toBe(true);
   });
 
   test("freeze and bounds copy only rectangle fields", () => {

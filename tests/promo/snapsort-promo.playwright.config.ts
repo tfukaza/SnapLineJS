@@ -16,7 +16,9 @@ export default defineConfig({
     browserName: "chromium",
     baseURL: `http://127.0.0.1:${websitePort}`,
     viewport: { width: 1200, height: 1200 },
-    screen: { width: 1200, height: 1200 },
+    // `screen` is a BrowserContext option with no top-level `use` fixture, so
+    // it must go through `contextOptions` to reach the browser context.
+    contextOptions: { screen: { width: 1200, height: 1200 } },
     deviceScaleFactor: 1,
     colorScheme: "light",
     screenshot: "only-on-failure",

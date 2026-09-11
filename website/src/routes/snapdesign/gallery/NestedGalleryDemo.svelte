@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { sessionPointerId } from "./session-pointer";
   import type { Engine } from "@snap-engine/core";
   import {
     createRenderEntries,
@@ -335,7 +336,8 @@
       () => {
         const session = rootContainer?.dragSession;
         return (
-          session?.pointerId === pointer.pointerId &&
+          session != null &&
+          sessionPointerId(session) === pointer.pointerId &&
           session.primaryItem.itemId === options.itemId &&
           session.status === "active"
         );

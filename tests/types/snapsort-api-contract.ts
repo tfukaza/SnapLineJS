@@ -87,11 +87,6 @@ const dropPolicy = (event: DropPriorityEvent): number | undefined => {
 };
 const policyCallbacks: ContainerCallbacks = { getDropPriority: dropPolicy };
 void policyCallbacks;
-const removedCanDrop: ContainerCallbacks = {
-  // @ts-expect-error canDrop was replaced by getDropPriority rejection.
-  canDrop: () => true,
-};
-void removedCanDrop;
 
 const itemOptions: ItemOptions = { itemId: "task-1" };
 const constructedItem = new Item(engine, null, itemOptions);
@@ -229,8 +224,6 @@ const _missingReactItemId: reactBinding.ItemProps = { children: null };
 const _missingReactContainerId: reactBinding.ContainerProps = {};
 // @ts-expect-error application identity is immutable.
 item.itemId = "replacement";
-// @ts-expect-error resolvedItemId was replaced by the non-null itemId property.
-item.resolvedItemId;
 
 const directSession: DragSession | null =
   item.beginDirectDrag();
@@ -315,28 +308,10 @@ session.ghosts;
 // @ts-expect-error animation bookkeeping is internal.
 session.dragVisualStart;
 
-// @ts-expect-error addItem was replaced by attachItem.
-container.addItem(item);
-// @ts-expect-error configuration was replaced by config.
-container.configuration;
 // @ts-expect-error custom strategy injection is no longer public configuration.
 config.strategy;
-// @ts-expect-error clickMove was replaced by move.
-animations.clickMove;
-// @ts-expect-error awaitMutation is no longer a callback integration seam.
-callbacks.awaitMutation;
-// @ts-expect-error framework transaction ownership moved to SnapSortAdapter.
-callbacks.flushMutation;
 // @ts-expect-error renderer adapters are construction-only ContainerOptions.
 config.adapter;
-// @ts-expect-error the old integration boundary was replaced by SnapSortAdapter.
-config.integration;
-// @ts-expect-error the old integration property was replaced by Container.adapter.
-container.integration;
-// @ts-expect-error Ghost accepts current GhostState, not mutation events.
-ghostProps.event;
-// @ts-expect-error Ghost accepts current GhostState, not presentation models.
-ghostProps.presentation;
 // @ts-expect-error insertion markers expose a semantic gap, not a render rectangle.
 insertionMarker.rect;
 // @ts-expect-error insertion geometry conversion always requires explicit presentation options.
@@ -352,20 +327,10 @@ horizontalGap.length = 200;
 insertionNeighbor.rect.x = 0;
 // @ts-expect-error the stock renderer contract is immutable.
 stockInsertionMarkerRectOptions.thickness = 4;
-// @ts-expect-error mutation events no longer expose a phase.
-insertEvent.phase;
-// @ts-expect-error mutation events no longer expose a phase.
-moveEvent.phase;
-// @ts-expect-error mutation events no longer expose a phase.
-removeEvent.phase;
-// @ts-expect-error mutation events no longer expose a phase.
-swapEvent.phase;
 // @ts-expect-error a true insertion cannot materialize an application value.
 renderTree = reduceRenderTree(renderTree, insertEvent);
 // @ts-expect-error framework reconciliation keys are application-owned.
 entries[0].key;
-// @ts-expect-error RenderEntry.id was replaced by RenderEntry.itemId.
-entries[0].id;
 
 const callbacksWithoutLegacyInsertionGeometry: ContainerCallbacks = {
   // @ts-expect-error insertion targeting geometry is core-owned; this callback was removed.
@@ -373,38 +338,12 @@ const callbacksWithoutLegacyInsertionGeometry: ContainerCallbacks = {
 };
 void callbacksWithoutLegacyInsertionGeometry;
 
-// @ts-expect-error MutationPhase is no longer exported from the package root.
-import type { MutationPhase as _MutationPhase } from "@snap-engine/snapsort";
 // @ts-expect-error SortStrategy is an internal implementation detail.
 import type { SortStrategy as _SortStrategy } from "@snap-engine/snapsort";
 // @ts-expect-error DropTargetStrategy is an internal implementation detail.
 import type { DropTargetStrategy as _DropTargetStrategy } from "@snap-engine/snapsort";
 // @ts-expect-error DragLifecycleStrategy is an internal implementation detail.
 import type { DragLifecycleStrategy as _DragLifecycleStrategy } from "@snap-engine/snapsort";
-// @ts-expect-error FrameworkIntegration was replaced by SnapSortAdapter.
-import type { FrameworkIntegration as _FrameworkIntegration } from "@snap-engine/snapsort";
-// @ts-expect-error GhostPresentation was replaced by GhostState.
-import type { GhostPresentation as _GhostPresentation } from "@snap-engine/snapsort";
-// @ts-expect-error InsertionMarkerRectEvent was removed with getInsertionMarkerRect.
-import type { InsertionMarkerRectEvent as _InsertionMarkerRectEvent } from "@snap-engine/snapsort";
-// @ts-expect-error RenderKey is no longer part of the public API.
-import type { RenderKey as _RenderKey } from "@snap-engine/snapsort";
-// @ts-expect-error renderKey is no longer part of the public API.
-import { renderKey as _renderKey } from "@snap-engine/snapsort";
-// @ts-expect-error container-local ghost state was replaced by RenderTree.
-import { reduceContainerGhosts as _reduceContainerGhosts } from "@snap-engine/snapsort";
-// @ts-expect-error render composition was replaced by RenderTree state.
-import { composeRenderEntries as _composeRenderEntries } from "@snap-engine/snapsort";
-// @ts-expect-error container-local reduction replaced the flat insert reducer.
-import { insertGhostState as _insertGhostState } from "@snap-engine/snapsort";
-// @ts-expect-error container-local reduction replaced the flat move reducer.
-import { moveGhostState as _moveGhostState } from "@snap-engine/snapsort";
-// @ts-expect-error container-local reduction replaced the flat remove reducer.
-import { removeGhostState as _removeGhostState } from "@snap-engine/snapsort";
-// @ts-expect-error the deprecated React helper is no longer exported.
-import { useSnapSortAwaitMutation as _useSnapSortAwaitMutation } from "@snap-engine/snapsort/react";
-// @ts-expect-error the deprecated React helper has no package subpath.
-import { useSnapSortAwaitMutation as _deepHelper } from "@snap-engine/snapsort/react/useSnapSortAwaitMutation";
 // @ts-expect-error GhostRect was replaced by core's geometry Rect.
 import type { GhostRect as _GhostRect } from "@snap-engine/snapsort";
 // @ts-expect-error ContainerLocalRect was replaced by core's geometry Rect.

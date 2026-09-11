@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { sessionPointerId } from "./session-pointer";
   import type { Engine } from "@snap-engine/core";
   import {
     Container,
@@ -387,14 +388,14 @@
 
   function handleDragStart(event: DragStartEvent) {
     if (event.itemMetadata.kind !== "lesson-tile") return false;
-    startedDragPointerId = event.session.pointerId;
+    startedDragPointerId = sessionPointerId(event.session);
     startedDragItemId = String(event.itemId);
     dragClickGuardTileId = event.itemId;
     if (dragClickGuardTimer !== null) {
       window.clearTimeout(dragClickGuardTimer);
       dragClickGuardTimer = null;
     }
-    if (event.session.pointerId !== LESSON_VIRTUAL_POINTER_ID) {
+    if (sessionPointerId(event.session) !== LESSON_VIRTUAL_POINTER_ID) {
       takeManualControl();
     }
   }
