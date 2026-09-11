@@ -10,6 +10,7 @@ import {
 import { defaultAnimations, Item as CoreItem } from "@snap-engine/snapsort";
 import {
   prioritizeIntersectingContainer,
+  prioritizePointerContainer,
   rejectDrop,
 } from "@snap-engine/snapsort/callbacks";
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
@@ -1399,12 +1400,30 @@ export function SnapSortComponentsDemo() {
     [columns],
   );
 
+  // Programmatic removal through SnapSort (animated by the owning Container)
+  // versus a direct state deletion (not animated), for the e2e suite.
+  const removeItemThroughSnapSort = useCallback(
+    (itemId) => {
+      const column = columns.find((candidate) =>
+        candidate.items.some((item) => item.id === itemId),
+      );
+      return column
+        ? (containerRefs.current.get(column.id)?.removeItem(itemId) ?? false)
+        : false;
+    },
+    [columns],
+  );
+
   useEffect(() => {
     window.__snapsortMoveComponentItem = moveItemAcrossColumns;
+    window.__snapsortRemoveComponentItem = removeItemThroughSnapSort;
+    window.__snapsortDeleteComponentItem = deleteItem;
     return () => {
       delete window.__snapsortMoveComponentItem;
+      delete window.__snapsortRemoveComponentItem;
+      delete window.__snapsortDeleteComponentItem;
     };
-  }, [moveItemAcrossColumns]);
+  }, [moveItemAcrossColumns, removeItemThroughSnapSort, deleteItem]);
 
   return (
     <div className="snapsort-fixture components-demo">
@@ -2224,6 +2243,10 @@ export function SnapSortInsertionDemo() {
                 direction: "column",
                 mode: "insertion",
                 name: `insertion-${column.id}`,
+                // Insertion ranks gaps by main-axis distance alone, so a
+                // side-by-side column needs pointer-container priority to
+                // keep the marker in the column under the pointer.
+                callbacks: { getDropPriority: prioritizePointerContainer },
               }}
               itemId={column.id}
               key={column.id}

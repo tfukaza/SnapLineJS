@@ -72,6 +72,9 @@ test("direct movement animates the active item between candidate slots", async (
   const item = page.locator('[data-task-id="outline"]');
   await outline.focus();
   await page.keyboard.press("Enter");
+  // Trace the move only once the lift is active; an arrow pressed while the
+  // lift is still activating is consumed without moving (covered below).
+  await expect(item).toHaveAttribute("data-snapsort-dragging", "true");
   const source = await item.evaluate((element) => {
     const rect = element.getBoundingClientRect();
     return {
@@ -98,6 +101,34 @@ test("direct movement animates the active item between candidate slots", async (
     frames.some((frame) => frame.y > source.y + 1 && frame.y < final.y - 1),
   ).toBe(true);
 
+  await page.keyboard.press("Escape");
+});
+
+test("an arrow pressed while the lift activates never scrolls the page", async ({
+  page,
+}) => {
+  await page.goto("/snapsort-keyboard", { waitUntil: "networkidle" });
+  await page.locator('[data-keyboard-handle="outline"]').focus();
+
+  // Enter and ArrowDown in the same task: the ArrowDown reaches the
+  // controller before the lift has activated its candidates, so there is no
+  // target to move yet — but the key must still be consumed.
+  const arrowPrevented = await page.evaluate(() => {
+    const target = document.activeElement!;
+    const keydown = (key: string) => {
+      const event = new KeyboardEvent("keydown", {
+        key,
+        bubbles: true,
+        cancelable: true,
+      });
+      target.dispatchEvent(event);
+      return event.defaultPrevented;
+    };
+    keydown("Enter");
+    return keydown("ArrowDown");
+  });
+
+  expect(arrowPrevented).toBe(true);
   await page.keyboard.press("Escape");
 });
 

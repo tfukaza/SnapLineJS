@@ -542,7 +542,12 @@ test("places append ghost on the short second row in a wrapped row layout", () =
   expect(appendGhost!.y).toBe(container.children[6].box.y);
 });
 
-test("scores a wrapped-row destination by its canonical insertion gap-line center", () => {
+// Insertion ranks gaps by main-axis distance alone (see "Insertion geometry
+// ownership" in assets/snapsort/AGENTS.md): in a wrapped row every line's
+// gaps compete on pointer X, so a gap on another line can win. This pins
+// that documented rule; applications that want line-aware wrapped
+// insertion supply their own getDropPriority / layout.
+test("ranks wrapped-row insertion gaps by main-axis distance across lines", () => {
   const items = [
     mockSnapSortItem("彼", { x: 14, y: 14, width: 53.6, height: 47.8 }),
     mockSnapSortItem("の", { x: 71.6, y: 14, width: 53.6, height: 47.8 }),
@@ -607,17 +612,19 @@ test("scores a wrapped-row destination by its canonical insertion gap-line cente
   // @ts-expect-error The fixture implements the resolver surface without Item's private fields.
   const target = determineInsertionDropTarget(dragged, container, session);
 
+  // Pointer X 235.6 is 24.4 from the first line's を|会社 gap (x=260) but
+  // 40 from the second line's append gap (x=195.6), so the first line wins.
   expect(target?.container).toBe(container);
-  expect(target?.index).toBe(8);
+  expect(target?.index).toBe(4);
   expect(target?.insertion).toMatchObject({
     gap: {
       orientation: "vertical",
-      x: 195.6,
-      y: 65.8,
+      x: 260,
+      y: 14,
       length: 47.8,
     },
-    previous: { item: items[7] },
-    next: null,
+    previous: { item: items[3] },
+    next: { item: items[4] },
     isCurrentPlacement: false,
   });
 });

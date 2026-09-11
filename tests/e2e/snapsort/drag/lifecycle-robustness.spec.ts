@@ -99,13 +99,12 @@ test.describe("Snapsort drag-start snapshot layout", () => {
     ).toEqual([]);
   });
 
-  test("does not let a locked container drag consume leaked root ghost state", async ({
+  // Regression for a leak where a released drag left a root ghost behind and
+  // a later locked-container drag adopted it. The input layer now finishes
+  // the released pointer, so neither gesture may leave drag state behind.
+  test("leaves no drag state behind when a locked container drag follows a released drag", async ({
     page,
   }, testInfo) => {
-    test.fail(
-      true,
-      "Known repro: drag/dragEnd still run after locked dragStart returns, so a locked container can consume leaked root drag state.",
-    );
     const consoleMessages: string[] = [];
     const pageErrors: string[] = [];
     page.on("console", (message) => consoleMessages.push(message.text()));
@@ -118,38 +117,35 @@ test.describe("Snapsort drag-start snapshot layout", () => {
     );
 
     const nested = await demoBoxByHeading(page, "Nested Container");
+    const initialState = await nestedSnapSortLifecycleState(page);
     await releaseStartedDragNearOrigin(page, nested, "Item 1.5", "Sub A1", 0.2);
     const beforeLockedDrag = await nestedSnapSortLifecycleState(page);
     await dragLockedNestedContainerBackground(page, nested);
     const afterLockedDrag = await nestedSnapSortLifecycleState(page);
-
-    await writeJson(
-      testInfo.outputPath("locked-container-leak-adoption-repro.json"),
-      {
-        beforeLockedDrag,
-        afterLockedDrag,
-        adapterWarnings: consoleMessages.filter((message) =>
-          /adapter did not place/.test(message),
+    const errors = [
+      ...pageErrors,
+      ...consoleMessages.filter((message) =>
+        /Missing drag snapshot|Unhandled|TypeError|ReferenceError/i.test(
+          message,
         ),
-        errors: [
-          ...pageErrors,
-          ...consoleMessages.filter((message) =>
-            /Missing drag snapshot|Unhandled|TypeError|ReferenceError/i.test(
-              message,
-            ),
-          ),
-        ],
-      },
-    );
+      ),
+    ];
 
-    expect(
-      beforeLockedDrag.spacerCount,
-      "precondition should expose the leaked ghost",
-    ).toBe(1);
-    expect(
-      afterLockedDrag.spacerCount,
-      "a locked container drag should not consume another drag's leaked ghost",
-    ).toBe(1);
+    await writeJson(testInfo.outputPath("locked-container-drag-state.json"), {
+      initialState,
+      beforeLockedDrag,
+      afterLockedDrag,
+      errors,
+    });
+
+    for (const state of [beforeLockedDrag, afterLockedDrag]) {
+      expect(state.spacerCount).toBe(0);
+      expect(state.draggingTexts).toEqual([]);
+    }
+    expect(afterLockedDrag.nestedOuterChildren).toEqual(
+      initialState.nestedOuterChildren,
+    );
+    expect(errors).toEqual([]);
   });
 
   test("does not self-reference beforeElement when reinserting an existing nested container", async ({

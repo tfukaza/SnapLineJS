@@ -189,6 +189,16 @@ export class KeyboardDragController {
     prop.event.preventDefault();
   };
 
+  #isMovementKey(key: string): boolean {
+    const { previous, next } = this.#bindings;
+    return (
+      previous.column.has(key) ||
+      previous.row.has(key) ||
+      next.column.has(key) ||
+      next.row.has(key)
+    );
+  }
+
   #handleActiveDirectSession(
     event: KeyboardEvent,
     input: DirectDragController,
@@ -204,7 +214,13 @@ export class KeyboardDragController {
     }
 
     const direction = input.currentTarget?.container.direction;
-    if (!direction) return;
+    if (!direction) {
+      // The lift is still activating, so there is no target to move from
+      // yet. Consume movement keys anyway: otherwise an arrow pressed right
+      // after lifting falls through to the browser and scrolls the page.
+      if (this.#isMovementKey(event.key)) event.preventDefault();
+      return;
+    }
 
     if (this.#bindings.previous[direction].has(event.key)) {
       input.movePrevious();

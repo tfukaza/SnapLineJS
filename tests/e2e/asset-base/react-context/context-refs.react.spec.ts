@@ -17,7 +17,7 @@ test("shares contexts, exposes refs, and survives Strict Mode remounts", async (
   await expect(refStatus).toHaveAttribute("data-camera-ref", "true");
   await expect(refStatus).toHaveAttribute("data-background-ref", "true");
 
-  await expect(page.getByTestId("asset-base-engine")).toHaveAttribute(
+  await expect(page.getByTestId("camera-engine")).toHaveAttribute(
     "style",
     /width: 100%/,
   );
@@ -28,11 +28,11 @@ test("shares contexts, exposes refs, and survives Strict Mode remounts", async (
 
   await page.getByTestId("toggle-debug").click();
   await expect(
-    page.getByTestId("asset-base-engine").locator("canvas"),
+    page.getByTestId("camera-engine").locator("canvas"),
   ).toHaveCount(1);
 
   await page.getByTestId("toggle-engine").click();
-  await expect(page.getByTestId("asset-base-engine")).toHaveCount(0);
+  await expect(page.getByTestId("camera-engine")).toHaveCount(0);
   await page.evaluate(() => window.dispatchEvent(new Event("scroll")));
 
   await page.getByTestId("toggle-engine").click();

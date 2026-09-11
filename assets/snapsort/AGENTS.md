@@ -247,7 +247,10 @@ no pre-mutation FLIP rectangle and must be ignored safely by animation code.
   virtual rectangle retains the initial pointer-to-item offset. There is no
   implicit deepest-container preference; an application may opt into
   `prioritizeTreeDepth` through `getDropPriority` when it wants explicit
-  virtual-X/pointer-Y depth policy.
+  virtual-X/pointer-Y depth policy. Because the cross axis never enters the
+  score, side-by-side destinations (columns of a board) opt into
+  `prioritizePointerContainer` so the column under the pointer wins over a
+  neighbor whose gap merely lines up on the main axis.
 - Wrapped rows and columns use the selected visual line's measured cross-axis
   band. A boundary that wraps uses the next line's leading edge and band;
   append uses the previous line's trailing edge and band.

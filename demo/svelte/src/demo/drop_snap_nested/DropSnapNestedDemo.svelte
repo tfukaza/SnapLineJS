@@ -766,19 +766,19 @@
     color: #000;
   }
 
-  :global(.snapsort-container) {
+  .snapsort-demo :global(.snapsort-container) {
     gap: var(--size-8);
     min-height: 40px;
   }
 
-  :global(.snapsort-container .snapsort-container) {
+  .snapsort-demo :global(.snapsort-container .snapsort-container) {
     border: 2px solid #000;
     padding: var(--size-8);
   }
 
-  :global(.demo-item),
-  :global(.layer-item),
-  :global(.snapsort-item) {
+  .snapsort-demo :global(.demo-item),
+  .snapsort-demo :global(.layer-item),
+  .snapsort-demo :global(.snapsort-item) {
     margin: var(--size-4);
     border: 2px solid #000;
     background: #fff;
@@ -786,13 +786,13 @@
     box-sizing: border-box;
   }
 
-  :global(.demo-item:active),
-  :global(.layer-item:active),
-  :global(.snapsort-item:active) {
+  .snapsort-demo :global(.demo-item:active),
+  .snapsort-demo :global(.layer-item:active),
+  .snapsort-demo :global(.snapsort-item:active) {
     cursor: grabbing;
   }
 
-  :global(.demo-item p) {
+  .snapsort-demo :global(.demo-item p) {
     margin: 0;
     padding: var(--size-8) var(--size-12);
     font-size: 1rem;
@@ -804,7 +804,7 @@
     min-height: 240px;
   }
 
-  :global(.demo-item.size-item p) {
+  .snapsort-demo :global(.demo-item.size-item p) {
     display: flex;
     align-items: center;
     justify-content: center;
@@ -812,12 +812,12 @@
     text-align: center;
   }
 
-  :global(.demo-item.row-item) {
+  .snapsort-demo :global(.demo-item.row-item) {
     min-width: 50px;
     text-align: center;
   }
 
-  :global(.demo-item.selected) {
+  .snapsort-demo :global(.demo-item.selected) {
     border-color: #6366f1;
     box-shadow: inset 0 0 0 2px #6366f1;
     background: #eef2ff;
@@ -829,7 +829,7 @@
     color: #888;
   }
 
-  :global(.demo-item.sub-item) {
+  .snapsort-demo :global(.demo-item.sub-item) {
     opacity: 0.6;
   }
 
@@ -880,14 +880,14 @@
     user-select: none;
   }
 
-  :global(.ghost) {
+  .snapsort-demo :global(.ghost) {
     background: #e5e5e5;
     border: 2px solid #9a9a9a;
     box-sizing: border-box;
     opacity: 1;
   }
 
-  :global(.double-row-ghost-label) {
+  .snapsort-demo :global(.double-row-ghost-label) {
     display: flex;
     align-items: center;
     justify-content: center;

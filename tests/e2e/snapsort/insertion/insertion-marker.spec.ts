@@ -64,6 +64,11 @@ test.describe("SnapSort insertion marker strategy", () => {
 
     await page.mouse.move(start.x, start.y);
     await page.mouse.down();
+    // The move that crosses the drag threshold only starts the session; its
+    // position is not resolved. Start the drag first so the next move is the
+    // first one that places the marker.
+    await page.mouse.move(start.x + 6, start.y);
+    await page.waitForTimeout(60);
     await page.mouse.move(start.x, draggedBefore.y + 4);
     await page.waitForTimeout(120);
 
